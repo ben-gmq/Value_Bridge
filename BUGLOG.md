@@ -5,8 +5,9 @@
 **Open: 1 entry (VB-005, the standing backlog) · 1 unworked line in it — measured 2026-09-28.**
 **Archives:** none yet.
 
-**Status of the app:** design only. No code, no schema, no data, **no defects**. The design
-spec is `docs/VB_design.md`; the originating brief is `docs/ASSESSMENT_BRIEF.md`.
+**Status of the app:** design signed off 2026-09-28; the **foundation** is built (auth,
+projects and programs, access control, code master — migrations 0001–0004). No open defects.
+The design spec is `docs/VB_design.md`; the originating brief is `docs/ASSESSMENT_BRIEF.md`.
 
 **Why this file has four closed entries and no open ones.** VB-001…VB-004 were never code
 defects — there is no code. They were three design-review findings that could not be closed

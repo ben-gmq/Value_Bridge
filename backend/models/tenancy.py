@@ -2,8 +2,8 @@
 from datetime import date
 
 from sqlalchemy import (
-    BigInteger, Boolean, Computed, Date, ForeignKey, ForeignKeyConstraint, Identity, Index,
-    String, Text, UniqueConstraint, func, text,
+    BigInteger, Boolean, CheckConstraint, Computed, Date, ForeignKey, ForeignKeyConstraint,
+    Identity, Index, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -76,6 +76,8 @@ class Project(AuditMixin, Base):
         ForeignKeyConstraint(["program_id", "client_id", "program_is_active"],
                              ["program.program_id", "program.client_id", "program.is_active"],
                              name="fk_project_program_live", onupdate="NO ACTION"),
+        CheckConstraint("end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
+                        name="ck_project_dates"),
     )
 
     def owning_project_id(self) -> int:

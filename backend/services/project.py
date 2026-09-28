@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from models import AppUser, Client, CodeMaster, Program, Project, UserAccessGrant
 from services import access, audit, numbering
+from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
 
 
@@ -28,6 +29,18 @@ def create_client(db: Session, actor: AppUser, client_code: str, client_name: st
 
 # ---- projects -------------------------------------------------------------------------
 
+def get_project(db: Session, project_id: int) -> Project:
+    p = db.get(Project, project_id)
+    if p is None:
+        raise HTTPException(404, "Not found")
+    return p
+
+
+def _check_dates(start_date, end_date) -> None:
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(422, "The end date is before the start date")   # L5
+
+
 def list_visible_projects(db: Session, user: AppUser) -> list[Project]:
     ids = access.visible_project_ids(db, user)
     q = select(Project).where(Project.is_active).order_by(Project.project_code)
@@ -50,6 +63,7 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
             raise HTTPException(422, "Choose an active program")
         if prog.client_id != client_id:
             raise HTTPException(422, "A program's projects belong to its client")
+    _check_dates(start_date, end_date)
     status = validate_required_code(db, None, "PROJECT_STATUS", "PLANNING", "status")
     p = Project(client_id=client_id, program_id=program_id,
                 project_code=project_code.strip().upper(), project_name=project_name.strip(),
@@ -69,6 +83,7 @@ def update_project(db: Session, actor: AppUser, project: Project, row_version: i
                    fields: dict) -> Project:
     if project.row_version != row_version:
         raise HTTPException(409, "Updated by another user. Please refresh.")
+    _check_dates(fields.get("start_date", project.start_date), fields.get("end_date", project.end_date))
     for k in ("project_name", "start_date", "end_date"):   # program_id is not PATCHable (§9)
         if k in fields:
             setattr(project, k, fields[k])
@@ -95,6 +110,10 @@ def grant_access(db: Session, actor: AppUser, target_user_id: int, project_role_
     """Route guards: a project grant needs OWNER on the project — which a program OWNER holds
     for every project in their program (Q16); a program grant needs a platform admin (Q10)."""
     role = _role(db, project_role_code)
+    if program_id is not None:                               # L5 — a clear 404, not an FK 409
+        prog = db.get(Program, program_id)
+        if prog is None or not prog.is_active:
+            raise HTTPException(404, "Not found")
     target = db.get(AppUser, target_user_id)
     if target is None or not target.is_active:
         raise HTTPException(422, "Choose an active user")
@@ -102,7 +121,10 @@ def grant_access(db: Session, actor: AppUser, target_user_id: int, project_role_
         raise HTTPException(422, "A platform admin needs no grant")
     existing = access.live_grant(db, target)
     if existing and existing.project_id == project_id and existing.program_id == program_id:
-        if row_version is not None and existing.row_version != row_version:
+        if row_version is None:                              # M4 — D-6 on role changes too
+            raise HTTPException(422, f"{target.display_name} already has access here. Send the "
+                                     "grant's row_version to change their role.")
+        if existing.row_version != row_version:
             raise HTTPException(409, "Updated by another user. Please refresh.")
         old = access.grant_role(db, existing)
         existing.project_role_code_id = role.code_id           # a role change, not a 2nd grant
@@ -143,8 +165,7 @@ def reassign_access(db: Session, actor: AppUser, target_user_id: int, project_ro
     old = access.live_grant(db, target)
     old_scope = _scope_name(db, old) if old else None
     if old:
-        old.is_active = False
-        old.deleted_by = actor.app_user_id
+        soft_delete(old, actor.app_user_id)
         db.flush()
     g = UserAccessGrant(app_user_id=target_user_id, project_id=project_id, program_id=program_id,
                         project_role_code_id=role.code_id, granted_by_user_id=actor.app_user_id,
@@ -163,8 +184,7 @@ def revoke_access(db: Session, actor: AppUser, grant: UserAccessGrant) -> UserAc
     """Soft-revoke, audited (S9), and never restorable (R2-S5)."""
     if not grant.is_active:
         raise HTTPException(409, "That access was already revoked")
-    grant.is_active = False
-    grant.deleted_by = actor.app_user_id
+    soft_delete(grant, actor.app_user_id)
     audit.record(db, "ACCESS_REVOKED", actor_id=actor.app_user_id, project_id=grant.project_id,
                  target_table="user_access_grant", target_id=grant.user_access_grant_id,
                  detail={"user_id": grant.app_user_id, "program_id": grant.program_id})
@@ -187,7 +207,7 @@ def effective_access(db: Session, project: Project) -> list[dict]:
             out.append(_row(db, g, "PROGRAM", prog.program_name))
     for u in db.scalars(select(AppUser).where(AppUser.is_platform_admin, AppUser.is_active)):
         out.append({"grant_id": None, "user_id": u.app_user_id, "display_name": u.display_name,
-                    "email": u.email, "role": "ALL", "source": "PLATFORM_ADMIN", "program": None,
+                    "email": u.email, "project_role_code": "ALL", "source": "PLATFORM_ADMIN", "program": None,
                     "granted_at": None, "row_version": None})
     order = {"PROJECT": 0, "PROGRAM": 1, "PLATFORM_ADMIN": 2}
     return sorted(out, key=lambda r: (order[r["source"]], r["display_name"].lower()))
@@ -196,6 +216,6 @@ def effective_access(db: Session, project: Project) -> list[dict]:
 def _row(db: Session, g: UserAccessGrant, source: str, program: str | None) -> dict:
     u = db.get(AppUser, g.app_user_id)
     return {"grant_id": g.user_access_grant_id, "user_id": u.app_user_id,
-            "display_name": u.display_name, "email": u.email, "role": access.grant_role(db, g),
+            "display_name": u.display_name, "email": u.email, "project_role_code": access.grant_role(db, g),
             "source": source, "program": program, "granted_at": g.granted_at,
             "row_version": g.row_version}

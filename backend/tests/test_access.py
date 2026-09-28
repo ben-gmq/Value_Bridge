@@ -60,11 +60,20 @@ def test_one_grant_per_user(client, world):
     assert grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").status_code == 201
     r = grant(client, w["admin"], w["p_sales"], w["users"]["editor"], "EDITOR")
     assert r.status_code == 409 and "SOLO" in r.json()["detail"]
+    # a role change on the same scope must carry row_version (D-6, sara M4)
     r = grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "REVIEWER")
+    assert r.status_code == 422
+    access = client.get(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"]).json()
+    row = next(a for a in access if a["user_id"] == w["users"]["editor"])
+    r = client.post(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"], json={
+        "user_id": w["users"]["editor"], "project_role_code": "REVIEWER", "row_version": row["row_version"]})
     assert r.status_code == 201
+    stale = client.post(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"], json={
+        "user_id": w["users"]["editor"], "project_role_code": "OWNER", "row_version": row["row_version"]})
+    assert stale.status_code == 409
     access = client.get(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"]).json()
     editor_rows = [a for a in access if a["user_id"] == w["users"]["editor"]]
-    assert [a["role"] for a in editor_rows] == ["REVIEWER"]
+    assert [a["project_role_code"] for a in editor_rows] == ["REVIEWER"]
 
 
 def test_program_owner_grants_inside_not_outside(client, world):
@@ -162,3 +171,48 @@ def test_non_admin_cannot_create_projects_or_move(client, world):
     r = client.post(f"/api/v1/programs/{w['program_id']}/projects", headers=owner,
                     json={"project_id": w["p_solo"]})
     assert r.status_code == 403
+
+
+def test_admin_gets_404_for_missing_program_and_wrong_program_detach(client, world):
+    """sara M2, M1."""
+    w = world
+    assert client.get("/api/v1/programs/9999", headers=w["admin"]).status_code == 404
+    assert client.get("/api/v1/programs/9999/projects", headers=w["admin"]).status_code == 404
+    other = client.post("/api/v1/programs", headers=w["admin"], json={
+        "client_id": w["client_id"], "program_code": "OTHER", "program_name": "Other"}).json()
+    r = client.delete(f"/api/v1/programs/{other['program_id']}/projects/{w['p_sales']}",
+                      headers=w["admin"])
+    assert r.status_code == 404      # SALES is not in OTHER — detaching must not happen
+
+
+def test_revoke_records_who_and_when(client, world, db):
+    """sara M3: deleted_at and deleted_by are both set."""
+    from sqlalchemy import text
+    w = world
+    g = grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").json()
+    client.delete(f"/api/v1/access/{g['user_access_grant_id']}", headers=w["admin"])
+    row = db.execute(text("SELECT deleted_at, deleted_by FROM user_access_grant "
+                          "WHERE user_access_grant_id = :g"), {"g": g["user_access_grant_id"]}).one()
+    assert row.deleted_at is not None and row.deleted_by is not None
+
+
+def test_platform_admin_is_a_separate_audited_act(client, world):
+    """sara M7: no admin flag on create; promotion needs a reason and a clean grant state."""
+    w = world
+    r = client.post("/api/v1/users", headers=w["admin"], json={
+        "email": "sneaky@example.test", "display_name": "Sneaky", "initial_password": "correct-horse-battery",
+        "is_platform_admin": True})
+    assert r.status_code == 201 and r.json()["is_platform_admin"] is False
+    uid, rv = r.json()["app_user_id"], r.json()["row_version"]
+    url = f"/api/v1/users/{uid}/platform-admin"
+    assert client.patch(url, headers=w["admin"], json={
+        "is_platform_admin": True, "rationale": "", "row_version": rv}).status_code == 422
+    ok = client.patch(url, headers=w["admin"], json={
+        "is_platform_admin": True, "rationale": "Second admin for cover", "row_version": rv})
+    assert ok.status_code == 200 and ok.json()["is_platform_admin"] is True
+    grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR")
+    ed = client.get("/api/v1/users", headers=w["admin"]).json()
+    ed = next(u for u in ed if u["app_user_id"] == w["users"]["editor"])
+    r = client.patch(f"/api/v1/users/{ed['app_user_id']}/platform-admin", headers=w["admin"], json={
+        "is_platform_admin": True, "rationale": "x", "row_version": ed["row_version"]})
+    assert r.status_code == 409      # holds a grant — revoke first

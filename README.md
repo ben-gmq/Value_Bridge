@@ -22,3 +22,15 @@ access control, code master). Build plan: https://claude.ai/artifact/KReFrU3AkML
 
 Stack (FTC standard): React + MUI + Vite frontend, FastAPI + PostgreSQL backend, JWT auth,
 hosted on Azure (Japan East).
+
+## Run it locally
+
+See `CLAUDE.md` → *Stack & where things run* for the one-time bootstrap. After that:
+
+```bash
+cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload    # API
+cd frontend && npm run dev                                         # http://localhost:5180
+```
+
+The first visit opens a one-time setup screen that creates the first platform administrator.
+

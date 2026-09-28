@@ -1,7 +1,9 @@
 """Pydantic schemas. *In = request, *Out = response. No response model carries password_hash."""
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+Email = Field(max_length=254)
 
 
 class Orm(BaseModel):
@@ -10,13 +12,13 @@ class Orm(BaseModel):
 
 # ---- auth / users ----
 class LoginIn(BaseModel):
-    email: str
-    password: str
+    email: str = Email
+    password: str = Field(max_length=200)
     remember_me: bool = False
 
 
 class SetupIn(BaseModel):
-    email: str
+    email: str = Email
     display_name: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=10, max_length=200)
 
@@ -28,13 +30,19 @@ class UserOut(Orm):
     is_active: bool
     is_platform_admin: bool
     last_login_at: datetime | None
+    row_version: int
 
 
 class UserIn(BaseModel):
-    email: str
+    email: str = Email
     display_name: str = Field(min_length=1, max_length=200)
     initial_password: str = Field(min_length=10, max_length=200)
-    is_platform_admin: bool = False
+
+
+class PlatformAdminIn(BaseModel):
+    is_platform_admin: bool
+    rationale: str = Field(min_length=1, max_length=500)
+    row_version: int
 
 
 class GrantOut(Orm):
@@ -48,7 +56,7 @@ class GrantOut(Orm):
 class MeOut(BaseModel):
     user: UserOut
     grant: GrantOut | None
-    role: str | None                 # the grant's role, or None for admins / no grant
+    project_role_code: str | None    # the grant's role, or None for admins / no grant
     scope: str                        # PLATFORM_ADMIN / PROJECT / PROGRAM / NONE
 
 
@@ -103,6 +111,13 @@ class ProjectPatch(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
 
+    @field_validator("project_name")
+    @classmethod
+    def _not_null(cls, v):          # L5: omit the field to leave it; null is not a name
+        if v is None:
+            raise ValueError("project_name cannot be empty")
+        return v
+
 
 class ProjectOut(Orm):
     project_id: int
@@ -140,7 +155,7 @@ class EffectiveAccessOut(BaseModel):
     user_id: int
     display_name: str
     email: str
-    role: str
+    project_role_code: str
     source: str
     program: str | None
     granted_at: datetime | None

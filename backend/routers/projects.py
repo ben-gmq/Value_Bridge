@@ -3,7 +3,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AppUser, Program, Project, UserAccessGrant
+from models import AppUser, UserAccessGrant
 from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin,
                             program_ctx, project_ctx)
 from schemas.common import (CodeOut, EffectiveAccessOut, GrantIn, GrantOut, ProgramIn,
@@ -37,15 +37,15 @@ def create_project(body: ProjectIn, actor: AppUser = Depends(_admin.dep), db: Se
 
 @router.get("/projects/{project_id}", response_model=ProjectOut, **_reader.route)
 def read_project(project_id: int, db: Session = Depends(get_db)):
-    return db.get(Project, project_id)
+    return project_service.get_project(db, project_id)
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut, **_owner.route)
 def update_project(project_id: int, body: ProjectPatch, db: Session = Depends(get_db),
                    user: AppUser = Depends(_auth.dep)):
     fields = body.model_dump(exclude_unset=True, exclude={"row_version"})
-    return project_service.update_project(db, user, db.get(Project, project_id), body.row_version,
-                                          fields)
+    return project_service.update_project(db, user, project_service.get_project(db, project_id),
+                                          body.row_version, fields)
 
 
 @router.get("/projects/{project_id}/code-master/{category}", response_model=list[CodeOut],
@@ -57,7 +57,7 @@ def project_codes(project_id: int, category: str, db: Session = Depends(get_db))
 # ---- access ----
 @router.get("/projects/{project_id}/access", response_model=list[EffectiveAccessOut], **_owner.route)
 def effective_access(project_id: int, db: Session = Depends(get_db)):
-    return project_service.effective_access(db, db.get(Project, project_id))
+    return project_service.effective_access(db, project_service.get_project(db, project_id))
 
 
 @router.post("/projects/{project_id}/access", response_model=GrantOut, status_code=201,
@@ -95,7 +95,7 @@ def create_program(body: ProgramIn, actor: AppUser = Depends(_admin.dep), db: Se
 
 @router.get("/programs/{program_id}", response_model=ProgramOut, **_prog_reader.route)
 def read_program(program_id: int, db: Session = Depends(get_db)):
-    return db.get(Program, program_id)
+    return program_service.get_program(db, program_id)
 
 
 @router.get("/programs/{program_id}/projects", response_model=list[ProjectOut], **_prog_reader.route)
@@ -113,7 +113,8 @@ def add_project_to_program(program_id: int, body: ProgramMoveIn, actor: AppUser 
 @router.delete("/programs/{program_id}/projects/{project_id}", **_admin.route)
 def remove_project_from_program(program_id: int, project_id: int, confirm_hash: str | None = None,
                                 actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
-    return program_service.move_project_program(db, actor, project_id, None, confirm_hash)
+    return program_service.move_project_program(db, actor, project_id, None, confirm_hash,
+                                                expected_from_program_id=program_id)   # M1
 
 
 @router.post("/programs/{program_id}/access", response_model=GrantOut, status_code=201,

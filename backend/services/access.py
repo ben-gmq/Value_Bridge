@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import AppUser, CodeMaster, Project, UserAccessGrant
+from models import AppUser, CodeMaster, Program, Project, UserAccessGrant
 
 PROJECT_ROLE_RANK = {"REVIEWER": 1, "EDITOR": 2, "OWNER": 3}
 NOT_FOUND = "Not found"
@@ -80,6 +80,8 @@ def require_program(db: Session, user: AppUser, program_id: int, min_role: str) 
     """Program roll-ups need a PROGRAM grant (or admin). A project grant inside the program
     sees no roll-up (R2-S2)."""
     if user.is_platform_admin:
+        if db.get(Program, program_id) is None:          # M2 — admins get 404s too
+            raise HTTPException(404, NOT_FOUND)
         return ADMIN_GRANT
     g = live_grant(db, user)
     if g is None or g.program_id != program_id:
@@ -88,3 +90,21 @@ def require_program(db: Session, user: AppUser, program_id: int, min_role: str) 
     if not _rank_ok(role, min_role):
         raise HTTPException(403, "Your role on this program does not allow that")
     return EffectiveGrant(role, "PROGRAM", g)
+
+
+def visible_program_ids(db: Session, user: AppUser) -> set[int] | None:
+    """None means ALL. A program is visible only through a PROGRAM grant (R2-S2)."""
+    if user.is_platform_admin:
+        return None
+    g = live_grant(db, user)
+    return {g.program_id} if g is not None and g.program_id is not None else set()
+
+
+def describe_scope(db: Session, user: AppUser) -> tuple[str, UserAccessGrant | None, str | None]:
+    """(scope, grant, project_role_code) for /auth/me — PLATFORM_ADMIN / PROJECT / PROGRAM / NONE."""
+    if user.is_platform_admin:
+        return "PLATFORM_ADMIN", None, None
+    g = live_grant(db, user)
+    if g is None:
+        return "NONE", None, None
+    return ("PROJECT" if g.project_id else "PROGRAM"), g, grant_role(db, g)

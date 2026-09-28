@@ -11,13 +11,20 @@ from models import AppUser, Client, Program, Project, UserAccessGrant
 from services import access, audit
 
 
+def get_program(db: Session, program_id: int) -> Program:
+    p = db.get(Program, program_id)
+    if p is None:
+        raise HTTPException(404, "Not found")
+    return p
+
+
 def list_visible_programs(db: Session, user: AppUser) -> list[Program]:
+    ids = access.visible_program_ids(db, user)          # M8 — visibility has one owner
     q = select(Program).where(Program.is_active).order_by(Program.program_code)
-    if not user.is_platform_admin:
-        g = access.live_grant(db, user)
-        if g is None or g.program_id is None:
+    if ids is not None:
+        if not ids:
             return []
-        q = q.where(Program.program_id == g.program_id)
+        q = q.where(Program.program_id.in_(ids))
     return list(db.scalars(q))
 
 
@@ -52,16 +59,19 @@ def _holders(db: Session, program_id: int | None) -> list[dict]:
     rows = db.scalars(select(UserAccessGrant).where(UserAccessGrant.program_id == program_id,
                                                     UserAccessGrant.is_active))
     return sorted(({"user_id": g.app_user_id, "display_name": db.get(AppUser, g.app_user_id).display_name,
-                    "role": access.grant_role(db, g)} for g in rows), key=lambda r: r["user_id"])
+                    "project_role_code": access.grant_role(db, g)} for g in rows), key=lambda r: r["user_id"])
 
 
 def move_project_program(db: Session, actor: AppUser, project_id: int,
-                         target_program_id: int | None, confirm_hash: str | None) -> dict:
+                         target_program_id: int | None, confirm_hash: str | None,
+                         expected_from_program_id: int | None = None) -> dict:
     """Platform admin only (Q10). Step 1 (no hash) previews who gains and loses access and
     writes nothing; step 2 applies it only if the preview is unchanged (R2-S3)."""
     p = db.get(Project, project_id)
     if p is None or not p.is_active:
         raise HTTPException(404, "Not found")
+    if expected_from_program_id is not None and p.program_id != expected_from_program_id:
+        raise HTTPException(404, "Not found")              # M1 — not in THIS program
     t = db.get(Program, target_program_id) if target_program_id else None
     if target_program_id and (t is None or not t.is_active):
         raise HTTPException(422, "Choose an active program")

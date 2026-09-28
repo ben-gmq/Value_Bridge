@@ -14,7 +14,10 @@ from services.body_limit import BodyLimitMiddleware
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()          # refuses to start without the required env (§9.1)
 
-app = FastAPI(title="Value Bridge API", version="0.1.0")
+_docs = settings.enable_api_docs
+app = FastAPI(title="Value Bridge API", version="0.1.0",
+              docs_url="/docs" if _docs else None, redoc_url=None,
+              openapi_url="/openapi.json" if _docs else None)
 app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=False,
                    allow_methods=["*"], allow_headers=["Authorization", "Content-Type"])
 app.add_middleware(BodyLimitMiddleware, default_cap=settings.max_body_bytes)

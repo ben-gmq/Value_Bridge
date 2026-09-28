@@ -10,12 +10,16 @@ class Settings(BaseSettings):
     database_url: str                      # the application role (vb_app) — DML only (§6.6)
     migration_database_url: str            # the owner role (vb_owner) — migrations only
     jwt_secret_key: str                    # env only, never a fallback (§9.1)
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = "http://localhost:5180"
     # D-11: accounts are FTC staff only. Comma-separated email domains, e.g. "fortience.com".
     allowed_email_domains: str
     token_days_default: int = 1            # scaffold §1: 1 day, 30 with remember-me
     token_days_remember: int = 30
     max_body_bytes: int = 1_048_576        # ingress cap for ordinary JSON routes (R2-S8)
+    # H1: the anonymous first-run setup exists only where this is switched on (local dev).
+    # Cloud environments create the first admin with `python -m seeds.create_admin`.
+    allow_first_run_setup: bool = False
+    enable_api_docs: bool = False          # M9: /docs, /redoc, /openapi.json off by default
 
     @property
     def email_domains(self) -> set[str]:

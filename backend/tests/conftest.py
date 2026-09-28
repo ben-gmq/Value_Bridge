@@ -9,6 +9,7 @@ _env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
 os.environ["DATABASE_URL"] = _env["TEST_DATABASE_URL"]
 os.environ["MIGRATION_DATABASE_URL"] = _env["TEST_MIGRATION_DATABASE_URL"]
 os.environ["ALLOWED_EMAIL_DOMAINS"] = "example.test"
+os.environ["ALLOW_FIRST_RUN_SETUP"] = "true"
 os.environ.setdefault("JWT_SECRET_KEY", _env["JWT_SECRET_KEY"])
 
 import pytest  # noqa: E402

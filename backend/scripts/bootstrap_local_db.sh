@@ -31,7 +31,7 @@ MIGRATION_DATABASE_URL=postgresql+psycopg://vb_owner:${OWNER_PW}@localhost:5432/
 TEST_DATABASE_URL=postgresql+psycopg://vb_app:${APP_PW}@localhost:5432/vb_test_db
 TEST_MIGRATION_DATABASE_URL=postgresql+psycopg://vb_owner:${OWNER_PW}@localhost:5432/vb_test_db
 JWT_SECRET_KEY=${JWT}
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5180
 ALLOWED_EMAIL_DOMAINS=${VB_EMAIL_DOMAINS}
 ENV
 echo "Created roles vb_owner, vb_app; databases vb_db, vb_test_db; wrote $ENV_FILE (mode 600)."

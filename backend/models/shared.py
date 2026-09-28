@@ -32,6 +32,8 @@ class CodeMaster(AuditMixin, Base):
     behaviour_code: Mapped[str | None] = mapped_column(String(20))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Seeded FTC library rows have no author — the one nullable created_by (deviation 7).
+    created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
 
     __table_args__ = (
         Index("uq_code_master_scope", "project_id", "category", "code", unique=True,

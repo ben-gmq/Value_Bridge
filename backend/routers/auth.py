@@ -32,10 +32,7 @@ def setup(body: SetupIn, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=MeOut, **_auth.route)
 def me(user: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
-    if user.is_platform_admin:
-        return MeOut(user=UserOut.model_validate(user), grant=None, role=None, scope="PLATFORM_ADMIN")
-    g = access.live_grant(db, user)
-    if g is None:
-        return MeOut(user=UserOut.model_validate(user), grant=None, role=None, scope="NONE")
-    return MeOut(user=UserOut.model_validate(user), grant=GrantOut.model_validate(g),
-                 role=access.grant_role(db, g), scope="PROJECT" if g.project_id else "PROGRAM")
+    scope, g, code = access.describe_scope(db, user)          # M8 — logic in the service
+    return MeOut(user=UserOut.model_validate(user),
+                 grant=GrantOut.model_validate(g) if g else None,
+                 project_role_code=code, scope=scope)

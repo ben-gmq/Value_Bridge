@@ -6508,7 +6508,12 @@ target is confirmed.
 - **Frontend**: Azure Static Web Apps (Standard), custom domain, TLS. The CSP and security
   headers of §14.5 are set in `staticwebapp.config.json`.
 - **API**: Azure Container Apps, with a minimum of 1 replica so the first request of the
-  day does not cold-start. HTTPS ingress only.
+  day does not cold-start. HTTPS ingress only. uvicorn runs with `--proxy-headers
+  --forwarded-allow-ips=<ingress range>` so audit rows record the caller's address, not the
+  proxy's (sara L11).
+- **First admin**: first-run setup is switched off in every Azure environment
+  (`ALLOW_FIRST_RUN_SETUP=false`); the first platform admin is created with
+  `python -m seeds.create_admin`, run by Ben as a one-off Container Apps Job (sara H1).
 - **Database**: Azure Database for PostgreSQL Flexible Server (PostgreSQL 16), **private
   access only** — VNet-integrated, no public endpoint. The Container Apps environment sits
   in the same VNet.

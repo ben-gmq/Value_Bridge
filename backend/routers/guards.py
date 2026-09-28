@@ -22,6 +22,10 @@ from models import AppUser
 from services import access
 
 GUARD_KEY = "x-vb-guard"
+# Every guard dependency ever built, by identity → its kind. Criterion 49 checks that each
+# route's declared kind is backed by an attached dependency of the same kind — a hand-written
+# openapi_extra marker without the real Depends cannot pass (sara H2d).
+GUARD_DEPS: dict[int, "Guard"] = {}
 
 
 class Guard(str, Enum):
@@ -44,6 +48,9 @@ class GuardSpec:
     min_role: str | None = None
     model: type | None = None
     extra: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        GUARD_DEPS[id(self.dep)] = self.kind
 
     @property
     def route(self) -> dict:

@@ -2,6 +2,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -11,7 +12,21 @@ log = logging.getLogger("vb")
 CONFLICT = "Updated by another user. Please refresh."
 
 
+def _flatten(exc: RequestValidationError) -> str:
+    """M5: one readable `detail` string, which is all the frontend ever reads (§7)."""
+    parts = []
+    for e in exc.errors()[:5]:
+        loc = ".".join(str(x) for x in e.get("loc", ()) if x not in ("body", "query", "path"))
+        msg = str(e.get("msg", "is invalid")).removeprefix("Value error, ")
+        parts.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(parts) or "The request is invalid."
+
+
 def install(app: FastAPI) -> None:
+    @app.exception_handler(RequestValidationError)
+    async def _validation(_: Request, exc: RequestValidationError):
+        return JSONResponse({"detail": _flatten(exc)}, status_code=422)
+
     @app.exception_handler(StaleDataError)
     async def _stale(_: Request, __: StaleDataError):
         return JSONResponse({"detail": CONFLICT}, status_code=409)            # D-6
@@ -22,7 +37,10 @@ def install(app: FastAPI) -> None:
         if code == "23505":                                                  # unique violation
             return JSONResponse({"detail": "That already exists. Refresh and check the "
                                            "existing record."}, status_code=409)   # P10
-        if code in ("23503", "23514"):                                       # FK / CHECK
+        if code in ("23502", "23514"):                                       # NOT NULL / CHECK
+            log.warning("integrity violation: %s", code)                      # L5 — a 422, not 409
+            return JSONResponse({"detail": "That value is not allowed here."}, status_code=422)
+        if code == "23503":                                                  # FK
             log.warning("integrity violation: %s", code)
             return JSONResponse({"detail": "That change conflicts with related records."},
                                 status_code=409)

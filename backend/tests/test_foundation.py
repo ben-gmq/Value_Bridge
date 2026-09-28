@@ -157,3 +157,43 @@ def test_oversized_body_is_413_before_the_handler(client, world):
     big = "x" * 1_100_000
     r = client.post("/auth/login", content=big, headers={"Content-Type": "application/json"})
     assert r.status_code == 413
+
+
+# ---- sara fixes -----------------------------------------------------------------------------
+
+def test_setup_is_404_when_switched_off(client, monkeypatch):
+    """H1: with ALLOW_FIRST_RUN_SETUP off (the cloud default) setup does not exist."""
+    from config import get_settings
+    monkeypatch.setattr(get_settings(), "allow_first_run_setup", False)
+    assert client.get("/auth/setup").json() == {"setup_required": False}
+    r = client.post("/auth/setup", json={"email": "a@example.test", "display_name": "A", "password": PW})
+    assert r.status_code == 404
+
+
+def test_api_docs_are_off_by_default(client):
+    """M9."""
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_validation_errors_are_one_detail_string(client, world):
+    """M5: the frontend reads `detail` only — it must be a sentence, not a list."""
+    r = client.post("/api/v1/clients", headers=world["admin"], json={"client_code": "", "client_name": "X"})
+    assert r.status_code == 422 and isinstance(r.json()["detail"], str)
+    assert "client_code" in r.json()["detail"]
+
+
+def test_null_name_and_reversed_dates_are_422(client, world):
+    """L5."""
+    url = f"/api/v1/projects/{world['p_solo']}"
+    p = client.get(url, headers=world["admin"]).json()
+    assert client.patch(url, headers=world["admin"], json={
+        "row_version": p["row_version"], "project_name": None}).status_code == 422
+    assert client.patch(url, headers=world["admin"], json={
+        "row_version": p["row_version"], "start_date": "2027-03-01", "end_date": "2027-01-01"}).status_code == 422
+
+
+def test_overlong_email_is_rejected(client, world):
+    """M10."""
+    r = client.post("/auth/login", json={"email": "a" * 300 + "@example.test", "password": PW})
+    assert r.status_code == 422
