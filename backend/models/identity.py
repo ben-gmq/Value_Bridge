@@ -26,6 +26,9 @@ class AppUser(TimestampMixin, Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Nullable only because the first-run admin is created by nobody (scaffold §1).
     created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    updated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
 
     __mapper_args__ = {"version_id_col": row_version}
@@ -72,6 +75,8 @@ class UserAccessGrant(AuditMixin, Base):
         ForeignKeyConstraint(["program_id", "scope_is_active"],
                              ["program.program_id", "program.is_active"],
                              name="fk_grant_live_program", onupdate="NO ACTION"),
+        Index("ix_grant_program_live", "program_id", postgresql_where=text("is_active")),
+        Index("ix_grant_project_live", "project_id", postgresql_where=text("is_active")),
     )
 
     def owning_project_id(self) -> int | None:
@@ -95,3 +100,5 @@ class AuditEvent(Base):
     )
     source_ip: Mapped[str | None] = mapped_column(INET)
     detail: Mapped[dict | None] = mapped_column(JSONB)
+
+    __table_args__ = (Index("ix_audit_event_project", "project_id", "occurred_at"),)
