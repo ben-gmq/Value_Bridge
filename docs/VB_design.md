@@ -3389,7 +3389,8 @@ The one place any VB identifier is minted (§9.10). Called at commit, never on s
 (§9.8).
 
 ```
-lock row PROJECT_SEQUENCE(project_id, entity_type) FOR UPDATE   # create at 0 if absent
+lock row PROJECT_SEQUENCE(project_id, entity_type) FOR UPDATE
+if absent: raise MissingSequence      # never insert lazily — create_project seeds all ten (R2-D14)
 seq = row.last_value + 1
 row.last_value = seq
 return f"{prefix}-{seq:0{width}d}"        # DE-0001, BR-0001, FR-0001, ISS-0001
@@ -4341,7 +4342,7 @@ login(email, password):
                                                    # "wrong password"
     user.last_login_at = now()
     AUDIT_EVENT(event_type='LOGIN_OK', app_user_id=user.id)
-    return jwt(sub=user.id, exp=now() + ACCESS_TOKEN_TTL)      # A-34: 8 hours
+    return jwt(sub=user.id, exp=now() + (30 days if remember_me else 1 day))   # A-34, §14.5
     # finding S4: the token carries the SUBJECT ONLY. It does not carry is_platform_admin
     # or any role, because a claim baked into a token cannot be revoked.
 
@@ -6023,10 +6024,7 @@ Confirm or kill each. Those marked ⚠ change the data model if wrong.
   UTC, an issue resolved at 06:30 ICT recorded the previous day, and a US-locale sheet
   reading `03/04/2027` committed as 3 April where the author meant 4 March. Every wrong
   value looks plausible, so nothing would ever have surfaced it.
-- `ASSUMPTION A-34` — **JWT lifetime is 8 hours, no refresh token in MVP.** The token
-  carries the subject only; `is_active` and `is_platform_admin` are re-read per request
-  (finding S4). **Check `fortience-app-scaffold` before building** — if the scaffold pins a
-  different expiry or a refresh model, the scaffold wins and this assumption is deleted.
+- ✅ `A-34` — **Revised 2026-09-28 at build: JWT lifetime follows the FTC scaffold standard** — 1 day, or 30 days with remember-me (§14.5), no refresh token. The earlier 8-hour figure contradicted §14.5. Deactivation still takes effect on the next request, because `current_user` re-reads the user (S4).
 - ✅ `A-35` — **RESOLVED by Ben, 2026-09-28: at most 2,000 process nodes per project.**
   `freeze_baseline` stays synchronous; criterion 76 stands with "process nodes" for "L5
   nodes", and with **30** frozen tables for 25 (D-24a, D-27 added four shadow tables; R2-D7 the rate card).
