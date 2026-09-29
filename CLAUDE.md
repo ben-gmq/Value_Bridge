@@ -66,7 +66,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
     and gets its migration **one per commit**, reversible; a destructive one pauses for Ben.
 
 ## Parallel sessions (up to ~20 a day)
-- **One git worktree per slice.** Branch from `main`; merge back through review.
+- **One git worktree per slice**, at `.worktrees/<branch>` inside the repo (gitignored) — never a
+  sibling folder. Branch from `main`; merge back through review.
 - **Migrations only on `main`, in order.** A slice branch that needs a table rebases onto the
   latest `main` before creating its migration, so revision ids never fork. Two slices never
   add migrations at the same time — coordinate on `main`.

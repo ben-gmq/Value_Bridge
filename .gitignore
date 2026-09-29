@@ -22,3 +22,6 @@ dist/
 docs/mockups/node_modules/
 # Browser-test screenshots land in the repo root (Playwright tool root) — never commit them
 /*.png
+
+# Slice worktrees live inside the repo (one per slice)
+.worktrees/
