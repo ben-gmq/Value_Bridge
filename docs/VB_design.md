@@ -3,7 +3,7 @@
 **App:** Value Bridge (VB) · **For:** Fortience Consulting Inc. — Strategic PMO practice
 **Scope of this spec:** MVP — Scope Management & Control
 **Status:** **SIGNED OFF by Ben, 2026-09-28, in Plan Mode.** Changes from here are proposed with evidence and approved before they land.
-**Date:** 2026-09-17 · **Revised:** 2026-09-28 (D-23…D-31, Ben's v8 review) · 2026-09-28 (round-2 review, D-32…D-36) · **Supersedes:** nothing. Builds on `docs/ASSESSMENT_BRIEF.md`.
+**Date:** 2026-09-17 · **Revised:** 2026-09-28 (D-23…D-31, Ben's v8 review) · 2026-09-28 (round-2 review, D-32…D-36) · 2026-09-29 (Slice 1 schema review, S1-1…S1-7) · **Supersedes:** nothing. Builds on `docs/ASSESSMENT_BRIEF.md`.
 
 ---
 
@@ -299,6 +299,30 @@ reported. **Resolved by Ben the same day (Q15): a client contract that requires 
 engagement end overrides the 5-year baseline retention.** Five years is the default when the
 contract says nothing. The mechanism is per-project crypto-shredding of the evidence archive
 (§15.3), so the archive's storage stays write-once.
+
+### Slice 1 schema review — 2026-09-29
+
+Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
+(`docs/slice1_schema.md`, whose `[Q-n]` numbers are cited below). Three items are defects in
+the signed-off text; the rest close gaps. **Ben approved S1-1…S1-7 on 2026-09-29**, on the
+test that anything which would otherwise need a schema change later is fixed now. Where
+these rows and the section they cite disagree, **these rows win**.
+
+| # | Decision | Supersedes | apple |
+|---|---|---|---|
+| S1-1 | **Sibling order covers the roots.** `UNIQUE (project_id, parent_*_id, seq_no) NULLS NOT DISTINCT WHERE is_active` on `bfc_node` and `org_unit`. A NULL parent (L1) is one shared parent per project | §5.3 BFC_NODE, §6.2 (`(parent_bfc_node_id, seq_no)` let two L1 nodes share a position) | Q-1 |
+| S1-2 | **Reorder writes codes in two phases.** `renumber_subtree` first sets `hier_code = '~' \|\| bfc_node_id` on every affected row, then writes the final codes. The affected set is **every shifted sibling and all their descendants**, not only the moved node's subtree. `hier_code` is `varchar(40)`. Field reorder (`data_field.seq_no`) uses the same two-phase pattern | §7.2 (a swap hit the live `hier_code` index mid-update) | Q-2 |
+| S1-3 | **Position range** `CHECK (seq_no <> 0 AND seq_no BETWEEN -99 AND 99)`: at most 99 siblings, negatives only during a reorder | §5.3, §4.1 (two-digit pad broke at 100) | Q-3 |
+| S1-4 | **Lookups are category-verified.** Each code FK in the slice (`org_unit.level_code_id`, `data_field.data_type_code_id`, `external_entity.kind_code_id`, `business_requirement.status_code_id`) gets a generated constant `*_category` column and a composite FK to `code_master (code_id, category)` (`uq_code_category_target`). Project scope stays with `code_master.resolve` plus a `consistency_check` line | §5.3, §6.2 (only RACI and FR type were verified) | Q-4 |
+| S1-5 | **Link rows have their own identity.** `bfc_node_data_entity`, `br_data_entity`, `bfc_node_org_role` and `br_org_role` get a surrogate identity **primary key** `<table>_id`; the design's composite key becomes a `UNIQUE NOT NULL` constraint, and every FK that targeted it still does. This is what lets `baseline_shadow.py` snapshot them unchanged (it records the PK as `source_id`) | §5.3 junction PKs, §6.1 | Q-12, taken as surrogate-PK rather than apple's generator change |
+| S1-6 | **User-entered names and codes are unique among live rows**, normalised `lower(btrim(…))`: `data_entity.de_name`, `data_field.field_name` (and `pk_ordinal`), `org_role.org_role_code`, `org_unit.org_unit_code`. Minted numbers keep full UKs (§5.1) | §5.3, §6.2 (full UKs blocked re-adding a retired name) | Q-6, Q-7, Q-8 |
+| S1-7 | **Smaller items.** `org_unit` depth held by the service + `consistency_check` (column `level_code_id`); `org_role → org_unit` is composite `(org_unit_id, project_id)`; `br_statement` is nullable and the service sets `BR_STATUS/DRAFT`; `fk_group_no` — the request names the relationship (`new` or an existing group), the service assigns the number; `business_requirement.bfc_node_id` immutability is service-enforced; re-linking a retired link **restores** the row, never inserts; `raci_category` is `varchar(40)`; apple's four sanity CHECKs | §5.3, §7.2–§7.4 | Q-9…Q-11, Q-13, Q-14, Q-16…Q-18 |
+
+**Deferred, not decided:** `bfc_node_flow` moves to the process-flow slice (Q-15), and whether
+`FLOW_TYPE` becomes a CHECK column is decided with it (Q-5, Ben 2026-09-29). **For the shadow
+slice:** the generator will also copy `purpose_desc`, `output_expectation` and
+`business_owner_note`, which §5.2's shadow blocks omit, and still needs code labels and
+baseline-id remapping of parent keys.
 
 ---
 
@@ -1659,7 +1683,8 @@ targets. Partial UKs:
   That is why imports identify steps by BR number (§5.4.18, R2-D1). Restoring a node whose
   code a live node now holds is refused by the index. The service renumbers the restored node
   into its parent (§7.12 `restore`).
-- `(parent_bfc_node_id, seq_no) WHERE is_active`: sibling order.
+- `(project_id, parent_bfc_node_id, seq_no) NULLS NOT DISTINCT WHERE is_active`: sibling
+  order, L1 included (**S1-1**; was `(parent_bfc_node_id, seq_no)`).
 - **`(parent_bfc_node_id, lower(btrim(node_name))) WHERE is_active AND is_process`** (Q1): two
   live process steps under one parent cannot share a name. Promoting a node to process when a
   process sibling already has its name is refused. The partial predicate follows Ben's answer
@@ -3439,7 +3464,10 @@ reorder(node, new_seq_no):                       # finding P7
     with one transaction:
         UPDATE siblings SET seq_no = -seq_no WHERE parent = :p   # disjoint negative range
         UPDATE siblings SET seq_no = <target>                    # into place, no collision
-        for n in {node} ∪ descendants(node): n.hier_code = generate_code(n)
+        # S1-2: codes are two-phase too, and every SHIFTED sibling's subtree is re-coded.
+        affected = ∪ {s} ∪ descendants(s) for s in siblings whose seq_no changed
+        UPDATE affected SET hier_code = '~' || bfc_node_id       # cannot equal a dotted code
+        for n in affected: n.hier_code = generate_code(n)
         AUDIT_EVENT(event_type='BFC_REORDERED', detail={node, from, to, subtree_size})
 
 mark_process(node_id, is_process, row_version):          # D-23
