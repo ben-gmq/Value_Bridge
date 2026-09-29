@@ -86,3 +86,37 @@ class BrDataEntity(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BrOrgRole(AuditMixin, Base):
+    """BR × org role × RACI; one ACCOUNTABLE-behaviour role per BR. S1-5: surrogate PK."""
+
+    __tablename__ = "br_org_role"
+
+    br_org_role_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    org_role_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    raci_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    raci_category: Mapped[str] = mapped_column(String(40), Computed("'RACI_TYPE'", persisted=True))
+    raci_behaviour: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "org_role_id", "raci_code_id", name="uq_bror_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"],
+                             name="fk_bror_br"),
+        ForeignKeyConstraint(["org_role_id", "project_id"],
+                             ["org_role.org_role_id", "org_role.project_id"], name="fk_bror_role"),
+        ForeignKeyConstraint(["raci_code_id", "raci_category", "raci_behaviour"],
+                             ["code_master.code_id", "code_master.category", "code_master.behaviour_code"],
+                             name="fk_bror_raci", onupdate="NO ACTION"),
+        Index("uq_bror_one_accountable", "br_id", unique=True,
+              postgresql_where=text("is_active AND raci_behaviour = 'ACCOUNTABLE'")),
+        Index("ix_bror_role", "org_role_id", "project_id"),
+        Index("ix_bror_raci", "raci_code_id"),
+        Index("ix_bror_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
