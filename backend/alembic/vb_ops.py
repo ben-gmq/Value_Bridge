@@ -1,4 +1,7 @@
-"""Shared migration helpers. The conventions live here once, not in every revision."""
+"""Shared migration helpers. The conventions live here once, not in every revision.
+
+Append-only: revisions replay these on every upgrade, so changing a helper rewrites every
+migration that already used it. Add a new helper instead of editing an old one."""
 from alembic import op
 import sqlalchemy as sa
 
@@ -26,3 +29,17 @@ def updated_at_trigger(table: str) -> None:
 
 def drop_updated_at_trigger(table: str) -> None:
     op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_updated_at ON {table}")
+
+
+def live_guard(name: str, value: bool) -> sa.Column:
+    """§5.4.7(1): a generated guard that carries `value` while the row is live and NULL once
+    retired, so a composite FK through it applies only to live rows (MATCH SIMPLE)."""
+    return sa.Column(name, sa.Boolean,
+                     sa.Computed(f"CASE WHEN is_active THEN {str(value).upper()} END", persisted=True))
+
+
+def category_column(name: str, category: str) -> sa.Column:
+    """S1-4: a generated constant naming the code_master category a code FK must belong to.
+    Paired with an FK to code_master (code_id, category) — uq_code_category_target."""
+    return sa.Column(name, sa.String(40), sa.Computed(f"'{category}'", persisted=True),
+                     nullable=False)
