@@ -59,7 +59,11 @@ export default function OrganisationPage() {
   const expandedItems = expanded ?? units.map((u) => String(u.org_unit_id));
 
   const refreshUnits = () => qc.invalidateQueries({ queryKey: keys.units(projectId) });
-  const refreshRoles = () => qc.invalidateQueries({ queryKey: keys.roles(projectId) });
+  const refreshRoles = () => {
+    qc.invalidateQueries({ queryKey: keys.roles(projectId) });
+    qc.invalidateQueries({ queryKey: ['bfc-node'] });   // RACI panels show role names
+    qc.invalidateQueries({ queryKey: ['br'] });
+  };
 
   const retire = useMutation({
     mutationFn: ({ kind, row }) => (kind === 'unit'
@@ -82,14 +86,17 @@ export default function OrganisationPage() {
       if (kind === 'unit') refreshUnits(); else refreshRoles();
       setNotice(t(kind === 'unit' ? 'settings.org.unitRestored' : 'settings.org.roleRestored'));
     },
-    onError: (err) => setError(errorText(err, t('settings.restoreFailed'))),
+    onError: (err, { kind }) => {
+      if (kind === 'unit') refreshUnits(); else refreshRoles();
+      setError(errorText(err, t('settings.restoreFailed')));
+    },
   });
 
   // ---- unit dialog ----
-  const unitFields = (depth) => [
+  const unitFields = (depth, editing) => [
     { name: 'org_unit_code', label: t('settings.code'), required: true },
     { name: 'org_unit_name', label: t('settings.name'), required: true },
-    { name: 'level_code', label: t('settings.org.level'), type: 'select',
+    { name: 'level_code', label: t('settings.org.level'), type: 'select', required: editing,
       emptyLabel: t('settings.org.levelDefault', { level: levelLabel(levels[depth - 1]?.code) || depth }),
       options: levels.map((c) => ({ value: c.code, label: c.label })) },
     { name: 'description', label: t('settings.description'), multiline: true },
@@ -230,7 +237,7 @@ export default function OrganisationPage() {
       </Page>
 
       {unitDialog && (
-        <RecordDialog open fields={unitFields(unitDialog.row ? unitDialog.row.level_no : (unitDialog.parent?.level_no ?? 0) + 1)}
+        <RecordDialog open fields={unitFields(unitDialog.row ? unitDialog.row.level_no : (unitDialog.parent?.level_no ?? 0) + 1, Boolean(unitDialog.row))}
           title={unitDialog.row ? t('settings.org.editUnitTitle', { code: unitDialog.row.org_unit_code })
             : unitDialog.parent ? t('settings.org.addChildTitle', { parent: unitDialog.parent.org_unit_name })
               : t('settings.org.addTopTitle')}

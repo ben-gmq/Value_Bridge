@@ -26,7 +26,10 @@ export default function PartiesPage() {
   const [confirm, setConfirm] = useState(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.parties(projectId) });
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: keys.parties(projectId) });
+    qc.invalidateQueries({ queryKey: ['bfc-node'] });   // external-flow panels show party names
+  };
 
   const retire = useMutation({
     mutationFn: (row) => partyApi.retire(row.external_entity_id, row.row_version),
@@ -36,7 +39,7 @@ export default function PartiesPage() {
   const restore = useMutation({
     mutationFn: (row) => partyApi.restore(row.external_entity_id),
     onSuccess: () => { refresh(); setNotice(t('settings.party.restored')); },
-    onError: (err) => setError(errorText(err, t('settings.restoreFailed'))),
+    onError: (err) => { refresh(); setError(errorText(err, t('settings.restoreFailed'))); },
   });
 
   const rows = (q.data ?? []).filter((r) => showRetired || r.is_active);

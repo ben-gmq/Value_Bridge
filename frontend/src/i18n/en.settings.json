@@ -64,5 +64,6 @@
   "settings.org.unitRetired": "Unit retired",
   "settings.org.unitRestored": "Unit restored",
   "settings.org.roleRetired": "Role retired",
-  "settings.org.roleRestored": "Role restored"
+  "settings.org.roleRestored": "Role restored",
+  "settings.codeRetired": "{code} (no longer offered)"
 }

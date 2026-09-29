@@ -3,18 +3,16 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
   FormControlLabel, InputLabel, Link, MenuItem, Select, Stack, Switch, TextField, Typography } from '@mui/material';
-import { errorText, isConflict } from '../../api/client';
+import { errorText, isStale } from '../../api/client';
 import { links } from '../../app/links';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { t } from '../../i18n/t';
 
 // Shared pieces of the two settings screens (client organisation, external parties).
 
-// A 409 is a stale row_version only when the backend says so (services/errors.py CONFLICT,
-// lifecycle.check_version). Every other 409 names its blocker and is shown as text.
-const STALE_DETAIL = 'Updated by another user';
-export const isStale = (err) =>
-  isConflict(err) && String(err?.response?.data?.detail ?? '').startsWith(STALE_DETAIL);
+// A stale row_version is marked by the server (X-VB-Error: STALE → isStale); every other 409
+// names its blocker and is shown as text.
+export { isStale };
 
 export function SettingsCrumbs({ projectId, current }) {
   return (
@@ -87,7 +85,7 @@ export function RecordDialog({ open, title, fields, row, initial, onSubmit, onRe
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={m.isPending ? undefined : onClose} maxWidth="sm" fullWidth>
         <DialogTitle>{title}</DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error}</Alert>}
@@ -96,10 +94,12 @@ export function RecordDialog({ open, title, fields, row, initial, onSubmit, onRe
               <FormControl key={f.name} size="small" required={f.required}>
                 <InputLabel id={`rec-${f.name}-label`}>{f.label}</InputLabel>
                 <Select labelId={`rec-${f.name}-label`} id={`rec-${f.name}`} label={f.label}
-                  value={f.options.some((o) => o.value === values[f.name]) ? values[f.name] : ''}
+                  value={values[f.name] ?? ''}
                   onChange={(e) => set(f.name, e.target.value)}>
                   {!f.required && <MenuItem value=""><em>{f.emptyLabel ?? t('common.none')}</em></MenuItem>}
                   {f.options.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+                  {values[f.name] && !f.options.some((o) => o.value === values[f.name]) && (
+                    <MenuItem value={values[f.name]} disabled>{t('settings.codeRetired', { code: values[f.name] })}</MenuItem>)}
                 </Select>
                 {f.helperText && <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5, ml: 1.75 }}>{f.helperText}</Typography>}
               </FormControl>
@@ -112,7 +112,7 @@ export function RecordDialog({ open, title, fields, row, initial, onSubmit, onRe
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={onClose} disabled={m.isPending}>{t('common.cancel')}</Button>
           <Button variant="contained" disabled={m.isPending || reloading || missing}
             onClick={() => { setError(''); m.mutate(); }}>{row ? t('common.save') : t('common.create')}</Button>
         </DialogActions>
