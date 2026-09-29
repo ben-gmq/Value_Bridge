@@ -90,13 +90,15 @@ function Header() {
         <Typography sx={{ fontWeight: 700, fontSize: 16.5, color: 'brand.onFtc' }}>{t('app.name')}</Typography>
       </Box>
       <ScopeSelector />
-      <Box component="nav" aria-label="Main" sx={{ display: 'flex', gap: 0.25 }}>
+      <Box component="nav" aria-label="Main" sx={{ display: 'flex', gap: 0.25, minWidth: 0, overflowX: 'auto',
+        scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {base && NAV.map(([key, path]) => {
           const active = section === path;
           return (
             <Box key={key} component={RouterLink} to={path ? `${base}/${path}` : base}
               aria-current={active ? 'page' : undefined}
               sx={(th) => ({ textDecoration: 'none', px: 1.5, py: 0.875, borderRadius: 999, fontSize: 14.5,
+                whiteSpace: 'nowrap', flexShrink: 0,
                 fontWeight: active ? 600 : 500,
                 color: active ? th.vars.palette.brand.ftc : th.vars.palette.brand.onFtc2,
                 bgcolor: active ? th.vars.palette.brand.onFtcPill : 'transparent',
@@ -106,6 +108,7 @@ function Header() {
         {!base && isAdmin && (
           <Box component={RouterLink} to="/admin" aria-current={pathname.startsWith('/admin') ? 'page' : undefined}
             sx={(th) => ({ textDecoration: 'none', px: 1.5, py: 0.875, borderRadius: 999, fontSize: 14.5,
+                whiteSpace: 'nowrap', flexShrink: 0,
               fontWeight: 600, color: pathname.startsWith('/admin') ? th.vars.palette.brand.ftc : th.vars.palette.brand.onFtc2,
               bgcolor: pathname.startsWith('/admin') ? th.vars.palette.brand.onFtcPill : 'transparent' })}>{t('nav.admin')}</Box>
         )}
