@@ -416,3 +416,23 @@ def test_a_stale_save_is_marked_and_other_conflicts_are_not(client, ed):
     assert stale.status_code == 409 and stale.headers.get("x-vb-error") == "STALE"
     dup = client.post(f"{API}/projects/{ed['p']}/bfc-nodes", headers=ed["h"], json={"node_name": "a"})
     assert dup.status_code == 409 and "x-vb-error" not in dup.headers
+
+
+def test_fk_field_keeps_its_own_relationship_number(client, ed):
+    """sara (data M2): changing only the target field must not renumber the relationship."""
+    order, cust = entity(client, ed, "Order"), entity(client, ed, "Customer")
+    url_c = f"{API}/data-entities/{cust['data_entity_id']}/fields"
+    a = client.post(url_c, headers=ed["h"], json={"field_name": "id", "is_primary_key": True, "pk_ordinal": 1}).json()
+    b = client.post(url_c, headers=ed["h"], json={"field_name": "code"}).json()
+    url = f"{API}/data-entities/{order['data_entity_id']}/fields"
+    fks = [client.post(url, headers=ed["h"], json={"field_name": n, "ref_data_entity_id": cust["data_entity_id"],
+                                                   "ref_data_field_id": a["data_field_id"]}).json()
+           for n in ("f1", "f2", "f3")]
+    assert [f["fk_group_no"] for f in fks] == [1, 2, 3]
+    mid = fks[1]
+    for body in ({"fk_group": 2}, {}):                        # keep explicitly, and by default
+        r = client.patch(f"{API}/data-fields/{mid['data_field_id']}", headers=ed["h"], json={
+            "row_version": mid["row_version"], "ref_data_entity_id": cust["data_entity_id"],
+            "ref_data_field_id": b["data_field_id"], **body})
+        assert r.status_code == 200 and r.json()["fk_group_no"] == 2, r.text
+        mid = r.json()

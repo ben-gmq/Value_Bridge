@@ -75,9 +75,11 @@ def _apply(db: Session, de: DataEntity, f: DataField, spec: dict) -> None:
             rf = db.get(DataField, ref_field_id)
             if rf is None or rf.data_entity_id != target.data_entity_id or not rf.is_active:
                 raise HTTPException(422, "The referenced field must belong to the referenced entity")
-        group = spec.get("fk_group", "new")
+        # Same target: the field may keep its own relationship number, and does if none is sent.
+        own = f.fk_group_no if f.data_field_id and f.ref_data_entity_id == target_id else None
+        group = spec.get("fk_group", own if own is not None else "new")
         f.is_foreign_key, f.ref_data_entity_id, f.ref_data_field_id = True, target_id, ref_field_id
-        f.fk_group_no = _group_no(db, de, target_id, group, f)
+        f.fk_group_no = own if own is not None and group == own else _group_no(db, de, target_id, group, f)
 
 
 def _group_no(db: Session, de: DataEntity, target_id: int, group, field: DataField) -> int:
