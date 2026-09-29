@@ -172,3 +172,45 @@ class BfcNodeOrgRole(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BfcNodeExternalFlow(AuditMixin, Base):
+    """Step × party × direction × DE (optional, §5.4.9). A named DE must be licensed by live
+    step I/O; re-adding restores the row (full grain UK)."""
+
+    __tablename__ = "bfc_node_external_flow"
+
+    bfc_node_external_flow_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    bfc_node_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    node_is_process: Mapped[bool | None] = _live(True)
+    external_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    direction: Mapped[str] = mapped_column(CHAR(1), nullable=False)
+    data_entity_id: Mapped[int | None] = mapped_column(BigInteger)
+    io_is_active: Mapped[bool | None] = _live(True)
+    flow_label: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("bfc_node_id", "external_entity_id", "direction", "data_entity_id",
+                         name="uq_bnef_grain", postgresql_nulls_not_distinct=True),
+        *_process_node_fk("bnef"),
+        ForeignKeyConstraint(["external_entity_id", "project_id"],
+                             ["external_entity.external_entity_id", "external_entity.project_id"],
+                             name="fk_bnef_ext"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"],
+                             ["data_entity.data_entity_id", "data_entity.project_id"], name="fk_bnef_de"),
+        ForeignKeyConstraint(["bfc_node_id", "data_entity_id", "direction", "io_is_active"],
+                             ["bfc_node_data_entity.bfc_node_id", "bfc_node_data_entity.data_entity_id",
+                              "bfc_node_data_entity.direction", "bfc_node_data_entity.is_active"],
+                             name="fk_bnef_io_licence", onupdate="NO ACTION"),
+        CheckConstraint("direction IN ('I', 'O')", name="ck_bnef_direction"),
+        Index("ix_bnef_io", "bfc_node_id", "data_entity_id", "direction"),
+        Index("ix_bnef_ext", "external_entity_id", "project_id"),
+        Index("ix_bnef_node", "bfc_node_id", "project_id"),
+        Index("ix_bnef_de", "data_entity_id", "project_id"),
+        Index("ix_bnef_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
