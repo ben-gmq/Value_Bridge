@@ -77,6 +77,7 @@ function Header() {
   const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const base = projectId ? `/p/${projectId}` : null;
   const section = base ? pathname.slice(base.length + 1).split('/')[0] : null;
+  const inSettings = section === 'settings' || section === 'access';   // Settings holds access too
 
   return (
     <Box component="header" sx={(th) => ({ height: 56, flexShrink: 0, px: 2.5, display: 'flex',
@@ -118,12 +119,12 @@ function Header() {
         </IconButton>
       </Tooltip>
       {base && (
-        <Tooltip title={t('nav.access')}>
-          <IconButton component={RouterLink} to={`${base}/access`} aria-label={t('nav.access')}
-            aria-current={section === 'access' ? 'page' : undefined}
+        <Tooltip title={t('nav.settings')}>
+          <IconButton component={RouterLink} to={`${base}/settings`} aria-label={t('nav.settings')}
+            aria-current={inSettings ? 'page' : undefined}
             sx={(th) => ({ ...onFtc(th), border: '1px solid', width: 36, height: 36,
-              bgcolor: section === 'access' ? th.vars.palette.brand.onFtcPill : th.vars.palette.brand.onFtcFill,
-              color: section === 'access' ? th.vars.palette.brand.ftc : th.vars.palette.brand.onFtc })}>
+              bgcolor: inSettings ? th.vars.palette.brand.onFtcPill : th.vars.palette.brand.onFtcFill,
+              color: inSettings ? th.vars.palette.brand.ftc : th.vars.palette.brand.onFtc })}>
             <TuneIcon fontSize="small" />
           </IconButton>
         </Tooltip>

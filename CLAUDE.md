@@ -14,6 +14,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 - **Backend:** Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic, psycopg 3, PostgreSQL 16.
 - **Frontend:** React 18 + MUI 9 + Vite 8, TanStack Query, React Router 7.
 - **Ports: API 8100, web 5180.** Not 8000/5173 — those belong to other FTC apps on this machine.
+  A parallel session uses its own pair (`--port 81xx`, `VB_API_PORT=81xx VB_WEB_PORT=51xx npm run dev`)
+  and its own database; never stop a server by pattern (`pkill -f vite`) — stop your own by PID.
 - **First time on a machine:** `cd backend && VB_EMAIL_DOMAINS=fortience.com ./scripts/bootstrap_local_db.sh`
   (creates roles `vb_owner`/`vb_app`, databases `vb_db`/`vb_test_db`, writes a gitignored `.env`),
   then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master`.
@@ -39,7 +41,10 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   `services/code_master.resolve`. Send codes, never labels. Seeds: `backend/seeds/`, never Alembic.
 - **Brand/theme:** `frontend/src/theme/brand.js` (`BRAND`, `STATUS_COLOR_MAP`, `TOKENS`) →
   `theme.js`. Components read `theme.vars.palette.*` — no hex anywhere else.
-- **Strings:** `frontend/src/i18n/en.json` via `t()`. No hard-coded UI text in new screens.
+- **Strings:** via `t()`, one file per screen area — `frontend/src/i18n/en.json` (shell) plus
+  `en.<area>.json`, keys prefixed by area. No hard-coded UI text in new screens.
+- **Screen contracts:** page addresses and query keys in `frontend/src/app/links.js`; one API
+  function per route in `frontend/src/api/scope.js`. Screens link to each other only through these.
 - **Deviations** from the playbook: [docs/PLAYBOOK_DEVIATIONS.md](docs/PLAYBOOK_DEVIATIONS.md).
 - **Bugs:** [BUGLOG.md](BUGLOG.md) (`VB-###`). Standing review backlog is VB-005.
 

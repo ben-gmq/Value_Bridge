@@ -1,0 +1,11 @@
+{
+  "settings.title": "Settings",
+  "settings.subtitle": "Project configuration and the lists other screens pick from",
+  "settings.access": "People and access",
+  "settings.accessWhat": "Who can see and edit this project",
+  "settings.organisation": "Client organisation",
+  "settings.organisationWhat": "Departments, divisions, sections and the roles in them",
+  "settings.parties": "External parties",
+  "settings.partiesWhat": "Customers, banks, regulators and suppliers that exchange data with a process",
+  "settings.building": "This screen is being built in Slice 1."
+}

@@ -304,7 +304,7 @@ contract says nothing. The mechanism is per-project crypto-shredding of the evid
 
 Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
 (`docs/slice1_schema.md`, whose `[Q-n]` numbers are cited below). Three items are defects in
-the signed-off text; the rest close gaps. **Ben approved S1-1…S1-8 on 2026-09-29**, on the
+the signed-off text; the rest close gaps. **Ben approved S1-1…S1-9 on 2026-09-29**, on the
 test that anything which would otherwise need a schema change later is fixed now. Where
 these rows and the section they cite disagree, **these rows win**.
 
@@ -318,6 +318,7 @@ these rows and the section they cite disagree, **these rows win**.
 | S1-6 | **User-entered names and codes are unique among live rows**, normalised `lower(btrim(…))`: `data_entity.de_name`, `data_field.field_name` (and `pk_ordinal`), `org_role.org_role_code`, `org_unit.org_unit_code`, `external_entity.ext_name` (Ben, 2026-09-29; §6.2 had `lower(ext_name)`). Minted numbers keep full UKs (§5.1) | §5.3, §6.2 (full UKs blocked re-adding a retired name) | Q-6, Q-7, Q-8 |
 | S1-7 | **Smaller items.** `org_unit` depth held by the service + `consistency_check` (column `level_code_id`); `org_role → org_unit` is composite `(org_unit_id, project_id)`; `br_statement` is nullable and the service sets `BR_STATUS/DRAFT`; `fk_group_no` — the request names the relationship (`new` or an existing group), the service assigns the number; `business_requirement.bfc_node_id` immutability is service-enforced; re-linking a retired link **restores** the row, never inserts; `raci_category` is `varchar(40)`; apple's four sanity CHECKs | §5.3, §7.2–§7.4 | Q-9…Q-11, Q-13, Q-14, Q-16…Q-18 |
 | S1-8 | **Build-review calls (Ben, 2026-09-29).** A BR's `BASELINED` / `SUPERSEDED` status is set only by the baseline freeze; `update_br` refuses them (422). The RACI link routes are `/bfc-nodes/{id}/org-roles` and `/business-requirements/{id}/org-roles`, not `/roles` (VB law 7). `/org-units/{id}` and `/org-roles/{id}` join the §9 object-guard list | §9, §7.3 | sara M5, L9 |
+| S1-9 | **Screens (Ben, 2026-09-29).** The top-bar item **Processes opens the business function chart**; the process flow arrives later as a view of it. **Client organisation and external parties live under Settings** (configuration and master data), beside people and access. **The mockups' extra fields are not built**: BR trigger, frequency and priority; DE owning area and master-candidate switch. A requirement priority was checked against the design: nothing reads one — prioritisation is per solution (`value_ranking`, D-14; phasing, D-18) | §14.3 | — |
 
 **Deferred, not decided:** `bfc_node_flow` moves to the process-flow slice (Q-15), and whether
 `FLOW_TYPE` becomes a CHECK column is decided with it (Q-5, Ben 2026-09-29). **For the shadow

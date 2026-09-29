@@ -12,12 +12,27 @@ import AccessPage from '../features/projects/AccessPage';
 import ProgramHome from '../features/programs/ProgramHome';
 import AdminPage from '../features/admin/AdminPage';
 import SectionPlaceholder from '../features/common/SectionPlaceholder';
+import ProcessesPage from '../features/processes/ProcessesPage';
+import RequirementsPage from '../features/requirements/RequirementsPage';
+import RequirementPage from '../features/requirements/RequirementPage';
+import DataEntitiesPage from '../features/data/DataEntitiesPage';
+import DataEntityPage from '../features/data/DataEntityPage';
+import SettingsPage from '../features/settings/SettingsPage';
+import OrganisationPage from '../features/settings/OrganisationPage';
+import PartiesPage from '../features/settings/PartiesPage';
 
 // Routes name their scope (§14.1): /p/:projectId for a project, /g/:programId for a program,
 // so the backend guard always receives it.
-const SECTIONS = [   // [path, i18n section key, build slice]
-  ['processes', 'processes', 2], ['dfd', 'dfd', 2], ['requirements', 'requirements', 1],
-  ['br-fr', 'brfr', 3], ['interfaces', 'interfaces', 3], ['data', 'data', 1],
+const SECTIONS = [   // [path, i18n section key, build slice] — sections not built yet
+  ['dfd', 'dfd', 2], ['br-fr', 'brfr', 3], ['interfaces', 'interfaces', 3],
+];
+
+// Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
+// process flow arrives later as a view of it (Ben, 2026-09-29, S1-9).
+const PAGES = [
+  ['processes', ProcessesPage], ['requirements', RequirementsPage],
+  ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/:deId', DataEntityPage],
+  ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];
 
 function Spinner() {
@@ -49,6 +64,9 @@ export default function App() {
       <Route path="/g/:programId" element={<RequireAuth><ProgramHome /></RequireAuth>} />
       <Route path="/p/:projectId" element={<RequireAuth><ProjectHome /></RequireAuth>} />
       <Route path="/p/:projectId/access" element={<RequireAuth><AccessPage /></RequireAuth>} />
+      {PAGES.map(([path, Screen]) => (
+        <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Screen /></RequireAuth>} />
+      ))}
       {SECTIONS.map(([path, section, slice]) => (
         <Route key={path} path={`/p/:projectId/${path}`}
           element={<RequireAuth><SectionPlaceholder section={section} slice={slice} /></RequireAuth>} />
