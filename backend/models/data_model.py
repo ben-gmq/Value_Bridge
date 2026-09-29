@@ -3,7 +3,7 @@ from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint, Identity,
     Index, Integer, SmallInteger, String, Text, UniqueConstraint, func, text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import AuditMixin, Base
 
@@ -55,6 +55,13 @@ class DataField(AuditMixin, Base):
     ref_data_field_id: Mapped[int | None] = mapped_column(BigInteger)
     fk_group_no: Mapped[int | None] = mapped_column(SmallInteger)
     description: Mapped[str | None] = mapped_column(Text)
+
+    data_type_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                            primaryjoin="foreign(DataField.data_type_code_id) == CodeMaster.code_id")
+
+    @property
+    def data_type_code(self) -> str | None:
+        return self.data_type_code_row.code if self.data_type_code_row is not None else None
 
     __table_args__ = (
         UniqueConstraint("data_field_id", "data_entity_id", name="uq_data_field_entity"),

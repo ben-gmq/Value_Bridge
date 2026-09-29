@@ -4,7 +4,7 @@ from sqlalchemy import (
     CHAR, BigInteger, Boolean, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint,
     Identity, Index, Integer, SmallInteger, String, Text, UniqueConstraint, func, text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import AuditMixin, Base
 
@@ -90,6 +90,13 @@ class ExternalEntity(AuditMixin, Base):
     kind_category: Mapped[str] = mapped_column(String(40), Computed("'EXTERNAL_ENTITY_KIND'", persisted=True))
     description: Mapped[str | None] = mapped_column(Text)
 
+    kind_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                            primaryjoin="foreign(ExternalEntity.kind_code_id) == CodeMaster.code_id")
+
+    @property
+    def kind_code(self) -> str | None:
+        return self.kind_code_row.code if self.kind_code_row is not None else None
+
     __table_args__ = (
         UniqueConstraint("project_id", "ext_number", name="uq_ext_number"),
         UniqueConstraint("external_entity_id", "project_id", name="uq_external_entity_project"),
@@ -150,6 +157,13 @@ class BfcNodeOrgRole(AuditMixin, Base):
     raci_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     raci_category: Mapped[str] = mapped_column(String(40), Computed("'RACI_TYPE'", persisted=True))
     raci_behaviour: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    raci_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                            primaryjoin="foreign(BfcNodeOrgRole.raci_code_id) == CodeMaster.code_id")
+
+    @property
+    def raci_code(self) -> str | None:
+        return self.raci_code_row.code if self.raci_code_row is not None else None
 
     __table_args__ = (
         UniqueConstraint("bfc_node_id", "org_role_id", "raci_code_id", name="uq_bnor_grain"),

@@ -3,7 +3,7 @@ from sqlalchemy import (
     BigInteger, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint, Identity, Index,
     Integer, SmallInteger, String, Text, UniqueConstraint, func, text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import AuditMixin, Base
 
@@ -23,6 +23,13 @@ class OrgUnit(AuditMixin, Base):
     org_unit_name: Mapped[str] = mapped_column(String(200), nullable=False)
     seq_no: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+
+    level_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                            primaryjoin="foreign(OrgUnit.level_code_id) == CodeMaster.code_id")
+
+    @property
+    def level_code(self) -> str | None:
+        return self.level_code_row.code if self.level_code_row is not None else None
 
     __table_args__ = (
         UniqueConstraint("org_unit_id", "project_id", name="uq_org_unit_project"),
