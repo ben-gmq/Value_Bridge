@@ -1,6 +1,5 @@
 {
   "data.title": "Data entities",
-  "data.building": "This screen is being built in Slice 1.",
   "data.subtitle": "The logical data the processes create, read, update and delete.",
   "data.count": "{n} active entities",
   "data.empty": "No data entities yet. Add the first one.",
@@ -73,5 +72,19 @@
   "data.field.retired": "{name} retired",
   "data.field.restored": "{name} restored",
   "data.field.gone": "This field was retired by someone else. Close and reload the page.",
-  "data.field.reloaded": "Reloaded the latest version. Your changes are still in the form: check them and save again."
+  "data.field.reloaded": "Reloaded the latest version. Your changes are still in the form: check them and save again.",
+  "data.loadFailed": "Could not load this. Reload the page to try again.",
+  "data.showRetired": "Show retired",
+  "data.retiredChip": "Retired",
+  "data.none": "—",
+  "data.check.unavailable": "Checks appear once the fields have loaded.",
+  "data.field.seqShort": "#",
+  "data.field.unknownEntity": "Entity {id}",
+  "data.field.fkTo": "→ {target}",
+  "data.field.fkToField": "→ {target}.{field}",
+  "data.field.targetDotField": "{target}.{field}",
+  "data.field.fkSummary": "{target} · {group}",
+  "data.field.sizePs": "{p},{s}",
+  "data.field.intBad": "A whole number, {min} or more",
+  "data.field.pkBad": "A whole number from 1 to 32"
 }
