@@ -134,3 +134,41 @@ class BfcNodeDataEntity(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BfcNodeOrgRole(AuditMixin, Base):
+    """Step × org role × RACI. Rules key on raci_behaviour, FK-verified (VB law 5); the service
+    copies it from the code. S1-5: surrogate PK."""
+
+    __tablename__ = "bfc_node_org_role"
+
+    bfc_node_org_role_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    bfc_node_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    node_is_process: Mapped[bool | None] = _live(True)
+    org_role_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    raci_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    raci_category: Mapped[str] = mapped_column(String(40), Computed("'RACI_TYPE'", persisted=True))
+    raci_behaviour: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("bfc_node_id", "org_role_id", "raci_code_id", name="uq_bnor_grain"),
+        *_process_node_fk("bnor"),
+        ForeignKeyConstraint(["org_role_id", "project_id"],
+                             ["org_role.org_role_id", "org_role.project_id"], name="fk_bnor_role"),
+        ForeignKeyConstraint(["raci_code_id", "raci_category", "raci_behaviour"],
+                             ["code_master.code_id", "code_master.category", "code_master.behaviour_code"],
+                             name="fk_bnor_raci", onupdate="NO ACTION"),
+        Index("uq_bnor_one_accountable", "bfc_node_id", unique=True,
+              postgresql_where=text("is_active AND raci_behaviour = 'ACCOUNTABLE'")),
+        # Also the swimlane lookup (A-46).
+        Index("uq_bnor_one_responsible", "bfc_node_id", unique=True,
+              postgresql_where=text("is_active AND raci_behaviour = 'RESPONSIBLE'")),
+        Index("ix_bnor_node", "bfc_node_id", "project_id"),
+        Index("ix_bnor_role", "org_role_id", "project_id"),
+        Index("ix_bnor_raci", "raci_code_id"),
+        Index("ix_bnor_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
