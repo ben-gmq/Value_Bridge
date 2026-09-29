@@ -47,3 +47,42 @@ class BusinessRequirement(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BrDataEntity(AuditMixin, Base):
+    """BR × DE × CRUD, licensed by live step I/O (D-24). direction is generated; bfc_node_id is
+    copied from the BR by the service. S1-5: surrogate PK."""
+
+    __tablename__ = "br_data_entity"
+
+    br_data_entity_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bfc_node_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    crud_code: Mapped[str] = mapped_column(CHAR(1), nullable=False)
+    direction: Mapped[str] = mapped_column(
+        CHAR(1), Computed("CASE WHEN crud_code = 'R' THEN 'I' ELSE 'O' END", persisted=True))
+    io_is_active: Mapped[bool | None] = mapped_column(
+        Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
+    usage_note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "data_entity_id", "crud_code", name="uq_brde_grain"),
+        ForeignKeyConstraint(["br_id", "project_id", "bfc_node_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id",
+                              "business_requirement.bfc_node_id"], name="fk_brde_br"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"],
+                             ["data_entity.data_entity_id", "data_entity.project_id"], name="fk_brde_de"),
+        ForeignKeyConstraint(["bfc_node_id", "data_entity_id", "direction", "io_is_active"],
+                             ["bfc_node_data_entity.bfc_node_id", "bfc_node_data_entity.data_entity_id",
+                              "bfc_node_data_entity.direction", "bfc_node_data_entity.is_active"],
+                             name="fk_brde_io_licence", onupdate="NO ACTION"),
+        CheckConstraint("crud_code IN ('C', 'R', 'U', 'D')", name="ck_brde_crud"),
+        Index("ix_brde_de", "data_entity_id"),
+        Index("ix_brde_io", "bfc_node_id", "data_entity_id", "direction"),
+        Index("ix_brde_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
