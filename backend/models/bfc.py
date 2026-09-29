@@ -103,3 +103,34 @@ class ExternalEntity(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BfcNodeDataEntity(AuditMixin, Base):
+    """Step I/O — the one record of it (D-24). Written only by bfc.ensure_step_io (R2-D13).
+    S1-5: surrogate PK so the baseline shadow keeps the link; the design's key is a UNIQUE."""
+
+    __tablename__ = "bfc_node_data_entity"
+
+    bfc_node_data_entity_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    bfc_node_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    node_is_process: Mapped[bool | None] = _live(True)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    direction: Mapped[str] = mapped_column(CHAR(1), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("bfc_node_id", "data_entity_id", "direction", name="uq_bnde_grain"),
+        UniqueConstraint("bfc_node_id", "data_entity_id", "direction", "is_active",
+                         name="uq_bnde_live_target"),
+        *_process_node_fk("bnde"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"],
+                             ["data_entity.data_entity_id", "data_entity.project_id"], name="fk_bnde_de"),
+        CheckConstraint("direction IN ('I', 'O')", name="ck_bnde_direction"),
+        Index("ix_bnde_node", "bfc_node_id", "project_id"),
+        Index("ix_bnde_de", "data_entity_id", "project_id"),
+        Index("ix_bnde_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
