@@ -14,7 +14,7 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 - **Backend:** Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic, psycopg 3, PostgreSQL 16.
 - **Frontend:** React 18 + MUI 9 + Vite 8, TanStack Query, React Router 7.
 - **Ports: API 8100, web 5180.** Not 8000/5173 — those belong to other FTC apps on this machine.
-- **First time on a machine:** `cd backend && VB_EMAIL_DOMAINS=<ftc domain> ./scripts/bootstrap_local_db.sh`
+- **First time on a machine:** `cd backend && VB_EMAIL_DOMAINS=fortience.com ./scripts/bootstrap_local_db.sh`
   (creates roles `vb_owner`/`vb_app`, databases `vb_db`/`vb_test_db`, writes a gitignored `.env`),
   then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master`.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
