@@ -197,7 +197,7 @@ def test_org_unit_level_code_defaults_from_level(client, ed):
 def test_one_accountable_per_step_named_in_the_409(client, ed):
     s = step(client, ed)
     cfo, clerk = _org_role(client, ed, "CFO"), _org_role(client, ed, "CLERK")
-    url = f"{API}/bfc-nodes/{s['bfc_node_id']}/roles"
+    url = f"{API}/bfc-nodes/{s['bfc_node_id']}/org-roles"
     r = client.post(url, headers=ed["h"], json={"org_role_id": cfo["org_role_id"], "raci_code": "A"})
     assert r.status_code == 201 and r.json()["raci_behaviour"] == "ACCOUNTABLE"
     r = client.post(url, headers=ed["h"], json={"org_role_id": clerk["org_role_id"], "raci_code": "A"})
@@ -328,9 +328,9 @@ def test_a_link_cannot_be_removed_under_another_owner(client, ed):
     s1 = step(client, ed)
     s2 = node(client, ed, "Ship order", s1["parent_bfc_node_id"], is_process=True)
     role = _org_role(client, ed, "CLERK")
-    link = client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/roles", headers=ed["h"],
+    link = client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/org-roles", headers=ed["h"],
                        json={"org_role_id": role["org_role_id"], "raci_code": "C"}).json()
-    r = client.delete(f"{API}/bfc-nodes/{s2['bfc_node_id']}/roles/{link['bfc_node_org_role_id']}",
+    r = client.delete(f"{API}/bfc-nodes/{s2['bfc_node_id']}/org-roles/{link['bfc_node_org_role_id']}",
                       headers=ed["h"], params={"row_version": link["row_version"]})
     assert r.status_code == 404
 
@@ -349,3 +349,29 @@ def test_duplicate_step_data_is_409_and_removal_is_audited(client, ed, db):
     n = db.execute(text("SELECT count(*) FROM audit_event WHERE event_type = 'RECORD_DELETED' "
                         "AND target_table = 'bfc_node_data_entity'")).scalar()
     assert n == 1
+
+
+def test_baseline_statuses_are_system_set(client, ed):
+    """S1-8: an editor may choose Draft or Confirmed, never Baselined or Superseded."""
+    step(client, ed)
+    br = brs(client, ed)["BR-0001"]
+    url = f"{API}/business-requirements/{br['br_id']}"
+    for code in ("BASELINED", "SUPERSEDED"):
+        r = client.patch(url, headers=ed["h"], json={"row_version": br["row_version"], "status_code": code})
+        assert r.status_code == 422 and "baseline freeze" in r.json()["detail"]
+    r = client.patch(url, headers=ed["h"], json={"row_version": br["row_version"], "status_code": "CONFIRMED"})
+    assert r.status_code == 200 and r.json()["status_code"] == "CONFIRMED"
+
+
+def test_changed_lookup_codes_come_back_in_the_response(client, ed):
+    top = client.post(f"{API}/projects/{ed['p']}/org-units", headers=ed["h"],
+                      json={"org_unit_code": "FIN", "org_unit_name": "Finance"}).json()
+    r = client.patch(f"{API}/org-units/{top['org_unit_id']}", headers=ed["h"],
+                     json={"row_version": top["row_version"], "level_code": "SECTION"})
+    assert r.json()["level_code"] == "SECTION"
+    de = entity(client, ed)
+    f = client.post(f"{API}/data-entities/{de['data_entity_id']}/fields", headers=ed["h"],
+                    json={"field_name": "amount", "data_type_code": "INTEGER"}).json()
+    r = client.patch(f"{API}/data-fields/{f['data_field_id']}", headers=ed["h"],
+                     json={"row_version": f["row_version"], "data_type_code": "DECIMAL"})
+    assert r.json()["data_type_code"] == "DECIMAL"

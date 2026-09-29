@@ -61,6 +61,7 @@ def update_unit(db: Session, actor_id: int, unit: OrgUnit, row_version: int, fie
         unit.level_code_id = _level_code(db, unit.project_id, unit.level_no, level_code)
     unit.updated_by = actor_id
     db.commit()
+    db.refresh(unit)                 # reload the code relationship with the new id
     return unit
 
 

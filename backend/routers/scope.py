@@ -143,18 +143,18 @@ def unlink_external_flow(id: int, link_id: int, row_version: int, node: BfcNode 
                                                     node.bfc_node_id), row_version)
 
 
-@router.get("/bfc-nodes/{id}/roles", response_model=list[StepRaciOut], **_node_r.route)
+@router.get("/bfc-nodes/{id}/org-roles", response_model=list[StepRaciOut], **_node_r.route)
 def list_step_roles(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
     return raci.list_links(db, BfcNodeOrgRole, node.bfc_node_id)
 
 
-@router.post("/bfc-nodes/{id}/roles", response_model=StepRaciOut, status_code=201, **_node_w.route)
+@router.post("/bfc-nodes/{id}/org-roles", response_model=StepRaciOut, status_code=201, **_node_w.route)
 def link_step_role(id: int, body: RaciIn, node: BfcNode = Depends(_node_w.dep),
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return raci.link(db, _uid(user), BfcNodeOrgRole, node, body.org_role_id, body.raci_code)
 
 
-@router.delete("/bfc-nodes/{id}/roles/{link_id}", status_code=204, **_node_w.route)
+@router.delete("/bfc-nodes/{id}/org-roles/{link_id}", status_code=204, **_node_w.route)
 def unlink_step_role(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_w.dep),
                      user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     raci.unlink(db, _uid(user), _child(db, BfcNodeOrgRole, link_id, "bfc_node_id", node.bfc_node_id),
@@ -206,19 +206,19 @@ def unlink_br_data(id: int, link_id: int, row_version: int, br: BusinessRequirem
                                   row_version)
 
 
-@router.get("/business-requirements/{id}/roles", response_model=list[BrRaciOut], **_br_r.route)
+@router.get("/business-requirements/{id}/org-roles", response_model=list[BrRaciOut], **_br_r.route)
 def list_br_roles(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return raci.list_links(db, BrOrgRole, br.br_id)
 
 
-@router.post("/business-requirements/{id}/roles", response_model=BrRaciOut, status_code=201,
+@router.post("/business-requirements/{id}/org-roles", response_model=BrRaciOut, status_code=201,
              **_br_w.route)
 def link_br_role(id: int, body: RaciIn, br: BusinessRequirement = Depends(_br_w.dep),
                  user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return raci.link(db, _uid(user), BrOrgRole, br, body.org_role_id, body.raci_code)
 
 
-@router.delete("/business-requirements/{id}/roles/{link_id}", status_code=204, **_br_w.route)
+@router.delete("/business-requirements/{id}/org-roles/{link_id}", status_code=204, **_br_w.route)
 def unlink_br_role(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     raci.unlink(db, _uid(user), _child(db, BrOrgRole, link_id, "br_id", br.br_id), row_version)

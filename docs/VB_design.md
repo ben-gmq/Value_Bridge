@@ -304,7 +304,7 @@ contract says nothing. The mechanism is per-project crypto-shredding of the evid
 
 Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
 (`docs/slice1_schema.md`, whose `[Q-n]` numbers are cited below). Three items are defects in
-the signed-off text; the rest close gaps. **Ben approved S1-1…S1-7 on 2026-09-29**, on the
+the signed-off text; the rest close gaps. **Ben approved S1-1…S1-8 on 2026-09-29**, on the
 test that anything which would otherwise need a schema change later is fixed now. Where
 these rows and the section they cite disagree, **these rows win**.
 
@@ -317,6 +317,7 @@ these rows and the section they cite disagree, **these rows win**.
 | S1-5 | **Link rows have their own identity.** `bfc_node_data_entity`, `br_data_entity`, `bfc_node_org_role` and `br_org_role` get a surrogate identity **primary key** `<table>_id`; the design's composite key becomes a `UNIQUE NOT NULL` constraint, and every FK that targeted it still does. This is what lets `baseline_shadow.py` snapshot them unchanged (it records the PK as `source_id`) | §5.3 junction PKs, §6.1 | Q-12, taken as surrogate-PK rather than apple's generator change |
 | S1-6 | **User-entered names and codes are unique among live rows**, normalised `lower(btrim(…))`: `data_entity.de_name`, `data_field.field_name` (and `pk_ordinal`), `org_role.org_role_code`, `org_unit.org_unit_code`, `external_entity.ext_name` (Ben, 2026-09-29; §6.2 had `lower(ext_name)`). Minted numbers keep full UKs (§5.1) | §5.3, §6.2 (full UKs blocked re-adding a retired name) | Q-6, Q-7, Q-8 |
 | S1-7 | **Smaller items.** `org_unit` depth held by the service + `consistency_check` (column `level_code_id`); `org_role → org_unit` is composite `(org_unit_id, project_id)`; `br_statement` is nullable and the service sets `BR_STATUS/DRAFT`; `fk_group_no` — the request names the relationship (`new` or an existing group), the service assigns the number; `business_requirement.bfc_node_id` immutability is service-enforced; re-linking a retired link **restores** the row, never inserts; `raci_category` is `varchar(40)`; apple's four sanity CHECKs | §5.3, §7.2–§7.4 | Q-9…Q-11, Q-13, Q-14, Q-16…Q-18 |
+| S1-8 | **Build-review calls (Ben, 2026-09-29).** A BR's `BASELINED` / `SUPERSEDED` status is set only by the baseline freeze; `update_br` refuses them (422). The RACI link routes are `/bfc-nodes/{id}/org-roles` and `/business-requirements/{id}/org-roles`, not `/roles` (VB law 7). `/org-units/{id}` and `/org-roles/{id}` join the §9 object-guard list | §9, §7.3 | sara M5, L9 |
 
 **Deferred, not decided:** `bfc_node_flow` moves to the process-flow slice (Q-15), and whether
 `FLOW_TYPE` becomes a CHECK column is decided with it (Q-5, Ben 2026-09-29). **For the shadow
@@ -5355,7 +5356,7 @@ routes. That list had already fallen seven route families behind by D-31.
 | `authenticated` | the JWT user; the service filters | `GET /auth/me`, `GET /projects` (via `visible_project_ids`), `GET /programs` (admin: all; program grant: its one), `GET /process-flow-json/schema` |
 | `platform_admin` | `current_user().is_platform_admin`, per request | `/users*`, `/clients*`, `POST /projects`, `POST /programs`, `PATCH /programs/{id}`, `POST/DELETE /programs/{id}/projects*`, `POST /programs/{id}/access`, `POST /access/reassign`, `GET/PUT /control-rules/defaults`, `PUT /code-master/FR_TYPE` (global tier) |
 | `project_ctx(role)` | `require_project(user, {project_id}, role)` | **every route under `/projects/{id}/…`** — REVIEWER for GET and export; EDITOR for writes and import validate; OWNER for freeze, access, rate card, control rules, FR types |
-| `object_guard(Model, role)` | the object's owning project, then `require_project` | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/process-flows/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/stakeholders/{id}` · `/issues/{id}` · `/benefits/{id}` · `/risks/{id}` · `/change-requests/{id}` · `/phases/{id}` · `/wbs-items/{id}` · `/baselines/{id}` · `/baselines/diff` (both ids, one project) · `/bulk/batches/{id}` · `/access/{grant_id}` (a program grant resolves to no project → platform admin) · **each restore route**, one per `RESTORABLE` entity (§7.12) |
+| `object_guard(Model, role)` | the object's owning project, then `require_project` | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-flows/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/stakeholders/{id}` · `/issues/{id}` · `/benefits/{id}` · `/risks/{id}` · `/change-requests/{id}` · `/phases/{id}` · `/wbs-items/{id}` · `/baselines/{id}` · `/baselines/diff` (both ids, one project) · `/bulk/batches/{id}` · `/access/{grant_id}` (a program grant resolves to no project → platform admin) · **each restore route**, one per `RESTORABLE` entity (§7.12) |
 | `program_ctx(role)` | `require_program(user, {program_id}, role)` | `GET /programs/{id}`, `/programs/{id}/dashboard`, `/counts`, `/interfaces`, `/effort`, `/control-status`, `/plan-vs-actual` |
 
 Surrogate ids are sequential `bigint`s, so enumeration is trivial and looks like normal use.
@@ -5380,10 +5381,10 @@ or a guard that does not fit its path.**
 | `GET/POST /data-entities/{id}/fields` · `PATCH/DELETE /data-fields/{id}` | field fields | data field |
 | `GET/POST /projects/{id}/business-requirements` · `PATCH/DELETE /business-requirements/{id}` | bfc_node_id, statement, logic | BR incl. generated `br_number` |
 | `POST/DELETE /business-requirements/{id}/data-entities` | de_id, crud_code | BR↔DE links; `direction` is returned, never sent |
-| `POST/DELETE /business-requirements/{id}/roles` | org_role_id, raci_code | BR↔role links |
+| `POST/DELETE /business-requirements/{id}/org-roles` | org_role_id, raci_code | BR↔role links (renamed from `/roles`, VB law 7, S1-8) |
 | `PATCH /bfc-nodes/{id}/process` | is_process, row_version | promote / demote a node (D-23). Promote returns the new BR; demote is 409 while the BR is active |
 | `POST/DELETE /bfc-nodes/{id}/data-entities` | de_id, direction | process step ↔ DE links. DELETE is 409 while a BR CRUD depends on it (D-24) |
-| `POST/DELETE /bfc-nodes/{id}/roles` | org_role_id, raci_code | process step ↔ role links |
+| `POST/DELETE /bfc-nodes/{id}/org-roles` | org_role_id, raci_code | process step ↔ role links (renamed from `/roles`, S1-8) |
 | `GET/POST /projects/{id}/external-entities` · `PATCH/DELETE /external-entities/{id}` | name, kind_code, description | external parties incl. `EXT-0001` (D-24a) |
 | `POST/DELETE /bfc-nodes/{id}/external-flows` | external_entity_id, direction, data_entity_id | step ↔ external party flows (D-24a) |
 | `GET/POST /projects/{id}/process-flows` · `PATCH/DELETE /process-flows/{id}` | from, to, flow_type, condition_label | flow edges between process steps (D-20, D-23). **409 on a second edge between the same steps under the same condition** (Q2) |

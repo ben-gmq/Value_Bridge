@@ -15,6 +15,8 @@ log = logging.getLogger("vb")
 
 CRUD = ("C", "R", "U", "D")
 EDITABLE = ("br_statement", "business_logic", "output_expectation")
+# Set only by the baseline freeze, never chosen by a person (Ben, 2026-09-29, S1-8).
+SYSTEM_SET_STATUSES = frozenset({"BASELINED", "SUPERSEDED"})
 
 
 def create_br(db: Session, actor_id: int, node: BfcNode) -> BusinessRequirement:
@@ -46,10 +48,13 @@ def update_br(db: Session, actor_id: int, br: BusinessRequirement, row_version: 
         if k in fields:
             setattr(br, k, fields[k])
     if status_code is not None:
+        if status_code in SYSTEM_SET_STATUSES:
+            raise HTTPException(422, f"{status_code.title()} is set by the baseline freeze, not by hand")
         br.status_code_id = validate_required_code(db, br.project_id, "BR_STATUS", status_code,
                                                    "status_code").code_id
     br.updated_by = actor_id
     db.commit()
+    db.refresh(br)                 # reload the code relationship with the new id
     return br
 
 

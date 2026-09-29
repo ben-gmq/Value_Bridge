@@ -112,6 +112,7 @@ def update_field(db: Session, actor_id: int, f: DataField, row_version: int, nam
     _apply(db, de, f, spec)
     f.updated_by = actor_id
     db.commit()
+    db.refresh(f)                 # reload the code relationship with the new id
     return f
 
 

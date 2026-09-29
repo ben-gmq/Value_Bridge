@@ -39,4 +39,5 @@ def update_party(db: Session, actor_id: int, ext: ExternalEntity, row_version: i
         ext.kind_code_id = _kind(db, ext.project_id, fields["kind_code"])
     ext.updated_by = actor_id
     db.commit()
+    db.refresh(ext)                 # reload the code relationship with the new id
     return ext
