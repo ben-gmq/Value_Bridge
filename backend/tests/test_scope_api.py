@@ -387,3 +387,32 @@ def test_entity_lists_the_requirements_that_use_it(client, ed):
     r = client.get(f"{API}/data-entities/{de['data_entity_id']}/business-requirements", headers=ed["rv"])
     assert r.json() == [{"br_id": br["br_id"], "br_number": "BR-0001", "hier_code": "01.01.01",
                          "node_name": "Take order", "crud": "RU"}]
+
+
+def test_lists_can_include_retired_rows(client, ed):
+    """Show retired → Restore needs the retired rows in every list."""
+    de = entity(client, ed)
+    unit = client.post(f"{API}/projects/{ed['p']}/org-units", headers=ed["h"],
+                       json={"org_unit_code": "FIN", "org_unit_name": "Finance"}).json()
+    party = client.post(f"{API}/projects/{ed['p']}/external-entities", headers=ed["h"],
+                        json={"ext_name": "Bank"}).json()
+    for path, obj in ((f"data-entities/{de['data_entity_id']}", de), (f"org-units/{unit['org_unit_id']}", unit),
+                      (f"external-entities/{party['external_entity_id']}", party)):
+        assert client.delete(f"{API}/{path}", headers=ed["h"],
+                             params={"row_version": obj["row_version"]}).status_code == 204
+    for coll in ("data-entities", "org-units", "external-entities"):
+        url = f"{API}/projects/{ed['p']}/{coll}"
+        assert client.get(url, headers=ed["h"]).json() == []
+        rows = client.get(url, headers=ed["h"], params={"include_retired": True}).json()
+        assert len(rows) == 1 and rows[0]["is_active"] is False
+
+
+def test_a_stale_save_is_marked_and_other_conflicts_are_not(client, ed):
+    n = node(client, ed, "A")
+    client.patch(f"{API}/bfc-nodes/{n['bfc_node_id']}", headers=ed["h"],
+                 json={"row_version": n["row_version"], "purpose_desc": "x"})
+    stale = client.patch(f"{API}/bfc-nodes/{n['bfc_node_id']}", headers=ed["h"],
+                         json={"row_version": n["row_version"], "purpose_desc": "y"})
+    assert stale.status_code == 409 and stale.headers.get("x-vb-error") == "STALE"
+    dup = client.post(f"{API}/projects/{ed['p']}/bfc-nodes", headers=ed["h"], json={"node_name": "a"})
+    assert dup.status_code == 409 and "x-vb-error" not in dup.headers

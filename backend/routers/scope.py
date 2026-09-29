@@ -167,8 +167,8 @@ _br_r, _br_w = _og(BusinessRequirement, "REVIEWER"), _og(BusinessRequirement, "E
 
 
 @router.get("/projects/{project_id}/business-requirements", response_model=list[BrOut], **_read.route)
-def list_brs(project_id: int, db: Session = Depends(get_db)):
-    return br_service.list_brs(db, project_id)
+def list_brs(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return br_service.list_brs(db, project_id, include_retired)
 
 
 @router.get("/business-requirements/{id}", response_model=BrOut, **_br_r.route)
@@ -231,8 +231,8 @@ _df_w = _og(DataField, "EDITOR")
 
 
 @router.get("/projects/{project_id}/data-entities", response_model=list[DataEntityOut], **_read.route)
-def list_entities(project_id: int, db: Session = Depends(get_db)):
-    return de_service.list_entities(db, project_id)
+def list_entities(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return de_service.list_entities(db, project_id, include_retired)
 
 
 @router.post("/projects/{project_id}/data-entities", response_model=DataEntityOut, status_code=201,
@@ -265,8 +265,9 @@ def entity_used_by(id: int, de: DataEntity = Depends(_de_r.dep), db: Session = D
 
 
 @router.get("/data-entities/{id}/fields", response_model=list[DataFieldOut], **_de_r.route)
-def list_fields(id: int, de: DataEntity = Depends(_de_r.dep), db: Session = Depends(get_db)):
-    return de_service.list_fields(db, de)
+def list_fields(id: int, include_retired: bool = False, de: DataEntity = Depends(_de_r.dep),
+                db: Session = Depends(get_db)):
+    return de_service.list_fields(db, de, include_retired)
 
 
 @router.post("/data-entities/{id}/fields", response_model=DataFieldOut, status_code=201, **_de_w.route)
@@ -292,8 +293,8 @@ _ext_w = _og(ExternalEntity, "EDITOR")
 
 @router.get("/projects/{project_id}/external-entities", response_model=list[ExternalEntityOut],
             **_read.route)
-def list_parties(project_id: int, db: Session = Depends(get_db)):
-    return ext_service.list_parties(db, project_id)
+def list_parties(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return ext_service.list_parties(db, project_id, include_retired)
 
 
 @router.post("/projects/{project_id}/external-entities", response_model=ExternalEntityOut,
@@ -319,8 +320,8 @@ _unit_w, _role_w = _og(OrgUnit, "EDITOR"), _og(OrgRole, "EDITOR")
 
 
 @router.get("/projects/{project_id}/org-units", response_model=list[OrgUnitOut], **_read.route)
-def list_units(project_id: int, db: Session = Depends(get_db)):
-    return client_org.list_units(db, project_id)
+def list_units(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return client_org.list_units(db, project_id, include_retired)
 
 
 @router.post("/projects/{project_id}/org-units", response_model=OrgUnitOut, status_code=201,
@@ -344,8 +345,8 @@ _retire_and_restore("org-units", OrgUnit, OrgUnitOut, on_restore=client_org.rest
 
 
 @router.get("/projects/{project_id}/org-roles", response_model=list[OrgRoleOut], **_read.route)
-def list_roles(project_id: int, db: Session = Depends(get_db)):
-    return client_org.list_roles(db, project_id)
+def list_roles(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return client_org.list_roles(db, project_id, include_retired)
 
 
 @router.post("/projects/{project_id}/org-roles", response_model=OrgRoleOut, status_code=201,

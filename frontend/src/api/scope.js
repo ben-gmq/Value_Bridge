@@ -30,7 +30,7 @@ export const bfcApi = {
 
 // There is no "create requirement": a BR appears with its process step (D-2).
 export const brApi = {
-  list: (projectId) => d(http.get(`${P(projectId)}/business-requirements`)),
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/business-requirements`, { params: { include_retired: includeRetired } })),
   get: (id) => d(http.get(`${V}/business-requirements/${id}`)),
   update: (id, body) => d(http.patch(`${V}/business-requirements/${id}`, body)),
   retire: (id, rowVersion) => del(`${V}/business-requirements/${id}`, rowVersion),
@@ -44,14 +44,14 @@ export const brApi = {
 };
 
 export const dataApi = {
-  list: (projectId) => d(http.get(`${P(projectId)}/data-entities`)),
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/data-entities`, { params: { include_retired: includeRetired } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/data-entities`, body)),
   get: (id) => d(http.get(`${V}/data-entities/${id}`)),
   update: (id, body) => d(http.patch(`${V}/data-entities/${id}`, body)),
   retire: (id, rowVersion) => del(`${V}/data-entities/${id}`, rowVersion),
   restore: (id) => d(http.patch(`${V}/data-entities/${id}/restore`)),
   usedBy: (id) => d(http.get(`${V}/data-entities/${id}/business-requirements`)),
-  fields: (id) => d(http.get(`${V}/data-entities/${id}/fields`)),
+  fields: (id, includeRetired = false) => d(http.get(`${V}/data-entities/${id}/fields`, { params: { include_retired: includeRetired } })),
   createField: (id, body) => d(http.post(`${V}/data-entities/${id}/fields`, body)),
   updateField: (fieldId, body) => d(http.patch(`${V}/data-fields/${fieldId}`, body)),
   retireField: (fieldId, rowVersion) => del(`${V}/data-fields/${fieldId}`, rowVersion),
@@ -59,7 +59,7 @@ export const dataApi = {
 };
 
 export const partyApi = {
-  list: (projectId) => d(http.get(`${P(projectId)}/external-entities`)),
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/external-entities`, { params: { include_retired: includeRetired } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/external-entities`, body)),
   update: (id, body) => d(http.patch(`${V}/external-entities/${id}`, body)),
   retire: (id, rowVersion) => del(`${V}/external-entities/${id}`, rowVersion),
@@ -67,12 +67,12 @@ export const partyApi = {
 };
 
 export const orgApi = {
-  units: (projectId) => d(http.get(`${P(projectId)}/org-units`)),
+  units: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-units`, { params: { include_retired: includeRetired } })),
   createUnit: (projectId, body) => d(http.post(`${P(projectId)}/org-units`, body)),
   updateUnit: (id, body) => d(http.patch(`${V}/org-units/${id}`, body)),
   retireUnit: (id, rowVersion) => del(`${V}/org-units/${id}`, rowVersion),
   restoreUnit: (id) => d(http.patch(`${V}/org-units/${id}/restore`)),
-  roles: (projectId) => d(http.get(`${P(projectId)}/org-roles`)),
+  roles: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-roles`, { params: { include_retired: includeRetired } })),
   createRole: (projectId, body) => d(http.post(`${P(projectId)}/org-roles`, body)),
   updateRole: (id, body) => d(http.patch(`${V}/org-roles/${id}`, body)),
   retireRole: (id, rowVersion) => del(`${V}/org-roles/${id}`, rowVersion),

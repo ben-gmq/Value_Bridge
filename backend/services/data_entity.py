@@ -12,9 +12,11 @@ from services import lifecycle
 MAX_FIELDS = 999                  # S1-3 (fields have no hierarchy code)
 
 
-def list_entities(db: Session, project_id: int) -> list[DataEntity]:
-    return list(db.scalars(select(DataEntity).where(DataEntity.project_id == project_id,
-                                                    DataEntity.is_active).order_by(DataEntity.de_number)))
+def list_entities(db: Session, project_id: int, include_retired: bool = False) -> list[DataEntity]:
+    q = select(DataEntity).where(DataEntity.project_id == project_id)
+    if not include_retired:
+        q = q.where(DataEntity.is_active)
+    return list(db.scalars(q.order_by(DataEntity.de_number)))
 
 
 def create_entity(db: Session, actor_id: int, project_id: int, name: str, description: str | None,
@@ -37,9 +39,11 @@ def update_entity(db: Session, actor_id: int, de: DataEntity, row_version: int, 
     return de
 
 
-def list_fields(db: Session, de: DataEntity) -> list[DataField]:
-    return list(db.scalars(select(DataField).where(DataField.data_entity_id == de.data_entity_id,
-                                                   DataField.is_active).order_by(DataField.seq_no)))
+def list_fields(db: Session, de: DataEntity, include_retired: bool = False) -> list[DataField]:
+    q = select(DataField).where(DataField.data_entity_id == de.data_entity_id)
+    if not include_retired:
+        q = q.where(DataField.is_active)
+    return list(db.scalars(q.order_by(DataField.is_active.desc(), DataField.seq_no)))
 
 
 def _apply(db: Session, de: DataEntity, f: DataField, spec: dict) -> None:

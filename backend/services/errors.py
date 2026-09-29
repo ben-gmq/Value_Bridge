@@ -10,6 +10,9 @@ from sqlalchemy.orm.exc import StaleDataError
 log = logging.getLogger("vb")
 
 CONFLICT = "Updated by another user. Please refresh."
+# A stale row_version is the one 409 the UI answers with ConflictDialog; every other 409
+# (blockers, duplicates, retired rows) shows its detail. The header tells them apart.
+STALE_HEADERS = {"X-VB-Error": "STALE"}
 
 
 def _flatten(exc: RequestValidationError) -> str:
@@ -29,7 +32,7 @@ def install(app: FastAPI) -> None:
 
     @app.exception_handler(StaleDataError)
     async def _stale(_: Request, __: StaleDataError):
-        return JSONResponse({"detail": CONFLICT}, status_code=409)            # D-6
+        return JSONResponse({"detail": CONFLICT}, status_code=409, headers=STALE_HEADERS)   # D-6
 
     @app.exception_handler(IntegrityError)
     async def _integrity(_: Request, exc: IntegrityError):

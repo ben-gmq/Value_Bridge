@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from models import (Base, BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity,
                     OrgRole, OrgUnit)
-from services import audit
+from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
 # through code_master.maintain (R2-D8), never blocked by the rows that use it.
@@ -120,7 +120,7 @@ def soft_delete(obj, actor_id: int) -> None:
 
 def check_version(obj, row_version: int) -> None:
     if obj.row_version != row_version:
-        raise HTTPException(409, "Updated by another user. Please refresh.")
+        raise HTTPException(409, errors.CONFLICT, headers=errors.STALE_HEADERS)
 
 
 def check_live(obj, row_version: int) -> None:

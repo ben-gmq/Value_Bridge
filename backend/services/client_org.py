@@ -11,8 +11,9 @@ from services import lifecycle
 MAX_LEVEL = 3
 
 
-def list_units(db: Session, project_id: int) -> list[OrgUnit]:
-    return list(db.scalars(select(OrgUnit).where(OrgUnit.project_id == project_id, OrgUnit.is_active)
+def list_units(db: Session, project_id: int, include_retired: bool = False) -> list[OrgUnit]:
+    live = True if include_retired else OrgUnit.is_active
+    return list(db.scalars(select(OrgUnit).where(OrgUnit.project_id == project_id, live)
                            .order_by(OrgUnit.level_no, OrgUnit.parent_org_unit_id, OrgUnit.seq_no)))
 
 
@@ -65,8 +66,9 @@ def update_unit(db: Session, actor_id: int, unit: OrgUnit, row_version: int, fie
     return unit
 
 
-def list_roles(db: Session, project_id: int) -> list[OrgRole]:
-    return list(db.scalars(select(OrgRole).where(OrgRole.project_id == project_id, OrgRole.is_active)
+def list_roles(db: Session, project_id: int, include_retired: bool = False) -> list[OrgRole]:
+    live = True if include_retired else OrgRole.is_active
+    return list(db.scalars(select(OrgRole).where(OrgRole.project_id == project_id, live)
                            .order_by(OrgRole.org_role_code)))
 
 

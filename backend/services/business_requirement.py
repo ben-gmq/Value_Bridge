@@ -35,10 +35,11 @@ def create_br(db: Session, actor_id: int, node: BfcNode) -> BusinessRequirement:
     return br
 
 
-def list_brs(db: Session, project_id: int) -> list[BusinessRequirement]:
-    return list(db.scalars(select(BusinessRequirement).where(
-        BusinessRequirement.project_id == project_id, BusinessRequirement.is_active)
-        .order_by(BusinessRequirement.br_number)))
+def list_brs(db: Session, project_id: int, include_retired: bool = False) -> list[BusinessRequirement]:
+    q = select(BusinessRequirement).where(BusinessRequirement.project_id == project_id)
+    if not include_retired:
+        q = q.where(BusinessRequirement.is_active)
+    return list(db.scalars(q.order_by(BusinessRequirement.br_number)))
 
 
 def update_br(db: Session, actor_id: int, br: BusinessRequirement, row_version: int,

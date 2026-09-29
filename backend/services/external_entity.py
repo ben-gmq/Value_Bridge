@@ -13,9 +13,9 @@ def _kind(db: Session, project_id: int, code: str | None) -> int | None:
         if code else None      # kind is optional (a missing kind is a report warning, §5.3); a wrong one is 400
 
 
-def list_parties(db: Session, project_id: int) -> list[ExternalEntity]:
-    return list(db.scalars(select(ExternalEntity).where(ExternalEntity.project_id == project_id,
-                                                        ExternalEntity.is_active)
+def list_parties(db: Session, project_id: int, include_retired: bool = False) -> list[ExternalEntity]:
+    live = True if include_retired else ExternalEntity.is_active
+    return list(db.scalars(select(ExternalEntity).where(ExternalEntity.project_id == project_id, live)
                            .order_by(ExternalEntity.ext_number)))
 
 

@@ -37,3 +37,7 @@ export const errorText = (err, fallback = 'Something went wrong.') =>
     : fallback;
 
 export const isConflict = (err) => err?.response?.status === 409;
+
+// A stale row_version (someone else saved first) → ConflictDialog. Other 409s show their detail.
+export const isStale = (err) => err?.response?.status === 409
+  && err.response.headers?.['x-vb-error'] === 'STALE';
