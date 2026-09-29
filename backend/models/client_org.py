@@ -49,3 +49,31 @@ class OrgUnit(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class OrgRole(AuditMixin, Base):
+    """A role within one org unit of the same project (S1-7). Never bare `role` (VB law 7)."""
+
+    __tablename__ = "org_role"
+
+    org_role_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    org_unit_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    org_role_code: Mapped[str] = mapped_column(String(30), nullable=False)
+    org_role_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    responsibility_desc: Mapped[str | None] = mapped_column(Text)
+    headcount: Mapped[int | None] = mapped_column(Integer)
+
+    __table_args__ = (
+        UniqueConstraint("org_role_id", "project_id", name="uq_org_role_project"),
+        ForeignKeyConstraint(["org_unit_id", "project_id"],
+                             ["org_unit.org_unit_id", "org_unit.project_id"], name="fk_org_role_unit"),
+        CheckConstraint("headcount IS NULL OR headcount >= 0", name="ck_org_role_headcount"),
+        Index("uq_org_role_code_live", "project_id", func.lower(func.btrim(org_role_code)),
+              unique=True, postgresql_where=text("is_active")),
+        Index("ix_org_role_project", "project_id"),
+        Index("ix_org_role_unit", "org_unit_id", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
