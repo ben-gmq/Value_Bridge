@@ -194,6 +194,14 @@ class DataEntityOut(Orm):
     row_version: int
 
 
+class DataEntityUseOut(BaseModel):
+    br_id: int
+    br_number: str
+    hier_code: str
+    node_name: str
+    crud: str                        # e.g. "RU" — letters in C, R, U, D order
+
+
 class _FieldSpec(BaseModel):
     data_type_code: str | None = Field(default=None, max_length=40)
     length_val: int | None = Field(default=None, ge=1)

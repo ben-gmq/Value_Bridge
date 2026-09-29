@@ -16,6 +16,7 @@ from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, Bf
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityOut, DataEntityPatch,
+                           DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
                            ExternalEntityOut, ExternalEntityPatch, ExternalFlowIn, ExternalFlowOut,
                            OrgRoleIn, OrgRoleOut, OrgRolePatch, OrgUnitIn, OrgUnitOut, OrgUnitPatch,
@@ -255,6 +256,12 @@ def update_entity(id: int, body: DataEntityPatch, de: DataEntity = Depends(_de_w
 
 
 _retire_and_restore("data-entities", DataEntity, DataEntityOut)
+
+
+@router.get("/data-entities/{id}/business-requirements", response_model=list[DataEntityUseOut],
+            **_de_r.route)
+def entity_used_by(id: int, de: DataEntity = Depends(_de_r.dep), db: Session = Depends(get_db)):
+    return de_service.used_by(db, de)
 
 
 @router.get("/data-entities/{id}/fields", response_model=list[DataFieldOut], **_de_r.route)

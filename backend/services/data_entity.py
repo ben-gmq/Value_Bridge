@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import DataEntity, DataField
+from models import BfcNode, BrDataEntity, BusinessRequirement, DataEntity, DataField
 from services import numbering
 from services.code_master import validate_required_code
 from services import lifecycle
@@ -127,3 +127,20 @@ def restore_field(db: Session, actor_id: int, f: DataField) -> DataField:
                 DataField.data_entity_id == row.data_entity_id, DataField.is_active)) or 0) + 1
     lifecycle.restore(db, actor_id, f, before_activate=_free)
     return f
+
+
+def used_by(db: Session, de: DataEntity) -> list[dict]:
+    """The entity page's "Used by requirements": one row per live BR, its CRUD letters merged."""
+    rows = db.execute(select(BusinessRequirement.br_id, BusinessRequirement.br_number,
+                             BfcNode.hier_code, BfcNode.node_name, BrDataEntity.crud_code)
+                      .join(BrDataEntity, BrDataEntity.br_id == BusinessRequirement.br_id)
+                      .join(BfcNode, BfcNode.bfc_node_id == BusinessRequirement.bfc_node_id)
+                      .where(BrDataEntity.data_entity_id == de.data_entity_id, BrDataEntity.is_active,
+                             BusinessRequirement.is_active)
+                      .order_by(BusinessRequirement.br_number)).all()
+    out: dict[int, dict] = {}
+    for br_id, number, code, name, crud in rows:
+        r = out.setdefault(br_id, {"br_id": br_id, "br_number": number, "hier_code": code,
+                                   "node_name": name, "crud": ""})
+        r["crud"] = "".join(c for c in "CRUD" if c in r["crud"] + crud)
+    return list(out.values())

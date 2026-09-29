@@ -375,3 +375,15 @@ def test_changed_lookup_codes_come_back_in_the_response(client, ed):
     r = client.patch(f"{API}/data-fields/{f['data_field_id']}", headers=ed["h"],
                      json={"row_version": f["row_version"], "data_type_code": "DECIMAL"})
     assert r.json()["data_type_code"] == "DECIMAL"
+
+
+def test_entity_lists_the_requirements_that_use_it(client, ed):
+    step(client, ed)
+    de = entity(client, ed)
+    br = brs(client, ed)["BR-0001"]
+    for c in ("U", "R"):
+        client.post(f"{API}/business-requirements/{br['br_id']}/data-entities", headers=ed["h"],
+                    json={"data_entity_id": de["data_entity_id"], "crud_code": c})
+    r = client.get(f"{API}/data-entities/{de['data_entity_id']}/business-requirements", headers=ed["rv"])
+    assert r.json() == [{"br_id": br["br_id"], "br_number": "BR-0001", "hier_code": "01.01.01",
+                         "node_name": "Take order", "crud": "RU"}]
