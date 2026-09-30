@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link,
   Snackbar, Stack, Switch, TextField, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
+import SchemaRounded from '@mui/icons-material/SchemaRounded';
 import { DataGrid } from '@mui/x-data-grid';
 import { dataApi } from '../../api/scope';
 import { errorText } from '../../api/client';
@@ -97,8 +98,10 @@ export default function DataEntitiesPage() {
   const loadError = q.error && errorText(q.error, t('data.loadFailed'));
   return (
     <Page title={t('data.title')} subtitle={t('data.subtitle')}
-      actions={<Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>
-        {t('data.add')}</Button>}>
+      actions={(<>
+        <Button component={RouterLink} to={links.erd(projectId)} startIcon={<SchemaRounded />}>{t('data.diagram')}</Button>
+        <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>
+      </>)}>
       {(error || loadError) && <Alert severity="error" sx={ERR_SX}>{error || loadError}</Alert>}
       <WrapperBox>
         {!q.error && (

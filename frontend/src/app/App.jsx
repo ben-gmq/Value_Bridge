@@ -18,6 +18,7 @@ import RequirementsPage from '../features/requirements/RequirementsPage';
 import RequirementPage from '../features/requirements/RequirementPage';
 import DataEntitiesPage from '../features/data/DataEntitiesPage';
 import DataEntityPage from '../features/data/DataEntityPage';
+import ErdPage from '../features/data/ErdPage';
 import SettingsPage from '../features/settings/SettingsPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
@@ -32,7 +33,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 // process flow arrives later as a view of it (Ben, 2026-09-29, S1-9).
 const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['requirements', RequirementsPage],
-  ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/:deId', DataEntityPage],
+  ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];
 

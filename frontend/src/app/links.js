@@ -8,6 +8,7 @@ export const links = {
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   data: (p) => `/p/${p}/data`,
   entity: (p, deId) => `/p/${p}/data/${deId}`,
+  erd: (p, area) => (area ? `/p/${p}/data/diagram?area=${area}` : `/p/${p}/data/diagram`),
   settings: (p) => `/p/${p}/settings`,
   access: (p) => `/p/${p}/access`,
   organisation: (p) => `/p/${p}/settings/organisation`,
@@ -22,6 +23,7 @@ export const keys = {
   br: (id) => ['br', String(id)],
   entities: (p) => ['entities', String(p)],
   entity: (id) => ['entity', String(id)],
+  erd: (p, area) => ['entities', String(p), 'erd', String(area ?? 'project')],   // under entities(p): field edits refresh it
   parties: (p) => ['parties', String(p)],
   units: (p) => ['org-units', String(p)],
   roles: (p) => ['org-roles', String(p)],

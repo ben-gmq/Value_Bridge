@@ -14,7 +14,7 @@ const scheme = (mode) => {
       background: { default: t.page, paper: t.card, subtle: t.raised },
       text: { primary: t.text, secondary: t.text2, disabled: t.muted },
       divider: t.line,
-      brand: { ...BRAND, title: t.title, link: t.link, teal: t.teal, tealText: t.tealText,
+      brand: { ...BRAND, title: t.title, link: t.link, teal: t.teal, tealText: t.tealText, onTeal: t.onTeal,
                selected: t.selected, lineStrong: t.lineStrong, field: t.field, muted: t.muted },
       status: STATUS_COLOR_MAP[mode],
     },

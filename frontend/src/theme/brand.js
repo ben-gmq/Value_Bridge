@@ -29,13 +29,13 @@ export const TOKENS = {
     line: '#E6E6E9', lineStrong: '#D4D5D9', field: '#CACCD2',
     text: '#111318', text2: '#50545C', muted: '#686C74',
     action: '#1F3A5F', actionHover: '#172D4A', link: '#2B4F7E', data: '#3E6A9E',
-    teal: '#7FA6A3', tealText: '#2F5F5D', title: BRAND.ftc,
+    teal: '#7FA6A3', tealText: '#2F5F5D', onTeal: '#0E1F1E', title: BRAND.ftc,   // onTeal: text on a teal header (~6.5:1)
   },
   dark: {
     page: '#111214', card: '#18191C', raised: '#1F2024', selected: '#1E2733',
     line: '#2A2B30', lineStrong: '#3A3B41', field: '#3A3B41',
     text: '#EDEDEF', text2: '#B4B6BC', muted: '#8B8E96',
     action: '#4A73A8', actionHover: '#5A83B8', link: '#7DA2D6', data: '#6F97CC',
-    teal: '#5E8C88', tealText: '#8FC1BD', title: '#EDEDEF',
+    teal: '#5E8C88', tealText: '#8FC1BD', onTeal: '#0E1F1E', title: '#EDEDEF',    // onTeal ~4.6:1
   },
 };
