@@ -25,55 +25,89 @@ function useSteps(projectId) {
   }, [q.data, q.error]);
 }
 
-/** Add or edit one edge. `ends` fixes both ends up front (a line drawn on the canvas).
- * `replaces` re-points an existing edge: the new one is added, then the old one removed —
- * an edge's ends never change in place (S2-2), so a baseline diff sees REMOVED + ADDED. */
-export function EdgeDialog({ projectId, node, edge, ends, replaces, steps, onClose, onDone }) {
+const NO_STEP = { bfc_node_id: null };
+
+/** One end of a flow: a process step, or none (the start or end of the flow). */
+function EndPicker({ id, label, noneLabel, steps, value, onChange }) {
+  const options = [NO_STEP, ...steps.list];
+  const current = value == null ? NO_STEP : (steps.byId.get(value) ?? { bfc_node_id: value });
+  return (
+    <Autocomplete id={id} options={options} value={current} disableClearable
+      getOptionLabel={(n) => (n.bfc_node_id == null ? noneLabel : (stepLabel(n) || `#${n.bfc_node_id}`))}
+      isOptionEqualToValue={(a, b) => a.bfc_node_id === b.bfc_node_id}
+      onChange={(_, n) => onChange(n.bfc_node_id)}
+      renderInput={(params) => <TextField {...params} label={label} />} />
+  );
+}
+
+/**
+ * Create, edit, re-point or delete one flow — the one flow dialog, used by the step panel and
+ * the canvas. With `edge` it edits; `ends` pre-fills both ends (a line drawn or an arrow moved).
+ * Changing an existing flow's ends adds the new flow and removes the old one — ends never
+ * change in place (S2-2), so a baseline diff sees REMOVED + ADDED. From the step panel with
+ * neither, it picks a direction and the other step.
+ */
+export function EdgeDialog({ projectId, node, edge, ends, onClose, onDone }) {
+  const steps = useSteps(projectId);
   const editing = Boolean(edge);
-  const fixed = editing ? edge : ends;
-  const seed = edge ?? replaces;
+  const pickEnds = editing || Boolean(ends);
+  const start = ends ?? edge;
+  const [from, setFrom] = useState(start?.from_bfc_node_id ?? null);
+  const [to, setTo] = useState(start?.to_bfc_node_id ?? null);
   const [dir, setDir] = useState('O');
   const [other, setOther] = useState(null);
   const [v, setV] = useState({
-    flow_type: seed?.flow_type ?? 'SEQUENCE', condition_label: seed?.condition_label ?? '',
-    seq_no: seed?.seq_no ?? '', note: seed?.note ?? '' });
+    flow_type: edge?.flow_type ?? 'SEQUENCE', condition_label: edge?.condition_label ?? '',
+    seq_no: edge?.seq_no ?? '', note: edge?.note ?? '' });
   const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const set = (k) => (val) => setV((s) => ({ ...s, [k]: val }));
   const needsLabel = v.flow_type === 'CONDITIONAL' && !v.condition_label.trim();
   const seqOk = v.seq_no === '' || (/^\d+$/.test(String(v.seq_no)) && +v.seq_no >= 1 && +v.seq_no <= 99);
+  const noEnds = pickEnds && from == null && to == null;
+  const moved = editing && (from !== edge.from_bfc_node_id || to !== edge.to_bfc_node_id);
   const fields = () => ({ flow_type: v.flow_type, condition_label: blankToNull(v.condition_label.trim()),
     seq_no: v.seq_no === '' ? null : +v.seq_no, note: blankToNull(v.note) });
+  const failed = (err) => {
+    onDone();                                           // show what is there, even after a half-landed move
+    setError(isStale(err) ? t('processes.staleLink') : errorText(err, t('common.saveFailed')));
+  };
   const m = useMutation({
     mutationFn: () => {
-      if (editing) return flowApi.update(edge.bfc_node_flow_id, { row_version: edge.row_version, ...fields() });
-      if (replaces) {
-        return flowApi.create(projectId, { ...fields(), ...ends })
-          .then(() => flowApi.remove(replaces.bfc_node_flow_id, replaces.row_version));
+      if (editing && !moved) return flowApi.update(edge.bfc_node_flow_id, { row_version: edge.row_version, ...fields() });
+      if (pickEnds) {
+        const created = flowApi.create(projectId, { ...fields(), from_bfc_node_id: from, to_bfc_node_id: to });
+        return editing ? created.then(() => flowApi.remove(edge.bfc_node_flow_id, edge.row_version)) : created;
       }
-      if (ends) return flowApi.create(projectId, { ...fields(), ...ends });
       const otherId = other?.bfc_node_id ?? null;
       return flowApi.create(projectId, { ...fields(),
         from_bfc_node_id: dir === 'O' ? node.bfc_node_id : otherId,
         to_bfc_node_id: dir === 'O' ? otherId : node.bfc_node_id });
     },
     onSuccess: () => { onDone(); onClose(); },
-    onError: (err) => {
-      if (isStale(err) || replaces) onDone();            // a move may have half-landed: show what is there
-      setError(isStale(err) ? t('processes.staleLink') : errorText(err, t('common.saveFailed')));
-    },
+    onError: failed,
   });
-  const end = (id, fallback) => (id == null ? t(fallback) : stepLabel(steps.byId.get(id)) || `#${id}`);
+  const del = useMutation({
+    mutationFn: () => flowApi.remove(edge.bfc_node_flow_id, edge.row_version),
+    onSuccess: () => { onDone(); onClose(); },
+    onError: (err) => { setConfirmDelete(false); failed(err); },
+  });
+  const busy = m.isPending || del.isPending;
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{t(editing ? 'processes.editEdgeTitle' : (replaces ? 'processes.moveEdgeTitle' : 'processes.addEdgeTitle'))}</DialogTitle>
+      <DialogTitle>{t(editing ? 'processes.editEdgeTitle' : 'processes.addEdgeTitle')}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 1 }}>
-          {fixed ? (
-            <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-              {t(editing ? 'processes.edgeFixed' : (replaces ? 'processes.edgeMove' : 'processes.edgeNew'), {
-                from: end(fixed.from_bfc_node_id, 'processes.flowStart'),
-                to: end(fixed.to_bfc_node_id, 'processes.flowEnd') })}</Typography>
+          {pickEnds ? (
+            <>
+              <EndPicker id="edge-from" label={t('processes.edgeFromStep')} noneLabel={t('processes.flowStart')}
+                steps={steps} value={from} onChange={setFrom} />
+              <EndPicker id="edge-to" label={t('processes.edgeToStep')} noneLabel={t('processes.flowEnd')}
+                steps={steps} value={to} onChange={setTo} />
+              {noEnds && <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>{t('processes.edgeNoEnds')}</Typography>}
+              {moved && <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.edgeMoveNote')}</Typography>}
+            </>
           ) : (
             <>
               <SimpleSelect id="edge-dir" label={t('processes.edgeDirection')} value={dir} onChange={setDir}
@@ -96,12 +130,21 @@ export function EdgeDialog({ projectId, node, edge, ends, replaces, steps, onClo
             onChange={(e) => set('seq_no')(e.target.value)} slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 2 } }} />
           <TextField id="edge-note" label={t('processes.edgeNote')} value={v.note} multiline minRows={2}
             onChange={(e) => set('note')(e.target.value)} slotProps={{ htmlInput: { maxLength: 2000 } }} />
+          {confirmDelete && (
+            <Alert severity="warning" action={(
+              <Button color="warning" size="small" disabled={busy} onClick={() => del.mutate()}>
+                {t('processes.deleteEdge')}</Button>)}>{t('processes.deleteEdgeConfirm')}</Alert>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
+        {editing && !confirmDelete && (
+          <Button color="warning" disabled={busy} onClick={() => setConfirmDelete(true)} sx={{ mr: 'auto' }}>
+            {t('processes.deleteEdge')}</Button>
+        )}
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" disabled={needsLabel || !seqOk || m.isPending}
-          onClick={() => { setError(''); m.mutate(); }}>{t(editing ? 'common.save' : (replaces ? 'processes.moveEdge' : 'processes.add'))}</Button>
+        <Button variant="contained" disabled={needsLabel || !seqOk || noEnds || busy}
+          onClick={() => { setError(''); m.mutate(); }}>{t(editing ? 'common.save' : 'processes.add')}</Button>
       </DialogActions>
     </Dialog>
   );
@@ -184,7 +227,7 @@ export function StepSequence({ projectId, node, disabled }) {
         {column(false)}
       </Stack>
       {dialog && (
-        <EdgeDialog projectId={projectId} node={node} steps={steps} edge={dialog === 'new' ? null : dialog}
+        <EdgeDialog projectId={projectId} node={node} edge={dialog === 'new' ? null : dialog}
           onClose={() => setDialog(null)} onDone={refresh} />
       )}
     </Box>

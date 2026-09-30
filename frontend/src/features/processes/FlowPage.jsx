@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Handle, MarkerType, Position, useNodesState, useStore } from '@xyflow/react';
@@ -109,7 +109,7 @@ async function buildLayout(g, palette) {
     }
     const dashed = e.flow_type === 'HANDOFF';
     edges.push({
-      id: `f${e.bfc_node_flow_id}`, type: 'smoothstep', data: { flow: e },
+      id: `f${e.bfc_node_flow_id}`, type: 'smoothstep', data: { flow: e }, interactionWidth: 24,
       source: start ? eventId(e.bfc_node_flow_id) : stepId(e.from_bfc_node_id), sourceHandle: 's-R',
       target: end ? eventId(e.bfc_node_flow_id) : stepId(e.to_bfc_node_id), targetHandle: 't-L',
       label: e.condition_label ?? undefined,
@@ -204,6 +204,61 @@ function FlowTable({ g }) {
   );
 }
 
+/** A box's pop-up: rename the step, retire it, or open it in the chart. Retire names its
+ * blockers (the requirement, flows, step data) rather than cascading — nothing cascades (§7.12). */
+function StepDialog({ projectId, stepId, onClose, onDone }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: keys.node(stepId), queryFn: () => bfcApi.get(stepId) });
+  const step = q.data;
+  const [name, setName] = useState(null);
+  const [error, setError] = useState('');
+  const [confirmRetire, setConfirmRetire] = useState(false);
+  const shown = name ?? step?.node_name ?? '';
+  const done = (row) => { if (row) qc.setQueryData(keys.node(stepId), row); qc.invalidateQueries({ queryKey: keys.node(stepId) }); onDone(); };
+  const fail = (err) => { done(); setConfirmRetire(false); setError(errorText(err, t('common.saveFailed'))); };
+  const rename = useMutation({
+    mutationFn: () => bfcApi.update(stepId, { row_version: step.row_version, node_name: shown.trim() }),
+    onSuccess: (row) => { done(row); onClose(); },
+    onError: fail,
+  });
+  const retire = useMutation({
+    mutationFn: () => bfcApi.retire(stepId, step.row_version),
+    onSuccess: () => { done(); onClose(); },
+    onError: fail,
+  });
+  const busy = rename.isPending || retire.isPending;
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{step ? t('processes.stepTitle', { code: step.hier_code }) : t('processes.loading')}</DialogTitle>
+      <DialogContent>
+        {(error || q.error) && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error || errorText(q.error)}</Alert>}
+        {step && (
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField id="flow-step-name" label={t('processes.name')} required value={shown}
+              onChange={(e) => setName(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />
+            <Button component={RouterLink} to={links.node(projectId, stepId)} sx={{ alignSelf: 'flex-start' }}>
+              {t('processes.openInChart')}</Button>
+            {confirmRetire && (
+              <Alert severity="warning" action={(
+                <Button color="warning" size="small" disabled={busy} onClick={() => retire.mutate()}>
+                  {t('processes.retire')}</Button>)}>{t('processes.retireStepConfirm')}</Alert>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        {step && !confirmRetire && (
+          <Button color="warning" disabled={busy} onClick={() => setConfirmRetire(true)} sx={{ mr: 'auto' }}>
+            {t('processes.retire')}</Button>
+        )}
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" disabled={!step || !shown.trim() || shown.trim() === step.node_name || busy}
+          onClick={() => { setError(''); rename.mutate(); }}>{t('common.save')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 /** A new process step under the node this flow is drawn for — the chart's own create (§7.2). */
 function AddStepDialog({ projectId, parentId, onDone, onClose }) {
   const [name, setName] = useState('');
@@ -249,9 +304,15 @@ export default function FlowPage() {
   const [connecting, setConnecting] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
+  const [stepOpen, setStepOpen] = useState(null);
   const scopeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
   // A step sits at level 3–5 (A-47), so a level-1 area takes its steps through a level-2 child.
   const canAddStep = Boolean(scopeQ.data?.is_active && scopeQ.data.level_no >= FIRST_PROCESS_LEVEL - 1);
+  const refreshAll = useCallback(() => {
+    for (const k of [keys.flows(projectId), keys.tree(projectId), keys.flowGaps(projectId), keys.brs(projectId)]) {
+      qc.invalidateQueries({ queryKey: k });
+    }
+  }, [qc, projectId]);
   const pendingSave = useRef(new Map());
   const timer = useRef(null);
 
@@ -322,6 +383,9 @@ export default function FlowPage() {
     const [from, to] = state.fromHandle?.type === 'target' ? [over, state.fromNode.id] : [state.fromNode.id, over];
     onConnect({ source: from, target: to });
   }, [onConnect]);
+  // A click opens the pop-up: an arrow's flow dialog, or a box's step dialog (Ben, 2026-09-30).
+  const onEdgeClick = useCallback((_, edge) => { if (edge.data?.flow) setConnecting({ edge: edge.data.flow }); }, []);
+  const onNodeClick = useCallback((_, n) => { if (n.type === 'step') setStepOpen(n.data.node.bfc_node_id); }, []);
   // Dragging an arrow's end to another box re-points it: add the new flow, remove the old (S2-2).
   const onReconnectEnd = useCallback((event, edge, handleType, state) => {
     const flow = edge.data?.flow;
@@ -331,13 +395,9 @@ export default function FlowPage() {
     const ends = { from_bfc_node_id: flow.from_bfc_node_id, to_bfc_node_id: flow.to_bfc_node_id };
     const key = handleType === 'source' ? 'from_bfc_node_id' : 'to_bfc_node_id';
     if (ends[key] === moved) return;                            // dropped back where it was
-    setConnecting({ ends: { ...ends, [key]: moved }, replaces: flow });
+    setConnecting({ edge: flow, ends: { ...ends, [key]: moved } });
   }, []);
 
-  const steps = useMemo(() => {
-    const all = [...(g?.nodes ?? []), ...(g?.outside ?? [])];
-    return { list: all, byId: new Map(all.map((n) => [n.bfc_node_id, n])) };
-  }, [g]);
 
   const title = g ? t('processes.flowPageTitle', { name: `${g.scope.hier_code} ${g.scope.node_name}` }) : t('processes.flowTitle');
   return (
@@ -361,23 +421,22 @@ export default function FlowPage() {
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>{t('processes.flowCanvasHelp')}</Typography>
           <ModelCanvas kind="flow" nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} connectable
             onNodesChange={handleNodesChange} onConnect={onConnect} onConnectEnd={onConnectEnd} onReconnectEnd={onReconnectEnd}
+            onEdgeClick={onEdgeClick} onNodeClick={onNodeClick}
             ariaLabel={title} />
         </>
       )}
       {g && g.nodes.length > 0 && view === 'table' && <FlowTable g={g} />}
       {connecting && (
-        <EdgeDialog projectId={projectId} ends={connecting.ends} replaces={connecting.replaces} steps={steps}
+        <EdgeDialog projectId={projectId} ends={connecting.ends} edge={connecting.edge}
           onClose={() => setConnecting(null)}
-          onDone={() => { qc.invalidateQueries({ queryKey: keys.flows(projectId) }); qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) }); }} />
+          onDone={refreshAll} />
+      )}
+      {stepOpen && (
+        <StepDialog projectId={projectId} stepId={stepOpen} onClose={() => setStepOpen(null)} onDone={refreshAll} />
       )}
       {addingStep && (
         <AddStepDialog projectId={projectId} parentId={Number(nodeId)} onClose={() => setAddingStep(false)}
-          onDone={() => {
-            qc.invalidateQueries({ queryKey: keys.flows(projectId) });
-            qc.invalidateQueries({ queryKey: keys.tree(projectId) });
-            qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) });
-            qc.invalidateQueries({ queryKey: keys.brs(projectId) });
-          }} />
+          onDone={refreshAll} />
       )}
       <ConfirmDialog open={confirmReset} title={t('processes.resetLayoutTitle')} body={t('processes.resetLayoutBody')}
         confirmLabel={t('processes.resetLayout')} busy={reset.isPending}

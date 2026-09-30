@@ -7,7 +7,7 @@ import { Box } from '@mui/material';
 import { useColorScheme, useTheme } from '@mui/material/styles';
 
 export function ModelCanvas({ kind, nodes, edges, nodeTypes, onNodesChange, onNodeDragStop, onConnect,
-  onConnectEnd, onReconnectEnd, connectable = false, ariaLabel, height = '70vh' }) {
+  onConnectEnd, onReconnectEnd, onNodeClick, onEdgeClick, connectable = false, ariaLabel, height = '70vh' }) {
   const { mode, systemMode } = useColorScheme();
   const colorMode = (mode === 'system' ? systemMode : mode) === 'dark' ? 'dark' : 'light';
   const theme = useTheme();
@@ -20,6 +20,7 @@ export function ModelCanvas({ kind, nodes, edges, nodeTypes, onNodesChange, onNo
         // poorly on Windows, and 6px handles were too small to find.
         '& .react-flow__pane': { cursor: 'default' },
         '& .react-flow__node': { cursor: 'move' },
+        '& .react-flow__edge': { cursor: 'pointer' },
         '& .react-flow__handle': { width: 14, height: 14, cursor: 'crosshair',
           bgcolor: th.vars.palette.primary.main, border: 2, borderColor: th.vars.palette.background.paper,
           transition: 'transform 120ms' },
@@ -31,7 +32,7 @@ export function ModelCanvas({ kind, nodes, edges, nodeTypes, onNodesChange, onNo
       <ReactFlowProvider>
         <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop} onConnect={onConnect} onConnectEnd={onConnectEnd}
-          onReconnectEnd={onReconnectEnd} edgesReconnectable={connectable && Boolean(onReconnectEnd)} reconnectRadius={16}
+          onReconnectEnd={onReconnectEnd} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} edgesReconnectable={connectable && Boolean(onReconnectEnd)} reconnectRadius={16}
           connectionLineType={ConnectionLineType.SmoothStep} connectionLineStyle={drawing} nodesConnectable={connectable}
           onlyRenderVisibleElements colorMode={colorMode} deleteKeyCode={null} fitView minZoom={0.1}
           connectionRadius={36}>

@@ -135,7 +135,7 @@
   "processes.openFlow": "Open process flow",
   "processes.flowPageTitle": "Process flow · {name}",
   "processes.flowPageHelp": "The steps under this node, in swimlanes by their Responsible role.",
-  "processes.flowCanvasHelp": "Drag a box to place it; the position is saved. Drag from a box's blue dot onto another box to add a flow. Drag the end of an arrow onto another box to move it.",
+  "processes.flowCanvasHelp": "Click an arrow to edit, move or delete it. Click a box to rename or retire the step. Drag from a box's blue dot onto another box to add a flow. Drag a box to place it; the position is saved.",
   "processes.flowNoSteps": "There are no process steps under this node yet.",
   "processes.flowOutside": "other area",
   "processes.laneUnassigned": "No Responsible role",
@@ -155,7 +155,13 @@
   "processes.addStepTitle": "Add a process step",
   "processes.addStepHelp": "The step is added to the chart under this node, with its business requirement. Connect it by dragging from its right edge.",
   "processes.openFlowFor": "Open the process flow of {name}",
-  "processes.edgeMove": "Move this flow to {from} → {to}. The old flow is removed and this one added, keeping its type and condition.",
-  "processes.moveEdgeTitle": "Move the flow",
-  "processes.moveEdge": "Move"
+  "processes.edgeFromStep": "From step",
+  "processes.edgeToStep": "To step",
+  "processes.edgeNoEnds": "A flow needs at least one step.",
+  "processes.edgeMoveNote": "Changing a step removes this flow and adds a new one with the same type and condition.",
+  "processes.deleteEdge": "Delete flow",
+  "processes.deleteEdgeConfirm": "Delete this flow? It can be added again later.",
+  "processes.stepTitle": "Step {code}",
+  "processes.openInChart": "Open in the chart",
+  "processes.retireStepConfirm": "Retire this step? Anything still attached to it — its requirement, flows or data — is named, and must be removed first."
 }
