@@ -201,7 +201,11 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             <SectionTitle>{t('processes.stepFacts')}</SectionTitle>
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.stepFactsHelp')}</Typography>
             {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && (
-              <Box sx={{ mt: 3 }}><FlowGaps projectId={projectId} node={node} /></Box>
+              <>
+                <Button variant="outlined" sx={{ mt: 2 }} component={RouterLink} to={links.flow(projectId, nodeId)}>
+                  {t('processes.openFlow')}</Button>
+                <Box sx={{ mt: 3 }}><FlowGaps projectId={projectId} node={node} /></Box>
+              </>
             )}
           </Box>
         )}

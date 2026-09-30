@@ -3,6 +3,7 @@
 export const links = {
   processes: (p) => `/p/${p}/processes`,
   node: (p, nodeId) => `/p/${p}/processes?node=${nodeId}`,
+  flow: (p, nodeId) => `/p/${p}/processes/${nodeId}/flow`,
   requirements: (p) => `/p/${p}/requirements`,
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   data: (p) => `/p/${p}/data`,
@@ -26,4 +27,5 @@ export const keys = {
   roles: (p) => ['org-roles', String(p)],
   flows: (p) => ['process-flows', String(p)],
   flowGaps: (p) => ['flow-completeness', String(p)],
+  flowGraph: (p, nodeId) => ['process-flows', String(p), 'graph', String(nodeId)],   // under flows(p): edge edits refresh it
 };

@@ -86,4 +86,13 @@ export const flowApi = {
   update: (id, body) => d(http.patch(`${V}/process-flows/${id}`, body)),
   remove: (id, rowVersion) => del(`${V}/process-flows/${id}`, rowVersion),
   completeness: (projectId) => d(http.get(`${P(projectId)}/flow-completeness`)),
+  graph: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow`, { params: { variant } })),
+};
+
+// Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.
+const L = (projectId, type, scopeKey) => `${P(projectId)}/diagram-layouts/${type}/${scopeKey}`;
+export const layoutApi = {
+  get: (projectId, type, scopeKey) => d(http.get(L(projectId, type, scopeKey))),
+  save: (projectId, type, scopeKey, items) => d(http.put(L(projectId, type, scopeKey), items)),
+  reset: (projectId, type, scopeKey) => d(http.delete(L(projectId, type, scopeKey))),
 };

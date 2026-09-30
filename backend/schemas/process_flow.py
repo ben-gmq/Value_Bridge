@@ -53,3 +53,78 @@ class FlowCompletenessOut(BaseModel):
     crud_without_io: list[int]          # br_data_entity ids — must be empty
     ext_without_io: list[int]           # bfc_node_external_flow ids — must be empty
     edge_count: int
+
+
+# ---- the graph (D-21) and saved positions (D-30) ----
+ObjectType = Literal["STEP", "ENTITY", "EXTERNAL", "EVENT"]
+
+
+class LayoutItem(BaseModel):
+    object_type: ObjectType
+    object_id: int
+    x: float = Field(ge=-99_999_999, le=99_999_999)
+    y: float = Field(ge=-99_999_999, le=99_999_999)
+    w: float | None = Field(default=None, gt=0, le=99_999_999)
+    h: float | None = Field(default=None, gt=0, le=99_999_999)
+    collapsed: bool = False
+
+
+class FlowBox(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    node_name: str
+    data_processing_desc: str | None
+    br_number: str | None
+    lane_org_role_id: int | None
+
+
+class FlowEdge(BaseModel):
+    bfc_node_flow_id: int
+    from_bfc_node_id: int | None
+    to_bfc_node_id: int | None
+    flow_type: str
+    condition_label: str | None
+    seq_no: int | None
+    row_version: int
+    is_external: bool
+
+
+class FlowLane(BaseModel):
+    org_role_id: int
+    org_role_code: str
+    org_role_name: str
+    org_unit_name: str | None
+
+
+class FlowStore(BaseModel):
+    data_entity_id: int
+    de_number: str
+    de_name: str
+    reads: list[int]
+    writes: list[int]
+
+
+class FlowExternalLink(BaseModel):
+    bfc_node_id: int
+    direction: str
+    data_entity_id: int | None
+    flow_label: str | None
+
+
+class FlowExternal(BaseModel):
+    external_entity_id: int
+    ext_number: str
+    ext_name: str
+    flows: list[FlowExternalLink]
+
+
+class ProcessFlowGraphOut(BaseModel):
+    scope: StepRef
+    variant: str
+    nodes: list[FlowBox]
+    edges: list[FlowEdge]
+    outside: list[StepRef]
+    lanes: list[FlowLane]
+    stores: list[FlowStore]
+    externals: list[FlowExternal]
+    layout: list[LayoutItem]

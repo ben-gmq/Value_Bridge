@@ -13,6 +13,7 @@ import ProgramHome from '../features/programs/ProgramHome';
 import AdminPage from '../features/admin/AdminPage';
 import SectionPlaceholder from '../features/common/SectionPlaceholder';
 import ProcessesPage from '../features/processes/ProcessesPage';
+import FlowPage from '../features/processes/FlowPage';
 import RequirementsPage from '../features/requirements/RequirementsPage';
 import RequirementPage from '../features/requirements/RequirementPage';
 import DataEntitiesPage from '../features/data/DataEntitiesPage';
@@ -30,7 +31,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 // Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
 // process flow arrives later as a view of it (Ben, 2026-09-29, S1-9).
 const PAGES = [
-  ['processes', ProcessesPage], ['requirements', RequirementsPage],
+  ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['requirements', RequirementsPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/:deId', DataEntityPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];

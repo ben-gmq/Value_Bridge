@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 2 unworked lines in VB-005 — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 5 unworked lines in VB-005 — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -114,3 +114,13 @@ place.
   controls only when the node is retired, so a reviewer clicks and gets a 403. Fix once across
   the panel from the user's project role, not per section. The server refuses correctly; this
   is presentation only.
+- sara L5 · `sara`, slice-2-canvas pre-merge review, 2026-09-30 · LOW · **The flow canvas lets a
+  REVIEWER drag, draw a flow and press Reset**, each ending in a 403 alert. Same root as sara
+  LOW-3 above — fix both with one project-role hook.
+- sara L7 · `sara`, slice-2-canvas, 2026-09-30 · LOW · **Pinned boxes can overlap auto-placed
+  ones**: §14.6 says overlapping unpinned cards are pushed clear on auto-arrange; the flow canvas
+  lets a saved position win over ELK without pushing. **Owed to the shared canvas before the ERD
+  (Slice 3)**, where 200-entity diagrams make it visible.
+- sara L8 · `sara`, slice-2-canvas, 2026-09-30 · LOW · **Edge condition labels stay visible in the
+  low-zoom view** (below 0.45 box text hides, edge labels do not). A custom edge reading the zoom.
+
