@@ -1,7 +1,10 @@
 """Slice 2 routes (§9): process flow edges, the flow graph, saved diagram positions and the
 flow completeness report. Collections use project_ctx; /process-flows/{id} and
 /bfc-nodes/{id}/process-flow use object_guard, so an object you cannot see is a 404."""
-from fastapi import Depends, HTTPException
+from typing import Annotated
+
+from fastapi import Depends
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from auth.dependencies import current_user
@@ -68,10 +71,9 @@ def get_layout(project_id: int, diagram_type: str, scope_key: str, db: Session =
 
 
 @router.put(_LAYOUT, response_model=list[LayoutItem], **_edit.route)
-def save_layout(project_id: int, diagram_type: str, scope_key: str, body: list[LayoutItem],
+def save_layout(project_id: int, diagram_type: str, scope_key: str,
+                body: Annotated[list[LayoutItem], Field(max_length=2000)],      # A-35: 2,000 steps
                 user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
-    if len(body) > 2000:                                 # A-35: 2,000 process nodes per project
-        raise HTTPException(422, "At most 2,000 positions per save")
     return diagram_layout.save(db, user.app_user_id, project_id, diagram_type, scope_key,
                                [i.model_dump() for i in body])
 

@@ -29,7 +29,7 @@ def _scope(db: Session, project_id: int, diagram_type: str, scope_key: str) -> i
         if diagram_type != "ERD":
             raise HTTPException(422, "A process flow or DFD is scoped to a chart node")
         return None
-    if not scope_key.isdigit():
+    if not (scope_key.isascii() and scope_key.isdigit()):      # '¹'.isdigit() is True (sara L1)
         raise HTTPException(404, "Not found")
     node = db.get(BfcNode, int(scope_key))
     if node is None or node.project_id != project_id or not node.is_active:
@@ -107,7 +107,7 @@ def reset(db: Session, actor_id: int, project_id: int, diagram_type: str, scope_
     scope_id = _scope(db, project_id, diagram_type, scope_key)
     n = db.execute(delete(DiagramLayout).where(*_where(project_id, diagram_type, scope_id))).rowcount
     audit.record(db, "LAYOUT_RESET", actor_id=actor_id, project_id=project_id,
-                 target_table="diagram_layout", target_id=scope_id,
+                 target_table="bfc_node", target_id=scope_id,           # the scope node (sara L3)
                  detail={"diagram_type": diagram_type, "scope_key": scope_key, "positions": n})
     db.commit()
     return n

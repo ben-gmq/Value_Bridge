@@ -100,8 +100,10 @@ def test_reset_hard_deletes_only_its_own_diagram_and_is_audited(client, ed, step
     assert client.delete(layout_url(ed, scope), headers=ed["h"]).status_code == 204
     assert client.get(layout_url(ed, scope), headers=ed["h"]).json() == []
     assert len(client.get(layout_url(ed, other["bfc_node_id"]), headers=ed["h"]).json()) == 1
-    ev = db.execute(text("SELECT detail FROM audit_event WHERE event_type = 'LAYOUT_RESET'")).scalars().all()
-    assert ev == [{"diagram_type": "PROCESS_FLOW", "scope_key": str(scope), "positions": 1}]
+    ev = db.execute(text("SELECT target_table, target_id, detail FROM audit_event "
+                         "WHERE event_type = 'LAYOUT_RESET'")).all()
+    assert [tuple(e) for e in ev] == [("bfc_node", scope,
+                                       {"diagram_type": "PROCESS_FLOW", "scope_key": str(scope), "positions": 1})]
 
 
 def test_positions_are_validated_against_scope_type_and_project(client, ed, steps, world):
@@ -131,3 +133,41 @@ def test_positions_are_validated_against_scope_type_and_project(client, ed, step
     erd = put("project", one(object_type="ENTITY", object_id=de["data_entity_id"], collapsed=True), kind="ERD")
     assert erd.status_code == 200 and erd.json()[0]["collapsed"] is True           # Slice 3 needs no change
     assert put("project", one(object_type="STEP", object_id=s1["bfc_node_id"]), kind="ERD").status_code == 422
+
+
+# ---- sara L6: the remaining proofs -------------------------------------------------------
+
+def test_a_cycle_draws_like_any_other_flow(client, ed, steps):
+    s1, s2 = steps["s1"], steps["s2"]
+    edge(client, ed, s1, s2)
+    edge(client, ed, s2, s1, "CONDITIONAL", "Rejected")
+    edge(client, ed, s1, s1, "CONDITIONAL", "Rework")
+    g = graph(client, ed, steps["parent"]["bfc_node_id"])
+    assert g.status_code == 200 and len(g.json()["edges"]) == 3
+
+
+def test_layout_routes_are_hidden_from_outsiders(client, ed, steps):
+    url = layout_url(ed, steps["parent"]["bfc_node_id"])
+    item = [{"object_type": "STEP", "object_id": steps["s1"]["bfc_node_id"], "x": 0, "y": 0}]
+    assert client.get(url, headers=ed["out"]).status_code == 404
+    assert client.put(url, headers=ed["out"], json=item).status_code == 404
+    assert client.delete(url, headers=ed["out"]).status_code == 404
+    assert client.get(layout_url(ed, "%C2%B9"), headers=ed["h"]).status_code == 404       # sara L1
+
+
+def test_reset_of_one_diagram_type_leaves_the_others(client, ed, steps):
+    scope = steps["parent"]["bfc_node_id"]
+    de = client.post(f"{API}/projects/{ed['p']}/data-entities", headers=ed["h"], json={"de_name": "Order"}).json()
+    client.put(layout_url(ed, "project", "ERD"), headers=ed["h"],
+               json=[{"object_type": "ENTITY", "object_id": de["data_entity_id"], "x": 0, "y": 0}])
+    client.put(layout_url(ed, scope), headers=ed["h"],
+               json=[{"object_type": "STEP", "object_id": steps["s1"]["bfc_node_id"], "x": 0, "y": 0}])
+    assert client.delete(layout_url(ed, "project", "ERD"), headers=ed["h"]).status_code == 204
+    assert client.get(layout_url(ed, "project", "ERD"), headers=ed["h"]).json() == []
+    assert len(client.get(layout_url(ed, scope), headers=ed["h"]).json()) == 1
+
+
+def test_more_than_2000_positions_are_refused(client, ed, steps):
+    item = {"object_type": "STEP", "object_id": steps["s1"]["bfc_node_id"], "x": 0, "y": 0}
+    r = client.put(layout_url(ed, steps["parent"]["bfc_node_id"]), headers=ed["h"], json=[item] * 2001)
+    assert r.status_code == 422

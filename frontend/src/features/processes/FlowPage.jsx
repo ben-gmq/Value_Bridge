@@ -226,20 +226,41 @@ export default function FlowPage() {
     mutationFn: (items) => layoutApi.save(projectId, 'PROCESS_FLOW', nodeId, items),
     onError: (err) => setLayoutError(errorText(err, t('common.saveFailed'))),
   });
-  // Positions save on drag end, debounced (§14.6) — last write wins per object (A-52).
-  const onNodeDragStop = useCallback((_, __, dragged) => {
-    for (const n of dragged) {
-      if (!n.data?.object) continue;
-      pendingSave.current.set(n.id, { ...n.data.object, x: Math.round(n.position.x), y: Math.round(n.position.y) });
+  // Positions save when a move ends — a mouse drag or arrow keys — debounced (§14.6); last write
+  // wins per object (A-52). A move still pending when the page closes is sent, not dropped.
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const flush = useCallback(() => {
+    clearTimeout(timer.current);
+    const items = [...pendingSave.current.values()];
+    pendingSave.current.clear();
+    return items;
+  }, []);
+  const handleNodesChange = useCallback((changes) => {
+    onNodesChange(changes);
+    let moved = false;
+    for (const c of changes) {
+      if (c.type !== 'position' || c.dragging) continue;
+      const n = nodesRef.current.find((x) => x.id === c.id);
+      const pos = c.position ?? n?.position;
+      if (!n?.data?.object || !pos) continue;
+      pendingSave.current.set(n.id, { ...n.data.object, x: Math.round(pos.x), y: Math.round(pos.y) });
+      moved = true;
     }
+    if (!moved) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      const items = [...pendingSave.current.values()];
-      pendingSave.current.clear();
+      const items = flush();
       if (items.length) save.mutate(items);
     }, 600);
-  }, [save]);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  }, [onNodesChange, flush, save]);
+  useEffect(() => () => {
+    const items = flush();
+    if (items.length) {
+      layoutApi.save(projectId, 'PROCESS_FLOW', nodeId, items)
+        .catch((err) => console.error('Diagram positions not saved on leaving the page', err));
+    }
+  }, [flush, projectId, nodeId]);
 
   const reset = useMutation({
     mutationFn: () => layoutApi.reset(projectId, 'PROCESS_FLOW', nodeId),
@@ -277,7 +298,7 @@ export default function FlowPage() {
         <>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>{t('processes.flowCanvasHelp')}</Typography>
           <ModelCanvas kind="flow" nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} connectable
-            onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop} onConnect={onConnect}
+            onNodesChange={handleNodesChange} onConnect={onConnect}
             ariaLabel={title} />
         </>
       )}

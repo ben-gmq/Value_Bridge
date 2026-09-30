@@ -1,13 +1,4 @@
-// ELK runs off the main thread (§14.6). One request in, one laid-out graph (or an error) out.
-import ELK from 'elkjs/lib/elk.bundled.js';
-
-const elk = new ELK();
-
-self.onmessage = async (e) => {
-  const { id, graph } = e.data;
-  try {
-    self.postMessage({ id, graph: await elk.layout(graph) });
-  } catch (err) {
-    self.postMessage({ id, error: String(err?.message ?? err) });
-  }
-};
+// ELK runs off the main thread (§14.6). elk-worker detects the worker scope and installs its
+// own message dispatcher, so this file only loads it; layout.js talks to it through elk-api.
+// (elk.bundled cannot run inside a worker: its fake-worker fallback is not exported there.)
+import 'elkjs/lib/elk-worker.min.js';
