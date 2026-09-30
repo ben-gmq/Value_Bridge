@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 10 unworked lines in VB-005 (4 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 16 unworked lines in VB-005 (4 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -153,4 +153,20 @@ place.
   Reset (which re-arranges). Ben to say whether Reset is the auto-arrange; then fix the spec wording.
 - sara L3 · same review · LOW · A drag within 600 ms before Reset can land after the reset and pin
   the box again (flow and DFD). Flush-and-discard on reset — folds into the M1 hook.
+- sara L1 · `sara`, slice-3-erd pre-merge review, 2026-09-30 · LOW · **No test pins the ERD query
+  count** (fixed today, ~8 statements at any size). One statement-counting test so a later lazy
+  load cannot quietly make the 200-entity diagram slow.
+- UAT B · `ui-verifier`, Slice 3 UAT, 2026-09-30 · LOW · **Slow first paint on DFD and ERD**:
+  5–8 s of an empty canvas (ELK in the worker), with the ERD area picker showing a raw id until
+  the chart tree loads. A loading state at least; profile ELK at 200 entities.
+- UAT C · same · LOW · **Parallel lines overlap**: two relationships to one parent (ERD ship_to /
+  bill_to) or two flows between one pair of boxes (DFD) share a route and their labels stack.
+  Lines also run behind other boxes (smoothstep, not ELK's routes) — flow canvas too.
+- UAT D · same · LOW · **An expanded ERD card can overlap its neighbours**: expanding grows the
+  card without pushing others clear. Re-run `pushClear` on a collapse change.
+- UAT E · same · LOW · **At 390 px the minimap covers much of the ERD canvas** — hide it below a
+  breakpoint (with VB-006, the shell overflow).
+- ERD staleness · slice-3-erd builder, 2026-09-30 · LOW · **Editing a step's data does not refresh
+  an open ERD** until the 30 s staleTime passes: step I/O edits refresh `flows(p)`, not
+  `entities(p)`. Invalidate both from the step sections.
 
