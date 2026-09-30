@@ -184,5 +184,13 @@
   "processes.dfdFlowKind": "Kind",
   "processes.dfdKind.STORE": "Store",
   "processes.dfdKind.EXTERNAL": "Outside party",
-  "processes.dfdLegend": "Rounded box: process step · Cylinder: data store · Heavy square: outside party"
+  "processes.dfdLegend": "Rounded box: process step · Cylinder: data store · Heavy square: outside party",
+  "processes.mermaidCopy": "Copy as Mermaid",
+  "processes.mermaidHelp": "Copies this diagram as Mermaid text, to paste into a document or a slide tool that renders Mermaid.",
+  "processes.mermaidCopied": "Mermaid text copied to the clipboard.",
+  "processes.mermaidFailed": "The Mermaid text could not be fetched.",
+  "processes.mermaidManualTitle": "Copy the Mermaid text",
+  "processes.mermaidManualHelp": "This browser did not allow copying to the clipboard. Select the text below and copy it.",
+  "processes.mermaidText": "Mermaid text",
+  "processes.mermaidClose": "Close"
 }

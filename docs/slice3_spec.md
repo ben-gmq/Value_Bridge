@@ -180,7 +180,7 @@ _guard(text): any output line whose first token is click, call, href, %%{init, s
     classDef, linkStyle or class → log + raise 500 (a renderer bug). Last step of all three
 export_process_flow(g): flowchart LR; one subgraph per lane (id l{n}, label escaped);
     s{id}["label"]; -->|"cond"| for conditional; -.-> for HANDOFF; stores d{id}[("label")];
-    a start/end event (one end NULL) → e{flow_id}(("")) circle; handoff targets outside the
+    a start/end event (one end NULL) → e{flow_id}((" ")) circle (one space: Mermaid 11 rejects an empty label — found at build, sara L4); handoff targets outside the
     frame → declared with escaped labels in an `outside` subgraph, as on the canvas
 export_dfd(g): flowchart LR; s{id}(["label"]); d{id}[("label")]; x{id}["label"] (square);
     one edge per flow with |"label"|

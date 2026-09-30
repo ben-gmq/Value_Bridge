@@ -4,6 +4,7 @@ flow completeness report. Collections use project_ctx; /process-flows/{id} and
 from typing import Annotated
 
 from fastapi import Depends
+from fastapi.responses import PlainTextResponse
 from pydantic import Field
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,7 @@ from models import AppUser, BfcNode, BfcNodeFlow
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.process_flow import (DfdGraphOut, FlowCompletenessOut, LayoutItem, ProcessFlowGraphOut, ProcessFlowIn,
                                   ProcessFlowOut, ProcessFlowPatch)
-from services import diagram_layout, process_flow
+from services import diagram_layout, process_flow, render
 
 router = GuardedRouter(tags=["process-flow"])
 _read = project_ctx("REVIEWER")
@@ -65,6 +66,22 @@ def process_flow_graph(id: int, variant: str = "AS_IS", node: BfcNode = Depends(
 @router.get("/bfc-nodes/{id}/dfd", response_model=DfdGraphOut, **_node_r.route)
 def dfd_graph(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
     return process_flow.generate_dfd(db, node)
+
+
+@router.get("/bfc-nodes/{id}/process-flow/export", response_class=PlainTextResponse, **_node_r.route)
+def export_process_flow(id: int, format: str = "mermaid", variant: str = "AS_IS",
+                        node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    """The process flow as Mermaid text (§7.2a export_process_flow, R2-S7)."""
+    render.check_format(format)
+    return PlainTextResponse(render.export_process_flow(process_flow.generate_process_flow(db, node, variant)))
+
+
+@router.get("/bfc-nodes/{id}/dfd/export", response_class=PlainTextResponse, **_node_r.route)
+def export_dfd(id: int, format: str = "mermaid", node: BfcNode = Depends(_node_r.dep),
+               db: Session = Depends(get_db)):
+    """The DFD as Mermaid text (§7.2a export_dfd, R2-S7)."""
+    render.check_format(format)
+    return PlainTextResponse(render.export_dfd(process_flow.generate_dfd(db, node)))
 
 
 _LAYOUT = "/projects/{project_id}/diagram-layouts/{diagram_type}/{scope_key}"
