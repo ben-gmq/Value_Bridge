@@ -1,4 +1,4 @@
-"""Slice 2 routes (§9): process flow edges, the flow graph, saved diagram positions and the
+"""Slice 2 routes (§9): process flow edges, the flow graph, the DFD (slice 3a), saved diagram positions and the
 flow completeness report. Collections use project_ctx; /process-flows/{id} and
 /bfc-nodes/{id}/process-flow use object_guard, so an object you cannot see is a 404."""
 from typing import Annotated
@@ -11,7 +11,7 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser, BfcNode, BfcNodeFlow
 from routers.guards import GuardedRouter, object_guard, project_ctx
-from schemas.process_flow import (FlowCompletenessOut, LayoutItem, ProcessFlowGraphOut, ProcessFlowIn,
+from schemas.process_flow import (DfdGraphOut, FlowCompletenessOut, LayoutItem, ProcessFlowGraphOut, ProcessFlowIn,
                                   ProcessFlowOut, ProcessFlowPatch)
 from services import diagram_layout, process_flow
 
@@ -60,6 +60,11 @@ def flow_completeness(project_id: int, db: Session = Depends(get_db)):
 def process_flow_graph(id: int, variant: str = "AS_IS", node: BfcNode = Depends(_node_r.dep),
                        db: Session = Depends(get_db)):
     return process_flow.generate_process_flow(db, node, variant)
+
+
+@router.get("/bfc-nodes/{id}/dfd", response_model=DfdGraphOut, **_node_r.route)
+def dfd_graph(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    return process_flow.generate_dfd(db, node)
 
 
 _LAYOUT = "/projects/{project_id}/diagram-layouts/{diagram_type}/{scope_key}"

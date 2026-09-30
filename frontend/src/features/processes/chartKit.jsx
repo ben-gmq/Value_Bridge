@@ -244,3 +244,14 @@ export function RaciPanel({ projectId, queryKey, list, link, unlink, linkId, sin
     </Box>
   );
 }
+
+/** Process flow / Data flow: two renderings of one node's steps (D-24, D-31). Links, not state,
+ * so each view keeps its own address. */
+export function DiagramKindToggle({ projectId, nodeId, current }) {
+  return (
+    <ToggleButtonGroup size="small" exclusive value={current} aria-label={t('processes.diagramKind')}>
+      <ToggleButton value="flow" component={RouterLink} to={links.flow(projectId, nodeId)}>{t('processes.kindFlow')}</ToggleButton>
+      <ToggleButton value="dfd" component={RouterLink} to={links.dfd(projectId, nodeId)}>{t('processes.kindDfd')}</ToggleButton>
+    </ToggleButtonGroup>
+  );
+}

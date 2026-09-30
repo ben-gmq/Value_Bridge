@@ -49,6 +49,7 @@ export function StepData({ projectId, node, disabled }) {
   const [direction, setDirection] = useState('I');
   const refresh = (deId) => {
     qc.invalidateQueries({ queryKey: qk });
+    qc.invalidateQueries({ queryKey: keys.flows(projectId) });   // the flow and DFD graphs draw step I/O
     if (deId) qc.invalidateQueries({ queryKey: keys.entity(deId) });
   };
   const unlink = useMutation({
@@ -109,7 +110,10 @@ export function StepFlows({ projectId, node, disabled }) {
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ direction: 'I', data_entity_id: '', flow_label: '' });
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.node(node.bfc_node_id) });  // flows can add step data
+  const refresh = () => {                                    // flows can add step data
+    qc.invalidateQueries({ queryKey: keys.node(node.bfc_node_id) });
+    qc.invalidateQueries({ queryKey: keys.flows(projectId) });  // the flow and DFD graphs draw them
+  };
   const unlink = useMutation({
     mutationFn: (row) => bfcApi.unlinkFlow(node.bfc_node_id, row.bfc_node_external_flow_id, row.row_version),
     onSuccess: () => { setError(''); refresh(); },

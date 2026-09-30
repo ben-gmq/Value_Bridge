@@ -264,3 +264,75 @@ def generate_process_flow(db: Session, node: BfcNode, variant: str = "AS_IS") ->
                       for x in sorted(exts.values(), key=lambda x: x.ext_number)],
         "layout": diagram_layout.positions(db, node.project_id, "PROCESS_FLOW", node.bfc_node_id),
     }
+
+
+def _l1(hier_code: str) -> str:
+    return hier_code.split(".", 1)[0]
+
+
+def _cross_area(db: Session, project_id: int, de_ids: set[int]) -> list[int]:
+    """A-S3-2: counted across the WHOLE project, not the frame (every step in one frame shares
+    its L1). W = L1 areas writing the DE ('O'), R = L1 areas reading it ('I'); cross-area iff some
+    writer area differs from some reader area (§4.1a). Only active rows on active steps count."""
+    if not de_ids:
+        return []
+    rows = db.execute(select(BfcNodeDataEntity.data_entity_id, BfcNodeDataEntity.direction, BfcNode.hier_code)
+                      .join(BfcNode, BfcNode.bfc_node_id == BfcNodeDataEntity.bfc_node_id)
+                      .where(BfcNodeDataEntity.project_id == project_id, BfcNodeDataEntity.is_active,
+                             BfcNodeDataEntity.data_entity_id.in_(de_ids),
+                             BfcNode.is_active, BfcNode.is_process)).all()
+    areas: dict[int, dict[str, set[str]]] = {}
+    for de_id, direction, hier in rows:
+        areas.setdefault(de_id, {"I": set(), "O": set()})[direction].add(_l1(hier))
+    return sorted(de_id for de_id, a in areas.items()
+                  if any(w != r for w in a["O"] for r in a["I"]))
+
+
+def generate_dfd(db: Session, node: BfcNode) -> dict:
+    """§7.2a generate_dfd (D-31): the same rows as the process flow, no sequence — no
+    BFC_NODE_FLOW read at all. One flow per active step I/O row, EXCEPT an I/O row that an active
+    external flow names on the same (step, DE, direction): that one is drawn from/to the party
+    instead, and the store is still listed, because another step may read it (§5.3
+    BFC_NODE_EXTERNAL_FLOW). An external flow is labelled with its DE name, else its flow_label."""
+    if not node.is_active:
+        raise HTTPException(409, "This node is retired. Restore it first")
+    if node.is_process:
+        raise HTTPException(422, "A data flow diagram is drawn for a parent node, not a step")
+    steps = _steps_under(db, node)
+    ids = [s.bfc_node_id for s in steps]
+
+    io = [] if not ids else list(db.scalars(select(BfcNodeDataEntity).where(
+        BfcNodeDataEntity.bfc_node_id.in_(ids), BfcNodeDataEntity.is_active)
+        .order_by(BfcNodeDataEntity.bfc_node_data_entity_id)))
+    ext_rows = [] if not ids else list(db.scalars(select(BfcNodeExternalFlow).where(
+        BfcNodeExternalFlow.bfc_node_id.in_(ids), BfcNodeExternalFlow.is_active)
+        .order_by(BfcNodeExternalFlow.bfc_node_external_flow_id)))
+    de_ids = {r.data_entity_id for r in io} | {x.data_entity_id for x in ext_rows if x.data_entity_id}
+    des = {d.data_entity_id: d for d in db.scalars(select(DataEntity).where(
+        DataEntity.data_entity_id.in_(de_ids)))} if de_ids else {}
+    exts = {x.external_entity_id: x for x in db.scalars(select(ExternalEntity).where(
+        ExternalEntity.external_entity_id.in_({r.external_entity_id for r in ext_rows})))} if ext_rows else {}
+
+    covered = {(x.bfc_node_id, x.data_entity_id, x.direction) for x in ext_rows if x.data_entity_id}
+    flows = [{"kind": "STORE", "bfc_node_id": r.bfc_node_id, "direction": r.direction,
+              "data_entity_id": r.data_entity_id, "external_entity_id": None,
+              "bfc_node_data_entity_id": r.bfc_node_data_entity_id, "bfc_node_external_flow_id": None,
+              "label": des[r.data_entity_id].de_name}
+             for r in io if (r.bfc_node_id, r.data_entity_id, r.direction) not in covered]
+    flows += [{"kind": "EXTERNAL", "bfc_node_id": x.bfc_node_id, "direction": x.direction,
+               "data_entity_id": x.data_entity_id, "external_entity_id": x.external_entity_id,
+               "bfc_node_data_entity_id": None, "bfc_node_external_flow_id": x.bfc_node_external_flow_id,
+               "label": des[x.data_entity_id].de_name if x.data_entity_id else x.flow_label}
+              for x in ext_rows]
+    return {
+        "scope": {"bfc_node_id": node.bfc_node_id, "hier_code": node.hier_code, "node_name": node.node_name},
+        "processes": [{"bfc_node_id": s.bfc_node_id, "hier_code": s.hier_code, "node_name": s.node_name}
+                      for s in steps],
+        "stores": [{"data_entity_id": d.data_entity_id, "de_number": d.de_number, "de_name": d.de_name}
+                   for d in sorted(des.values(), key=lambda d: d.de_number)],
+        "externals": [{"external_entity_id": x.external_entity_id, "ext_number": x.ext_number,
+                       "ext_name": x.ext_name} for x in sorted(exts.values(), key=lambda x: x.ext_number)],
+        "flows": flows,
+        "cross_area": _cross_area(db, node.project_id, set(des)),
+        "layout": diagram_layout.positions(db, node.project_id, "DFD", node.bfc_node_id),
+    }
