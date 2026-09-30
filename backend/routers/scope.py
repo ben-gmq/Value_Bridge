@@ -14,6 +14,7 @@ from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, Bf
                     BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
                     ExternalEntity, OrgRole, OrgUnit)
 from routers.guards import GuardedRouter, object_guard, project_ctx
+from schemas.erd import ErdGraphOut
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityOut, DataEntityPatch,
                            DataEntityUseOut,
@@ -285,6 +286,12 @@ def update_field(id: int, body: DataFieldPatch, f: DataField = Depends(_df_w.dep
 
 
 _retire_and_restore("data-fields", DataField, DataFieldOut, on_restore=de_service.restore_field)
+
+
+@router.get("/projects/{project_id}/erd", response_model=ErdGraphOut, **_read.route)
+def erd_graph(project_id: int, subject_area: int | None = None, db: Session = Depends(get_db)):
+    """The logical ERD (§7.4, D-29). An unknown, other-project or retired area node is a 404."""
+    return de_service.generate_erd(db, project_id, subject_area)
 
 
 # ---- external parties (D-24a) -------------------------------------------------------------
