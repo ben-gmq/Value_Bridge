@@ -1,5 +1,5 @@
 import { forwardRef, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, Grid, IconButton, InputAdornment, Snackbar, Stack, TextField, Tooltip,
@@ -7,12 +7,13 @@ import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogAc
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import SearchIcon from '@mui/icons-material/Search';
+import FlowIcon from '@mui/icons-material/AccountTreeOutlined';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useTreeItemModel } from '@mui/x-tree-view/hooks';
 import { errorText, isStale } from '../../api/client';
 import { bfcApi, brApi } from '../../api/scope';
-import { keys } from '../../app/links';
+import { keys, links } from '../../app/links';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, LevelBadge, Mono, ShowRetired, blankToNull } from './chartKit';
@@ -46,6 +47,8 @@ function filterRows(rows, text) {
 }
 
 function NodeLabel({ node }) {
+  const { projectId } = useParams();
+  const flowable = node.is_active && !node.is_process && node.level_no >= FIRST_PROCESS_LEVEL - 1;
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, py: 0.25 }}>
       <LevelBadge level={node.level_no} process={node.is_process} />
@@ -57,6 +60,14 @@ function NodeLabel({ node }) {
           label={node.br_number ?? t('processes.processChip')} />
       )}
       {!node.is_active && <Chip size="small" variant="outlined" sx={{ height: 20, flex: 'none' }} label={t('processes.retiredChip')} />}
+      {flowable && (
+        <Tooltip title={t('processes.openFlow')}>
+          <IconButton size="small" component={RouterLink} to={links.flow(projectId, node.bfc_node_id)}
+            aria-label={t('processes.openFlowFor', { name: node.node_name })} sx={{ flex: 'none', p: 0.25 }}
+            onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+            <FlowIcon fontSize="small" /></IconButton>
+        </Tooltip>
+      )}
     </Stack>
   );
 }
