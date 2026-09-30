@@ -23,6 +23,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`) ·
   `cd frontend && npm run lint && npm run build`.
+- **Demo/UAT data:** `VB_ALLOW_DEMO_SEED=1 ./venv/bin/python -m seeds.seed_demo --secrets-out <file outside the repo>`
+  against a throwaway database whose name contains `uat` or `demo`; it refuses anything else.
 - **Two database roles (§6.6):** the app connects as `vb_app` (SELECT/INSERT/UPDATE, **no DELETE**
   except `diagram_layout` and `import_row`); migrations run as `vb_owner` (`MIGRATION_DATABASE_URL`).
 
@@ -45,6 +47,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   `en.<area>.json`, keys prefixed by area. No hard-coded UI text in new screens.
 - **Screen contracts:** page addresses and query keys in `frontend/src/app/links.js`; one API
   function per route in `frontend/src/api/scope.js`. Screens link to each other only through these.
+- **Edit controls** hide through `frontend/src/app/useCanEdit.js` (reads `/auth/me`) — never by
+  matching grants to the project in the browser. Presentation only; the guards still refuse.
 - **Deviations** from the playbook: [docs/PLAYBOOK_DEVIATIONS.md](docs/PLAYBOOK_DEVIATIONS.md).
 - **Bugs:** [BUGLOG.md](BUGLOG.md) (`VB-###`). Standing review backlog is VB-005.
 
@@ -65,14 +69,17 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 7. **The bare word `role` is banned** in tables, models and routes: `org_role` vs
    `project_role_code`.
 8. **One import pipeline** (`bulk.py`: validate → preview → commit) for every import, flow JSON
-   included. **One canvas component** for process flow, DFD and ERD.
+   included. **One canvas component** for process flow, DFD and ERD, and one position saver
+   (`canvas/useLayoutSave.js`) for all three.
 9. **Untrusted text renders as text.** `dangerouslySetInnerHTML` / `innerHTML` fail lint (§14.5).
+   Every Mermaid label goes through `services/render.escape_mermaid`, and `_guard` ends every exporter.
 10. **Every new table** is added to `models/__init__.py` (autogenerate only sees what is imported)
     and gets its migration **one per commit**, reversible; a destructive one pauses for Ben.
 
 ## Parallel sessions (up to ~20 a day)
 - **One git worktree per slice**, at `.worktrees/<branch>` inside the repo (gitignored) — never a
-  sibling folder. Branch from `main`; merge back through review.
+  sibling folder. Branch from `main`; merge back through review. Give each worktree its own
+  copied `backend/.env` with its own `TEST_*` database — pytest wipes its test DB, so two never share one.
 - **Migrations only on `main`, in order.** A slice branch that needs a table rebases onto the
   latest `main` before creating its migration, so revision ids never fork. Two slices never
   add migrations at the same time — coordinate on `main`.
