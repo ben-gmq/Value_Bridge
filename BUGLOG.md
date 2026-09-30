@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 6 unworked lines in VB-005 (4 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 10 unworked lines in VB-005 (4 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -142,4 +142,15 @@ place.
   others. One `user_admin.create_platform_admin(...)` running `check_ftc_address`, `MIN_PASSWORD`
   and the audit event, called by all three. The seed already checks the domain (its missing D-11
   check is fixed).
+- sara M1 · `sara`, slice-3-dfd pre-merge review, 2026-09-30 · MEDIUM · **Layout-save logic is
+  copied** between `FlowPage` and `DfdPage` (pendingSave, debounce, flush, save-on-leave, reset),
+  and the copies already differ; the ERD would be a third. One `useLayoutPersistence` hook in
+  `frontend/src/canvas/`. **Scheduled: on main straight after slice-3-erd merges.**
+- sara M2 · same review · MEDIUM · **The header's "DFD" nav item still opens the "coming later"
+  placeholder** (`App.jsx` SECTIONS, `AppShell.jsx` nav), while the real DFD lives under a chart
+  node. Ben to choose: drop the nav item, or point it at the chart with a "pick a node" hint.
+- sara L1 · same review · LOW · The spec says "Auto-arrange and Reset"; the diagrams have only
+  Reset (which re-arranges). Ben to say whether Reset is the auto-arrange; then fix the spec wording.
+- sara L3 · same review · LOW · A drag within 600 ms before Reset can land after the reset and pin
+  the box again (flow and DFD). Flush-and-discard on reset — folds into the M1 hook.
 
