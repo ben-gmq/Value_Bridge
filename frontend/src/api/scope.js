@@ -20,6 +20,11 @@ export const bfcApi = {
   markProcess: (id, body) => d(http.patch(`${V}/bfc-nodes/${id}/process`, body)),
   retire: (id, rowVersion) => del(`${V}/bfc-nodes/${id}`, rowVersion),
   restore: (id) => d(http.patch(`${V}/bfc-nodes/${id}/restore`)),
+  // A process step retires with its requirement and flows, and comes back the same way
+  // (docs/step_retire_spec.md §9). The hash is the preview's staleness check.
+  retirePreview: (id) => d(http.get(`${V}/bfc-nodes/${id}/retire-preview`)),
+  retireWithDependents: (id, confirmHash) => d(http.post(`${V}/bfc-nodes/${id}/retire-with-dependents`, { confirm_hash: confirmHash })),
+  restoreWithDependents: (id) => d(http.post(`${V}/bfc-nodes/${id}/restore-with-dependents`)),
   stepData: (id) => d(http.get(`${V}/bfc-nodes/${id}/data-entities`)),
   linkStepData: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/data-entities`, body)),
   unlinkStepData: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/data-entities/${linkId}`, rowVersion),

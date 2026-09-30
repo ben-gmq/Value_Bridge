@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, FormControlLabel, Grid, Stack, Switch,
   TextField, Typography } from '@mui/material';
-import { errorText, isStale } from '../../api/client';
+import { errorKind, errorText, isStale } from '../../api/client';
 import { bfcApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
@@ -13,6 +13,7 @@ import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEditForm, useFormSave } from './chartKit';
 import { FlowGaps, StepSequence } from './FlowSections';
+import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
 
 const STEP_SINGLE = ['ACCOUNTABLE', 'RESPONSIBLE'];      // services/raci.py SINGLE[BfcNodeOrgRole]
@@ -22,6 +23,12 @@ const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose
 
 const firstLine = (s) => (s ?? '').split('\n')[0];
 
+// "Restore these first: A; B" → ['A', 'B'] — the names are the server's, shown as text.
+const restoreFirstList = (err) => {
+  const detail = errorText(err, '');
+  return detail.slice(detail.indexOf(':') + 1).split(';').map((s) => s.trim()).filter(Boolean);
+};
+
 export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice, onGone }) {
   const qc = useQueryClient();
   const canEdit = useCanEdit();
@@ -30,11 +37,18 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const form = useEditForm(node, pickNode);
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
+  const [retiringStep, setRetiringStep] = useState(false);
+  // Which restore fits a retired step is the server's call (SR-1): a step is offered the
+  // with-dependents restore until a 409 says it was retired on its own.
+  const [plainFor, setPlainFor] = useState(null);
+  const [restoreNote, setRestoreNote] = useState(null);       // { nodeId, hint?, first? }
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: keys.tree(projectId) });
     qc.invalidateQueries({ queryKey: keys.node(nodeId) });
     qc.invalidateQueries({ queryKey: keys.brs(projectId) });
+    qc.invalidateQueries({ queryKey: keys.flows(projectId) });
+    qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) });
   };
 
   const save = useFormSave({
@@ -86,9 +100,25 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     onError: (err) => { setConfirmRetire(false); actionFail(err); },
   });
   const restore = useMutation({
-    mutationFn: () => bfcApi.restore(nodeId),
-    onSuccess: (row) => { setActionError(''); qc.setQueryData(keys.node(nodeId), row); refreshAll(); onNotice(t('processes.restored')); },
-    onError: actionFail,
+    mutationFn: (withDependents) => (withDependents ? bfcApi.restoreWithDependents(nodeId) : bfcApi.restore(nodeId)),
+    onSuccess: (res, withDependents) => {
+      setActionError(''); setRestoreNote(null);
+      if (!withDependents) qc.setQueryData(keys.node(nodeId), res);
+      refreshAll();
+      onNotice(withDependents ? t('processes.restoredWithDependents', { n: res.restored }) : t('processes.restored'));
+    },
+    onError: (err) => {
+      const kind = errorKind(err);
+      if (kind === 'USE_PLAIN_RESTORE' || kind === 'USE_RESTORE_WITH_DEPENDENTS') {
+        const plain = kind === 'USE_PLAIN_RESTORE';
+        setPlainFor(plain ? nodeId : null); setActionError('');
+        setRestoreNote({ nodeId, hint: t(plain ? 'processes.restorePlainFits' : 'processes.restoreDependentsFits') });
+      } else if (kind === 'RESTORE_FIRST') {
+        setActionError(''); setRestoreNote({ nodeId, first: restoreFirstList(err) });
+      } else {
+        actionFail(err);
+      }
+    },
   });
 
   if (nodeQ.error) return <Alert severity="error">{errorText(nodeQ.error)}</Alert>;
@@ -98,6 +128,8 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const editable = live && canEdit;      // a REVIEWER sees the panel, not its controls (sara LOW-3)
   const v = form.values;
   const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending;
+  const restoreWithDependents = node.is_process && plainFor !== nodeId;
+  const note = !live && restoreNote?.nodeId === nodeId ? restoreNote : null;
   const canSwitch = editable && node.level_no >= FIRST_PROCESS_LEVEL;
   const labels = { node_name: t('processes.name'), purpose_desc: t('processes.purpose'),
     data_processing_desc: t('processes.dataProcessing') };
@@ -118,6 +150,15 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
 
         {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
         {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
+        {note?.hint && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
+        {note?.first && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRestoreNote(null)}>
+            <Typography sx={{ fontSize: 13, mb: 0.5 }}>{t('processes.restoreFirstTitle')}</Typography>
+            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+              {note.first.map((name, i) => <Typography component="li" key={i} sx={{ fontSize: 13 }}>{name}</Typography>)}
+            </Box>
+          </Alert>
+        )}
 
         {node.is_process && br && (
           <Box sx={(th) => ({ mb: 2, p: 2, borderRadius: 2, bgcolor: th.vars.palette.brand.selected,
@@ -127,7 +168,7 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
                 {t('processes.brBanner')}</Typography>
               <Typography sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <Mono sx={{ mr: 1 }}>{br.br_number}</Mono>
-                {!br.is_active && <Chip size="small" variant="outlined" sx={{ mr: 1 }} label={t('processes.retiredChip')} />}
+                {!br.is_active && <Chip component="span" size="small" variant="outlined" sx={{ mr: 1 }} label={t('processes.retiredChip')} />}
                 {firstLine(br.br_statement) || <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>{t('processes.brNoStatement')}</Box>}
               </Typography>
             </Box>
@@ -174,10 +215,12 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
 
         <Stack direction="row" spacing={1} sx={{ mt: 2, justifyContent: 'flex-end', flexWrap: 'wrap' }} useFlexGap>
           {!canEdit ? null : live ? (
-            <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>
+            <Button color="warning" disabled={busy}
+              onClick={() => { setActionError(''); if (node.is_process) setRetiringStep(true); else setConfirmRetire(true); }}>
               {t('processes.retire')}</Button>
           ) : (
-            <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('processes.restore')}</Button>
+            <Button disabled={busy} onClick={() => { setActionError(''); setRestoreNote(null); restore.mutate(restoreWithDependents); }}>
+              {t(restoreWithDependents ? 'processes.restoreWithDependents' : 'processes.restore')}</Button>
           )}
           <Box sx={{ flex: 1 }} />
           {canEdit && (<>
@@ -224,6 +267,14 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
         body={t('processes.retireBody', { name: `${node.hier_code} ${node.node_name}` })}
         confirmLabel={t('processes.retire')} busy={retire.isPending}
         onClose={() => setConfirmRetire(false)} onConfirm={() => retire.mutate()} />
+      {retiringStep && (
+        <RetireStepDialog step={node} onClose={() => setRetiringStep(false)}
+          onRetired={() => {
+            setRetiringStep(false); setActionError(''); setPlainFor(null); refreshAll();
+            onNotice(t('processes.retiredWithDependents'));
+            if (!showRetired) onGone();
+          }} />
+      )}
     </Card>
   );
 }
