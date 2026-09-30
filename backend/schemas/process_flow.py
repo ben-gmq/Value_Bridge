@@ -128,3 +128,37 @@ class ProcessFlowGraphOut(BaseModel):
     stores: list[FlowStore]
     externals: list[FlowExternal]
     layout: list[LayoutItem]
+
+
+# ---- the DFD (D-31, slice 3a) ----
+class DfdStore(BaseModel):
+    data_entity_id: int
+    de_number: str
+    de_name: str
+
+
+class DfdExternal(BaseModel):
+    external_entity_id: int
+    ext_number: str
+    ext_name: str
+
+
+class DfdFlow(BaseModel):
+    kind: Literal["STORE", "EXTERNAL"]
+    bfc_node_id: int
+    direction: Literal["I", "O"]           # the step's point of view: I = into the step
+    data_entity_id: int | None
+    external_entity_id: int | None
+    bfc_node_data_entity_id: int | None    # the source row, one of the two
+    bfc_node_external_flow_id: int | None
+    label: str | None                      # DE name, else flow_label, else none
+
+
+class DfdGraphOut(BaseModel):
+    scope: StepRef
+    processes: list[StepRef]
+    stores: list[DfdStore]
+    externals: list[DfdExternal]
+    flows: list[DfdFlow]
+    cross_area: list[int]                  # data_entity_ids (A-S3-2, project-wide)
+    layout: list[LayoutItem]
