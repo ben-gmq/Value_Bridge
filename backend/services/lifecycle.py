@@ -42,6 +42,8 @@ LABELS = {
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
+    "bfc_node_flow": ("Flow edge",
+                      lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),
 }
 
 

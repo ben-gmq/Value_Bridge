@@ -228,3 +228,53 @@ class BfcNodeExternalFlow(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class BfcNodeFlow(AuditMixin, Base):
+    """One flow edge between process steps (D-20, D-23, S2). A NULL end is a start or end event.
+    flow_type is CHECK-listed (S2-1), so the conditional-label rule is a table CHECK. The ends
+    are fixed after create (S2-2); a retired twin is restored, never re-inserted (Q2)."""
+
+    __tablename__ = "bfc_node_flow"
+
+    bfc_node_flow_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    from_bfc_node_id: Mapped[int | None] = mapped_column(BigInteger)
+    from_is_process: Mapped[bool | None] = _live(True)
+    to_bfc_node_id: Mapped[int | None] = mapped_column(BigInteger)
+    to_is_process: Mapped[bool | None] = _live(True)
+    flow_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    condition_label: Mapped[str | None] = mapped_column(String(200))
+    seq_no: Mapped[int | None] = mapped_column(SmallInteger)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("bfc_node_flow_id", "project_id", name="uq_bfc_node_flow_project"),
+        ForeignKeyConstraint(["from_bfc_node_id", "project_id"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id"], name="fk_bnf_from"),
+        ForeignKeyConstraint(["from_bfc_node_id", "project_id", "from_is_process"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id", "bfc_node.is_process"],
+                             name="fk_bnf_from_process", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["to_bfc_node_id", "project_id"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id"], name="fk_bnf_to"),
+        ForeignKeyConstraint(["to_bfc_node_id", "project_id", "to_is_process"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id", "bfc_node.is_process"],
+                             name="fk_bnf_to_process", onupdate="NO ACTION"),
+        CheckConstraint("num_nonnulls(from_bfc_node_id, to_bfc_node_id) >= 1", name="ck_bnf_has_end"),
+        CheckConstraint("flow_type IN ('SEQUENCE', 'CONDITIONAL', 'PARALLEL', 'HANDOFF')",
+                        name="ck_bnf_flow_type"),
+        CheckConstraint("condition_label IS NULL OR btrim(condition_label) <> ''",
+                        name="ck_bnf_label_not_blank"),
+        CheckConstraint("flow_type <> 'CONDITIONAL' OR condition_label IS NOT NULL",
+                        name="ck_bnf_conditional_label"),
+        CheckConstraint("seq_no IS NULL OR seq_no BETWEEN 1 AND 99", name="ck_bnf_seq"),
+        Index("uq_bfc_node_flow_edge", "from_bfc_node_id", "to_bfc_node_id",
+              func.lower(func.btrim(condition_label)), unique=True,
+              postgresql_nulls_not_distinct=True, postgresql_where=text("is_active")),
+        Index("ix_bnf_from", "from_bfc_node_id", "project_id"),
+        Index("ix_bnf_to", "to_bfc_node_id", "project_id"),
+        Index("ix_bnf_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id

@@ -1,10 +1,14 @@
 """Seed the FTC-wide code_master library (§8). Run from backend/:  python -m seeds.seed_code_master
 Idempotent: inserts missing rows, updates labels/sort/behaviour of existing global rows.
 Seeds go here via CLI — never in Alembic (§13)."""
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from database import SessionLocal
 from models import CodeMaster
+
+# Categories that left the library. Their global rows are retired, never deleted: FLOW_TYPE
+# became a CHECK-listed column on bfc_node_flow (S2-1).
+RETIRED_CATEGORIES = ("FLOW_TYPE",)
 
 # (category, is_system, [(code, label) or (code, label, behaviour)])
 LIBRARY: list[tuple[str, bool, list[tuple]]] = [
@@ -39,8 +43,6 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                                      ("PARTNER", "Partner"), ("OTHER", "Other")]),
     ("IMPORT_STATUS", True, [("VALIDATING", "Validating"), ("VALIDATED", "Validated"),
                              ("REJECTED", "Rejected"), ("COMMITTED", "Committed")]),
-    ("FLOW_TYPE", True, [("SEQUENCE", "Sequence"), ("CONDITIONAL", "Conditional"),
-                         ("PARALLEL", "Parallel"), ("HANDOFF", "Hand-off")]),
     ("BASELINE_STATUS", True, [("DRAFT", "Draft"), ("FROZEN", "Frozen"), ("APPROVED", "Approved"),
                                ("SUPERSEDED", "Superseded")]),
     ("BR_STATUS", False, [("DRAFT", "Draft"), ("CONFIRMED", "Confirmed"),
@@ -108,6 +110,11 @@ def seed(db) -> tuple[int, int]:
                 existing.label, existing.sort_order, existing.is_system = label, order * 10, is_system
                 updated += 1
             # behaviour_code is never changed here: once referenced it is immutable (Q6).
+    for row in db.scalars(select(CodeMaster).where(
+            CodeMaster.project_id.is_(None), CodeMaster.category.in_(RETIRED_CATEGORIES),
+            CodeMaster.is_active)):
+        row.is_active, row.deleted_at = False, func.now()
+        updated += 1
     db.commit()
     return added, updated
 

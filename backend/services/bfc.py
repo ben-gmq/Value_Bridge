@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
+from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
                     BusinessRequirement, ExternalEntity)
 from services import audit, business_requirement, step_io
 from services import lifecycle
@@ -160,6 +160,11 @@ def _step_blockers(db: Session, node: BfcNode) -> list[str]:
             model.bfc_node_id == node.bfc_node_id, model.is_active))
         if n:
             out.append(f"{n} {what}")
+    edges = db.scalar(select(func.count()).select_from(BfcNodeFlow).where(
+        (BfcNodeFlow.from_bfc_node_id == node.bfc_node_id)
+        | (BfcNodeFlow.to_bfc_node_id == node.bfc_node_id), BfcNodeFlow.is_active))
+    if edges:
+        out.append(f"{edges} flow edges")
     if node.data_processing_desc:
         out.append("the data processing description")
     return out

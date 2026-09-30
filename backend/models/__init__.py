@@ -2,7 +2,7 @@
 not listed here is invisible to autogenerate (FTC-PC landmine 5)."""
 from models.base import Base  # noqa: F401
 from models.bfc import (  # noqa: F401
-    BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole, ExternalEntity,
+    BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole, ExternalEntity,
 )
 from models.client_org import OrgRole, OrgUnit  # noqa: F401
 from models.data_model import DataEntity, DataField  # noqa: F401

@@ -321,10 +321,25 @@ these rows and the section they cite disagree, **these rows win**.
 | S1-9 | **Screens (Ben, 2026-09-29).** The top-bar item **Processes opens the business function chart**; the process flow arrives later as a view of it. **Client organisation and external parties live under Settings** (configuration and master data), beside people and access. **The mockups' extra fields are not built**: BR trigger, frequency and priority; DE owning area and master-candidate switch. A requirement priority was checked against the design: nothing reads one — prioritisation is per solution (`value_ranking`, D-14; phasing, D-18) | §14.3 | — |
 
 **Deferred, not decided:** `bfc_node_flow` moves to the process-flow slice (Q-15), and whether
-`FLOW_TYPE` becomes a CHECK column is decided with it (Q-5, Ben 2026-09-29). **For the shadow
+`FLOW_TYPE` becomes a CHECK column is decided with it (Q-5, Ben 2026-09-29) — **both now settled by S2-1**. **For the shadow
 slice:** the generator will also copy `purpose_desc`, `output_expectation` and
 `business_owner_note`, which §5.2's shadow blocks omit, and still needs code labels and
 baseline-id remapping of parent keys.
+
+### Slice 2 schema review — 2026-09-30
+
+`apple` made §5.3 `BFC_NODE_FLOW` and `DIAGRAM_LAYOUT` physical (`docs/slice2_schema.md`,
+`[Q-n]` cited below). **Ben approved every recommendation on 2026-09-30.** As with S1, where
+these rows and the section they cite disagree, **these rows win**.
+
+| # | Decision | Supersedes | apple |
+|---|---|---|---|
+| S2-1 | **`flow_type` is a CHECK-listed column**, `IN ('SEQUENCE','CONDITIONAL','PARALLEL','HANDOFF')`, not a `code_master` FK. "A CONDITIONAL edge needs a label" is a table CHECK (`ck_bnf_conditional_label`), so `consistency_check.conditional_without_label` and `flow_completeness_report.unlabelled_branch` are dropped. The `FLOW_TYPE` category leaves the seed and its seeded rows are retired once | D-20 ("one `code_master` category"), §5.3, §6.2, §8 | Q-5 |
+| S2-2 | **An edge's ends are fixed after create.** PATCH carries `flow_type`, `condition_label`, `seq_no`, `note`; re-pointing is remove + add. Twin restore happens on create only, and only after both ends are checked live, process and in-project | §9 `PATCH /process-flows/{id}`, §7.2a | Q-2, Q-8 |
+| S2-3 | **`seq_no`** is optional, 1–99, not unique, set by the consultant; render order `seq_no NULLS LAST, id`. It is snapshotted but **not** part of `content_hash` | §5.3 | Q-3, Q-4 |
+| S2-4 | **Self-loops are legal** (no CHECK); the flow import warns on one. **A HANDOFF with no `to` step names the receiving party in `condition_label`** | §5.3 | Q-6, Q-7 |
+| S2-5 | **Indexes.** Full `ix_bnf_from` / `ix_bnf_to (…_bfc_node_id, project_id)` (the partial natural key cannot serve the guard-FK checks); five partial object-FK indexes on `diagram_layout`. Label twins match on `normalise_name`; the latest retired twin is restored | §6.3 | Q-1, Q-9, Q-15 |
+| S2-6 | **`diagram_layout` physical shape.** `vb_ops.presence_columns()` (four audit columns, no soft delete, no `row_version`); `uq_dl_object` is a table constraint so `save` upserts `ON CONFLICT ON CONSTRAINT`; `PUT` upserts only the listed objects, and a separate audited `DELETE /diagram-layouts/{type}/{scope_key}` resets a diagram; scope and EVENT markers are service-validated; `ck_dl_collapse_erd` added. `vb_app` gets DELETE on this table only, and the grant test asserts exactly that set | §5.3, §9, §6.6 | Q-10…Q-14, Q-16, Q-17 |
 
 ---
 
@@ -1800,6 +1815,8 @@ one unlabelled end event per step, and forbids a second unlabelled S1 → S2.
   stable across baselines, and a diff does not report REMOVED + ADDED for an edge that was
   taken out and put back. Restoring a twin while a live duplicate exists is refused by the
   index.
+
+> **Superseded by S2-1 (2026-09-30):** `flow_type` is a CHECK-listed column and the label rule is the table CHECK `ck_bnf_conditional_label`; the paragraph below is the rejected variant.
 
 **Restated mechanism for the CONDITIONAL rule (R2-D11 class).** "A CONDITIONAL edge
 needs a label" cannot be a CHECK, because `flow_type_code_id` is an FK and `'CONDITIONAL'` is on
@@ -5292,7 +5309,7 @@ Seeded via `backend/seeds/`, never in Alembic.
 | `ISSUE_TYPE` | `PROCESS`, `DATA`, `SYSTEM`, `ORGANIZATION`, `POLICY`, `OTHER` | `ISSUE.issue_type_code` |
 | `ISSUE_STATUS` | `OPEN`, `IN_PROGRESS`, `RESOLVED`, `DEFERRED`, `CLOSED` | `ISSUE.status_code` |
 | `ORG_UNIT_LEVEL` | `DEPARTMENT`, `DIVISION`, `SECTION` | `ORG_UNIT.unit_level_code` |
-| `FLOW_TYPE` | `SEQUENCE`, `CONDITIONAL`, `PARALLEL`, `HANDOFF` — **`is_system`, not project-editable** | `BFC_NODE_FLOW.flow_type_code` — **D-20**. Code branches on each value ("CONDITIONAL needs a label" is service-enforced, §5.3 BFC_NODE_FLOW) |
+| ~~`FLOW_TYPE`~~ **Superseded by S2-1** — not a `code_master` category; `bfc_node_flow.flow_type` is CHECK-listed | `SEQUENCE`, `CONDITIONAL`, `PARALLEL`, `HANDOFF` — **`is_system`, not project-editable** | `BFC_NODE_FLOW.flow_type_code` — **D-20**. Code branches on each value ("CONDITIONAL needs a label" is service-enforced, §5.3 BFC_NODE_FLOW) |
 | `RACI_TYPE` | `R`, `A`, `C`, `I` — **project-editable**; each code carries a **behaviour** ∈ `RESPONSIBLE` / `ACCOUNTABLE` / `CONSULTED` / `INFORMED` / `SUPPORT` / `OTHER` (Q7). Seeded R → RESPONSIBLE, A → ACCOUNTABLE, C → CONSULTED, I → INFORMED. RASCI adds `S` → SUPPORT. RAPID is a seeded **mapping**, not a vocabulary: Perform → RESPONSIBLE, Decide → ACCOUNTABLE, Input → CONSULTED, Recommend / Agree → OTHER | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE` (`raci_behaviour`, FK-verified). Configurable because clients use RASCI / RAPID / house variants. **The lane (at most one RESPONSIBLE role per step) and the single Accountable (per step and per BR) read the behaviour, never the letter** (R2-D9). A project holds exactly one live code per load-bearing behaviour, RESPONSIBLE and ACCOUNTABLE: a second is refused when the code is saved (A-60). A behaviour is immutable once referenced, as for `FR_TYPE`; a project override of a global code must carry the global's behaviour |
 | `BR_STATUS` | `DRAFT`, `CONFIRMED`, `BASELINED`, `SUPERSEDED` | `BUSINESS_REQUIREMENT.status_code` |
 | `FR_FULFILMENT_STATUS` | `SPECIFIED`, `ACCEPTED_BY_VENDOR`, `BUILT`, `TESTED`, `DEFERRED` | `FUNCTION_REQUIREMENT.fulfilment_status_code` — **the vendor boundary is this column, not a table** |
