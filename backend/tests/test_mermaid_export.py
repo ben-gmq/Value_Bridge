@@ -24,7 +24,7 @@ HOSTILE = [
     'x"] --> Y[click',
     '%%{init: {"securityLevel": "loose"}}%%',
     'tick `click` tock',
-    'wrap click s1 call',
+    'wrap\u2028click s1 call',
     '#' * 200,                                   # the longest name the API stores
 ]
 
@@ -83,7 +83,7 @@ def assert_inert(text, kind):
         assert not any(first.startswith(b) for b in BANNED), line
         assert any(re.fullmatch(p, line) for p in SHAPES[kind]), f"unknown shape: {line!r}"
     assert "%%" not in text and "`" not in text
-    assert " " not in text and " " not in text and "\r" not in text
+    assert "\u2028" not in text and "\u2029" not in text and "\r" not in text
     assert text.endswith("\n") and text.count("\n") == len(lines)
 
 
@@ -198,7 +198,11 @@ def hostile(client, ed):
     pk(client, ed, keyed, "keyed_id", data_type_code="STRING")
     for i, name in enumerate(HOSTILE):
         field(client, ed, keyed, name)
-        fk(client, ed, des[i], "keyed_ref " + str(i), keyed)       # a relationship per hostile DE
+        fk(client, ed, des[i], name, keyed)                        # the FK name is the edge label (sara L6)
+    # A hand-off to a hostile step in another branch: the `outside` node of the flow (sara L6).
+    other = node(client, ed, "Fulfilment", l1["bfc_node_id"])
+    far = node(client, ed, HOSTILE[0], other["bfc_node_id"], is_process=True)
+    edge(client, ed, steps[-1], far, "HANDOFF", None)
     return {"parent": parent}
 
 
@@ -231,7 +235,7 @@ def test_a_300_character_name_is_capped_at_200_before_escaping():
 
 def test_escape_order_and_every_breaking_character():
     assert render.escape_mermaid(None) == '""' and render.escape_mermaid("") == '""'
-    assert render.escape_mermaid("a\r\nb\tc\vd\fe\x85f g h") == '"a  b c d e f g h"'
+    assert render.escape_mermaid("a\r\nb\tc\vd\fe\x85f\u2028g\u2029h") == '"a  b c d e f g h"'
     assert render.escape_mermaid("50%% off %%%") == '"50 off %"'
     assert render.escape_mermaid('#"<>`[](){}|;') == \
         '"#35;#quot;#lt;#gt;#96;#91;#93;#40;#41;#123;#125;#124;#59;"'
@@ -342,3 +346,33 @@ def test_the_export_is_the_same_scope_rules_as_the_graph(client, ed, flow):
     assert export(client, ed, "flow", flow["parent"]["bfc_node_id"], variant="NOPE").status_code == 422
     assert text_of(client, ed, "flow", flow["parent"]["bfc_node_id"], variant="TO_BE").startswith("flowchart LR")
     assert export(client, ed, "erd", ed["p"], subject_area=99999999).status_code == 404
+
+
+def test_a_hostile_out_of_area_parent_stays_inert(client, ed):
+    """The ERD stub label is user text too (sara L6)."""
+    l1 = node(client, ed, "Sales")
+    area = node(client, ed, "Order capture", l1["bfc_node_id"])
+    st = node(client, ed, "Receive order", area["bfc_node_id"], is_process=True)
+    evil, order = entity(client, ed, HOSTILE[0]), entity(client, ed, "Order")
+    fk(client, ed, order, HOSTILE[1], evil, pk(client, ed, evil, "evil_id"))
+    io(client, ed, st, order, "O")
+    text = text_of(client, ed, "erd", ed["p"], subject_area=area["bfc_node_id"])
+    assert_inert(text, "erd")
+    assert "x#quot;#93; --#gt; Y#91;click" in text
+
+
+@pytest.mark.parametrize("line", ["CLICK s1 href", "Style s1 fill:red", "%%{ init: {} }%%",
+                                  "%%{wrap}%%", "---", "  ClassDef x fill:red"])
+def test_the_guard_is_case_insensitive_and_refuses_every_opener(line):
+    with pytest.raises(HTTPException) as e:
+        render._guard(f"flowchart LR\n{line}\n")
+    assert e.value.status_code == 500
+
+
+def test_a_directive_word_type_code_exports_unknown():
+    g = {"entities": [{"data_entity_id": 3, "de_number": "DE-0003", "de_name": "T",
+                       "fields": [{"field_name": n, "data_type_code": c, "is_primary_key": False,
+                                   "is_foreign_key": False} for n, c in (("a", "CLASS"), ("b", "STYLE"))]}],
+         "relationships": [], "outside_refs": []}
+    rows = [x.split()[0] for x in render.export_erd(g).splitlines() if " a_" in x]
+    assert rows == ["unknown", "unknown"]

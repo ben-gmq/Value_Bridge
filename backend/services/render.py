@@ -52,11 +52,19 @@ def escape_mermaid(text) -> str:
     return '"' + s + '"'
 
 
+def _banned(token: str) -> bool:
+    """A directive word in any case, or anything that opens a comment, directive or YAML block."""
+    low = token.lower()
+    return low.startswith(("%%", "---")) or any(low.startswith(w.lower()) for w in BANNED_FIRST_TOKENS)
+
+
 def _guard(text: str) -> str:
-    """The last step of every exporter (§7.12b): any line whose first token is a directive → 500."""
+    """The last step of every exporter (§7.12b): any line whose first token is a directive → 500.
+    Case-insensitive, and any `%%` / `---` opener too (sara L1) — defence in depth behind the
+    escape, which already makes all of these unreachable from user text."""
     for n, line in enumerate(text.splitlines(), 1):
         token = (line.split() or [""])[0]
-        if any(token.startswith(word) for word in BANNED_FIRST_TOKENS):
+        if _banned(token):
             log.error("mermaid guard: line %d begins with a banned directive (%r)", n, token[:20])
             raise HTTPException(500, "The diagram export produced an unsafe line and was stopped")
     return text
@@ -154,7 +162,11 @@ CHILD_GLYPH = {"1": "o|", "many": "o{"}          # the child end never claims a 
 
 
 def _type(code: str | None) -> str:
-    return code if code and _TYPE_CODE.fullmatch(code) else "unknown"
+    # A project may code a type CLASS or STYLE: plain upper case, but a directive word — refused
+    # here so the guard (case-insensitive, sara L1/L2) never has to stop a legitimate export.
+    if not code or not _TYPE_CODE.fullmatch(code) or _banned(code):
+        return "unknown"
+    return code
 
 
 def _keys(f: dict) -> str:
