@@ -376,3 +376,8 @@ def test_a_directive_word_type_code_exports_unknown():
          "relationships": [], "outside_refs": []}
     rows = [x.split()[0] for x in render.export_erd(g).splitlines() if " a_" in x]
     assert rows == ["unknown", "unknown"]
+
+
+def test_invisible_format_characters_are_removed():
+    """A right-to-left override or a zero-width space cannot make a label read differently (sara L3)."""
+    assert render.escape_mermaid("Pay\u202eyap\u200b me\ufeff") == '"Payyap me"'

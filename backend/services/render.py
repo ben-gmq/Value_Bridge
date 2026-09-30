@@ -23,7 +23,8 @@ MERMAID_ENTITY = {'#': '#35;', '"': '#quot;', '<': '#lt;', '>': '#gt;', '`': '#9
                   '}': '#125;', '|': '#124;', ';': '#59;'}
 
 LABEL_CAP = 200
-_BREAKING = {"Cc", "Zl", "Zp"}      # CR, LF, tab, \v, \f, U+0085, U+2028, U+2029 …
+_BREAKING = {"Cc", "Zl", "Zp"}      # CR, LF, tab, \v, \f, U+0085, U+2028, U+2029 … → a space
+_INVISIBLE = "Cf"                    # U+202E right-to-left override, U+200B, U+FEFF … → removed (Ben, sara L3)
 BANNED_FIRST_TOKENS = ("click", "call", "href", "%%{init", "style", "classDef", "linkStyle", "class")
 _TYPE_CODE = re.compile(r"[A-Z_]+")
 
@@ -43,10 +44,12 @@ def check_format(fmt: str) -> None:
 
 def escape_mermaid(text) -> str:
     """Spec §7 3c, in this order: cap the RAW text (never cut an entity), break-like characters
-    to a space, drop `%%`, the entity map in ONE pass, then wrap in quotes."""
+    to a space and invisible format characters dropped, drop `%%`, the entity map in ONE pass,
+    then wrap in quotes."""
     s = str(text or "")
     s = s[:LABEL_CAP]
-    s = "".join(" " if unicodedata.category(c) in _BREAKING else c for c in s)
+    s = "".join(" " if unicodedata.category(c) in _BREAKING else c for c in s
+                if unicodedata.category(c) != _INVISIBLE)
     s = s.replace("%%", "")
     s = "".join(MERMAID_ENTITY.get(c, c) for c in s)
     return '"' + s + '"'

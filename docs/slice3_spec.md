@@ -173,6 +173,7 @@ escape_mermaid(text):          # design §7.12b, as written there, plus two tigh
     s = str(text or "")
     s = s[:200]                                        # cap the RAW text first (never cut an entity)
     s = every Unicode Cc / Zl / Zp char (CR, LF, tab, \v, \f, U+0085, U+2028, U+2029) → " "
+    s = every Unicode Cf char (U+202E right-to-left override, U+200B, U+FEFF) removed   # Ben, 2026-09-30 (sara L3)
     s = s.replace("%%", "")
     s = "".join(MERMAID_ENTITY.get(c, c) for c in s)   # §7.12b table incl. ` ( ) ; — ONE pass
     return '"' + s + '"'                               # wrap last

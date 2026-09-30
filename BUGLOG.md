@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 15 unworked lines in VB-005 (6 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 13 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -148,7 +148,7 @@ place.
   `frontend/src/canvas/`. **Scheduled: on main straight after slice-3-erd merges.** **FIXED 2026-09-30 (`useLayoutSave`, one copy for flow/DFD/ERD; ui-verifier 7/7) — awaiting Ben's close.**
 - sara M2 · same review · MEDIUM · **The header's "DFD" nav item still opens the "coming later"
   placeholder** (`App.jsx` SECTIONS, `AppShell.jsx` nav), while the real DFD lives under a chart
-  node. Ben to choose: drop the nav item, or point it at the chart with a "pick a node" hint.
+  node. Ben to choose: drop the nav item, or point it at the chart with a "pick a node" hint. **FIXED 2026-09-30 (Ben chose (b): the chart with a "pick a branch" hint) — awaiting Ben's close.**
 - sara L1 · same review · LOW · The spec says "Auto-arrange and Reset"; the diagrams have only
   Reset (which re-arranges). Ben to say whether Reset is the auto-arrange; then fix the spec wording.
 - sara L3 · same review · LOW · A drag within 600 ms before Reset can land after the reset and pin
@@ -172,7 +172,7 @@ place.
 - sara L3 · `sara`, slice-3-mermaid pre-merge review, 2026-09-30 · LOW · **Invisible format
   characters survive the Mermaid escape** (Unicode Cf: right-to-left override U+202E, zero-width
   space, BOM). No parser break-out, but a pasted label can read differently from what it says.
-  Mapping Cf too is a spec change to §7 3c — Ben to approve (5 min + tests).
+  Mapping Cf too is a spec change to §7 3c — Ben to approve (5 min + tests). **FIXED 2026-09-30 (Ben: strip them; Cf removed in escape_mermaid, tested) — awaiting Ben's close.**
 - UAT loose end · slice-3-mermaid builder, 2026-09-30 · LOW · The builder checked the exports
   with `mermaid.parse()` borrowed from another app's `node_modules` (PE-Demo) — not a VB
   dependency. Criterion 21 still stands as Ben's one manual paste.
