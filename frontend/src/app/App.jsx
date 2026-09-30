@@ -1,8 +1,9 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Box, CircularProgress } from '@mui/material';
 import { api } from '../api/vb';
 import { useAuth } from './AuthContext';
+import { links } from './links';
 import { AppShell } from '../components/AppShell';
 import LoginPage from '../features/auth/LoginPage';
 import SetupPage from '../features/auth/SetupPage';
@@ -27,7 +28,7 @@ import PartiesPage from '../features/settings/PartiesPage';
 // Routes name their scope (§14.1): /p/:projectId for a project, /g/:programId for a program,
 // so the backend guard always receives it.
 const SECTIONS = [   // [path, i18n section key, build slice] — sections not built yet
-  ['dfd', 'dfd', 2], ['br-fr', 'brfr', 3], ['interfaces', 'interfaces', 3],
+  ['br-fr', 'brfr', 3], ['interfaces', 'interfaces', 3],
 ];
 
 // Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
@@ -37,6 +38,13 @@ const PAGES = [
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];
+
+/** The shell's "DFD" item: a DFD is drawn for one branch of the chart, so it opens the chart
+ * with a hint to pick one (Ben, 2026-09-30, sara M2). */
+function PickDfd() {
+  const { projectId } = useParams();
+  return <Navigate to={`${links.processes(projectId)}?pick=dfd`} replace />;
+}
 
 function Spinner() {
   return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>;
@@ -70,6 +78,7 @@ export default function App() {
       {PAGES.map(([path, Screen]) => (
         <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Screen /></RequireAuth>} />
       ))}
+      <Route path="/p/:projectId/dfd" element={<RequireAuth><PickDfd /></RequireAuth>} />
       {SECTIONS.map(([path, section, slice]) => (
         <Route key={path} path={`/p/:projectId/${path}`}
           element={<RequireAuth><SectionPlaceholder section={section} slice={slice} /></RequireAuth>} />

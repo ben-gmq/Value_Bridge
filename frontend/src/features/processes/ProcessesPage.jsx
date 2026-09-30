@@ -179,6 +179,10 @@ export default function ProcessesPage() {
     <Page title={t('processes.title')} subtitle={t('processes.subtitle')}
       error={error || (treeQ.error && errorText(treeQ.error)) || (brsQ.error && errorText(brsQ.error))}
       actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}>
+      {params.get('pick') === 'dfd' && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => { const next = new URLSearchParams(params); next.delete('pick'); setParams(next); }}>
+          {t('processes.pickDfd')}</Alert>
+      )}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
           <Card sx={{ height: '100%' }}>

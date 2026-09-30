@@ -2,6 +2,7 @@
   "processes.title": "Business function chart",
   "processes.building": "This screen is being built in Slice 1.",
   "processes.subtitle": "Five levels, coded automatically · each process step owns exactly one business requirement",
+  "processes.pickDfd": "A data flow diagram is drawn for one branch of the chart. Select a function below, then press \"Open data flow\".",
   "processes.hierarchy": "Hierarchy",
   "processes.showRetired": "Show retired",
   "processes.filter": "Filter by code or name",
