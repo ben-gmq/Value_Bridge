@@ -2,18 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Handle, MarkerType, Position, useNodesState, useStore } from '@xyflow/react';
-import { Alert, Box, Button, Table, TableBody, TableCell, TableHead, TableRow, ToggleButton,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Table, TextField, TableBody, TableCell, TableHead, TableRow, ToggleButton,
   ToggleButtonGroup, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { errorText } from '../../api/client';
-import { flowApi, layoutApi } from '../../api/scope';
+import { bfcApi, flowApi, layoutApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { LAYERED_RIGHT, LOW_ZOOM, elkLayout } from '../../canvas/layout';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono } from './chartKit';
+import { FIRST_PROCESS_LEVEL, Mono } from './chartKit';
 import { EdgeDialog } from './FlowSections';
 
 const BOX = { w: 200, h: 72 };
@@ -54,8 +54,8 @@ function EventDot({ data }) {
     <Box title={t(data.start ? 'processes.flowStart' : 'processes.flowEnd')}
       sx={(th) => ({ width: EVENT, height: EVENT, borderRadius: '50%', bgcolor: th.vars.palette.background.paper,
         border: data.start ? 2 : 4, borderColor: th.vars.palette.text.primary })}>
-      {data.start ? <Handle type="source" position={Position.Right} id="s-R" isConnectable={false} />
-        : <Handle type="target" position={Position.Left} id="t-L" isConnectable={false} />}
+      {data.start ? <Handle type="source" position={Position.Right} id="s-R" isConnectable={false} style={{ opacity: 0 }} />
+        : <Handle type="target" position={Position.Left} id="t-L" isConnectable={false} style={{ opacity: 0 }} />}
     </Box>
   );
 }
@@ -196,6 +196,36 @@ function FlowTable({ g }) {
   );
 }
 
+/** A new process step under the node this flow is drawn for — the chart's own create (§7.2). */
+function AddStepDialog({ projectId, parentId, onDone, onClose }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const m = useMutation({
+    mutationFn: () => bfcApi.create(projectId, { parent_bfc_node_id: parentId, node_name: name.trim(), is_process: true }),
+    onSuccess: (row) => { onDone(row); onClose(); },
+    onError: (err) => setError(errorText(err, t('common.saveFailed'))),
+  });
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{t('processes.addStepTitle')}</DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error}</Alert>}
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <TextField id="flow-add-step" label={t('processes.name')} required autoFocus value={name}
+            onChange={(e) => setName(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && name.trim() && !m.isPending) m.mutate(); }} />
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.addStepHelp')}</Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" disabled={!name.trim() || m.isPending}
+          onClick={() => { setError(''); m.mutate(); }}>{t('processes.add')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 /** The process flow of one parent node: a view of the chart (S1-9), drawn on the shared canvas. */
 export default function FlowPage() {
   const { projectId, nodeId } = useParams();
@@ -210,6 +240,10 @@ export default function FlowPage() {
   const [layoutError, setLayoutError] = useState('');
   const [connecting, setConnecting] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [addingStep, setAddingStep] = useState(false);
+  const scopeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
+  // A step sits at level 3–5 (A-47), so a level-1 area takes its steps through a level-2 child.
+  const canAddStep = Boolean(scopeQ.data?.is_active && scopeQ.data.level_no >= FIRST_PROCESS_LEVEL - 1);
   const pendingSave = useRef(new Map());
   const timer = useRef(null);
 
@@ -284,6 +318,7 @@ export default function FlowPage() {
       actions={(
         <>
           <Button component={RouterLink} to={links.node(projectId, nodeId)}>{t('processes.backToChart')}</Button>
+          {canAddStep && <Button variant="contained" onClick={() => setAddingStep(true)}>{t('processes.addStep')}</Button>}
           <Button color="warning" disabled={!g || reset.isPending}
             onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>
         </>)}>
@@ -307,6 +342,15 @@ export default function FlowPage() {
         <EdgeDialog projectId={projectId} ends={connecting} steps={steps}
           onClose={() => setConnecting(null)}
           onDone={() => { qc.invalidateQueries({ queryKey: keys.flows(projectId) }); qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) }); }} />
+      )}
+      {addingStep && (
+        <AddStepDialog projectId={projectId} parentId={Number(nodeId)} onClose={() => setAddingStep(false)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: keys.flows(projectId) });
+            qc.invalidateQueries({ queryKey: keys.tree(projectId) });
+            qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) });
+            qc.invalidateQueries({ queryKey: keys.brs(projectId) });
+          }} />
       )}
       <ConfirmDialog open={confirmReset} title={t('processes.resetLayoutTitle')} body={t('processes.resetLayoutBody')}
         confirmLabel={t('processes.resetLayout')} busy={reset.isPending}

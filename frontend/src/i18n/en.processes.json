@@ -150,5 +150,9 @@
   "processes.tableSteps": "Steps",
   "processes.tableFlows": "Flows",
   "processes.tableLane": "Swimlane",
-  "processes.tableBr": "Requirement"
+  "processes.tableBr": "Requirement",
+  "processes.addStep": "Add step",
+  "processes.addStepTitle": "Add a process step",
+  "processes.addStepHelp": "The step is added to the chart under this node, with its business requirement. Connect it by dragging from its right edge.",
+  "processes.openFlowFor": "Open the process flow of {name}"
 }
