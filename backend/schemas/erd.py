@@ -36,7 +36,7 @@ class ErdViaField(BaseModel):
     data_field_id: int
     field_name: str
     ref_data_field_id: int | None
-    ref_is_key: bool                     # the parent field is a live PK row → it has a row handle
+    ref_is_key: bool                     # the parent field is a live PK or FK row → drawn even when collapsed
 
 
 class ErdRelationship(BaseModel):

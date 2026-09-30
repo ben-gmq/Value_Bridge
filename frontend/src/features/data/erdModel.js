@@ -61,7 +61,7 @@ export function ghostsOf(g) {
 
 /**
  * Edge landing (spec §7 3b): a via field lands on its parent's row handle only when it names a
- * parent field AND that field is a key row, which stays rendered when the card collapses;
+ * parent field AND that field is a key row (PK or FK), which stays rendered when the card collapses;
  * otherwise on the card's entity handle. No relationship is dropped for want of a handle.
  */
 export const targetHandle = (v) => (v.ref_data_field_id != null && v.ref_is_key

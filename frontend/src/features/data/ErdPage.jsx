@@ -35,6 +35,20 @@ function FocusOn({ request }) {
   return null;
 }
 
+/** Fit the view once per subject area, after that area's own cards are laid out (UAT finding
+ * A: switching area kept the previous zoom, which could leave the new diagram off screen).
+ * `laid` names the scope the canvas currently holds, so the old area's cards never trigger it. */
+function FitOnArea({ laid }) {
+  const rf = useReactFlow();
+  const fitted = useRef(null);
+  useEffect(() => {
+    if (!laid || fitted.current === laid) return;
+    fitted.current = laid;
+    requestAnimationFrame(() => rf.fitView({ padding: 0.1 }));
+  }, [laid, rf]);
+  return null;
+}
+
 function ErdTable({ g, projectId }) {
   const byId = new Map(g.entities.map((e) => [e.data_entity_id, e]));
   const rows = [...g.relationships.map((r) => ({ r, stub: false })), ...g.outside_refs.map((r) => ({ r, stub: true }))];
@@ -89,6 +103,7 @@ export default function ErdPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [arrangeTick, setArrangeTick] = useState(0);
   const [resetTick, setResetTick] = useState(0);
+  const [laidScope, setLaidScope] = useState(null);
 
   // The graph's parts keep their identity across a layout-only cache update (structural
   // sharing), so saving a position never re-arranges the canvas.
@@ -128,6 +143,7 @@ export default function ErdPage() {
       const hot = focusRef.current;         // a highlight survives a re-arrange
       setNodes(buildNodes(cur, collapsedRef.current, positions)
         .map((n) => ({ ...n, className: hot && !hot.has(n.id) ? DIM : undefined })));
+      setLaidScope(cur.scope_key);
       setLayoutError('');
     }).catch((err) => { if (live) setLayoutError(t('data.erd.layoutFailed', { message: err.message })); });
     return () => { live = false; };
@@ -279,6 +295,7 @@ export default function ErdPage() {
               onNodeDoubleClick={onNodeDoubleClick} minimap height="72vh"
               ariaLabel={t('data.erd.canvasLabel', { scope: scopeName })}>
               <FocusOn request={focusRequest} />
+              <FitOnArea laid={laidScope} />
             </ModelCanvas>
           </Box>
         </ErdContext.Provider>

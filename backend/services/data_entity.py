@@ -226,7 +226,8 @@ def generate_erd(db: Session, project_id: int, subject_area_node_id: int | None 
                    "via_fields": [{"data_field_id": f.data_field_id, "field_name": f.field_name,
                                    "ref_data_field_id": f.ref_data_field_id,
                                    "ref_is_key": bool(f.ref_data_field_id in ref_fields
-                                                      and ref_fields[f.ref_data_field_id].is_primary_key
+                                                      and (ref_fields[f.ref_data_field_id].is_primary_key
+                                                           or ref_fields[f.ref_data_field_id].is_foreign_key)
                                                       and ref_fields[f.ref_data_field_id].is_active)}
                                   for f in g],
                    "parent_cardinality": "1" if all(f.is_mandatory is True for f in g) else "0..1",

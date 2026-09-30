@@ -8,7 +8,7 @@ export const links = {
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   data: (p) => `/p/${p}/data`,
   entity: (p, deId) => `/p/${p}/data/${deId}`,
-  erd: (p, area) => (area ? `/p/${p}/data/diagram?area=${area}` : `/p/${p}/data/diagram`),
+  erd: (p, area) => (area ? `/p/${p}/data/diagram?area=${encodeURIComponent(area)}` : `/p/${p}/data/diagram`),
   settings: (p) => `/p/${p}/settings`,
   access: (p) => `/p/${p}/access`,
   organisation: (p) => `/p/${p}/settings/organisation`,

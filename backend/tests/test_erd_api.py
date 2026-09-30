@@ -252,3 +252,14 @@ def test_positions_per_scope_are_independent_and_collapse_persists_both_ways(cli
         "WHERE u.table_name = 'diagram_layout' AND c.constraint_type = 'FOREIGN KEY' "
         "AND c.table_name LIKE 'baseline%'")).scalar()
     assert refs == 0                                                               # never baselined (A-52)
+
+
+def test_an_fk_naming_a_parent_fk_row_lands_on_that_row(client, ed):
+    """A parent FK row stays drawn when its card collapses, so it counts as a key row (sara Q)."""
+    cust, order, line = entity(client, ed, "Customer"), entity(client, ed, "Order"), entity(client, ed, "Line")
+    cid = pk(client, ed, cust, "customer_id")
+    pk(client, ed, order, "order_id")
+    order_cust = fk(client, ed, order, "customer_id", cust, cid)
+    fk(client, ed, line, "order_customer_id", order, order_cust)
+    [rel] = rels(erd(client, ed).json(), line)
+    assert rel["via_fields"][0]["ref_is_key"] is True
