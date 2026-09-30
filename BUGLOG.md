@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 14 unworked lines in VB-005 (6 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 15 unworked lines in VB-005 (6 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -169,4 +169,11 @@ place.
 - ERD staleness · slice-3-erd builder, 2026-09-30 · LOW · **Editing a step's data does not refresh
   an open ERD** until the 30 s staleTime passes: step I/O edits refresh `flows(p)`, not
   `entities(p)`. Invalidate both from the step sections.
+- sara L3 · `sara`, slice-3-mermaid pre-merge review, 2026-09-30 · LOW · **Invisible format
+  characters survive the Mermaid escape** (Unicode Cf: right-to-left override U+202E, zero-width
+  space, BOM). No parser break-out, but a pasted label can read differently from what it says.
+  Mapping Cf too is a spec change to §7 3c — Ben to approve (5 min + tests).
+- UAT loose end · slice-3-mermaid builder, 2026-09-30 · LOW · The builder checked the exports
+  with `mermaid.parse()` borrowed from another app's `node_modules` (PE-Demo) — not a VB
+  dependency. Criterion 21 still stands as Ben's one manual paste.
 
