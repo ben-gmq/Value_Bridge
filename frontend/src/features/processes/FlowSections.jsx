@@ -25,8 +25,10 @@ function useSteps(projectId) {
   }, [q.data, q.error]);
 }
 
-function EdgeDialog({ projectId, node, edge, steps, onClose, onDone }) {
+/** Add or edit one edge. `ends` fixes both ends up front (a line drawn on the canvas). */
+export function EdgeDialog({ projectId, node, edge, ends, steps, onClose, onDone }) {
   const editing = Boolean(edge);
+  const fixed = editing ? edge : ends;
   const [dir, setDir] = useState('O');
   const [other, setOther] = useState(null);
   const [v, setV] = useState({
@@ -41,6 +43,7 @@ function EdgeDialog({ projectId, node, edge, steps, onClose, onDone }) {
   const m = useMutation({
     mutationFn: () => {
       if (editing) return flowApi.update(edge.bfc_node_flow_id, { row_version: edge.row_version, ...fields() });
+      if (ends) return flowApi.create(projectId, { ...fields(), ...ends });
       const otherId = other?.bfc_node_id ?? null;
       return flowApi.create(projectId, { ...fields(),
         from_bfc_node_id: dir === 'O' ? node.bfc_node_id : otherId,
@@ -59,10 +62,11 @@ function EdgeDialog({ projectId, node, edge, steps, onClose, onDone }) {
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 1 }}>
-          {editing ? (
+          {fixed ? (
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-              {t('processes.edgeFixed', { from: end(edge.from_bfc_node_id, 'processes.flowStart'),
-                to: end(edge.to_bfc_node_id, 'processes.flowEnd') })}</Typography>
+              {t(editing ? 'processes.edgeFixed' : 'processes.edgeNew', {
+                from: end(fixed.from_bfc_node_id, 'processes.flowStart'),
+                to: end(fixed.to_bfc_node_id, 'processes.flowEnd') })}</Typography>
           ) : (
             <>
               <SimpleSelect id="edge-dir" label={t('processes.edgeDirection')} value={dir} onChange={setDir}

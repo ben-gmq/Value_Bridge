@@ -11,8 +11,8 @@ from sqlalchemy import and_, exists, select
 from sqlalchemy.orm import Session
 
 from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
-                    BrDataEntity)
-from services import lifecycle
+                    BrDataEntity, BusinessRequirement, DataEntity, ExternalEntity, OrgRole, OrgUnit)
+from services import diagram_layout, lifecycle
 from services.bfc import normalise_name
 
 FLOW_TYPES = ("SEQUENCE", "CONDITIONAL", "PARALLEL", "HANDOFF")      # S2-1, = ck_bnf_flow_type
@@ -174,3 +174,93 @@ def _unlicensed(db: Session, project_id: int, model, pk) -> list[int]:
     return list(db.scalars(select(pk).where(model.project_id == project_id, model.is_active,
                                             model.data_entity_id.is_not(None), ~io)))
 
+
+
+# ---- the graph (D-21: data, not a picture) -----------------------------------------------
+
+VARIANTS = ("AS_IS", "TO_BE")                       # D-22; both read the same rows until APPLICATION lands
+
+
+def _steps_under(db: Session, node: BfcNode) -> list[BfcNode]:
+    return list(db.scalars(select(BfcNode).where(
+        BfcNode.project_id == node.project_id, BfcNode.is_active, BfcNode.is_process,
+        BfcNode.hier_code.startswith(f"{node.hier_code}.")).order_by(BfcNode.hier_code)))
+
+
+def generate_process_flow(db: Session, node: BfcNode, variant: str = "AS_IS") -> dict:
+    """§7.2a. The process descendants of a parent node as boxes, the live edges touching them,
+    one swimlane per RESPONSIBLE role (R2-D9; none → the unassigned lane), the data stores and
+    external parties of their step I/O, and any saved positions (D-30). Cycles are legal, so
+    nothing here walks the edges. `system` on a box waits for APPLICATION (D-8)."""
+    if variant not in VARIANTS:
+        raise HTTPException(422, "variant must be AS_IS or TO_BE")
+    if not node.is_active:
+        raise HTTPException(409, "This node is retired. Restore it first")
+    if node.is_process:
+        raise HTTPException(422, "A process flow is drawn for a parent node, not a step")
+    steps = _steps_under(db, node)
+    ids = [s.bfc_node_id for s in steps]
+    inside = set(ids)
+
+    brs = {b.bfc_node_id: b for b in db.scalars(select(BusinessRequirement).where(
+        BusinessRequirement.bfc_node_id.in_(ids), BusinessRequirement.is_active))} if ids else {}
+    lane_of: dict[int, int] = dict(db.execute(select(BfcNodeOrgRole.bfc_node_id, BfcNodeOrgRole.org_role_id).where(
+        BfcNodeOrgRole.bfc_node_id.in_(ids), BfcNodeOrgRole.is_active,
+        BfcNodeOrgRole.raci_behaviour == "RESPONSIBLE")).all()) if ids else {}
+    roles = {r.org_role_id: r for r in db.scalars(select(OrgRole).where(
+        OrgRole.org_role_id.in_(set(lane_of.values()))))} if lane_of else {}
+    units = {u.org_unit_id: u for u in db.scalars(select(OrgUnit).where(
+        OrgUnit.org_unit_id.in_({r.org_unit_id for r in roles.values()})))} if roles else {}
+
+    edges = [] if not ids else list(db.scalars(select(BfcNodeFlow).where(
+        BfcNodeFlow.is_active, BfcNodeFlow.from_bfc_node_id.in_(ids) | BfcNodeFlow.to_bfc_node_id.in_(ids))
+        .order_by(BfcNodeFlow.seq_no.asc().nulls_last(), BfcNodeFlow.bfc_node_flow_id)))
+    far_ids = {e.from_bfc_node_id for e in edges} | {e.to_bfc_node_id for e in edges}
+    far = {n.bfc_node_id: n for n in db.scalars(select(BfcNode).where(
+        BfcNode.bfc_node_id.in_({i for i in far_ids if i is not None} - inside)))}
+
+    io = [] if not ids else list(db.scalars(select(BfcNodeDataEntity).where(
+        BfcNodeDataEntity.bfc_node_id.in_(ids), BfcNodeDataEntity.is_active)))
+    des = {d.data_entity_id: d for d in db.scalars(select(DataEntity).where(
+        DataEntity.data_entity_id.in_({r.data_entity_id for r in io})))} if io else {}
+    ext_rows = [] if not ids else list(db.scalars(select(BfcNodeExternalFlow).where(
+        BfcNodeExternalFlow.bfc_node_id.in_(ids), BfcNodeExternalFlow.is_active)))
+    exts = {x.external_entity_id: x for x in db.scalars(select(ExternalEntity).where(
+        ExternalEntity.external_entity_id.in_({r.external_entity_id for r in ext_rows})))} if ext_rows else {}
+
+    def _lane_key(role_id):
+        r = roles[role_id]
+        u = units.get(r.org_unit_id)
+        return (u.level_no if u else 99, u.seq_no if u else 0, r.org_role_code)
+
+    lanes = [{"org_role_id": rid, "org_role_code": roles[rid].org_role_code,
+              "org_role_name": roles[rid].org_role_name,
+              "org_unit_name": units[roles[rid].org_unit_id].org_unit_name
+              if roles[rid].org_unit_id in units else None}
+             for rid in sorted(set(lane_of.values()), key=_lane_key)]
+    return {
+        "scope": {"bfc_node_id": node.bfc_node_id, "hier_code": node.hier_code, "node_name": node.node_name},
+        "variant": variant,
+        "nodes": [{"bfc_node_id": s.bfc_node_id, "hier_code": s.hier_code, "node_name": s.node_name,
+                   "data_processing_desc": s.data_processing_desc,
+                   "br_number": brs[s.bfc_node_id].br_number if s.bfc_node_id in brs else None,
+                   "lane_org_role_id": lane_of.get(s.bfc_node_id)} for s in steps],
+        "edges": [{"bfc_node_flow_id": e.bfc_node_flow_id, "from_bfc_node_id": e.from_bfc_node_id,
+                   "to_bfc_node_id": e.to_bfc_node_id, "flow_type": e.flow_type,
+                   "condition_label": e.condition_label, "seq_no": e.seq_no, "row_version": e.row_version,
+                   "is_external": any(x is not None and x not in inside
+                                      for x in (e.from_bfc_node_id, e.to_bfc_node_id))} for e in edges],
+        "outside": [{"bfc_node_id": n.bfc_node_id, "hier_code": n.hier_code, "node_name": n.node_name}
+                    for n in sorted(far.values(), key=lambda n: n.hier_code)],
+        "lanes": lanes,
+        "stores": [{"data_entity_id": d.data_entity_id, "de_number": d.de_number, "de_name": d.de_name,
+                    "reads": sorted(r.bfc_node_id for r in io if r.data_entity_id == d.data_entity_id and r.direction == "I"),
+                    "writes": sorted(r.bfc_node_id for r in io if r.data_entity_id == d.data_entity_id and r.direction == "O")}
+                   for d in sorted(des.values(), key=lambda d: d.de_number)],
+        "externals": [{"external_entity_id": x.external_entity_id, "ext_number": x.ext_number, "ext_name": x.ext_name,
+                       "flows": [{"bfc_node_id": r.bfc_node_id, "direction": r.direction,
+                                  "data_entity_id": r.data_entity_id, "flow_label": r.flow_label}
+                                 for r in ext_rows if r.external_entity_id == x.external_entity_id]}
+                      for x in sorted(exts.values(), key=lambda x: x.ext_number)],
+        "layout": diagram_layout.positions(db, node.project_id, "PROCESS_FLOW", node.bfc_node_id),
+    }
