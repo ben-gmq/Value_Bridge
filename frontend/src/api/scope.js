@@ -89,11 +89,13 @@ export const flowApi = {
   graph: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow`, { params: { variant } })),
 };
 
-// Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.
-const L = (projectId, type, scopeKey) => `${P(projectId)}/diagram-layouts/${type}/${scopeKey}`;
+// Slice 3a — the DFD of one parent node (D-31).
 export const dfdApi = {
   graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),
 };
+
+// Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.
+const L = (projectId, type, scopeKey) => `${P(projectId)}/diagram-layouts/${type}/${scopeKey}`;
 
 export const layoutApi = {
   get: (projectId, type, scopeKey) => d(http.get(L(projectId, type, scopeKey))),

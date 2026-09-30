@@ -74,7 +74,11 @@ def main() -> None:
 
 def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
     """The demo project itself, through the services. Split from main() so the DFD invariant
-    test (slice 3 criterion 5a) runs over exactly this data without the database-name guard."""
+    test (slice 3 criterion 5a) runs over exactly this data. It keeps a guard of its own, so an
+    importer cannot use it to seed a real database around main()'s checks (sara L2)."""
+    name = db.scalar(text("select current_database()"))
+    if not any(m in name.lower() for m in (*SAFE_MARKERS, "test")):
+        raise SystemExit(f"Refusing: connected database '{name}' is not a uat/demo/test database")
     a = admin.app_user_id
     client = create_client(db, admin, "DEMO", "Demo Trading Co", "Distribution")
     proj = create_project(db, admin, client.client_id, "DEMO", "Order to cash demo", None, None, None)
