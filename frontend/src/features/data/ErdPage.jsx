@@ -141,7 +141,10 @@ export default function ErdPage() {
     }));
   }, [near, setNodes]);
 
-  // ---- saving: drag end and collapse, debounced; every item carries its card's current flag ----
+  // ==== LAYOUT SAVE (the same shape as FlowPage's; to move into one shared canvas hook) ====
+  // Drag end and collapse queue a card; one debounced PUT sends them; a pending save is sent on
+  // leaving; Reset clears the scope. The ONLY ERD-specific extra is `collapsed`: every item
+  // carries its card's current flag (R2-NEW-1), so a drag never un-collapses a card.
   const pending = useRef(new Set());
   const timer = useRef(null);
   const items = useCallback((ids) => ids.map((id) => nodesRef.current.find((n) => n.id === id))
@@ -186,17 +189,6 @@ export default function ErdPage() {
     }
   }, [onNodesChange, canEdit, queue]);
 
-  // Collapsing a card that was never dragged saves its current place, which pins it (the
-  // tooltip says so). A REVIEWER may fold a card on their own screen; nothing is saved.
-  const onToggle = useCallback((deId) => {
-    const next = !collapsedRef.current.get(deId);
-    collapsedRef.current = new Map(collapsedRef.current).set(deId, next);
-    const id = entityNodeId(deId);
-    setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, collapsed: next } } : n)));
-    if (canEdit) queue(id);
-  }, [setNodes, canEdit, queue]);
-  const ctx = useMemo(() => ({ getLabel, onToggle, canEdit }), [getLabel, onToggle, canEdit]);
-
   const reset = useMutation({
     mutationFn: () => layoutApi.reset(projectId, 'ERD', scopeKey),
     onSuccess: async () => {
@@ -208,6 +200,18 @@ export default function ErdPage() {
     },
     onError: (err) => { setConfirmReset(false); setLayoutError(errorText(err, t('common.saveFailed'))); },
   });
+  // ==== END LAYOUT SAVE ====
+
+  // Collapsing a card that was never dragged saves its current place, which pins it (the
+  // tooltip says so). A REVIEWER may fold a card on their own screen; nothing is saved.
+  const onToggle = useCallback((deId) => {
+    const next = !collapsedRef.current.get(deId);
+    collapsedRef.current = new Map(collapsedRef.current).set(deId, next);
+    const id = entityNodeId(deId);
+    setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, collapsed: next } } : n)));
+    if (canEdit) queue(id);
+  }, [setNodes, canEdit, queue]);
+  const ctx = useMemo(() => ({ getLabel, onToggle, canEdit }), [getLabel, onToggle, canEdit]);
 
   const onNodeClick = useCallback((_, n) => setFocusId((cur) => (cur === n.id ? null : n.id)), []);
   const onPaneClick = useCallback(() => setFocusId(null), []);
