@@ -4,10 +4,11 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import BfcNode, BrDataEntity, BusinessRequirement, DataEntity, DataField
-from services import numbering
+from models import BfcNode, BfcNodeDataEntity, BrDataEntity, BusinessRequirement, DataEntity, DataField
+from services import diagram_layout, numbering
 from services.code_master import validate_required_code
 from services import lifecycle
+from services.process_flow import _steps_under
 
 MAX_FIELDS = 999                  # S1-3 (fields have no hierarchy code)
 
@@ -150,3 +151,91 @@ def used_by(db: Session, de: DataEntity) -> list[dict]:
                                    "node_name": name, "crud": ""})
         r["crud"] = "".join(c for c in "CRUD" if c in r["crud"] + crud)
     return list(out.values())
+
+
+# ---- the logical ERD (§7.4 generate_erd, D-29, §5.4.17; Slice 3 spec §7 3b) -----------------
+
+def _field_order(f: DataField) -> tuple:
+    """PK rows by pk_ordinal, then FK rows, then attributes, the last two by seq_no."""
+    if f.is_primary_key:
+        return (0, f.pk_ordinal or 0, f.seq_no)
+    return (1 if f.is_foreign_key else 2, f.seq_no, 0)
+
+
+def _area_entity_ids(db: Session, project_id: int, node_id: int) -> set[int]:
+    """The entities in the active I/O of the processes under a node (A-S3-7: any active node)."""
+    node = db.get(BfcNode, node_id)
+    if node is None or node.project_id != project_id or not node.is_active:
+        raise HTTPException(404, "Not found")
+    step_ids = [node.bfc_node_id] if node.is_process else [s.bfc_node_id for s in _steps_under(db, node)]
+    if not step_ids:
+        return set()
+    return set(db.scalars(select(BfcNodeDataEntity.data_entity_id).where(
+        BfcNodeDataEntity.bfc_node_id.in_(step_ids), BfcNodeDataEntity.is_active)))
+
+
+def generate_erd(db: Session, project_id: int, subject_area_node_id: int | None = None) -> dict:
+    """The project's (or one subject area's) entities, their ordered fields, one relationship per
+    FK group (data_entity, ref_data_entity, fk_group_no), stubs for groups leaving the area, and
+    the saved positions. Nothing is stored; the diagram is exactly as complete as the model."""
+    entities = list_entities(db, project_id)
+    if subject_area_node_id is not None:
+        area = _area_entity_ids(db, project_id, subject_area_node_id)
+        entities = [e for e in entities if e.data_entity_id in area]
+    in_scope = {e.data_entity_id: e for e in entities}
+    fields = list(db.scalars(select(DataField).where(
+        DataField.data_entity_id.in_(list(in_scope)), DataField.is_active))) if in_scope else []
+    by_de: dict[int, list[DataField]] = {}
+    for f in fields:
+        by_de.setdefault(f.data_entity_id, []).append(f)
+
+    parent_ids = {f.ref_data_entity_id for f in fields if f.is_foreign_key}
+    parents = {d.data_entity_id: d for d in db.scalars(select(DataEntity).where(
+        DataEntity.data_entity_id.in_(parent_ids)))} if parent_ids else {}
+    ref_ids = {f.ref_data_field_id for f in fields if f.is_foreign_key and f.ref_data_field_id}
+    ref_fields = {r.data_field_id: r for r in db.scalars(select(DataField).where(
+        DataField.data_field_id.in_(ref_ids)))} if ref_ids else {}
+
+    def _field(f: DataField) -> dict:
+        parent = parents.get(f.ref_data_entity_id) if f.is_foreign_key else None
+        return {"data_field_id": f.data_field_id, "field_name": f.field_name,
+                "data_type_code": f.data_type_code, "is_mandatory": f.is_mandatory,
+                "is_primary_key": f.is_primary_key, "pk_ordinal": f.pk_ordinal,
+                "is_foreign_key": f.is_foreign_key, "ref_data_entity_id": f.ref_data_entity_id,
+                "ref_data_field_id": f.ref_data_field_id, "fk_group_no": f.fk_group_no,
+                "ref_de_name": parent.de_name if parent else None, "description": f.description}
+
+    out_entities, relationships, outside_refs = [], [], []
+    for de in entities:
+        own = sorted(by_de.get(de.data_entity_id, []), key=_field_order)
+        pk_set = {f.data_field_id for f in own if f.is_primary_key}
+        out_entities.append({"data_entity_id": de.data_entity_id, "de_number": de.de_number,
+                             "de_name": de.de_name, "description": de.description,
+                             "field_count": len(own), "fields": [_field(f) for f in own],
+                             "warnings": [] if pk_set else ["NO_KEY"]})
+        groups: dict[tuple[int, int], list[DataField]] = {}
+        for f in own:
+            if f.is_foreign_key:
+                groups.setdefault((f.ref_data_entity_id, f.fk_group_no), []).append(f)
+        for (parent_id, group_no), g in groups.items():
+            parent = parents[parent_id]
+            ids = {f.data_field_id for f in g}
+            rel = {"child_data_entity_id": de.data_entity_id, "parent_data_entity_id": parent_id,
+                   "parent_de_number": parent.de_number, "parent_de_name": parent.de_name,
+                   "fk_group_no": group_no, "label": ", ".join(f.field_name for f in g),
+                   "via_fields": [{"data_field_id": f.data_field_id, "field_name": f.field_name,
+                                   "ref_data_field_id": f.ref_data_field_id,
+                                   "ref_is_key": bool(f.ref_data_field_id in ref_fields
+                                                      and (ref_fields[f.ref_data_field_id].is_primary_key
+                                                           or ref_fields[f.ref_data_field_id].is_foreign_key)
+                                                      and ref_fields[f.ref_data_field_id].is_active)}
+                                  for f in g],
+                   "parent_cardinality": "1" if all(f.is_mandatory is True for f in g) else "0..1",
+                   "child_cardinality": "1" if pk_set and ids == pk_set else "many",
+                   "identifying": all(f.is_primary_key for f in g),
+                   "retired": not parent.is_active}
+            (relationships if parent.is_active and parent_id in in_scope else outside_refs).append(rel)
+    return {"scope_key": diagram_layout.PROJECT_SCOPE if subject_area_node_id is None
+            else str(subject_area_node_id),
+            "entities": out_entities, "relationships": relationships, "outside_refs": outside_refs,
+            "layout": diagram_layout.positions(db, project_id, "ERD", subject_area_node_id)}

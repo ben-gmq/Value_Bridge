@@ -102,3 +102,9 @@ export const layoutApi = {
   save: (projectId, type, scopeKey, items) => d(http.put(L(projectId, type, scopeKey), items)),
   reset: (projectId, type, scopeKey) => d(http.delete(L(projectId, type, scopeKey))),
 };
+
+// Slice 3b — the logical ERD (§7.4 generate_erd). `area` is a chart node id, or empty for the
+// whole project. Positions go through layoutApi with type ERD and the graph's scope_key.
+export const erdApi = {
+  graph: (projectId, area) => d(http.get(`${P(projectId)}/erd`, { params: area ? { subject_area: area } : {} })),
+};

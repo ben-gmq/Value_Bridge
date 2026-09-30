@@ -1,7 +1,7 @@
 // The ONE diagram component (§7.14, §14.6, VB law 8): <ModelCanvas kind="flow" | "dfd" | "erd">.
 // The kind supplies its node types; this owns the rules every diagram shares — visible-only
 // rendering, theme-driven colour mode, no keyboard delete, the attribution left visible.
-import { Background, ConnectionLineType, Controls, ReactFlow, ReactFlowProvider } from '@xyflow/react';
+import { Background, ConnectionLineType, Controls, MiniMap, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useMemo } from 'react';
 import { Box } from '@mui/material';
@@ -9,7 +9,8 @@ import { useColorScheme, useTheme } from '@mui/material/styles';
 import { EDGE_TYPES } from './edges';
 
 export function ModelCanvas({ kind, nodes, edges, nodeTypes, edgeTypes, onNodesChange, onNodeDragStop, onConnect,
-  onConnectEnd, onReconnectEnd, onNodeClick, onEdgeClick, connectable = false, draggable = true, ariaLabel, height = '70vh' }) {
+  onConnectEnd, onReconnectEnd, onNodeClick, onNodeDoubleClick, onPaneClick, onEdgeClick, connectable = false, draggable = true,
+  minimap = false, minimapNodeColor, ariaLabel, height = '70vh', children }) {
   const { mode, systemMode } = useColorScheme();
   const colorMode = (mode === 'system' ? systemMode : mode) === 'dark' ? 'dark' : 'light';
   const theme = useTheme();
@@ -38,12 +39,18 @@ export function ModelCanvas({ kind, nodes, edges, nodeTypes, edgeTypes, onNodesC
         <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={types} onNodesChange={onNodesChange}
           nodesDraggable={draggable}
           onNodeDragStop={onNodeDragStop} onConnect={onConnect} onConnectEnd={onConnectEnd}
-          onReconnectEnd={onReconnectEnd} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} edgesReconnectable={connectable && Boolean(onReconnectEnd)} reconnectRadius={16}
+          onReconnectEnd={onReconnectEnd} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick}
+          onPaneClick={onPaneClick} zoomOnDoubleClick={!onNodeDoubleClick} onEdgeClick={onEdgeClick} edgesReconnectable={connectable && Boolean(onReconnectEnd)} reconnectRadius={16}
           connectionLineType={ConnectionLineType.SmoothStep} connectionLineStyle={drawing} nodesConnectable={connectable}
           onlyRenderVisibleElements colorMode={colorMode} deleteKeyCode={null} fitView minZoom={0.1}
           connectionRadius={36}>
           <Background gap={24} />
           <Controls showInteractive={false} />
+          {minimap && (
+            <MiniMap pannable zoomable nodeColor={minimapNodeColor ?? theme.vars.palette.brand.teal}
+              maskColor={theme.vars.palette.action.hover} bgColor={theme.vars.palette.background.paper} />)}
+          {/* A kind's own helpers that need the React Flow instance (e.g. search-to-focus). */}
+          {children}
         </ReactFlow>
       </ReactFlowProvider>
     </Box>
