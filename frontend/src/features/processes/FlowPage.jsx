@@ -28,6 +28,13 @@ const eventId = (flowId) => `e${flowId}`;
 
 const useLowZoom = () => useStore((s) => s.transform[2] < LOW_ZOOM);
 
+/** The canvas node under the pointer where a drag was released, if any. */
+function nodeUnder(event) {
+  const pt = event?.changedTouches?.[0] ?? event;
+  if (pt?.clientX == null) return null;
+  return document.elementFromPoint(pt.clientX, pt.clientY)?.closest('.react-flow__node')?.getAttribute('data-id') ?? null;
+}
+
 // Text is hidden with `visibility`, never `display: none`, so handle positions stay valid (§14.6).
 function StepBox({ data }) {
   const low = useLowZoom();
@@ -102,7 +109,7 @@ async function buildLayout(g, palette) {
     }
     const dashed = e.flow_type === 'HANDOFF';
     edges.push({
-      id: `f${e.bfc_node_flow_id}`, type: 'smoothstep',
+      id: `f${e.bfc_node_flow_id}`, type: 'smoothstep', data: { flow: e },
       source: start ? eventId(e.bfc_node_flow_id) : stepId(e.from_bfc_node_id), sourceHandle: 's-R',
       target: end ? eventId(e.bfc_node_flow_id) : stepId(e.to_bfc_node_id), targetHandle: 't-L',
       label: e.condition_label ?? undefined,
@@ -305,7 +312,26 @@ export default function FlowPage() {
 
   const onConnect = useCallback(({ source, target }) => {
     if (!source?.startsWith('s') || !target?.startsWith('s')) return;
-    setConnecting({ from_bfc_node_id: Number(source.slice(1)), to_bfc_node_id: Number(target.slice(1)) });
+    setConnecting({ ends: { from_bfc_node_id: Number(source.slice(1)), to_bfc_node_id: Number(target.slice(1)) } });
+  }, []);
+  // A line dropped anywhere on a box connects to it, not only on its dot (Ben, 2026-09-30).
+  const onConnectEnd = useCallback((event, state) => {
+    if (state.isValid || !state.fromNode) return;             // onConnect already has it
+    const over = nodeUnder(event);
+    if (!over || over === state.fromNode.id) return;
+    const [from, to] = state.fromHandle?.type === 'target' ? [over, state.fromNode.id] : [state.fromNode.id, over];
+    onConnect({ source: from, target: to });
+  }, [onConnect]);
+  // Dragging an arrow's end to another box re-points it: add the new flow, remove the old (S2-2).
+  const onReconnectEnd = useCallback((event, edge, handleType, state) => {
+    const flow = edge.data?.flow;
+    const over = state?.isValid ? state.toNode?.id : nodeUnder(event);
+    if (!flow || !over?.startsWith('s')) return;
+    const moved = Number(over.slice(1));
+    const ends = { from_bfc_node_id: flow.from_bfc_node_id, to_bfc_node_id: flow.to_bfc_node_id };
+    const key = handleType === 'source' ? 'from_bfc_node_id' : 'to_bfc_node_id';
+    if (ends[key] === moved) return;                            // dropped back where it was
+    setConnecting({ ends: { ...ends, [key]: moved }, replaces: flow });
   }, []);
 
   const steps = useMemo(() => {
@@ -334,13 +360,13 @@ export default function FlowPage() {
         <>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>{t('processes.flowCanvasHelp')}</Typography>
           <ModelCanvas kind="flow" nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} connectable
-            onNodesChange={handleNodesChange} onConnect={onConnect}
+            onNodesChange={handleNodesChange} onConnect={onConnect} onConnectEnd={onConnectEnd} onReconnectEnd={onReconnectEnd}
             ariaLabel={title} />
         </>
       )}
       {g && g.nodes.length > 0 && view === 'table' && <FlowTable g={g} />}
       {connecting && (
-        <EdgeDialog projectId={projectId} ends={connecting} steps={steps}
+        <EdgeDialog projectId={projectId} ends={connecting.ends} replaces={connecting.replaces} steps={steps}
           onClose={() => setConnecting(null)}
           onDone={() => { qc.invalidateQueries({ queryKey: keys.flows(projectId) }); qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) }); }} />
       )}

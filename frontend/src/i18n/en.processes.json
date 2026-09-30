@@ -135,7 +135,7 @@
   "processes.openFlow": "Open process flow",
   "processes.flowPageTitle": "Process flow · {name}",
   "processes.flowPageHelp": "The steps under this node, in swimlanes by their Responsible role.",
-  "processes.flowCanvasHelp": "Drag a box to place it; the position is saved. Drag from a box's right edge to another box to add a flow.",
+  "processes.flowCanvasHelp": "Drag a box to place it; the position is saved. Drag from a box's blue dot onto another box to add a flow. Drag the end of an arrow onto another box to move it.",
   "processes.flowNoSteps": "There are no process steps under this node yet.",
   "processes.flowOutside": "other area",
   "processes.laneUnassigned": "No Responsible role",
@@ -154,5 +154,8 @@
   "processes.addStep": "Add step",
   "processes.addStepTitle": "Add a process step",
   "processes.addStepHelp": "The step is added to the chart under this node, with its business requirement. Connect it by dragging from its right edge.",
-  "processes.openFlowFor": "Open the process flow of {name}"
+  "processes.openFlowFor": "Open the process flow of {name}",
+  "processes.edgeMove": "Move this flow to {from} → {to}. The old flow is removed and this one added, keeping its type and condition.",
+  "processes.moveEdgeTitle": "Move the flow",
+  "processes.moveEdge": "Move"
 }

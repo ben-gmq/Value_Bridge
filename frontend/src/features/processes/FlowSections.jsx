@@ -25,15 +25,18 @@ function useSteps(projectId) {
   }, [q.data, q.error]);
 }
 
-/** Add or edit one edge. `ends` fixes both ends up front (a line drawn on the canvas). */
-export function EdgeDialog({ projectId, node, edge, ends, steps, onClose, onDone }) {
+/** Add or edit one edge. `ends` fixes both ends up front (a line drawn on the canvas).
+ * `replaces` re-points an existing edge: the new one is added, then the old one removed —
+ * an edge's ends never change in place (S2-2), so a baseline diff sees REMOVED + ADDED. */
+export function EdgeDialog({ projectId, node, edge, ends, replaces, steps, onClose, onDone }) {
   const editing = Boolean(edge);
   const fixed = editing ? edge : ends;
+  const seed = edge ?? replaces;
   const [dir, setDir] = useState('O');
   const [other, setOther] = useState(null);
   const [v, setV] = useState({
-    flow_type: edge?.flow_type ?? 'SEQUENCE', condition_label: edge?.condition_label ?? '',
-    seq_no: edge?.seq_no ?? '', note: edge?.note ?? '' });
+    flow_type: seed?.flow_type ?? 'SEQUENCE', condition_label: seed?.condition_label ?? '',
+    seq_no: seed?.seq_no ?? '', note: seed?.note ?? '' });
   const [error, setError] = useState('');
   const set = (k) => (val) => setV((s) => ({ ...s, [k]: val }));
   const needsLabel = v.flow_type === 'CONDITIONAL' && !v.condition_label.trim();
@@ -43,6 +46,10 @@ export function EdgeDialog({ projectId, node, edge, ends, steps, onClose, onDone
   const m = useMutation({
     mutationFn: () => {
       if (editing) return flowApi.update(edge.bfc_node_flow_id, { row_version: edge.row_version, ...fields() });
+      if (replaces) {
+        return flowApi.create(projectId, { ...fields(), ...ends })
+          .then(() => flowApi.remove(replaces.bfc_node_flow_id, replaces.row_version));
+      }
       if (ends) return flowApi.create(projectId, { ...fields(), ...ends });
       const otherId = other?.bfc_node_id ?? null;
       return flowApi.create(projectId, { ...fields(),
@@ -51,20 +58,20 @@ export function EdgeDialog({ projectId, node, edge, ends, steps, onClose, onDone
     },
     onSuccess: () => { onDone(); onClose(); },
     onError: (err) => {
-      if (isStale(err)) onDone();
+      if (isStale(err) || replaces) onDone();            // a move may have half-landed: show what is there
       setError(isStale(err) ? t('processes.staleLink') : errorText(err, t('common.saveFailed')));
     },
   });
   const end = (id, fallback) => (id == null ? t(fallback) : stepLabel(steps.byId.get(id)) || `#${id}`);
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{t(editing ? 'processes.editEdgeTitle' : 'processes.addEdgeTitle')}</DialogTitle>
+      <DialogTitle>{t(editing ? 'processes.editEdgeTitle' : (replaces ? 'processes.moveEdgeTitle' : 'processes.addEdgeTitle'))}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 1 }}>
           {fixed ? (
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-              {t(editing ? 'processes.edgeFixed' : 'processes.edgeNew', {
+              {t(editing ? 'processes.edgeFixed' : (replaces ? 'processes.edgeMove' : 'processes.edgeNew'), {
                 from: end(fixed.from_bfc_node_id, 'processes.flowStart'),
                 to: end(fixed.to_bfc_node_id, 'processes.flowEnd') })}</Typography>
           ) : (
@@ -94,7 +101,7 @@ export function EdgeDialog({ projectId, node, edge, ends, steps, onClose, onDone
       <DialogActions>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button variant="contained" disabled={needsLabel || !seqOk || m.isPending}
-          onClick={() => { setError(''); m.mutate(); }}>{t(editing ? 'common.save' : 'processes.add')}</Button>
+          onClick={() => { setError(''); m.mutate(); }}>{t(editing ? 'common.save' : (replaces ? 'processes.moveEdge' : 'processes.add'))}</Button>
       </DialogActions>
     </Dialog>
   );
