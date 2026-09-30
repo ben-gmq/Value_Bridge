@@ -44,7 +44,11 @@ def test_missing_series_raises_never_inserts(db):
 
 # ---- database grants (§6.6, R2-S9) ------------------------------------------------------
 
-def test_app_role_has_no_delete_and_audit_is_append_only():
+# §6.6 / D-30: the only table the app may hard-delete from. import_row joins it when it lands.
+HARD_DELETE_TABLES = {"diagram_layout"}
+
+
+def test_app_role_deletes_only_layout_and_audit_is_append_only():
     eng = create_engine(APP_URL)
     with eng.connect() as c:
         rows = c.execute(text(
@@ -52,7 +56,9 @@ def test_app_role_has_no_delete_and_audit_is_append_only():
             "WHERE grantee = 'vb_app'")).all()
     eng.dispose()
     privs = {(t, p) for t, p in rows}
-    assert not [t for t, p in privs if p in ("DELETE", "TRUNCATE")], "vb_app must hold no DELETE"
+    assert {t for t, p in privs if p == "DELETE"} == HARD_DELETE_TABLES, \
+        "vb_app may DELETE only from the documented hard-delete tables"
+    assert not [t for t, p in privs if p == "TRUNCATE"], "vb_app must hold no TRUNCATE"
     assert ("audit_event", "UPDATE") not in privs
     assert ("audit_event", "INSERT") in privs
 
@@ -62,7 +68,20 @@ def test_app_role_cannot_delete_even_by_direct_sql(world):
     with pytest.raises(DBAPIError):
         with eng.begin() as c:
             c.execute(text("DELETE FROM project WHERE project_id = :p"), {"p": world["p_solo"]})
+    with pytest.raises(DBAPIError):                 # soft-deleted, beside the D-30 exception
+        with eng.begin() as c:
+            c.execute(text("DELETE FROM bfc_node_flow WHERE project_id = :p"), {"p": world["p_solo"]})
     eng.dispose()
+
+
+def test_retired_code_categories_stay_retired(db):
+    """S2-1: FLOW_TYPE left the library; the seed retires it and a re-run changes nothing."""
+    from seeds.seed_code_master import LIBRARY, RETIRED_CATEGORIES, seed
+    from services import code_master
+    assert not {c for c, _, _ in LIBRARY} & set(RETIRED_CATEGORIES)
+    seed(db)
+    assert code_master.resolve(db, None, "FLOW_TYPE") == []
+    assert seed(db) == (0, 0)
 
 
 # ---- declarative constraints (§5.3) -----------------------------------------------------

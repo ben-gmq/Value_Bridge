@@ -43,3 +43,14 @@ def category_column(name: str, category: str) -> sa.Column:
     Paired with an FK to code_master (code_id, category) — uq_code_category_target."""
     return sa.Column(name, sa.String(40), sa.Computed(f"'{category}'", persisted=True),
                      nullable=False)
+
+
+def presence_columns() -> list[sa.Column]:
+    """S2-6: the four audit columns without soft delete or row_version — for the documented
+    hard-deleted presentation tables (diagram_layout, D-30, A-52). Not for business rows."""
+    return [
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("created_by", sa.BigInteger, sa.ForeignKey("app_user.app_user_id"), nullable=False),
+        sa.Column("updated_by", sa.BigInteger, sa.ForeignKey("app_user.app_user_id")),
+    ]
