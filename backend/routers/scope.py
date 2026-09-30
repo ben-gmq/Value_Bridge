@@ -6,6 +6,7 @@ Every route declares one guard. Project-scoped collections use project_ctx; ever
 "create a requirement" route: a BR appears with its process step (D-2, §7.3).
 """
 from fastapi import Depends
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from auth.dependencies import current_user
@@ -24,7 +25,7 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            ProcessIn, ProcessOut, RaciIn, ReorderIn, StepIoIn, StepIoOut,
                            StepRaciOut, TreeNodeOut)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
-from services import external_entity as ext_service, lifecycle, raci, step_io
+from services import external_entity as ext_service, lifecycle, raci, render, step_io
 
 router = GuardedRouter(tags=["scope"])
 _read = project_ctx("REVIEWER")
@@ -292,6 +293,14 @@ _retire_and_restore("data-fields", DataField, DataFieldOut, on_restore=de_servic
 def erd_graph(project_id: int, subject_area: int | None = None, db: Session = Depends(get_db)):
     """The logical ERD (§7.4, D-29). An unknown, other-project or retired area node is a 404."""
     return de_service.generate_erd(db, project_id, subject_area)
+
+
+@router.get("/projects/{project_id}/erd/export", response_class=PlainTextResponse, **_read.route)
+def erd_export(project_id: int, format: str = "mermaid", subject_area: int | None = None,
+               db: Session = Depends(get_db)):
+    """The logical ERD as Mermaid erDiagram text (§7.4 export_erd, R2-S7)."""
+    render.check_format(format)
+    return PlainTextResponse(render.export_erd(de_service.generate_erd(db, project_id, subject_area)))
 
 
 # ---- external parties (D-24a) -------------------------------------------------------------
