@@ -34,7 +34,7 @@ SHAPES = {
         r"flowchart LR",
         rf"    subgraph (l\d+|outside)\[{L}\]",
         rf"        s\d+\[{L}\]",
-        r'        e\d+\(\(""\)\)',
+        r'        e\d+\(\(" "\)\)',
         r"    end",
         rf"    d\d+\[\({L}\)\]",
         rf"    x\d+\[{L}\]",
@@ -151,7 +151,7 @@ def test_start_and_end_events_and_outside_nodes_have_generated_ids(client, ed, f
     text = text_of(client, ed, "flow", flow["parent"]["bfc_node_id"])
     lines = text.splitlines()
     start, end = f"e{e['start']['bfc_node_flow_id']}", f"e{e['end']['bfc_node_flow_id']}"
-    assert f'        {start}((""))' in lines and f'        {end}((""))' in lines
+    assert f'        {start}((" "))' in lines and f'        {end}((" "))' in lines
     assert f"    {start} --> s{s['s1']['bfc_node_id']}" in lines
     assert f"    s{s['s3']['bfc_node_id']} --> {end}" in lines
     # the start event is drawn in its step's lane (as on the canvas), the end in the unassigned one

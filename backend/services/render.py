@@ -29,6 +29,7 @@ _TYPE_CODE = re.compile(r"[A-Z_]+")
 
 UNASSIGNED_LANE = "Unassigned"
 OUTSIDE_LANE = "Outside this flow"
+EVENT_LABEL = '(" ")'                # e{flow_id}((" ")) — the spec's `(("")` fails Mermaid 11's parser
 
 
 def check_format(fmt: str) -> None:
@@ -95,7 +96,8 @@ def export_process_flow(g: dict) -> str:
         lines.append(f"    subgraph l{i}[{escape_mermaid(label)}]")
         lines += [f"        s{n['bfc_node_id']}[{escape_mermaid(_ref(n))}]"
                   for n in g["nodes"] if n["lane_org_role_id"] == rid]
-        lines += [f'        {ev}((""))' for ev in events.get(rid, [])]
+        # an event is an unlabelled circle; Mermaid refuses an empty "" label, so one space
+        lines += [f'        {ev}({EVENT_LABEL})' for ev in events.get(rid, [])]
         lines.append("    end")
     if g["outside"]:
         lines.append(f"    subgraph outside[{escape_mermaid(OUTSIDE_LANE)}]")
