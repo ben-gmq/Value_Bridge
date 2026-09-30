@@ -35,9 +35,10 @@ function StepBox({ data }) {
     <Box sx={(th) => ({ width: BOX.w, height: BOX.h, px: 1.5, py: 1, borderRadius: 2,
       border: 1.5, borderStyle: data.outside ? 'dashed' : 'solid',
       borderColor: data.outside ? th.vars.palette.brand.lineStrong : th.vars.palette.primary.main,
-      bgcolor: th.vars.palette.background.paper, overflow: 'hidden' })}>
+      bgcolor: th.vars.palette.background.paper })}>
       <Handle type="target" position={Position.Left} id="t-L" />
-      <Box sx={{ visibility: low ? 'hidden' : 'visible' }}>
+      {/* The text clips, not the box: the connectors sit half outside its edge. */}
+      <Box sx={{ visibility: low ? 'hidden' : 'visible', height: '100%', overflow: 'hidden' }}>
         <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
           <Mono>{data.node.hier_code}</Mono>{data.node.br_number ? ` · ${data.node.br_number}` : ''}
           {data.outside ? ` · ${t('processes.flowOutside')}` : ''}</Typography>
