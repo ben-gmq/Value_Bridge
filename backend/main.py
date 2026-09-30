@@ -19,7 +19,8 @@ app = FastAPI(title="Value Bridge API", version="0.1.0",
               docs_url="/docs" if _docs else None, redoc_url=None,
               openapi_url="/openapi.json" if _docs else None)
 app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_url], allow_credentials=False,
-                   allow_methods=["*"], allow_headers=["Authorization", "Content-Type"])
+                   allow_methods=["*"], allow_headers=["Authorization", "Content-Type"],
+                   expose_headers=["X-VB-Error"])       # the 409 kind the UI reads (STALE, restores)
 app.add_middleware(BodyLimitMiddleware, default_cap=settings.max_body_bytes)
 errors.install(app)
 

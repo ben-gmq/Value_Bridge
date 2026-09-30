@@ -24,6 +24,11 @@ def list_links(db: Session, model, owner_id: int) -> list:
 def link(db: Session, actor_id: int, model, owner, org_role_id: int, raci_code: str):
     col, _ = _owner(model)
     owner_id = getattr(owner, col)
+    if model is BfcNodeOrgRole:                               # SR-5: the step, FOR SHARE, first
+        lifecycle.lock_for_share(db, owner)
+    else:
+        lifecycle.lock_for_share(db, db.get(BfcNode, owner.bfc_node_id))
+        db.refresh(owner)
     if not owner.is_active:
         raise HTTPException(409, "Restore it first")
     if model is BfcNodeOrgRole and not owner.is_process:

@@ -53,6 +53,27 @@ class ProcessIn(BaseModel):
     is_process: bool
 
 
+class RowRef(BaseModel):
+    table: str
+    id: int
+    label: str
+
+
+class RetirePreviewOut(BaseModel):
+    """docs/step_retire_spec.md §9: what a retire with dependents takes with it."""
+    owned: list[RowRef]
+    blockers: list[RowRef]
+    confirm_hash: str
+
+
+class RetireConfirmIn(BaseModel):
+    confirm_hash: str = Field(min_length=64, max_length=64)
+
+
+class RestoreCountOut(BaseModel):
+    restored: int
+
+
 class BfcNodeOut(Orm):
     bfc_node_id: int
     project_id: int

@@ -44,6 +44,11 @@ class StepRef(BaseModel):
     node_name: str
 
 
+class TableRow(BaseModel):
+    table: str
+    id: int
+
+
 class FlowCompletenessOut(BaseModel):
     orphan_steps: list[StepRef]
     no_start: list[StepRef]
@@ -53,6 +58,8 @@ class FlowCompletenessOut(BaseModel):
     crud_without_io: list[int]          # br_data_entity ids — must be empty
     ext_without_io: list[int]           # bfc_node_external_flow ids — must be empty
     edge_count: int
+    step_without_br: list[StepRef]      # a warning (SR-3): the first step of a demote
+    live_link_on_retired_step: list[TableRow]   # must be empty (docs/step_retire_spec.md §4)
 
 
 # ---- the graph (D-21) and saved positions (D-30) ----

@@ -64,6 +64,8 @@ def link_data_entity(db: Session, actor_id: int, br: BusinessRequirement, data_e
     """D-24: the step I/O that licenses the CRUD is created in the same transaction."""
     if crud_code not in CRUD:
         raise HTTPException(422, "crud_code must be one of C, R, U, D")
+    lifecycle.lock_for_share(db, db.get(BfcNode, br.bfc_node_id))    # SR-5: the step first
+    db.refresh(br)
     if not br.is_active:
         raise HTTPException(409, f"{br.br_number} is retired. Restore it first.")
     node = db.get(BfcNode, br.bfc_node_id)

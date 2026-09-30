@@ -55,6 +55,10 @@ class Link:
     pairs: tuple[tuple[str, str], ...]          # (child column, parent column)
 
 
+def mapper_for(table_name: str):
+    return _mapper_for(table_name)
+
+
 def _mapper_for(table_name: str):
     for m in Base.registry.mappers:
         if m.local_table.name == table_name:
@@ -93,6 +97,10 @@ def parents_of(model: type) -> list[Link]:
     return [ln for ln in LINKS if ln.child is model]
 
 
+def label(obj) -> str:
+    return _label(obj)
+
+
 def _label(obj) -> str:
     name, key = LABELS.get(obj.__table__.name, (obj.__table__.name, lambda r: ""))
     return f"{name} {key(obj)}".strip()
@@ -114,10 +122,38 @@ def active_dependents(db: Session, obj) -> dict[str, tuple[list, int]]:
     return found
 
 
-def soft_delete(obj, actor_id: int) -> None:
+def active_dependent_ids(db: Session, obj) -> set[tuple[str, int]]:
+    """Every active row that references obj, as (table, pk) — uncapped, unlike
+    active_dependents. The step-retire blocker check (docs/step_retire_spec.md §4) uses it, so
+    any FK-declared table blocks by default (SR-4)."""
+    found: set[tuple[str, int]] = set()
+    for ln in dependents_of(type(obj)):
+        cond = and_(*(getattr(ln.child, c) == getattr(obj, p) for c, p in ln.pairs),
+                    ln.child.is_active)
+        pk_col = ln.child.__mapper__.primary_key[0]
+        if ln.child is type(obj):
+            cond = and_(cond, pk_col != _pk(obj))
+        found |= {(ln.child.__table__.name, i) for i in db.scalars(select(pk_col).where(cond))}
+    return found
+
+
+def soft_delete(obj, actor_id: int, at: datetime | None = None) -> None:
+    """`at` lets one action stamp every row it retires with the same deleted_at."""
     obj.is_active = False
-    obj.deleted_at = datetime.now(UTC)
+    obj.deleted_at = at or datetime.now(UTC)
     obj.deleted_by = actor_id
+
+
+def lock_for_share(db: Session, obj) -> None:
+    """SR-5: re-read obj under FOR SHARE, so a child write and a step retire are serialised.
+    Call it before the is_active check; it discards unflushed changes on obj."""
+    lock(db, obj, read=True)
+
+
+def lock(db: Session, obj, read: bool = False) -> None:
+    """Re-read obj under FOR UPDATE (or FOR SHARE). `OF <table>` keeps the lock off the
+    eager-joined code rows, which Postgres refuses to lock on an outer join's nullable side."""
+    db.refresh(obj, with_for_update={"read": read, "of": type(obj)})
 
 
 def check_version(obj, row_version: int) -> None:
@@ -161,7 +197,9 @@ def relink(db: Session, actor_id: int, row) -> None:
 
 
 def retire(db: Session, actor_id: int, obj, row_version: int) -> None:
-    """The one DELETE. Refuses with the blockers named (Q4); commits on success."""
+    """The one DELETE. Refuses with the blockers named (Q4); commits on success. The row is
+    locked first, so a child writer holding it FOR SHARE (SR-5) finishes before the check."""
+    lock(db, obj)
     check_version(obj, row_version)
     if not obj.is_active:
         raise HTTPException(409, f"{_label(obj)} is already retired")
@@ -173,12 +211,18 @@ def retire(db: Session, actor_id: int, obj, row_version: int) -> None:
             more = f" (+{total - 10} more)" if total > 10 else ""
             parts.append(f"{kind}: {names}{more}")
         raise HTTPException(409, "Retire these first: " + "; ".join(parts))
-    soft_delete(obj, actor_id)
+    retire_row(db, actor_id, obj)
+    db.commit()
+
+
+def retire_row(db: Session, actor_id: int, obj, at: datetime | None = None,
+               detail: dict | None = None) -> None:
+    """Soft-delete one row and audit it. No blocker check and NO commit — the caller owns both."""
+    soft_delete(obj, actor_id, at)
     obj.updated_by = actor_id
     audit.record(db, "RECORD_DELETED", actor_id=actor_id, project_id=obj.project_id,
                  target_table=obj.__table__.name, target_id=_pk(obj),
-                 detail={"label": _label(obj)})
-    db.commit()
+                 detail={"label": _label(obj), **(detail or {})})
 
 
 def inactive_parents(db: Session, obj) -> list:
@@ -188,7 +232,8 @@ def inactive_parents(db: Session, obj) -> list:
         if any(v is None for v in values):
             continue                                       # a nullable FK is a parent only where set
         cond = and_(*(getattr(ln.parent, p) == getattr(obj, c) for c, p in ln.pairs))
-        parent = db.scalars(select(ln.parent).where(cond)).one_or_none()
+        # FOR SHARE: a parent checked live stays live until this restore commits (sara M).
+        parent = db.scalars(select(ln.parent).where(cond).with_for_update(read=True, of=ln.parent)).one_or_none()
         if parent is not None and not parent.is_active and parent is not obj:
             out.append(parent)
     return out
@@ -200,6 +245,13 @@ def restore(db: Session, actor_id: int, obj, before_activate=None) -> None:
         raise HTTPException(404, "Not found")
     if obj.is_active:
         raise HTTPException(409, f"{_label(obj)} is not retired")
+    restore_row(db, actor_id, obj, before_activate)
+    db.commit()
+
+
+def restore_row(db: Session, actor_id: int, obj, before_activate=None,
+                detail: dict | None = None) -> None:
+    """Un-delete one row and audit it; 409 while a parent is inactive. NO commit."""
     blocked = inactive_parents(db, obj)
     if blocked:
         raise HTTPException(409, f"Restore {_label(blocked[0])} first")
@@ -209,8 +261,11 @@ def restore(db: Session, actor_id: int, obj, before_activate=None) -> None:
     obj.updated_by = actor_id
     audit.record(db, "RECORD_RESTORED", actor_id=actor_id, project_id=obj.project_id,
                  target_table=obj.__table__.name, target_id=_pk(obj),
-                 detail={"label": _label(obj)})
-    db.commit()
+                 detail={"label": _label(obj), **(detail or {})})
+
+
+def pk(obj) -> int:
+    return _pk(obj)
 
 
 def _pk(obj) -> int:
