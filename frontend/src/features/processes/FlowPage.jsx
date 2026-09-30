@@ -14,7 +14,7 @@ import { LAYERED_RIGHT, LOW_ZOOM, elkLayout, pushClear } from '../../canvas/layo
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { FIRST_PROCESS_LEVEL, Mono } from './chartKit';
+import { DiagramKindToggle, FIRST_PROCESS_LEVEL, Mono } from './chartKit';
 import { EdgeDialog } from './FlowSections';
 
 const BOX = { w: 200, h: 72 };
@@ -419,11 +419,14 @@ export default function FlowPage() {
               onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}
         </>)}>
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
-      <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)} sx={{ mb: 2 }}
-        aria-label={t('processes.flowView')}>
-        <ToggleButton value="diagram">{t('processes.viewDiagram')}</ToggleButton>
-        <ToggleButton value="table">{t('processes.viewTable')}</ToggleButton>
-      </ToggleButtonGroup>
+      <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
+        <DiagramKindToggle projectId={projectId} nodeId={nodeId} current="flow" />
+        <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}
+          aria-label={t('processes.flowView')}>
+          <ToggleButton value="diagram">{t('processes.viewDiagram')}</ToggleButton>
+          <ToggleButton value="table">{t('processes.viewTable')}</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
       {g && g.nodes.length === 0 && <Alert severity="info">{t('processes.flowNoSteps')}</Alert>}
       {g && g.nodes.length > 0 && view === 'diagram' && (
         <>

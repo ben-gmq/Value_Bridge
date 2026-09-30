@@ -91,6 +91,10 @@ export const flowApi = {
 
 // Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.
 const L = (projectId, type, scopeKey) => `${P(projectId)}/diagram-layouts/${type}/${scopeKey}`;
+export const dfdApi = {
+  graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),
+};
+
 export const layoutApi = {
   get: (projectId, type, scopeKey) => d(http.get(L(projectId, type, scopeKey))),
   save: (projectId, type, scopeKey, items) => d(http.put(L(projectId, type, scopeKey), items)),
