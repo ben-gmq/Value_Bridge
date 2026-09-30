@@ -78,3 +78,12 @@ export const orgApi = {
   retireRole: (id, rowVersion) => del(`${V}/org-roles/${id}`, rowVersion),
   restoreRole: (id) => d(http.patch(`${V}/org-roles/${id}/restore`)),
 };
+
+// Slice 2 — process flow edges (§9, S2-2: the ends are create-only).
+export const flowApi = {
+  list: (projectId, nodeId) => d(http.get(`${P(projectId)}/process-flows`, { params: nodeId ? { bfc_node_id: nodeId } : {} })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/process-flows`, body)),
+  update: (id, body) => d(http.patch(`${V}/process-flows/${id}`, body)),
+  remove: (id, rowVersion) => del(`${V}/process-flows/${id}`, rowVersion),
+  completeness: (projectId) => d(http.get(`${P(projectId)}/flow-completeness`)),
+};

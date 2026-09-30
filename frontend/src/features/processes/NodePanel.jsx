@@ -11,6 +11,7 @@ import { ConflictDialog } from '../../components/ConflictDialog';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEditForm, useFormSave } from './chartKit';
+import { FlowGaps, StepSequence } from './FlowSections';
 import { StepData, StepFlows, stepKey } from './StepSections';
 
 const STEP_SINGLE = ['ACCOUNTABLE', 'RESPONSIBLE'];      // services/raci.py SINGLE[BfcNodeOrgRole]
@@ -186,6 +187,8 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             <Divider sx={{ my: 3 }} />
             <StepData projectId={projectId} node={node} disabled={!live} />
             <Divider sx={{ my: 3 }} />
+            <StepSequence projectId={projectId} node={node} disabled={!live} />
+            <Divider sx={{ my: 3 }} />
             <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!live}
               list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
               unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
@@ -197,6 +200,9 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
           <Box sx={{ mt: 3 }}>
             <SectionTitle>{t('processes.stepFacts')}</SectionTitle>
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.stepFactsHelp')}</Typography>
+            {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && (
+              <Box sx={{ mt: 3 }}><FlowGaps projectId={projectId} node={node} /></Box>
+            )}
           </Box>
         )}
       </CardContent>

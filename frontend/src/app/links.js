@@ -24,4 +24,6 @@ export const keys = {
   parties: (p) => ['parties', String(p)],
   units: (p) => ['org-units', String(p)],
   roles: (p) => ['org-roles', String(p)],
+  flows: (p) => ['process-flows', String(p)],
+  flowGaps: (p) => ['flow-completeness', String(p)],
 };

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routers import admin, auth, projects, scope
+from routers import admin, auth, process_flow, projects, scope
 from routers.guards import GuardedRouter
 from services import errors
 from services.body_limit import BodyLimitMiddleware
@@ -27,6 +27,7 @@ api = GuardedRouter(prefix="/api/v1")
 api.include_router(admin.router)
 api.include_router(projects.router)
 api.include_router(scope.router)
+api.include_router(process_flow.router)
 
 app.include_router(auth.router)
 app.include_router(api)
