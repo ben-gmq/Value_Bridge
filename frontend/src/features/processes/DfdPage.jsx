@@ -11,6 +11,7 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { LAYERED_RIGHT, LOW_ZOOM, elkLayout, pushClear } from '../../canvas/layout';
+import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
@@ -192,9 +193,6 @@ export default function DfdPage() {
   const [view, setView] = useState('diagram');
   const [layoutError, setLayoutError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
-  const pendingSave = useRef(new Map());
-  const timer = useRef(null);
-
   const palette = theme.vars.palette;
   useEffect(() => {
     if (!g) return undefined;
@@ -204,49 +202,25 @@ export default function DfdPage() {
     return () => { live = false; };
   }, [g, palette, setNodes]);
 
-  const save = useMutation({
-    mutationFn: (items) => layoutApi.save(projectId, DIAGRAM, nodeId, items),
-    onError: (err) => setLayoutError(errorText(err, t('common.saveFailed'))),
-  });
-  // As on the flow: positions save when a move ends, debounced (§14.6); last write wins (A-52).
-  // A move still pending when the page closes is sent, not dropped.
+  // As on the flow: positions save when a move ends, through the one shared hook (§14.6).
+  // A REVIEWER places nothing (the hook ignores their moves).
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
-  const flush = useCallback(() => {
-    clearTimeout(timer.current);
-    const items = [...pendingSave.current.values()];
-    pendingSave.current.clear();
-    return items;
-  }, []);
+  const layout = useLayoutSave({
+    projectId, diagramType: DIAGRAM, scopeKey: nodeId, canEdit,
+    getNode: (id) => nodesRef.current.find((n) => n.id === id),
+    toItem: (n) => (n.data?.object && n.position
+      ? { ...n.data.object, x: Math.round(n.position.x), y: Math.round(n.position.y) } : null),
+    onError: (err) => setLayoutError(errorText(err, t('common.saveFailed'))),
+  });
   const handleNodesChange = useCallback((changes) => {
     onNodesChange(changes);
-    if (!canEdit) return;                                     // a REVIEWER places nothing
-    let moved = false;
-    for (const c of changes) {
-      if (c.type !== 'position' || c.dragging) continue;
-      const n = nodesRef.current.find((x) => x.id === c.id);
-      const pos = c.position ?? n?.position;
-      if (!n?.data?.object || !pos) continue;
-      pendingSave.current.set(n.id, { ...n.data.object, x: Math.round(pos.x), y: Math.round(pos.y) });
-      moved = true;
-    }
-    if (!moved) return;
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const items = flush();
-      if (items.length) save.mutate(items);
-    }, 600);
-  }, [onNodesChange, flush, save, canEdit]);
-  useEffect(() => () => {
-    const items = flush();
-    if (items.length) {
-      layoutApi.save(projectId, DIAGRAM, nodeId, items)
-        .catch((err) => console.error('Diagram positions not saved on leaving the page', err));
-    }
-  }, [flush, projectId, nodeId]);
+    layout.onChanges(changes);
+  }, [onNodesChange, layout]);
 
   const reset = useMutation({
     mutationFn: () => layoutApi.reset(projectId, DIAGRAM, nodeId),
+    onMutate: () => layout.discard(),           // a queued move must not re-pin after the reset (sara L3)
     onSuccess: () => { setConfirmReset(false); qc.invalidateQueries({ queryKey: graphKey }); },
     onError: (err) => { setConfirmReset(false); setLayoutError(errorText(err, t('common.saveFailed'))); },
   });

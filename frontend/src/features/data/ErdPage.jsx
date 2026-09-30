@@ -13,6 +13,7 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
+import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page, WrapperBox } from '../../components/Page';
 import { MONO } from '../../theme/theme';
@@ -21,7 +22,6 @@ import { ERD_EDGE_TYPES, ERD_NODE_TYPES, ErdContext, ErdMarkers, cardinalityText
 import { arrange, buildEdges, buildNodes, entityNodeId, ghostNodeId, initialCollapsed, neighbours } from './erdModel';
 import { entityLabel } from './fieldRules';
 
-const SAVE_DELAY = 600;
 const DIM = 'erd-dim';
 const WHOLE = 'project';                     // the picker's "Whole project" (the layout scope key)
 const NOWRAP = { whiteSpace: 'nowrap' };
@@ -157,66 +157,37 @@ export default function ErdPage() {
     }));
   }, [near, setNodes]);
 
-  // ==== LAYOUT SAVE (the same shape as FlowPage's; to move into one shared canvas hook) ====
-  // Drag end and collapse queue a card; one debounced PUT sends them; a pending save is sent on
-  // leaving; Reset clears the scope. The ONLY ERD-specific extra is `collapsed`: every item
-  // carries its card's current flag (R2-NEW-1), so a drag never un-collapses a card.
-  const pending = useRef(new Set());
-  const timer = useRef(null);
-  const items = useCallback((ids) => ids.map((id) => nodesRef.current.find((n) => n.id === id))
-    .filter((n) => n?.type === 'entity').map((n) => ({ object_type: 'ENTITY', object_id: n.data.entity.data_entity_id,
+  // Positions save through the one shared hook (§14.6). The ONLY ERD-specific extra is
+  // `collapsed`: every item carries its card's current flag (R2-NEW-1), so a drag never
+  // un-collapses a card. The saved scope's positions go back into the cache, so a return visit
+  // (and Auto-arrange) pins what was placed; the entities keep their identity.
+  const layout = useLayoutSave({
+    projectId, diagramType: 'ERD', scopeKey, canEdit,
+    getNode: (id) => nodesRef.current.find((n) => n.id === id),
+    toItem: (n) => (n.type === 'entity' && n.position ? {
+      object_type: 'ENTITY', object_id: n.data.entity.data_entity_id,
       x: Math.round(n.position.x), y: Math.round(n.position.y),
-      collapsed: Boolean(collapsedRef.current.get(n.data.entity.data_entity_id)) })), []);
-  const save = useMutation({
-    mutationFn: ({ sk, list }) => layoutApi.save(projectId, 'ERD', sk, list),
-    // The response is every saved position of this scope: keep the cache's copy current so a
-    // return visit (and Auto-arrange) pins what was placed. entities keep their identity.
-    onSuccess: (layout, { forArea }) => qc.setQueryData(keys.erd(projectId, forArea), (old) => (old ? { ...old, layout } : old)),
+      collapsed: Boolean(collapsedRef.current.get(n.data.entity.data_entity_id)) } : null),
+    onSaved: (saved, sk) => qc.setQueryData(keys.erd(projectId, sk === WHOLE ? null : sk),
+      (old) => (old ? { ...old, layout: saved } : old)),
     onError: (err) => setLayoutError(errorText(err, t('common.saveFailed'))),
   });
-  const take = useCallback(() => {
-    clearTimeout(timer.current);
-    const list = items([...pending.current]);
-    pending.current.clear();
-    return list;
-  }, [items]);
-  const queue = useCallback((id) => {
-    pending.current.add(id);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const list = take();
-      if (list.length && scopeKey) save.mutate({ sk: scopeKey, list, forArea: area });
-    }, SAVE_DELAY);
-  }, [take, save, scopeKey, area]);
-  // A move still pending when the page or the area changes is sent, not dropped.
-  useEffect(() => () => {
-    const list = take();
-    if (list.length && scopeKey) {
-      layoutApi.save(projectId, 'ERD', scopeKey, list)
-        .catch((err) => console.error('Diagram positions not saved on leaving the diagram', err));
-    }
-  }, [take, projectId, scopeKey]);
-
+  const queue = layout.queue;
   const handleNodesChange = useCallback((changes) => {
     onNodesChange(changes);
-    if (!canEdit) return;
-    for (const c of changes) {
-      if (c.type === 'position' && !c.dragging && c.id.startsWith('e')) queue(c.id);
-    }
-  }, [onNodesChange, canEdit, queue]);
+    layout.onChanges(changes);
+  }, [onNodesChange, layout]);
 
   const reset = useMutation({
     mutationFn: () => layoutApi.reset(projectId, 'ERD', scopeKey),
+    onMutate: () => layout.discard(),           // a queued move must not re-pin after the reset (sara L3)
     onSuccess: async () => {
-      pending.current.clear();
-      clearTimeout(timer.current);
       setConfirmReset(false);
       await qc.refetchQueries({ queryKey: keys.erd(projectId, area), exact: true });
       setResetTick((n) => n + 1);
     },
     onError: (err) => { setConfirmReset(false); setLayoutError(errorText(err, t('common.saveFailed'))); },
   });
-  // ==== END LAYOUT SAVE ====
 
   // Collapsing a card that was never dragged saves its current place, which pins it (the
   // tooltip says so). A REVIEWER may fold a card on their own screen; nothing is saved.

@@ -1,4 +1,5 @@
 import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -13,7 +14,8 @@ const port = Number(process.env.VB_WEB_PORT ?? 5180);
 // files resolved through the link sit outside this root (fonts 403). One cache per port, and
 // the real node_modules folder is allowed.
 let modules = 'node_modules';
-try { modules = realpathSync('node_modules'); } catch { /* not installed yet */ }
+// Resolved from this file, not the start folder (sara L3, slice-3-erd).
+try { modules = realpathSync(fileURLToPath(new URL('./node_modules', import.meta.url))); } catch { /* not installed yet */ }
 
 export default defineConfig({
   plugins: [react()],

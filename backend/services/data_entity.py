@@ -8,7 +8,7 @@ from models import BfcNode, BfcNodeDataEntity, BrDataEntity, BusinessRequirement
 from services import diagram_layout, numbering
 from services.code_master import validate_required_code
 from services import lifecycle
-from services.process_flow import _steps_under
+from services.process_flow import steps_under
 
 MAX_FIELDS = 999                  # S1-3 (fields have no hierarchy code)
 
@@ -167,7 +167,7 @@ def _area_entity_ids(db: Session, project_id: int, node_id: int) -> set[int]:
     node = db.get(BfcNode, node_id)
     if node is None or node.project_id != project_id or not node.is_active:
         raise HTTPException(404, "Not found")
-    step_ids = [node.bfc_node_id] if node.is_process else [s.bfc_node_id for s in _steps_under(db, node)]
+    step_ids = [node.bfc_node_id] if node.is_process else [s.bfc_node_id for s in steps_under(db, node)]
     if not step_ids:
         return set()
     return set(db.scalars(select(BfcNodeDataEntity.data_entity_id).where(

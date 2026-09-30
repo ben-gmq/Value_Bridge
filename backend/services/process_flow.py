@@ -181,7 +181,8 @@ def _unlicensed(db: Session, project_id: int, model, pk) -> list[int]:
 VARIANTS = ("AS_IS", "TO_BE")                       # D-22; both read the same rows until APPLICATION lands
 
 
-def _steps_under(db: Session, node: BfcNode) -> list[BfcNode]:
+def steps_under(db: Session, node: BfcNode) -> list[BfcNode]:
+    """The active process steps under a parent node — shared by the flow, the DFD and the ERD."""
     return list(db.scalars(select(BfcNode).where(
         BfcNode.project_id == node.project_id, BfcNode.is_active, BfcNode.is_process,
         BfcNode.hier_code.startswith(f"{node.hier_code}.")).order_by(BfcNode.hier_code)))
@@ -198,7 +199,7 @@ def generate_process_flow(db: Session, node: BfcNode, variant: str = "AS_IS") ->
         raise HTTPException(409, "This node is retired. Restore it first")
     if node.is_process:
         raise HTTPException(422, "A process flow is drawn for a parent node, not a step")
-    steps = _steps_under(db, node)
+    steps = steps_under(db, node)
     ids = [s.bfc_node_id for s in steps]
     inside = set(ids)
 
@@ -298,7 +299,7 @@ def generate_dfd(db: Session, node: BfcNode) -> dict:
         raise HTTPException(409, "This node is retired. Restore it first")
     if node.is_process:
         raise HTTPException(422, "A data flow diagram is drawn for a parent node, not a step")
-    steps = _steps_under(db, node)
+    steps = steps_under(db, node)
     ids = [s.bfc_node_id for s in steps]
 
     io = [] if not ids else list(db.scalars(select(BfcNodeDataEntity).where(
