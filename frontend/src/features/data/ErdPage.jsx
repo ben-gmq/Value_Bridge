@@ -15,6 +15,7 @@ import { useCodes } from '../../app/useCodes';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CopyMermaidButton } from '../../components/CopyMermaidButton';
 import { Page, WrapperBox } from '../../components/Page';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
@@ -223,6 +224,7 @@ export default function ErdPage() {
         <Tooltip title={t('data.erd.arrangeHelp')}>
           <span><Button sx={NOWRAP} disabled={!g || empty} onClick={() => setArrangeTick((n) => n + 1)}>{t('data.erd.arrange')}</Button></span>
         </Tooltip>
+        <CopyMermaidButton area="data.erd" disabled={!g} fetchText={() => erdApi.mermaid(projectId, area)} />
         {canEdit && (
           <Button color="warning" sx={NOWRAP} disabled={!g || reset.isPending} onClick={() => setConfirmReset(true)}>
             {t('data.erd.reset')}</Button>)}

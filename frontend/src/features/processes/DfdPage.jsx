@@ -13,6 +13,7 @@ import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { LAYERED_RIGHT, LOW_ZOOM, elkLayout, pushClear } from '../../canvas/layout';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CopyMermaidButton } from '../../components/CopyMermaidButton';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DiagramKindToggle, Mono } from './chartKit';
@@ -236,6 +237,7 @@ export default function DfdPage() {
       actions={(
         <>
           <Button component={RouterLink} to={links.node(projectId, nodeId)}>{t('processes.backToChart')}</Button>
+          <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId)} />
           {canEdit && (
             <Button color="warning" disabled={!g || reset.isPending}
               onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}

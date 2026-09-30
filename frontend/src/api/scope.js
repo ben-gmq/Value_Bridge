@@ -5,6 +5,9 @@ import { http } from './client';
 const d = (p) => p.then((r) => r.data);
 const P = (projectId) => `/api/v1/projects/${projectId}`;
 const V = '/api/v1';
+// A text/plain export arrives as text; an error body (JSON) is still parsed, so errorText works.
+const asText = { responseType: 'text',
+  transformResponse: (data, headers) => (String(headers?.['content-type'] ?? '').includes('json') ? JSON.parse(data) : data) };
 const del = (url, rowVersion) => d(http.delete(url, { params: { row_version: rowVersion } }));
 
 export const bfcApi = {
@@ -87,11 +90,15 @@ export const flowApi = {
   remove: (id, rowVersion) => del(`${V}/process-flows/${id}`, rowVersion),
   completeness: (projectId) => d(http.get(`${P(projectId)}/flow-completeness`)),
   graph: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow`, { params: { variant } })),
+  // Slice 3c — the same graph as Mermaid text (R2-S7).
+  mermaid: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow/export`,
+    { params: { format: 'mermaid', variant }, ...asText })),
 };
 
 // Slice 3a — the DFD of one parent node (D-31).
 export const dfdApi = {
   graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),
+  mermaid: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd/export`, { params: { format: 'mermaid' }, ...asText })),
 };
 
 // Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.
@@ -107,4 +114,6 @@ export const layoutApi = {
 // whole project. Positions go through layoutApi with type ERD and the graph's scope_key.
 export const erdApi = {
   graph: (projectId, area) => d(http.get(`${P(projectId)}/erd`, { params: area ? { subject_area: area } : {} })),
+  mermaid: (projectId, area) => d(http.get(`${P(projectId)}/erd/export`,
+    { params: { format: 'mermaid', ...(area ? { subject_area: area } : {}) }, ...asText })),
 };

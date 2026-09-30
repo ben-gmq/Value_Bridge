@@ -140,5 +140,13 @@
   "data.erd.canvasLabel": "Entity relationship diagram of {scope}",
   "data.erd.layoutFailed": "The diagram could not be arranged: {message}",
   "data.erd.pk": "Primary key",
-  "data.erd.fk": "Foreign key"
+  "data.erd.fk": "Foreign key",
+  "data.erd.mermaidCopy": "Copy as Mermaid",
+  "data.erd.mermaidHelp": "Copies this diagram as Mermaid text, to paste into a document or a slide tool that renders Mermaid.",
+  "data.erd.mermaidCopied": "Mermaid text copied to the clipboard.",
+  "data.erd.mermaidFailed": "The Mermaid text could not be fetched.",
+  "data.erd.mermaidManualTitle": "Copy the Mermaid text",
+  "data.erd.mermaidManualHelp": "This browser did not allow copying to the clipboard. Select the text below and copy it.",
+  "data.erd.mermaidText": "Mermaid text",
+  "data.erd.mermaidClose": "Close"
 }

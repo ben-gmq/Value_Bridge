@@ -13,6 +13,7 @@ import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { LAYERED_RIGHT, LOW_ZOOM, elkLayout, pushClear } from '../../canvas/layout';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { CopyMermaidButton } from '../../components/CopyMermaidButton';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DiagramKindToggle, FIRST_PROCESS_LEVEL, Mono } from './chartKit';
@@ -388,6 +389,7 @@ export default function FlowPage() {
       actions={(
         <>
           <Button component={RouterLink} to={links.node(projectId, nodeId)}>{t('processes.backToChart')}</Button>
+          <CopyMermaidButton area="processes" disabled={!g} fetchText={() => flowApi.mermaid(nodeId, g?.variant)} />
           {canAddStep && <Button variant="contained" onClick={() => setAddingStep(true)}>{t('processes.addStep')}</Button>}
           {canEdit && (
             <Button color="warning" disabled={!g || reset.isPending}
