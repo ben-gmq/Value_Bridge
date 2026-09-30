@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 13 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 19 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -176,4 +176,10 @@ place.
 - UAT loose end · slice-3-mermaid builder, 2026-09-30 · LOW · The builder checked the exports
   with `mermaid.parse()` borrowed from another app's `node_modules` (PE-Demo) — not a VB
   dependency. Criterion 21 still stands as Ben's one manual paste.
+- SR-1…SR-5 · `design-auditor`, step-retire spec round 2, 2026-09-30 · MEDIUM ×3, LOW ×2 ·
+  build rules for `docs/step_retire_spec.md` (its "Round 2" section): which restore fits a step
+  (stamp vs latest event), restore through `restore_node`'s renumbering, `step_without_br` as a
+  warning, FK-declared-only blocking, and the child-path `FOR SHARE` lock. Settle in the build.
+- A-SR-7 · same review · LOW · **Baseline freeze vs a step retired with its BR since the last
+  freeze** — warn or block? Belongs to the freeze slice.
 
