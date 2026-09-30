@@ -128,5 +128,7 @@
   "processes.gap.no_lane": "Steps with no Responsible role (no swimlane)",
   "processes.edgeCondition": "“{label}”",
   "processes.edgeOrderShort": "#{n}",
-  "processes.gapCount": "{what} ({n})"
+  "processes.gapCount": "{what} ({n})",
+  "processes.editEdgeFrom": "Edit the flow from {step}",
+  "processes.removeEdgeFrom": "Remove the flow from {step}"
 }

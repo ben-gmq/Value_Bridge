@@ -144,9 +144,9 @@ export function StepSequence({ projectId, node, disabled }) {
                 )}
                 {!disabled && (
                   <>
-                    <IconButton size="small" aria-label={t('processes.editEdge', { step: name })}
+                    <IconButton size="small" aria-label={t(incoming ? 'processes.editEdgeFrom' : 'processes.editEdge', { step: name })}
                       onClick={() => { setError(''); setDialog(e); }}><EditIcon fontSize="small" /></IconButton>
-                    <IconButton size="small" aria-label={t('processes.removeEdge', { step: name })}
+                    <IconButton size="small" aria-label={t(incoming ? 'processes.removeEdgeFrom' : 'processes.removeEdge', { step: name })}
                       disabled={remove.isPending} onClick={() => remove.mutate(e)}><CloseIcon fontSize="small" /></IconButton>
                   </>
                 )}
