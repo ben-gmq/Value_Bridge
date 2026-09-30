@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 5 unworked lines in VB-005 — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 9 unworked lines in VB-005 — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -123,4 +123,17 @@ place.
   (Slice 3)**, where 200-entity diagrams make it visible.
 - sara L8 · `sara`, slice-2-canvas, 2026-09-30 · LOW · **Edge condition labels stay visible in the
   low-zoom view** (below 0.45 box text hides, edge labels do not). A custom edge reading the zoom.
+- Q5 · `design-auditor`, Slice 3 spec round 1, 2026-09-30 · policy question · **Mermaid export
+  moves client names out of VB.** A consultant pasting DE, field and step names into an outside
+  renderer (mermaid.live puts the whole diagram in its share URL) sends client content to a
+  third party, and no export is audited. Ben to decide before first client use: a stated rule
+  for consultants (FTC-approved tools only, cf. D-36), an audited export, or both.
+- R2-NEW-1 · `design-auditor`, Slice 3 spec round 2, 2026-09-30 · LOW · **ERD expand cannot be
+  saved**: if a stored `collapsed=false` means "default by size", a large card re-collapses on
+  reload. Build rule: no row = default by size; a stored row's flag is honoured. Settle in 3b.
+- R2-NEW-2 · same review · LOW · **ERD stub edges to ghost boxes** would target a row handle the
+  ghost does not draw and be dropped. Build rule: stubs always land on `t-L-entity`. Settle in 3b.
+- R2-NEW-3 · same review · LOW · **A PK-and-FK field in `erDiagram`** needs Mermaid's `PK, FK`
+  list form, or the paste fails / the FK is lost. Settle in 3c (criterion 20a gets an
+  identifying field).
 
