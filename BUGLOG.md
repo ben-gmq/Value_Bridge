@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 9 unworked lines in VB-005 — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 6 unworked lines in VB-005 (4 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -113,16 +113,16 @@ place.
   add / edit / remove to REVIEWERs**: `StepData`, `RaciPanel` and `StepSequence` hide their
   controls only when the node is retired, so a reviewer clicks and gets a 403. Fix once across
   the panel from the user's project role, not per section. The server refuses correctly; this
-  is presentation only.
+  is presentation only. **FIXED 2026-09-30, Slice 3 piece 0 (`useCanEdit`, `pushClear`, `LabelledEdge`); ui-verifier 6/6 — awaiting Ben's close.**
 - sara L5 · `sara`, slice-2-canvas pre-merge review, 2026-09-30 · LOW · **The flow canvas lets a
   REVIEWER drag, draw a flow and press Reset**, each ending in a 403 alert. Same root as sara
-  LOW-3 above — fix both with one project-role hook.
+  LOW-3 above — fix both with one project-role hook. **FIXED 2026-09-30, Slice 3 piece 0 (`useCanEdit`, `pushClear`, `LabelledEdge`); ui-verifier 6/6 — awaiting Ben's close.**
 - sara L7 · `sara`, slice-2-canvas, 2026-09-30 · LOW · **Pinned boxes can overlap auto-placed
   ones**: §14.6 says overlapping unpinned cards are pushed clear on auto-arrange; the flow canvas
   lets a saved position win over ELK without pushing. **Owed to the shared canvas before the ERD
-  (Slice 3)**, where 200-entity diagrams make it visible.
+  (Slice 3)**, where 200-entity diagrams make it visible. **FIXED 2026-09-30, Slice 3 piece 0 (`useCanEdit`, `pushClear`, `LabelledEdge`); ui-verifier 6/6 — awaiting Ben's close.**
 - sara L8 · `sara`, slice-2-canvas, 2026-09-30 · LOW · **Edge condition labels stay visible in the
-  low-zoom view** (below 0.45 box text hides, edge labels do not). A custom edge reading the zoom.
+  low-zoom view** (below 0.45 box text hides, edge labels do not). A custom edge reading the zoom. **FIXED 2026-09-30, Slice 3 piece 0 (`useCanEdit`, `pushClear`, `LabelledEdge`); ui-verifier 6/6 — awaiting Ben's close.**
 - Q5 · `design-auditor`, Slice 3 spec round 1, 2026-09-30 · policy question · **Mermaid export
   moves client names out of VB.** A consultant pasting DE, field and step names into an outside
   renderer (mermaid.live puts the whole diagram in its share URL) sends client content to a
@@ -136,4 +136,10 @@ place.
 - R2-NEW-3 · same review · LOW · **A PK-and-FK field in `erDiagram`** needs Mermaid's `PK, FK`
   list form, or the paste fails / the FK is lost. Settle in 3c (criterion 20a gets an
   identifying field).
+- sara M1 · `sara`, Slice 3 piece 0 pre-commit review, 2026-09-30 · MEDIUM · **Platform-admin
+  creation exists in three hand-written copies** (`seeds/create_admin.py`, `services/auth_service.py`
+  first-run setup, `seeds/seed_demo.py`): a new password or domain rule added to one misses the
+  others. One `user_admin.create_platform_admin(...)` running `check_ftc_address`, `MIN_PASSWORD`
+  and the audit event, called by all three. The seed already checks the domain (its missing D-11
+  check is fixed).
 

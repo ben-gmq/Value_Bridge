@@ -14,6 +14,7 @@ import { useTreeItemModel } from '@mui/x-tree-view/hooks';
 import { errorText, isStale } from '../../api/client';
 import { bfcApi, brApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, LevelBadge, Mono, ShowRetired, blankToNull } from './chartKit';
@@ -120,6 +121,7 @@ function AddNodeDialog({ projectId, parent, onDone, onClose }) {
 }
 
 export default function ProcessesPage() {
+  const canEdit = useCanEdit();
   const { projectId } = useParams();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -176,7 +178,7 @@ export default function ProcessesPage() {
   return (
     <Page title={t('processes.title')} subtitle={t('processes.subtitle')}
       error={error || (treeQ.error && errorText(treeQ.error)) || (brsQ.error && errorText(brsQ.error))}
-      actions={<Button variant="contained" onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}>
+      actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
           <Card sx={{ height: '100%' }}>
@@ -189,7 +191,7 @@ export default function ProcessesPage() {
                 onChange={(e) => setFilter(e.target.value)}
                 slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
                   input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-              <Stack direction="row" spacing={1} sx={{ my: 1.5, alignItems: 'center', flexWrap: 'wrap' }} useFlexGap>
+              {canEdit && <Stack direction="row" spacing={1} sx={{ my: 1.5, alignItems: 'center', flexWrap: 'wrap' }} useFlexGap>
                 <Button size="small" variant="outlined" disabled={!canAddChild}
                   onClick={() => { setError(''); setAdding({ parent: selected }); }}>{t('processes.addChild')}</Button>
                 <Tooltip title={t('processes.moveUp')}>
@@ -208,7 +210,7 @@ export default function ProcessesPage() {
                 {selected?.is_process && (
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>
                 )}
-              </Stack>
+              </Stack>}
               {!treeQ.isLoading && rows.length === 0 && (
                 <Typography sx={{ color: 'text.secondary', py: 2 }}>{t('processes.empty')}</Typography>
               )}
@@ -220,7 +222,7 @@ export default function ProcessesPage() {
                 selectedItems={selectedId} onSelectedItemsChange={(_, id) => select(id)}
                 expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => { if (!filtering) setExpanded(ids); }}
                 expansionTrigger="iconContainer" />
-              <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 2 }}>{t('processes.reorderHelp')}</Typography>
+              {canEdit && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 2 }}>{t('processes.reorderHelp')}</Typography>}
             </CardContent>
           </Card>
         </Grid>

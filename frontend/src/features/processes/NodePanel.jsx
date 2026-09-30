@@ -6,6 +6,7 @@ import { Alert, Box, Button, Card, CardContent, Chip, Divider, FormControlLabel,
 import { errorText, isStale } from '../../api/client';
 import { bfcApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { MONO } from '../../theme/theme';
@@ -23,6 +24,7 @@ const firstLine = (s) => (s ?? '').split('\n')[0];
 
 export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice, onGone }) {
   const qc = useQueryClient();
+  const canEdit = useCanEdit();
   const nodeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
   const node = nodeQ.data;
   const form = useEditForm(node, pickNode);
@@ -93,9 +95,10 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   if (!node || !form.values) return <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
 
   const live = node.is_active;
+  const editable = live && canEdit;      // a REVIEWER sees the panel, not its controls (sara LOW-3)
   const v = form.values;
   const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending;
-  const canSwitch = live && node.level_no >= FIRST_PROCESS_LEVEL;
+  const canSwitch = editable && node.level_no >= FIRST_PROCESS_LEVEL;
   const labels = { node_name: t('processes.name'), purpose_desc: t('processes.purpose'),
     data_processing_desc: t('processes.dataProcessing') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], v[k]]));
@@ -143,18 +146,18 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
               helperText={t('processes.codeHelp')} slotProps={{ htmlInput: { style: { fontFamily: MONO } } }} />
           </Grid>
           <Grid size={12}>
-            <TextField fullWidth id="node-name" label={t('processes.name')} required disabled={!live}
+            <TextField fullWidth id="node-name" label={t('processes.name')} required disabled={!editable}
               value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)}
               slotProps={{ htmlInput: { maxLength: 200 } }} />
           </Grid>
           <Grid size={12}>
-            <TextField fullWidth multiline minRows={2} id="node-purpose" label={t('processes.purpose')} disabled={!live}
+            <TextField fullWidth multiline minRows={2} id="node-purpose" label={t('processes.purpose')} disabled={!editable}
               value={v.purpose_desc} onChange={(e) => form.set('purpose_desc', e.target.value)}
               slotProps={{ htmlInput: { maxLength: 4000 } }} />
           </Grid>
           {node.is_process && (
             <Grid size={12}>
-              <TextField fullWidth multiline minRows={2} id="node-dpd" label={t('processes.dataProcessing')} disabled={!live}
+              <TextField fullWidth multiline minRows={2} id="node-dpd" label={t('processes.dataProcessing')} disabled={!editable}
                 value={v.data_processing_desc} onChange={(e) => form.set('data_processing_desc', e.target.value)}
                 slotProps={{ htmlInput: { maxLength: 4000 } }} />
             </Grid>
@@ -170,30 +173,32 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: 2, justifyContent: 'flex-end', flexWrap: 'wrap' }} useFlexGap>
-          {live ? (
+          {!canEdit ? null : live ? (
             <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>
               {t('processes.retire')}</Button>
           ) : (
             <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('processes.restore')}</Button>
           )}
           <Box sx={{ flex: 1 }} />
+          {canEdit && (<>
           <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>
           <Button variant="contained" disabled={!live || !form.dirty || busy || !v.node_name.trim()}
             onClick={() => { save.setError(''); save.m.mutate(); }}>{t('processes.save')}</Button>
+          </>)}
         </Stack>
 
         {node.is_process && (
           <>
             <Divider sx={{ my: 3 }} />
-            <StepData projectId={projectId} node={node} disabled={!live} />
+            <StepData projectId={projectId} node={node} disabled={!editable} />
             <Divider sx={{ my: 3 }} />
-            <StepSequence projectId={projectId} node={node} disabled={!live} />
+            <StepSequence projectId={projectId} node={node} disabled={!editable} />
             <Divider sx={{ my: 3 }} />
-            <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!live}
+            <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
               list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
               unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
             <Divider sx={{ my: 3 }} />
-            <StepFlows projectId={projectId} node={node} disabled={!live} />
+            <StepFlows projectId={projectId} node={node} disabled={!editable} />
           </>
         )}
         {!node.is_process && (

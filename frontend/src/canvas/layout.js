@@ -22,3 +22,30 @@ export const LAYERED_RIGHT = {
 
 /** Where the canvas stops showing text (§14.6): below this zoom, a simplified view. */
 export const LOW_ZOOM = 0.45;
+
+const overlaps = (a, b, gap) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap
+  && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap;
+
+/**
+ * Pinned boxes keep their saved place; every other box is pushed clear of every box already
+ * placed (§14.6, sara L7). `boxes` is [{id, x, y, w, h, pinned}]; returns a Map id → {x, y}.
+ * `axis` 'x' pushes right (the flow: a step never leaves its lane band, or it would read as
+ * another role's step); 'y' pushes down the column (DFD, ERD). Arranging saves nothing —
+ * only a drag end does — so an arrange never pins a box.
+ */
+export function pushClear(boxes, { axis = 'y', gap = 24 } = {}) {
+  const placed = boxes.filter((b) => b.pinned).map((b) => ({ ...b }));
+  const free = boxes.filter((b) => !b.pinned).map((b) => ({ ...b }))
+    .sort((a, b) => (axis === 'x' ? a.x - b.x || a.y - b.y : a.y - b.y || a.x - b.x));
+  for (const b of free) {
+    // Each move clears one placed box and never moves back, so this ends within |placed| moves.
+    for (let guard = 0; guard <= placed.length; guard += 1) {
+      const hit = placed.find((p) => overlaps(b, p, gap));
+      if (!hit) break;
+      if (axis === 'x') b.x = hit.x + hit.w + gap;
+      else b.y = hit.y + hit.h + gap;
+    }
+    placed.push(b);
+  }
+  return new Map(placed.map((b) => [b.id, { x: b.x, y: b.y }]));
+}

@@ -136,6 +136,7 @@
   "processes.flowPageTitle": "Process flow · {name}",
   "processes.flowPageHelp": "The steps under this node, in swimlanes by their Responsible role.",
   "processes.flowCanvasHelp": "Click an arrow to edit, move or delete it. Click a box to rename or retire the step. Drag from a box's blue dot onto another box to add a flow. Drag a box to place it; the position is saved.",
+  "processes.flowCanvasHelpReadOnly": "You can view this flow. Your role on the project does not allow changes to it.",
   "processes.flowNoSteps": "There are no process steps under this node yet.",
   "processes.flowOutside": "other area",
   "processes.laneUnassigned": "No Responsible role",

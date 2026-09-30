@@ -71,7 +71,7 @@ canvas/layout.js  arrange(autoNodes, pinned):           # sara L7, §14.6
           across a band edge (a box in another lane reads as another role's step)
         placed += it                      # bounded: each move clears one box
     Auto-arrange and the push save nothing. Only a drag end saves (§14.6), so arranging never pins
-canvas/edges.jsx  LabelledEdge: label hidden with `visibility` when zoom < LOW_ZOOM   # sara L8
+canvas/edges.jsx  LabelledEdge: label omitted when zoom < LOW_ZOOM (an edge has no handles to keep)   # sara L8
 app/useCanEdit.js  useCanEdit() -> bool                                   # sara LOW-3, L5
     from /auth/me as the server already resolved it, never by matching grant ids to the
     project in the browser: scope PLATFORM_ADMIN → true; PROJECT / PROGRAM →
