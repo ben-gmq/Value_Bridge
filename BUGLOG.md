@@ -1,12 +1,12 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-006 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 1 entry (VB-005, the standing backlog) · 1 unworked line in it — measured 2026-09-28.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 2 unworked lines in VB-005 — measured 2026-09-30.**
 **Archives:** none yet.
 
-**Status of the app:** design signed off 2026-09-28; the **foundation** is built (auth,
-projects and programs, access control, code master — migrations 0001–0004). No open defects.
+**Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
+data, settings) and Slice 2a (process flow edges) built — migrations 0001–0018.
 The design spec is `docs/VB_design.md`; the originating brief is `docs/ASSESSMENT_BRIEF.md`.
 
 **Why this file has four closed entries and no open ones.** VB-001…VB-004 were never code
@@ -16,7 +16,21 @@ in the spec on 2026-09-17, plus the standing backlog stub. All three were settle
 document's §11 Assumptions, not in a defect log; these should have gone there in the first
 place.
 
-**Section map:** `## Closed` · `## Standing backlog` (VB-005; VB-004 closed unused).
+**Section map:** `## Open` · `## Closed` · `## Standing backlog` (VB-005; VB-004 closed unused).
+
+---
+
+## Open
+
+### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN
+
+- **type:** BUG · **found:** 2026-09-30 by `ui-verifier` (Slice 2a UAT, process chart) · **depends-on:** —
+- At 390px wide the page renders 477px wide: the top bar's user menu is cut off at the right
+  and the footer text overflows. At ~930px the nav shows "BR–FR map" as "BR" and hides
+  Interfaces and Data. The step panel content itself fits. Not caused by Slice 2; likely
+  the shell (`frontend/src/components/AppShell.jsx`, cf. commit 07c6fbe "nav scrolls instead
+  of squashing"). Evidence: `.playwright-mcp/page-2026-09-30T02-20-08-918Z.png`.
+- **root cause:** not yet investigated · **files:** `frontend/src/components/AppShell.jsx` (suspected)
 
 ---
 
@@ -95,3 +109,8 @@ place.
   FTC's Teams would pass sign-in and break D-11), keep `create_user` the only way an account
   is made (no just-in-time creation), and revisit JWT storage (§14.5). Moot while auth stays
   JWT; escalates to its own id the day SSO is chosen.
+- sara LOW-3 · `sara`, slice-2-flow pre-merge review, 2026-09-30 · LOW · **The step panel shows
+  add / edit / remove to REVIEWERs**: `StepData`, `RaciPanel` and `StepSequence` hide their
+  controls only when the node is retired, so a reviewer clicks and gets a 403. Fix once across
+  the panel from the user's project role, not per section. The server refuses correctly; this
+  is presentation only.
