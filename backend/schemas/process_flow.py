@@ -50,4 +50,6 @@ class FlowCompletenessOut(BaseModel):
     no_end: list[StepRef]
     no_output: list[StepRef]
     no_lane: list[StepRef]
+    crud_without_io: list[int]          # br_data_entity ids — must be empty
+    ext_without_io: list[int]           # bfc_node_external_flow ids — must be empty
     edge_count: int

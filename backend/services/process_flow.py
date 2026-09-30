@@ -7,19 +7,20 @@ same row, so its baseline source_id stays stable. There is NO cycle check: a rew
 ordinary process behaviour (§5.3), the opposite of the solution-dependency rule.
 """
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, exists, select
 from sqlalchemy.orm import Session
 
-from models import BfcNode, BfcNodeDataEntity, BfcNodeFlow, BfcNodeOrgRole
+from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
+                    BrDataEntity)
 from services import lifecycle
 from services.bfc import normalise_name
 
 FLOW_TYPES = ("SEQUENCE", "CONDITIONAL", "PARALLEL", "HANDOFF")      # S2-1, = ck_bnf_flow_type
 
 
-def _clean(label: str | None) -> str | None:
-    label = (label or "").strip()
-    return label or None
+def _clean(text: str | None) -> str | None:
+    text = (text or "").strip()
+    return text or None
 
 
 def _same_condition(a: str | None, b: str | None) -> bool:
@@ -76,7 +77,7 @@ def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int 
         row = BfcNodeFlow(project_id=project_id, from_bfc_node_id=from_id, to_bfc_node_id=to_id,
                           created_by=actor_id)
         db.add(row)
-    row.flow_type, row.condition_label, row.seq_no, row.note = flow_type, label, seq_no, note
+    row.flow_type, row.condition_label, row.seq_no, row.note = flow_type, label, seq_no, _clean(note)
     db.commit()
     db.refresh(row)
     return row
@@ -85,7 +86,9 @@ def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int 
 def update_process_flow(db: Session, actor_id: int, row: BfcNodeFlow, row_version: int,
                         fields: dict) -> BfcNodeFlow:
     """S2-2: the ends are fixed; re-pointing an edge is remove + add."""
-    lifecycle.check_live(row, row_version)
+    lifecycle.check_version(row, row_version)
+    if not row.is_active:                        # edges have no restore route (sara LOW-2)
+        raise HTTPException(409, "This flow was removed. Add it again to bring it back")
     flow_type = fields.get("flow_type", row.flow_type)
     label = _clean(fields["condition_label"]) if "condition_label" in fields else row.condition_label
     _check_label(flow_type, label)
@@ -93,9 +96,10 @@ def update_process_flow(db: Session, actor_id: int, row: BfcNodeFlow, row_versio
         _refuse_duplicate(_between(db, row.from_bfc_node_id, row.to_bfc_node_id), label,
                           except_id=row.bfc_node_flow_id)
     row.flow_type, row.condition_label = flow_type, label
-    for f in ("seq_no", "note"):
-        if f in fields:
-            setattr(row, f, fields[f])
+    if "seq_no" in fields:
+        row.seq_no = fields["seq_no"]
+    if "note" in fields:
+        row.note = _clean(fields["note"])
     row.updated_by = actor_id
     db.commit()
     db.refresh(row)
@@ -117,8 +121,10 @@ def list_flows(db: Session, project_id: int, bfc_node_id: int | None = None) -> 
 
 def flow_completeness_report(db: Session, project_id: int) -> dict:
     """§7.2a — the gaps that make a flow unreadable. `unlabelled_branch` is gone: the table
-    CHECK makes it always empty (S2-1). The BR-CRUD / external-flow I/O checks belong to
-    consistency_check and arrive with it."""
+    CHECK makes it always empty (S2-1). `dangling_handoff` is empty by construction: a node
+    with a live edge cannot be retired (lifecycle.retire), so no key is returned for it.
+    `crud_without_io` and `ext_without_io` must be 0 — the licence FKs hold them; these prove it
+    (criterion 148)."""
     steps = list(db.scalars(select(BfcNode).where(
         BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process)
         .order_by(BfcNode.hier_code)))
@@ -152,6 +158,19 @@ def flow_completeness_report(db: Session, project_id: int) -> dict:
                    if not any(k.bfc_node_id in ends for k in kids)],
         "no_output": [_ref(s) for s in steps if s.bfc_node_id not in with_output],
         "no_lane": [_ref(s) for s in steps if s.bfc_node_id not in with_lane],
+        "crud_without_io": _unlicensed(db, project_id, BrDataEntity, BrDataEntity.br_data_entity_id),
+        "ext_without_io": _unlicensed(db, project_id, BfcNodeExternalFlow,
+                                      BfcNodeExternalFlow.bfc_node_external_flow_id),
         "edge_count": len(edges),
     }
+
+
+def _unlicensed(db: Session, project_id: int, model, pk) -> list[int]:
+    """Live rows naming a data entity with no matching live step I/O row (D-24, R2-D13)."""
+    io = exists().where(and_(BfcNodeDataEntity.bfc_node_id == model.bfc_node_id,
+                             BfcNodeDataEntity.data_entity_id == model.data_entity_id,
+                             BfcNodeDataEntity.direction == model.direction,
+                             BfcNodeDataEntity.is_active))
+    return list(db.scalars(select(pk).where(model.project_id == project_id, model.is_active,
+                                            model.data_entity_id.is_not(None), ~io)))
 
