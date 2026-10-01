@@ -25,6 +25,7 @@ def ensure_step_io(db: Session, actor_id: int, node: BfcNode, data_entity_id: in
     """Create, or re-activate, the step I/O row. Never commits — the caller's transaction owns it."""
     if direction not in DIRECTIONS:
         raise HTTPException(422, "direction must be I (input) or O (output)")
+    lifecycle.lock_for_share(db, node)                        # SR-5: serialised with a step retire
     if not (node.is_active and node.is_process):
         raise HTTPException(422, "Data flows in and out of a process step only")
     live_entity(db, node.project_id, data_entity_id)

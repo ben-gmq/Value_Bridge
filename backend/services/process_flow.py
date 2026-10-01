@@ -7,7 +7,7 @@ same row, so its baseline source_id stays stable. There is NO cycle check: a rew
 ordinary process behaviour (§5.3), the opposite of the solution-dependency rule.
 """
 from fastapi import HTTPException
-from sqlalchemy import and_, exists, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
@@ -62,6 +62,10 @@ def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int 
                       seq_no: int | None, note: str | None) -> BfcNodeFlow:
     if from_id is None and to_id is None:
         raise HTTPException(422, "An edge needs a from step, a to step, or both")
+    for end_id in sorted({from_id, to_id} - {None}):          # SR-5: both ends FOR SHARE, in id order
+        end = db.get(BfcNode, end_id)
+        if end is not None and end.project_id == project_id:
+            lifecycle.lock_for_share(db, end)
     _end(db, project_id, from_id, "from")
     _end(db, project_id, to_id, "to")
     label = _clean(condition_label)
@@ -122,9 +126,11 @@ def list_flows(db: Session, project_id: int, bfc_node_id: int | None = None) -> 
 def flow_completeness_report(db: Session, project_id: int) -> dict:
     """§7.2a — the gaps that make a flow unreadable. `unlabelled_branch` is gone: the table
     CHECK makes it always empty (S2-1). `dangling_handoff` is empty by construction: a node
-    with a live edge cannot be retired (lifecycle.retire), so no key is returned for it.
+    with a live edge cannot be retired on its own (lifecycle.retire), and a step retired with its
+    dependents takes its edges with it (step_retire), so no key is returned for it.
     `crud_without_io` and `ext_without_io` must be 0 — the licence FKs hold them; these prove it
-    (criterion 148)."""
+    (criterion 148). `step_without_br` is a WARNING: retiring a BR while its step is live is the
+    designed first step of a demote (SR-3). `live_link_on_retired_step` must be 0."""
     steps = list(db.scalars(select(BfcNode).where(
         BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process)
         .order_by(BfcNode.hier_code)))
@@ -147,6 +153,8 @@ def flow_completeness_report(db: Session, project_id: int) -> dict:
     with_output = set(db.scalars(select(BfcNodeDataEntity.bfc_node_id).where(
         BfcNodeDataEntity.project_id == project_id, BfcNodeDataEntity.is_active,
         BfcNodeDataEntity.direction == "O")))
+    with_br = set(db.scalars(select(BusinessRequirement.bfc_node_id).where(
+        BusinessRequirement.project_id == project_id, BusinessRequirement.is_active)))
     with_lane = set(db.scalars(select(BfcNodeOrgRole.bfc_node_id).where(
         BfcNodeOrgRole.project_id == project_id, BfcNodeOrgRole.is_active,
         BfcNodeOrgRole.raci_behaviour == "RESPONSIBLE")))           # the lane (R2-D9)
@@ -162,7 +170,24 @@ def flow_completeness_report(db: Session, project_id: int) -> dict:
         "ext_without_io": _unlicensed(db, project_id, BfcNodeExternalFlow,
                                       BfcNodeExternalFlow.bfc_node_external_flow_id),
         "edge_count": len(edges),
+        "step_without_br": [_ref(s) for s in steps if s.bfc_node_id not in with_br],
+        "live_link_on_retired_step": _live_on_retired(db, project_id),
     }
+
+
+def _live_on_retired(db: Session, project_id: int) -> list[dict]:
+    """Live rows hanging off a retired step — must be empty; the independent proof that a
+    step retire never leaves a half state (docs/step_retire_spec.md §4)."""
+    retired = select(BfcNode.bfc_node_id).where(BfcNode.project_id == project_id, ~BfcNode.is_active)
+    out = []
+    for model, cols in ((BusinessRequirement, ("bfc_node_id",)), (BfcNodeDataEntity, ("bfc_node_id",)),
+                        (BfcNodeOrgRole, ("bfc_node_id",)), (BfcNodeExternalFlow, ("bfc_node_id",)),
+                        (BfcNodeFlow, ("from_bfc_node_id", "to_bfc_node_id"))):
+        pk = model.__mapper__.primary_key[0]
+        on_retired = or_(*(getattr(model, c).in_(retired) for c in cols))
+        out += [{"table": model.__table__.name, "id": i} for i in db.scalars(
+            select(pk).where(model.project_id == project_id, model.is_active, on_retired).order_by(pk))]
+    return out
 
 
 def _unlicensed(db: Session, project_id: int, model, pk) -> list[int]:

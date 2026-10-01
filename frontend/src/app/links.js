@@ -20,6 +20,7 @@ export const links = {
 export const keys = {
   tree: (p) => ['bfc-tree', String(p)],
   node: (id) => ['bfc-node', String(id)],
+  retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview
   brs: (p) => ['brs', String(p)],
   br: (id) => ['br', String(id)],
   entities: (p) => ['entities', String(p)],

@@ -41,3 +41,6 @@ export const isConflict = (err) => err?.response?.status === 409;
 // A stale row_version (someone else saved first) → ConflictDialog. Other 409s show their detail.
 export const isStale = (err) => err?.response?.status === 409
   && err.response.headers?.['x-vb-error'] === 'STALE';
+
+// The kind of a non-stale 409, when the server names one (e.g. which restore fits a step).
+export const errorKind = (err) => (err?.response?.status === 409 ? err.response.headers?.['x-vb-error'] ?? null : null);

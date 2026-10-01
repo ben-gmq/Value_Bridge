@@ -22,10 +22,11 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
                            ExternalEntityOut, ExternalEntityPatch, ExternalFlowIn, ExternalFlowOut,
                            OrgRoleIn, OrgRoleOut, OrgRolePatch, OrgUnitIn, OrgUnitOut, OrgUnitPatch,
-                           ProcessIn, ProcessOut, RaciIn, ReorderIn, StepIoIn, StepIoOut,
+                           ProcessIn, ProcessOut, RaciIn, ReorderIn, RestoreCountOut,
+                           RetireConfirmIn, RetirePreviewOut, StepIoIn, StepIoOut,
                            StepRaciOut, TreeNodeOut)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
-from services import external_entity as ext_service, lifecycle, raci, render, step_io
+from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
 
 router = GuardedRouter(tags=["scope"])
 _read = project_ctx("REVIEWER")
@@ -104,7 +105,25 @@ def mark_process(id: int, body: ProcessIn, node: BfcNode = Depends(_node_w.dep),
     return {"node": node, "business_requirement": br}
 
 
-_retire_and_restore("bfc-nodes", BfcNode, BfcNodeOut, on_restore=bfc.restore_node)
+_retire_and_restore("bfc-nodes", BfcNode, BfcNodeOut, on_restore=step_retire.restore_plain)
+
+
+# retire a step with its requirement and flows (docs/step_retire_spec.md §9, design §1a S3-SR)
+@router.get("/bfc-nodes/{id}/retire-preview", response_model=RetirePreviewOut, **_node_w.route)
+def retire_preview(id: int, node: BfcNode = Depends(_node_w.dep), db: Session = Depends(get_db)):
+    return step_retire.preview(db, node)
+
+
+@router.post("/bfc-nodes/{id}/retire-with-dependents", status_code=204, **_node_w.route)
+def retire_with_dependents(id: int, body: RetireConfirmIn, node: BfcNode = Depends(_node_w.dep),
+                           user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    step_retire.retire(db, _uid(user), node, body.confirm_hash)
+
+
+@router.post("/bfc-nodes/{id}/restore-with-dependents", response_model=RestoreCountOut, **_node_w.route)
+def restore_with_dependents(id: int, node: BfcNode = Depends(_node_w.dep),
+                            user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return step_retire.restore(db, _uid(user), node)
 
 
 # step I/O — written only through step_io (R2-D13)

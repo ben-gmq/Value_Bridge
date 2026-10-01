@@ -341,6 +341,12 @@ these rows and the section they cite disagree, **these rows win**.
 | S2-5 | **Indexes.** Full `ix_bnf_from` / `ix_bnf_to (…_bfc_node_id, project_id)` (the partial natural key cannot serve the guard-FK checks); five partial object-FK indexes on `diagram_layout`. Label twins match on `normalise_name`; the latest retired twin is restored | §6.3 | Q-1, Q-9, Q-15 |
 | S2-6 | **`diagram_layout` physical shape.** `vb_ops.presence_columns()` (four audit columns, no soft delete, no `row_version`); `uq_dl_object` is a table constraint so `save` upserts `ON CONFLICT ON CONSTRAINT`; `PUT` upserts only the listed objects, and a separate audited `DELETE /diagram-layouts/{type}/{scope_key}` resets a diagram; scope and EVENT markers are service-validated; `ck_dl_collapse_erd` added. `vb_app` gets DELETE on this table only, and the grant test asserts exactly that set | §5.3, §9, §6.6 | Q-10…Q-14, Q-16, Q-17 |
 
+### Slice 3 step retire — 2026-09-30
+
+| # | Decision | Supersedes | Spec |
+|---|---|---|---|
+| S3-SR | **A process step retires with its requirement and flows**, in one confirmed, undoable action (Ben, 2026-09-30). Everything else keeps refuse-with-dependents. No schema change | Q4 / R2-D2 "nothing cascades" (§7.12), **for process steps only** | [`docs/step_retire_spec.md`](step_retire_spec.md) |
+
 ---
 
 **D-8 attaches one level up from where you first chose it.** You picked "link Applications

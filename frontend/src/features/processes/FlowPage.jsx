@@ -18,6 +18,7 @@ import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DiagramKindToggle, FIRST_PROCESS_LEVEL, Mono } from './chartKit';
 import { EdgeDialog } from './FlowSections';
+import { RetireStepDialog } from './RetireStepDialog';
 
 const BOX = { w: 200, h: 72 };
 const EVENT = 36;
@@ -213,8 +214,9 @@ function FlowTable({ g }) {
   );
 }
 
-/** A box's pop-up: rename the step, retire it, or open it in the chart. Retire names its
- * blockers (the requirement, flows, step data) rather than cascading — nothing cascades (§7.12). */
+/** A box's pop-up: rename the step, retire it, or open it in the chart. Retire previews what
+ * goes with the step — its requirement, data, roles and arrows — and retires them together
+ * (docs/step_retire_spec.md), through the dialog the node panel uses too. */
 function StepDialog({ projectId, stepId, onClose, onDone }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: keys.node(stepId), queryFn: () => bfcApi.get(stepId) });
@@ -224,18 +226,13 @@ function StepDialog({ projectId, stepId, onClose, onDone }) {
   const [confirmRetire, setConfirmRetire] = useState(false);
   const shown = name ?? step?.node_name ?? '';
   const done = (row) => { if (row) qc.setQueryData(keys.node(stepId), row); qc.invalidateQueries({ queryKey: keys.node(stepId) }); onDone(); };
-  const fail = (err) => { done(); setConfirmRetire(false); setError(errorText(err, t('common.saveFailed'))); };
+  const fail = (err) => { done(); setError(errorText(err, t('common.saveFailed'))); };
   const rename = useMutation({
     mutationFn: () => bfcApi.update(stepId, { row_version: step.row_version, node_name: shown.trim() }),
     onSuccess: (row) => { done(row); onClose(); },
     onError: fail,
   });
-  const retire = useMutation({
-    mutationFn: () => bfcApi.retire(stepId, step.row_version),
-    onSuccess: () => { done(); onClose(); },
-    onError: fail,
-  });
-  const busy = rename.isPending || retire.isPending;
+  const busy = rename.isPending;
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>{step ? t('processes.stepTitle', { code: step.hier_code }) : t('processes.loading')}</DialogTitle>
@@ -247,23 +244,22 @@ function StepDialog({ projectId, stepId, onClose, onDone }) {
               onChange={(e) => setName(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />
             <Button component={RouterLink} to={links.node(projectId, stepId)} sx={{ alignSelf: 'flex-start' }}>
               {t('processes.openInChart')}</Button>
-            {confirmRetire && (
-              <Alert severity="warning" action={(
-                <Button color="warning" size="small" disabled={busy} onClick={() => retire.mutate()}>
-                  {t('processes.retire')}</Button>)}>{t('processes.retireStepConfirm')}</Alert>
-            )}
           </Stack>
         )}
       </DialogContent>
       <DialogActions>
-        {step && !confirmRetire && (
-          <Button color="warning" disabled={busy} onClick={() => setConfirmRetire(true)} sx={{ mr: 'auto' }}>
+        {step?.is_active && (
+          <Button color="warning" disabled={busy} onClick={() => { setError(''); setConfirmRetire(true); }} sx={{ mr: 'auto' }}>
             {t('processes.retire')}</Button>
         )}
         <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button variant="contained" disabled={!step || !shown.trim() || shown.trim() === step.node_name || busy}
           onClick={() => { setError(''); rename.mutate(); }}>{t('common.save')}</Button>
       </DialogActions>
+      {confirmRetire && step && (
+        <RetireStepDialog step={step} onClose={() => setConfirmRetire(false)}
+          onRetired={() => { setConfirmRetire(false); done(); onClose(); }} />
+      )}
     </Dialog>
   );
 }

@@ -196,22 +196,34 @@ def mark_process(db: Session, actor_id: int, node: BfcNode, row_version: int,
     return None
 
 
-def restore_node(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
+def _free_slot(db: Session, n: BfcNode) -> None:
     """§7.12: the name must be free, and a node whose code a live node now holds is renumbered
     to the end of its parent (R2-D10)."""
-    def _free(n: BfcNode) -> None:
-        assert_name_free(db, n.project_id, n.parent_bfc_node_id, n.node_name, except_id=n.bfc_node_id)
-        siblings = _children(db, n.project_id, n.parent_bfc_node_id)
-        if any(s.seq_no == n.seq_no for s in siblings):
-            n.seq_no = (siblings[-1].seq_no if siblings else 0) + 1
-            if n.seq_no > MAX_SIBLINGS:
-                raise HTTPException(422, f"A node holds at most {MAX_SIBLINGS} children")
-        # sara H1: always re-derive — a retired node's code goes stale when its parent is
-        # reordered or restored elsewhere, since a retired code is only history (R2-D10).
-        parent = db.get(BfcNode, n.parent_bfc_node_id) if n.parent_bfc_node_id else None
-        n.hier_code = _code(parent, n.seq_no)
-    restore(db, actor_id, node, before_activate=_free)
+    assert_name_free(db, n.project_id, n.parent_bfc_node_id, n.node_name, except_id=n.bfc_node_id)
+    siblings = _children(db, n.project_id, n.parent_bfc_node_id)
+    if any(s.seq_no == n.seq_no for s in siblings):
+        n.seq_no = (siblings[-1].seq_no if siblings else 0) + 1
+        if n.seq_no > MAX_SIBLINGS:
+            raise HTTPException(422, f"A node holds at most {MAX_SIBLINGS} children")
+    # sara H1: always re-derive — a retired node's code goes stale when its parent is
+    # reordered or restored elsewhere, since a retired code is only history (R2-D10).
+    parent = db.get(BfcNode, n.parent_bfc_node_id) if n.parent_bfc_node_id else None
+    if parent is not None and parent.is_process:
+        raise HTTPException(409, f"{parent.hier_code} {parent.node_name} is now a process step, "
+                                 "so it cannot hold this node. Make it a summary node first")
+    n.hier_code = _code(parent, n.seq_no)
+
+
+def restore_node(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
+    """The plain restore (commits). A step retired with its dependents is restored through
+    step_retire instead (SR-1), which the route checks first."""
+    restore(db, actor_id, node, before_activate=lambda n: _free_slot(db, n))
     return node
+
+
+def restore_node_row(db: Session, actor_id: int, node: BfcNode, detail: dict | None = None) -> None:
+    """The same restore with NO commit, for step_retire's one transaction (SR-2)."""
+    lifecycle.restore_row(db, actor_id, node, before_activate=lambda n: _free_slot(db, n), detail=detail)
 
 
 # ---- external flows (D-24a, R2-D13) --------------------------------------------------------
@@ -221,6 +233,7 @@ def link_external_flow(db: Session, actor_id: int, node: BfcNode, external_entit
                        note: str | None) -> BfcNodeExternalFlow:
     if direction not in step_io.DIRECTIONS:
         raise HTTPException(422, "direction must be I (from the party) or O (to the party)")
+    lifecycle.lock_for_share(db, node)                        # SR-5: serialised with a step retire
     if not (node.is_active and node.is_process):
         raise HTTPException(422, "External parties exchange data with a process step only")
     ext = db.get(ExternalEntity, external_entity_id)
