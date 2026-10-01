@@ -56,6 +56,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
    `diagram_layout` (D-30) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
    DELETE grant, so this fails at the database, not in review.
+   Nothing cascades except a process step: `services/step_retire.OWNED` is the only list of rows
+   that retire with something else; a new table that points at a step blocks until added to it.
 2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
    trigger, and shadows are **generated** by `services/baseline_shadow.py`, never hand-written.
 3. **Audit columns, soft delete and `row_version` are born with every business table**
