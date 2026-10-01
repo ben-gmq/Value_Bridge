@@ -154,7 +154,9 @@ def retire(db: Session, actor_id: int, step: BfcNode, confirm_hash: str) -> None
         raise HTTPException(409, f"{lifecycle.label(step)} is already retired")
     owned, blockers, h = _assess(db, step)
     if blockers:
-        raise HTTPException(409, "Retire these first: " + "; ".join(lifecycle.label(b) for b in blockers))
+        names = [lifecycle.label(b) for b in blockers[:10]]
+        more = f" (+{len(blockers) - 10} more)" if len(blockers) > 10 else ""        # sara L4
+        raise HTTPException(409, "Retire these first: " + "; ".join(names) + more)
     if confirm_hash != h:
         raise HTTPException(409, "The step changed since the preview. Review it again.")
     at, action_id = datetime.now(UTC), str(uuid.uuid4())
@@ -218,10 +220,19 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
         for parent in lifecycle.inactive_parents(db, r):
             if _key(parent) not in keys:
                 first.setdefault(_key(parent), parent)
+    # An arrow's far end must still be a process step: one demoted while this step was retired
+    # would fail the guard FK at the flush with a message naming nothing (sara M1, step-retire).
+    for r in rows:
+        if isinstance(r, BfcNodeFlow):
+            for end in (r.from_bfc_node_id, r.to_bfc_node_id):
+                far = db.get(BfcNode, end) if end not in (None, step.bfc_node_id) else None
+                if far is not None and not far.is_process and _key(far) not in keys:
+                    first.setdefault(_key(far), far)
     if first:
-        raise HTTPException(409, "Restore these first: "
-                            + "; ".join(lifecycle.label(p) for _, p in sorted(first.items())),
-                            headers=RESTORE_FIRST)
+        names = [lifecycle.label(p) + ("" if getattr(p, "is_process", True) or not p.is_active
+                                       else " (make it a process step again)")
+                 for _, p in sorted(first.items())]
+        raise HTTPException(409, "Restore these first: " + "; ".join(names), headers=RESTORE_FIRST)
     action_id = str(uuid.uuid4())
     by_model: dict[type, list] = {}
     for r in rows:

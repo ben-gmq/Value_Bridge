@@ -492,3 +492,21 @@ def test_the_screens_sequence_preview_retire_then_restore(client, ed, full):
     assert plain_restore(client, ed, sid).headers["x-vb-error"] == "USE_RESTORE_WITH_DEPENDENTS"
     assert restore(client, ed, sid).json() == {"restored": 12}
     assert restore(client, ed, sid).status_code == 409                          # not retired
+
+
+def test_restore_names_an_arrow_end_that_was_demoted_meanwhile(client, ed):
+    """An arrow's far step demoted while this step was retired is named, not a bare FK error (sara M1)."""
+    l1 = node(client, ed, "Sales")
+    parent = node(client, ed, "Order capture", l1["bfc_node_id"])
+    a = node(client, ed, "Receive order", parent["bfc_node_id"], is_process=True)
+    b = node(client, ed, "Check credit", parent["bfc_node_id"], is_process=True)
+    edge(client, ed, a, b, "SEQUENCE", None)
+    assert retire(client, ed, a["bfc_node_id"]).status_code == 204
+    retire_br(client, ed, b["bfc_node_id"])
+    cur = client.get(f"{API}/bfc-nodes/{b['bfc_node_id']}", headers=ed["h"]).json()
+    r = client.patch(f"{API}/bfc-nodes/{b['bfc_node_id']}/process", headers=ed["h"],
+                     json={"is_process": False, "row_version": cur["row_version"]})
+    assert r.status_code == 200, r.text
+    r = restore(client, ed, a["bfc_node_id"])
+    assert r.status_code == 409 and r.headers.get("X-VB-Error") == "RESTORE_FIRST"
+    assert "Check credit" in r.json()["detail"] and "process step again" in r.json()["detail"]

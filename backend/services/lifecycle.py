@@ -146,13 +146,16 @@ def soft_delete(obj, actor_id: int, at: datetime | None = None) -> None:
 
 def lock_for_share(db: Session, obj) -> None:
     """SR-5: re-read obj under FOR SHARE, so a child write and a step retire are serialised.
-    Call it before the is_active check; it discards unflushed changes on obj."""
+    Call it before the is_active check."""
     lock(db, obj, read=True)
 
 
 def lock(db: Session, obj, read: bool = False) -> None:
     """Re-read obj under FOR UPDATE (or FOR SHARE). `OF <table>` keeps the lock off the
-    eager-joined code rows, which Postgres refuses to lock on an outer join's nullable side."""
+    eager-joined code rows, which Postgres refuses to lock on an outer join's nullable side.
+    Pending changes on obj are flushed first, so the re-read never discards them (sara L1)."""
+    if obj in db.dirty:
+        db.flush()
     db.refresh(obj, with_for_update={"read": read, "of": type(obj)})
 
 

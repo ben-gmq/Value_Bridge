@@ -28,7 +28,7 @@ def link(db: Session, actor_id: int, model, owner, org_role_id: int, raci_code: 
         lifecycle.lock_for_share(db, owner)
     else:
         lifecycle.lock_for_share(db, db.get(BfcNode, owner.bfc_node_id))
-        db.refresh(owner)
+        lifecycle.lock_for_share(db, owner)                   # the BR too, after the step (sara M2)
     if not owner.is_active:
         raise HTTPException(409, "Restore it first")
     if model is BfcNodeOrgRole and not owner.is_process:
