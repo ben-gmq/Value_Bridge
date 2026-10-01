@@ -44,16 +44,25 @@ def test_missing_series_raises_never_inserts(db):
 
 # ---- database grants (§6.6, R2-S9) ------------------------------------------------------
 
-# §6.6 / D-30: the only table the app may hard-delete from. import_row joins it when it lands.
-HARD_DELETE_TABLES = {"diagram_layout"}
+# §6.6: the only tables the app may hard-delete from — layout (D-30) and the 90-day staging
+# purge (Q14, deviation 7b).
+HARD_DELETE_TABLES = {"diagram_layout", "import_row"}
+# Q-17(b), amended by S4-11/Q6: the import trail is write-once for vb_app except these.
+IMPORT_BATCH_APP_UPDATABLE = {
+    "status_code_id", "row_count", "error_count", "warning_count", "insert_count", "update_count",
+    "retire_count", "file_warning_detail", "committed_at", "committed_by_user_id", "rows_purged_at",
+    "file_name", "row_version"}
 
 
-def test_app_role_deletes_only_layout_and_audit_is_append_only():
+def test_app_role_deletes_only_the_documented_tables_and_audit_is_append_only():
     eng = create_engine(APP_URL)
     with eng.connect() as c:
         rows = c.execute(text(
             "SELECT table_name, privilege_type FROM information_schema.role_table_grants "
             "WHERE grantee = 'vb_app'")).all()
+        batch_cols = {r[0] for r in c.execute(text(
+            "SELECT column_name FROM information_schema.column_privileges WHERE grantee = 'vb_app' "
+            "AND table_name = 'import_batch' AND privilege_type = 'UPDATE'"))}
     eng.dispose()
     privs = {(t, p) for t, p in rows}
     assert {t for t, p in privs if p == "DELETE"} == HARD_DELETE_TABLES, \
@@ -61,6 +70,8 @@ def test_app_role_deletes_only_layout_and_audit_is_append_only():
     assert not [t for t, p in privs if p == "TRUNCATE"], "vb_app must hold no TRUNCATE"
     assert ("audit_event", "UPDATE") not in privs
     assert ("audit_event", "INSERT") in privs
+    assert ("import_batch", "UPDATE") not in privs, "import_batch UPDATE is column-level only"
+    assert batch_cols == IMPORT_BATCH_APP_UPDATABLE
 
 
 def test_app_role_cannot_delete_even_by_direct_sql(world):

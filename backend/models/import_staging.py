@@ -4,7 +4,7 @@ schema change. Deviation 7c: neither table carries the full audit set. Written o
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, CheckConstraint, Computed, DateTime, ForeignKey, ForeignKeyConstraint, Identity,
+    BigInteger, Boolean, CheckConstraint, Computed, DateTime, ForeignKey, ForeignKeyConstraint, Identity,
     Index, Integer, String, UniqueConstraint, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -112,3 +112,83 @@ class ImportBatch(Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+ROW_KINDS = ("ISSUE", "DATA_ENTITY", "DATA_FIELD", "BUSINESS_REQUIREMENT", "FUNCTION_REQUIREMENT",
+             "WBS_ITEM", "STEP", "STEP_IO", "STEP_ROLE", "FLOW_EDGE", "EXTERNAL_ENTITY",
+             "EXTERNAL_FLOW", "LANE")
+FLOW_ROW_KINDS = ("STEP", "STEP_IO", "STEP_ROLE", "FLOW_EDGE", "EXTERNAL_ENTITY", "EXTERNAL_FLOW",
+                  "DATA_ENTITY", "LANE")
+VERDICTS = ("INSERT", "UPDATE", "MATCH", "RETIRE", "KEPT")
+
+
+class ImportRow(Base):
+    """One staged sheet row or JSON object. Hard-deleted 90 days after its batch's uploaded_at
+    (Q14, deviation 7b) — vb_app holds DELETE here. No audit columns, soft delete or row_version
+    (deviation 7c): provenance is the batch. target_entity is copied from the batch by the service
+    (never the body) and carried by fk_ir_batch, so the kind and locator rules are CHECKs (S4-2).
+    No owning_project_id(): no route addresses a row; rows are reached through their batch."""
+
+    __tablename__ = "import_row"
+
+    import_row_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    import_batch_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_entity: Mapped[str] = mapped_column(String(30), nullable=False)
+    row_kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    sheet_row_no: Mapped[int | None] = mapped_column(Integer)
+    source_path: Mapped[str | None] = mapped_column(String(200))
+    local_key: Mapped[str | None] = mapped_column(String(50))
+    source_ref: Mapped[str | None] = mapped_column(String(200))
+    business_key: Mapped[str | None] = mapped_column(String(250))
+    cross_check_key: Mapped[str | None] = mapped_column(String(100))
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    verdict: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_detail: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    warning_detail: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    # Untyped (Q-4, S4-3): row_kind says which table; NULL on LANE rows and uncommitted rows.
+    committed_target_id: Mapped[int | None] = mapped_column(BigInteger)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["import_batch_id", "target_entity"],
+                             ["import_batch.import_batch_id", "import_batch.target_entity"],
+                             name="fk_ir_batch"),
+        # Q-21: one staged row per sheet row / pointer; uq_ir_sheet_row is also the FK, purge
+        # and ordered-fetch index.
+        UniqueConstraint("import_batch_id", "sheet_row_no", name="uq_ir_sheet_row"),
+        UniqueConstraint("import_batch_id", "source_path", name="uq_ir_source_path"),
+        # Backstops: the service catches duplicates in memory first (S4-4, Q-5).
+        Index("uq_ir_local_key", "import_batch_id", "row_kind", "local_key", unique=True,
+              postgresql_where=text("local_key IS NOT NULL")),
+        Index("uq_ir_business_key", "import_batch_id", "row_kind", "business_key", unique=True,
+              postgresql_where=text("business_key IS NOT NULL")),
+        CheckConstraint(f"row_kind IN ({_in(ROW_KINDS)})", name="ck_ir_row_kind"),
+        CheckConstraint(f"CASE WHEN target_entity = 'PROCESS_FLOW' THEN row_kind IN ({_in(FLOW_ROW_KINDS)}) "
+                        "ELSE row_kind = target_entity END", name="ck_ir_kind_fits_target"),
+        # S4-1: a database-staged RETIRE / KEPT row has no place in the file.
+        CheckConstraint("CASE WHEN verdict IN ('RETIRE', 'KEPT') THEN num_nonnulls(sheet_row_no, source_path) = 0 "
+                        "WHEN target_entity = 'PROCESS_FLOW' THEN source_path IS NOT NULL AND sheet_row_no IS NULL "
+                        "ELSE sheet_row_no IS NOT NULL AND source_path IS NULL END", name="ck_ir_locator"),
+        CheckConstraint(f"verdict IN ({_in(VERDICTS)})", name="ck_ir_verdict"),
+        # CASE, not AND: jsonb_array_length raises on a non-array, and AND has no promised order.
+        CheckConstraint("CASE WHEN jsonb_typeof(error_detail) = 'array' "
+                        "THEN is_valid = (jsonb_array_length(error_detail) = 0) ELSE false END",
+                        name="ck_ir_valid_matches_errors"),
+        CheckConstraint("jsonb_typeof(warning_detail) = 'array'", name="ck_ir_warning_array"),
+        CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_ir_payload_object"),
+        CheckConstraint("verdict NOT IN ('RETIRE', 'KEPT') OR payload ? 'target'",
+                        name="ck_ir_db_staged_target"),
+        CheckConstraint("verdict <> 'RETIRE' OR row_kind IN ('FLOW_EDGE', 'STEP_IO', 'WBS_ITEM')",
+                        name="ck_ir_retire_kinds"),
+        CheckConstraint("verdict <> 'KEPT' OR row_kind = 'STEP_IO'", name="ck_ir_kept_kind"),
+        CheckConstraint("row_kind <> 'LANE' OR verdict = 'MATCH'", name="ck_ir_lane_match"),
+        CheckConstraint("target_entity = 'PROCESS_FLOW' OR (local_key IS NULL AND source_ref IS NULL)",
+                        name="ck_ir_flow_only_fields"),
+        CheckConstraint("sheet_row_no IS NULL OR sheet_row_no BETWEEN 2 AND 1048576", name="ck_ir_sheet_row"),
+        CheckConstraint("source_path IS NULL OR left(source_path, 1) = '/'", name="ck_ir_source_path"),
+        CheckConstraint("(local_key IS NULL OR btrim(local_key) <> '') "
+                        "AND (business_key IS NULL OR btrim(business_key) <> '') "
+                        "AND (cross_check_key IS NULL OR btrim(cross_check_key) <> '')",
+                        name="ck_ir_keys_not_blank"),
+        CheckConstraint("committed_target_id IS NULL OR row_kind <> 'LANE'", name="ck_ir_target_kind"),
+    )
