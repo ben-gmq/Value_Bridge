@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 19 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 22 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -182,4 +182,11 @@ place.
   warning, FK-declared-only blocking, and the child-path `FOR SHARE` lock. Settle in the build.
 - A-SR-7 · same review · LOW · **Baseline freeze vs a step retired with its BR since the last
   freeze** — warn or block? Belongs to the freeze slice.
+- sara L2 · `sara`, step-retire pre-merge review, 2026-10-01 · LOW · **The node panel guesses which
+  restore to offer** and switches only after a 409: a plainly-retired step costs two clicks. A
+  derived `restore_mode` on `BfcNodeOut` (from `step_retire._retired_with_dependents`).
+- sara L3 · same · LOW · **The "restore these first" list is parsed from the error text** — a name
+  holding `;` splits into two bullets. Return the list as structured data in the 409 body.
+- sara L5 · same · LOW · The criterion-4 probe class stays mapped in `Base.registry` after its test.
+  Use a throwaway registry.
 
