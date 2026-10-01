@@ -1,4 +1,5 @@
-"""Process flow edges (§7.2a, D-20, D-23, Q2, S2-1…S2-5). The one writer of BFC_NODE_FLOW.
+"""Process flow edges (§7.2a, D-20, D-23, Q2, S2-1…S2-5). `_link_row` is the only path that creates or re-links an arrow; every path that makes an
+arrow live (`_link_row`, `step_retire.restore`) locks a step at one of its ends (SG-1).
 
 An edge joins two process steps of one project; a missing end is a start or end event. Two
 live edges join the same two steps only under different conditions (Q2) — compared with

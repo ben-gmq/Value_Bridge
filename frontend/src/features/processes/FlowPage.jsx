@@ -319,6 +319,7 @@ export default function FlowPage() {
   const [addingStep, setAddingStep] = useState(false);
   const [stepOpen, setStepOpen] = useState(null);
   const [suggestion, setSuggestion] = useState(null);      // {arrows, confirm_hash}: browser only until Keep
+  useEffect(() => { setSuggestion(null); }, [nodeId]);   // another flow never shows this one's ghosts (sara L1)
   const [suggestError, setSuggestError] = useState('');
   const scopeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
   // A step sits at level 3–5 (A-47), so a level-1 area takes its steps through a level-2 child.
@@ -363,7 +364,7 @@ export default function FlowPage() {
   const suggest = useMutation({
     mutationFn: () => flowApi.suggest(nodeId),
     onSuccess: (s) => { setSuggestError(''); setView('diagram'); setSuggestion(s); },
-    onError: (err) => { setSuggestError(errorText(err, t('common.saveFailed'))); qc.invalidateQueries({ queryKey: graphKey }); },
+    onError: (err) => { setSuggestError(errorText(err, t('processes.suggestFailed'))); qc.invalidateQueries({ queryKey: graphKey }); },
   });
   // Keep sends only the hash; the server derives the arrows again (VB law 6). Either way the
   // ghosts go and the graph is read again, so the screen shows what is stored.

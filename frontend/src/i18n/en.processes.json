@@ -148,6 +148,7 @@
   "processes.resetLayoutBody": "Every saved position on this diagram is removed and the boxes are arranged automatically. Flows and steps are not changed.",
   "processes.flowView": "View",
   "processes.suggestArrows": "Suggest arrows",
+  "processes.suggestFailed": "The arrows could not be suggested.",
   "processes.suggestBanner": "Suggested arrows, in chart order: start, each step in turn, end. Nothing is saved until you keep them. You can change any arrow afterwards.",
   "processes.keepArrows": "Keep these arrows",
   "processes.discardArrows": "Discard",
