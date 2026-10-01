@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 22 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 23 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -189,4 +189,8 @@ place.
   holding `;` splits into two bullets. Return the list as structured data in the 409 body.
 - sara L5 · same · LOW · The criterion-4 probe class stays mapped in `Base.registry` after its test.
   Use a throwaway registry.
+- Suggest-arrows review · `design-auditor`, 2026-10-01 · LOW · **Restoring a retired step after its
+  flow was re-drawn brings its old arrows back beside the new ones** (a second path, possibly two
+  start events). Also true of a hand-redrawn flow today. `step_retire.restore` could list the
+  restored arrows whose far end already has other live arrows.
 
