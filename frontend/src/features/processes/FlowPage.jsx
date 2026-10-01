@@ -65,7 +65,8 @@ function EventDot({ data }) {
   return (
     <Box title={t(data.start ? 'processes.flowStart' : 'processes.flowEnd')}
       sx={(th) => ({ width: EVENT, height: EVENT, borderRadius: '50%', bgcolor: th.vars.palette.background.paper,
-        border: data.start ? 2 : 4, borderColor: th.vars.palette.text.primary })}>
+        border: data.start ? 2 : 4, borderStyle: data.ghost ? 'dashed' : 'solid', opacity: data.ghost ? 0.55 : 1,
+        borderColor: data.ghost ? th.vars.palette.primary.main : th.vars.palette.text.primary })}>
       {data.start ? <Handle type="source" position={Position.Right} id="s-R" isConnectable={false} style={{ opacity: 0 }} />
         : <Handle type="target" position={Position.Left} id="t-L" isConnectable={false} style={{ opacity: 0 }} />}
     </Box>
@@ -88,8 +89,12 @@ function LaneBand({ data }) {
 
 const NODE_TYPES = { step: StepBox, event: EventDot, lane: LaneBand };
 
-/** Graph → React Flow nodes and edges, with lanes as background bands (§7.2a, A-46). */
-async function buildLayout(g, palette) {
+/** A suggested arrow as a graph edge. Its id is a string, so it never meets a saved row. */
+const ghostEdge = (a, i) => ({ ...a, bfc_node_flow_id: `g${i}`, condition_label: null, ghost: true });
+
+/** Graph → React Flow nodes and edges, with lanes as background bands (§7.2a, A-46). Ghost
+ * arrows (an unsaved suggestion) draw dashed and faded, and their events are never saved. */
+async function buildLayout(g, palette, ghosts = []) {
   const laneOf = new Map(g.nodes.map((n) => [n.bfc_node_id, n.lane_org_role_id ?? UNASSIGNED]));
   g.outside.forEach((n) => laneOf.set(n.bfc_node_id, OUTSIDE));
   const bands = [...g.lanes.map((l) => ({ key: l.org_role_id, title: l.org_role_name, subtitle: l.org_unit_name }))];
@@ -103,22 +108,24 @@ async function buildLayout(g, palette) {
       w: BOX.w, h: BOX.h, object: { object_type: 'STEP', object_id: n.bfc_node_id } })),
   ];
   const edges = [];
-  for (const e of g.edges) {
+  for (const e of [...g.edges, ...ghosts.map(ghostEdge)]) {
     const start = e.from_bfc_node_id == null;
     const end = e.to_bfc_node_id == null;
     if (start || end) {
       const anchor = start ? e.to_bfc_node_id : e.from_bfc_node_id;
-      items.push({ id: eventId(e.bfc_node_flow_id), type: 'event', data: { start }, lane: laneOf.get(anchor),
-        w: EVENT, h: EVENT, object: { object_type: 'EVENT', object_id: e.bfc_node_flow_id } });
+      items.push({ id: eventId(e.bfc_node_flow_id), type: 'event', data: { start, ghost: e.ghost }, lane: laneOf.get(anchor),
+        w: EVENT, h: EVENT, object: e.ghost ? null : { object_type: 'EVENT', object_id: e.bfc_node_flow_id } });
     }
     const dashed = e.flow_type === 'HANDOFF';
+    const stroke = e.ghost ? palette.primary.main : palette.text.secondary;
     edges.push({
-      id: `f${e.bfc_node_flow_id}`, type: 'labelled', data: { flow: e }, interactionWidth: 24,
+      id: `f${e.bfc_node_flow_id}`, type: 'labelled', data: e.ghost ? { ghost: true } : { flow: e }, interactionWidth: 24,
       source: start ? eventId(e.bfc_node_flow_id) : stepId(e.from_bfc_node_id), sourceHandle: 's-R',
       target: end ? eventId(e.bfc_node_flow_id) : stepId(e.to_bfc_node_id), targetHandle: 't-L',
-      label: e.condition_label ?? undefined,
-      markerEnd: { type: MarkerType.ArrowClosed, color: palette.text.secondary },
-      style: { stroke: palette.text.secondary, strokeWidth: 1.5, strokeDasharray: dashed ? '6 4' : undefined },
+      label: e.condition_label ?? undefined, reconnectable: !e.ghost, focusable: !e.ghost,
+      markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+      style: { stroke, strokeWidth: 1.5, opacity: e.ghost ? 0.55 : undefined,
+        strokeDasharray: e.ghost ? '3 5' : dashed ? '6 4' : undefined },
       labelBgStyle: { fill: palette.background.paper }, labelStyle: { fill: palette.text.primary, fontSize: 12 },
     });
   }
@@ -151,7 +158,7 @@ async function buildLayout(g, palette) {
   // other box is pushed right, clear of it, inside its own lane (§14.6, sara L7).
   const saved = new Map(g.layout.map((p) => [`${p.object_type}:${p.object_id}`, p]));
   const boxes = nodes.map((n) => {
-    const p = saved.get(`${n.data.object.object_type}:${n.data.object.object_id}`);
+    const p = n.data.object && saved.get(`${n.data.object.object_type}:${n.data.object.object_id}`);
     const at = p ? { x: p.x, y: p.y } : n.position;
     return { id: n.id, ...at, w: n.size.w, h: n.size.h, pinned: Boolean(p) };
   });
@@ -311,6 +318,8 @@ export default function FlowPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
   const [stepOpen, setStepOpen] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);      // {arrows, confirm_hash}: browser only until Keep
+  const [suggestError, setSuggestError] = useState('');
   const scopeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
   // A step sits at level 3–5 (A-47), so a level-1 area takes its steps through a level-2 child.
   const canAddStep = canEdit && Boolean(scopeQ.data?.is_active && scopeQ.data.level_no >= FIRST_PROCESS_LEVEL - 1);
@@ -323,10 +332,10 @@ export default function FlowPage() {
   useEffect(() => {
     if (!g) return undefined;
     let live = true;
-    buildLayout(g, palette).then((r) => { if (live) { setNodes(r.nodes); setEdges(r.edges); setLayoutError(''); } })
+    buildLayout(g, palette, suggestion?.arrows).then((r) => { if (live) { setNodes(r.nodes); setEdges(r.edges); setLayoutError(''); } })
       .catch((err) => { if (live) setLayoutError(err.message); });
     return () => { live = false; };
-  }, [g, palette, setNodes]);
+  }, [g, palette, suggestion, setNodes]);
 
   // Positions save when a move ends — a mouse drag or arrow keys (§14.6), through the one
   // shared hook. Lanes carry no `object`, so they are never saved.
@@ -349,6 +358,19 @@ export default function FlowPage() {
     onMutate: () => layout.discard(),           // a queued move must not re-pin after the reset (sara L3)
     onSuccess: () => { setConfirmReset(false); qc.invalidateQueries({ queryKey: graphKey }); },
     onError: (err) => { setConfirmReset(false); setLayoutError(errorText(err, t('common.saveFailed'))); },
+  });
+
+  const suggest = useMutation({
+    mutationFn: () => flowApi.suggest(nodeId),
+    onSuccess: (s) => { setSuggestError(''); setView('diagram'); setSuggestion(s); },
+    onError: (err) => { setSuggestError(errorText(err, t('common.saveFailed'))); qc.invalidateQueries({ queryKey: graphKey }); },
+  });
+  // Keep sends only the hash; the server derives the arrows again (VB law 6). Either way the
+  // ghosts go and the graph is read again, so the screen shows what is stored.
+  const keepArrows = useMutation({
+    mutationFn: () => flowApi.keep(nodeId, suggestion.confirm_hash),
+    onSuccess: () => { setSuggestion(null); refreshAll(); },
+    onError: (err) => { setSuggestion(null); setSuggestError(errorText(err, t('common.saveFailed'))); refreshAll(); },
   });
 
   const onConnect = useCallback(({ source, target }) => {
@@ -387,10 +409,26 @@ export default function FlowPage() {
           <Button component={RouterLink} to={links.node(projectId, nodeId)}>{t('processes.backToChart')}</Button>
           <CopyMermaidButton area="processes" disabled={!g} fetchText={() => flowApi.mermaid(nodeId, g?.variant)} />
           {canAddStep && <Button variant="contained" onClick={() => setAddingStep(true)}>{t('processes.addStep')}</Button>}
+          {canEdit && g?.can_suggest && !suggestion && (
+            <Button variant="outlined" disabled={suggest.isPending}
+              onClick={() => suggest.mutate()}>{t('processes.suggestArrows')}</Button>)}
           {canEdit && (
             <Button color="warning" disabled={!g || reset.isPending}
               onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}
         </>)}>
+      {suggestError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setSuggestError('')}>{suggestError}</Alert>}
+      {suggestion && (
+        <Alert severity="info" sx={{ mb: 2 }} action={(
+          <Stack direction="row" spacing={1}>
+            {/* Discard is browser-only: nothing was stored, so nothing is sent. */}
+            <Button color="inherit" size="small" disabled={keepArrows.isPending}
+              onClick={() => setSuggestion(null)}>{t('processes.discardArrows')}</Button>
+            <Button variant="contained" size="small" disabled={keepArrows.isPending}
+              onClick={() => keepArrows.mutate()}>{t('processes.keepArrows')}</Button>
+          </Stack>)}>
+          {t('processes.suggestBanner')}
+        </Alert>
+      )}
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
       <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
         <DiagramKindToggle projectId={projectId} nodeId={nodeId} current="flow" />

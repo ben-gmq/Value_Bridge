@@ -98,6 +98,10 @@ export const flowApi = {
   // Slice 3c — the same graph as Mermaid text (R2-S7).
   mermaid: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow/export`,
     { params: { format: 'mermaid', variant }, ...asText })),
+  // A suggested chain in chart order: nothing is stored until keep (docs/draft_arrows_spec.md §9).
+  suggest: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow/suggest`)),
+  keep: (nodeId, confirmHash) => d(http.post(`${V}/bfc-nodes/${nodeId}/process-flow/suggest/keep`,
+    { confirm_hash: confirmHash })),
 };
 
 // Slice 3a — the DFD of one parent node (D-31).
