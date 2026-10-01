@@ -193,6 +193,9 @@ place.
   flow was re-drawn brings its old arrows back beside the new ones** (a second path, possibly two
   start events). Also true of a hand-redrawn flow today. `step_retire.restore` could list the
   restored arrows whose far end already has other live arrows.
+  *sara L4 (suggest-arrows, 2026-10-01):* a restore running **alongside** a Keep is not serialised
+  either (it locks the retired step, which Keep's frame excludes). Same end state; when fixed,
+  `restore` also locks the step's live siblings.
 - 4a-R1…R9 · `design-auditor`, Slice 4a round 2, 2026-10-01 · MEDIUM ×4, LOW ×5 · build rules
   in `docs/slice4a_spec.md` "Round 2": fk_group meaning, PK-position collision, claim-carrying
   token with its own key, number-without-token, column codes in a hidden row, before-values from
