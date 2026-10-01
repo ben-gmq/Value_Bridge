@@ -5,8 +5,12 @@ Deliberately not covered here: the NFKC-vs-index normaliser gap (S2-5, accepted)
 creates racing the partial index (the shared handler maps the 23505 to 409), and the flow JSON
 import, which arrives with the import pipeline."""
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
+
+from database import SessionLocal
+from models import AuditEvent, BfcNode
+from services import process_flow
 
 from tests.test_scope_api import API, _org_role, ed, node, step  # noqa: F401 — ed is a fixture
 
@@ -291,3 +295,192 @@ def test_io_licence_checks_are_empty_in_normal_use(client, ed, steps):
     got = client.get(f"{API}/projects/{ed['p']}/flow-completeness", headers=ed["h"]).json()
     assert got["crud_without_io"] == [] and got["ext_without_io"] == []
     assert "Receive order" not in {s["node_name"] for s in got["no_output"]}   # C made step output
+
+
+# ---- suggest a flow's arrows: preview, then keep (docs/draft_arrows_spec.md §10) ----------
+
+def suggest(client, ed, n, headers=None):
+    return client.get(f"{API}/bfc-nodes/{n['bfc_node_id']}/process-flow/suggest", headers=headers or ed["h"])
+
+
+def keep(client, ed, n, h, headers=None):
+    return client.post(f"{API}/bfc-nodes/{n['bfc_node_id']}/process-flow/suggest/keep",
+                       headers=headers or ed["h"], json={"confirm_hash": h})
+
+
+def can_suggest(client, ed, n):
+    return client.get(f"{API}/bfc-nodes/{n['bfc_node_id']}/process-flow", headers=ed["h"]).json()["can_suggest"]
+
+
+def flow_rows(project_id: int) -> list:
+    with SessionLocal() as s:
+        return s.execute(text("SELECT bfc_node_flow_id, from_bfc_node_id, to_bfc_node_id, flow_type, seq_no, "
+                              "note, is_active, row_version FROM bfc_node_flow WHERE project_id = :p "
+                              "ORDER BY 1"), {"p": project_id}).all()
+
+
+def audit_count() -> int:
+    with SessionLocal() as s:
+        return s.scalar(text("SELECT count(*) FROM audit_event"))
+
+
+def kept_events(frame_id: int) -> list[AuditEvent]:
+    with SessionLocal() as s:
+        return list(s.scalars(select(AuditEvent).where(
+            AuditEvent.event_type == process_flow.ARROWS_KEPT, AuditEvent.target_id == frame_id)
+            .order_by(AuditEvent.audit_event_id)))
+
+
+def test_suggest_then_keep_draws_the_chart_order_chain(client, ed, steps):
+    """Criterion 1."""
+    p, s1, s2, s3 = steps["parent"], steps["s1"], steps["s2"], steps["s3"]
+    ids = [s["bfc_node_id"] for s in (s1, s2, s3)]
+    assert can_suggest(client, ed, p) is True
+    before, events = flow_rows(ed["p"]), audit_count()
+    r = suggest(client, ed, p)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert [(a["from_bfc_node_id"], a["to_bfc_node_id"]) for a in got["arrows"]] == \
+        [(None, ids[0]), (ids[0], ids[1]), (ids[1], ids[2]), (ids[2], None)]
+    assert {a["flow_type"] for a in got["arrows"]} == {"SEQUENCE"}
+    assert flow_rows(ed["p"]) == before and audit_count() == events      # the GET writes nothing
+
+    r = keep(client, ed, p, got["confirm_hash"])
+    assert r.status_code == 200, r.text
+    out = r.json()
+    rows = [x for x in flow_rows(ed["p"]) if x.is_active]
+    assert len(rows) == 4 and out["restored"] == []
+    assert {(x.from_bfc_node_id, x.to_bfc_node_id) for x in rows} == \
+        {(a["from_bfc_node_id"], a["to_bfc_node_id"]) for a in got["arrows"]}
+    assert {x.flow_type for x in rows} == {"SEQUENCE"} and {x.seq_no for x in rows} == {None}
+    ev = kept_events(p["bfc_node_id"])
+    assert len(ev) == 1 and sorted(ev[0].detail["created_ids"]) == sorted(x.bfc_node_flow_id for x in rows)
+    assert sorted(out["created"]) == sorted(ev[0].detail["created_ids"])
+    assert ev[0].detail["frame_id"] == p["bfc_node_id"] and ev[0].detail["confirm_hash"] == got["confirm_hash"]
+    assert ev[0].detail["restored_ids"] == []
+    rep = client.get(f"{API}/projects/{ed['p']}/flow-completeness", headers=ed["h"]).json()
+    assert rep["no_start"] == [] and rep["no_end"] == [] and rep["orphan_steps"] == []
+    assert can_suggest(client, ed, p) is False                           # it has arrows now
+    assert suggest(client, ed, p).status_code == 409
+
+
+def test_a_summary_child_or_no_steps_is_422_and_not_offered(client, ed, steps):
+    """Criterion 2."""
+    p = steps["parent"]
+    node(client, ed, "Pricing", p["bfc_node_id"])                       # a summary child beside the steps
+    r = suggest(client, ed, p)
+    assert r.status_code == 422 and "children are all steps" in r.json()["detail"]
+    assert can_suggest(client, ed, p) is False
+    empty = node(client, ed, "Returns", client.get(f"{API}/bfc-nodes/{p['bfc_node_id']}",
+                                                   headers=ed["h"]).json()["parent_bfc_node_id"])
+    r = suggest(client, ed, empty)
+    assert r.status_code == 422 and "no process steps" in r.json()["detail"]
+    assert can_suggest(client, ed, empty) is False
+
+
+def test_an_arrow_drawn_after_the_get_makes_keep_409(client, ed, steps):
+    """Criterion 2a: a colleague's arrow is never merged in, even when the hash would match."""
+    p = steps["parent"]
+    h = suggest(client, ed, p).json()["confirm_hash"]
+    edge(client, ed, steps["s1"], steps["s2"], "HANDOFF")
+    before = flow_rows(ed["p"])
+    r = keep(client, ed, p, h)
+    assert r.status_code == 409 and "already has arrows" in r.json()["detail"]
+    assert flow_rows(ed["p"]) == before and kept_events(p["bfc_node_id"]) == []
+
+
+def test_a_live_arrow_or_event_in_the_frame_blocks_but_a_hand_off_from_outside_does_not(client, ed, steps):
+    """Criterion 3."""
+    p, s1, s3 = steps["parent"], steps["s1"], steps["s3"]
+    e = edge(client, ed, s3, s1, "CONDITIONAL", "Rework")
+    assert suggest(client, ed, p).status_code == 409 and can_suggest(client, ed, p) is False
+    client.delete(f"{API}/process-flows/{e['bfc_node_flow_id']}", headers=ed["h"],
+                  params={"row_version": e["row_version"]})
+    ev = edge(client, ed, s3, None)                                      # an end event on a frame step
+    assert suggest(client, ed, p).status_code == 409
+    client.delete(f"{API}/process-flows/{ev['bfc_node_flow_id']}", headers=ed["h"],
+                  params={"row_version": ev["row_version"]})
+
+    billing = node(client, ed, "Billing", client.get(f"{API}/bfc-nodes/{p['bfc_node_id']}",
+                                                     headers=ed["h"]).json()["parent_bfc_node_id"])
+    far = node(client, ed, "Send invoice", billing["bfc_node_id"], is_process=True)
+    edge(client, ed, far, s1, "HANDOFF")                                 # inbound from outside the frame
+    edge(client, ed, s3, far, "HANDOFF")                                 # and outbound
+    assert can_suggest(client, ed, p) is True
+    r = suggest(client, ed, p)
+    assert r.status_code == 200 and len(r.json()["arrows"]) == 4
+    assert keep(client, ed, p, r.json()["confirm_hash"]).status_code == 200
+
+
+def test_a_stale_hash_creates_nothing(client, ed, steps):
+    """Criterion 4: a step added, or a twin on a pair retired, since the GET."""
+    p = steps["parent"]
+    h = suggest(client, ed, p).json()["confirm_hash"]
+    node(client, ed, "Ship order", p["bfc_node_id"], is_process=True)
+    before = flow_rows(ed["p"])
+    r = keep(client, ed, p, h)
+    assert r.status_code == 409 and "Suggest again" in r.json()["detail"]
+    assert flow_rows(ed["p"]) == before
+
+    h = suggest(client, ed, p).json()["confirm_hash"]
+    e = edge(client, ed, steps["s1"], steps["s2"])                       # drawn and removed since the GET:
+    client.delete(f"{API}/process-flows/{e['bfc_node_flow_id']}", headers=ed["h"],
+                  params={"row_version": e["row_version"]})               # the frame is free again
+    before = flow_rows(ed["p"])
+    r = keep(client, ed, p, h)
+    assert r.status_code == 409 and "Suggest again" in r.json()["detail"]
+    assert flow_rows(ed["p"]) == before and kept_events(p["bfc_node_id"]) == []
+
+
+def test_a_retired_twin_on_a_pair_is_restored_with_its_history_audited(client, ed, steps):
+    """Criterion 5 (A-SG-5): restored as a plain SEQUENCE, its earlier values in its audit event."""
+    p = steps["parent"]
+    e = edge(client, ed, steps["s1"], steps["s2"], "HANDOFF", seq_no=3, note="via the sales desk")
+    client.delete(f"{API}/process-flows/{e['bfc_node_flow_id']}", headers=ed["h"],
+                  params={"row_version": e["row_version"]})
+    r = keep(client, ed, p, suggest(client, ed, p).json()["confirm_hash"])
+    assert r.status_code == 200, r.text
+    assert r.json()["restored"] == [e["bfc_node_flow_id"]] and len(r.json()["created"]) == 3
+    rows = [x for x in flow_rows(ed["p"]) if x.is_active]
+    assert len(rows) == 4 and len(flow_rows(ed["p"])) == 4                # not duplicated
+    twin = next(x for x in rows if x.bfc_node_flow_id == e["bfc_node_flow_id"])
+    assert (twin.flow_type, twin.seq_no, twin.note) == ("SEQUENCE", None, None)
+    with SessionLocal() as s:
+        restored = s.scalars(select(AuditEvent).where(
+            AuditEvent.event_type == "RECORD_RESTORED", AuditEvent.target_table == "bfc_node_flow",
+            AuditEvent.target_id == e["bfc_node_flow_id"])).one()
+    assert restored.detail["previous"] == {"flow_type": "HANDOFF", "condition_label": None,
+                                           "seq_no": 3, "note": "via the sales desk"}
+    assert kept_events(p["bfc_node_id"])[0].detail["restored_ids"] == [e["bfc_node_flow_id"]]
+
+
+def test_a_failure_on_the_last_arrow_creates_nothing(client, ed, steps, world, monkeypatch):
+    """Criterion 6: one transaction — all the arrows, or none."""
+    p = steps["parent"]
+    h = suggest(client, ed, p).json()["confirm_hash"]
+    before, events = flow_rows(ed["p"]), audit_count()
+    real, calls = process_flow._link_row, []
+
+    def wrapped(*a, **kw):
+        calls.append(1)
+        if len(calls) == 4:
+            raise RuntimeError("forced failure on the last arrow")
+        return real(*a, **kw)
+    monkeypatch.setattr(process_flow, "_link_row", wrapped)
+    with SessionLocal() as s:
+        with pytest.raises(RuntimeError):
+            process_flow.keep_arrows(s, world["users"]["editor"], s.get(BfcNode, p["bfc_node_id"]), h)
+    assert len(calls) == 4 and flow_rows(ed["p"]) == before and audit_count() == events
+    monkeypatch.undo()
+    assert keep(client, ed, p, h).status_code == 200                     # nothing changed, so the hash holds
+
+
+def test_suggest_and_keep_are_closed_to_reviewers_and_hidden_from_outsiders(client, ed, steps):
+    """Criterion 7 (the button side is useCanEdit, checked on screen)."""
+    p = steps["parent"]
+    h = suggest(client, ed, p).json()["confirm_hash"]
+    assert suggest(client, ed, p, ed["rv"]).status_code == 403
+    assert keep(client, ed, p, h, ed["rv"]).status_code == 403
+    assert suggest(client, ed, p, ed["out"]).status_code == 404
+    assert keep(client, ed, p, h, ed["out"]).status_code == 404
+    assert flow_rows(ed["p"]) == []
