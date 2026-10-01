@@ -12,8 +12,8 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser, BfcNode, BfcNodeFlow
 from routers.guards import GuardedRouter, object_guard, project_ctx
-from schemas.process_flow import (DfdGraphOut, FlowCompletenessOut, LayoutItem, ProcessFlowGraphOut, ProcessFlowIn,
-                                  ProcessFlowOut, ProcessFlowPatch)
+from schemas.process_flow import (DfdGraphOut, FlowCompletenessOut, KeepIn, KeepOut, LayoutItem, ProcessFlowGraphOut,
+                                  ProcessFlowIn, ProcessFlowOut, ProcessFlowPatch, SuggestOut)
 from services import diagram_layout, process_flow, render
 
 router = GuardedRouter(tags=["process-flow"])
@@ -21,6 +21,7 @@ _read = project_ctx("REVIEWER")
 _edit = project_ctx("EDITOR")
 _flow_w = object_guard(BfcNodeFlow, "EDITOR")
 _node_r = object_guard(BfcNode, "REVIEWER")
+_node_w = object_guard(BfcNode, "EDITOR")
 
 
 @router.get("/projects/{project_id}/process-flows", response_model=list[ProcessFlowOut], **_read.route)
@@ -61,6 +62,18 @@ def flow_completeness(project_id: int, db: Session = Depends(get_db)):
 def process_flow_graph(id: int, variant: str = "AS_IS", node: BfcNode = Depends(_node_r.dep),
                        db: Session = Depends(get_db)):
     return process_flow.generate_process_flow(db, node, variant)
+
+
+@router.get("/bfc-nodes/{id}/process-flow/suggest", response_model=SuggestOut, **_node_w.route)
+def suggest_arrows(id: int, node: BfcNode = Depends(_node_w.dep), db: Session = Depends(get_db)):
+    """A ghost chain in chart order; nothing is stored (docs/draft_arrows_spec.md §9)."""
+    return process_flow.suggest_arrows(db, node)
+
+
+@router.post("/bfc-nodes/{id}/process-flow/suggest/keep", response_model=KeepOut, **_node_w.route)
+def keep_arrows(id: int, body: KeepIn, node: BfcNode = Depends(_node_w.dep),
+                user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return process_flow.keep_arrows(db, user.app_user_id, node, body.confirm_hash)
 
 
 @router.get("/bfc-nodes/{id}/dfd", response_model=DfdGraphOut, **_node_r.route)

@@ -191,12 +191,14 @@ def unlink(db: Session, actor_id: int, row, row_version: int) -> None:
     db.commit()
 
 
-def relink(db: Session, actor_id: int, row) -> None:
-    """Re-linking a removed link restores the same row, never a new one (S1-7). No commit."""
+def relink(db: Session, actor_id: int, row, detail: dict | None = None) -> None:
+    """Re-linking a removed link restores the same row, never a new one (S1-7). No commit.
+    `detail` adds to the audit event, e.g. the values a restored flow arrow had before."""
     row.is_active, row.deleted_at, row.deleted_by = True, None, None
     row.updated_by = actor_id
     audit.record(db, "RECORD_RESTORED", actor_id=actor_id, project_id=row.project_id,
-                 target_table=row.__table__.name, target_id=_pk(row), detail={"label": _label(row)})
+                 target_table=row.__table__.name, target_id=_pk(row),
+                 detail={"label": _label(row), **(detail or {})})
 
 
 def retire(db: Session, actor_id: int, obj, row_version: int) -> None:

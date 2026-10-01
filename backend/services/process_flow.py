@@ -6,13 +6,16 @@ bfc.normalise_name, which is stricter than the index. Re-adding a removed edge r
 same row, so its baseline source_id stays stable. There is NO cycle check: a rework loop is
 ordinary process behaviour (§5.3), the opposite of the solution-dependency rule.
 """
+import hashlib
+import json
+
 from fastapi import HTTPException
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
                     BrDataEntity, BusinessRequirement, DataEntity, ExternalEntity, OrgRole, OrgUnit)
-from services import diagram_layout, lifecycle
+from services import audit, diagram_layout, lifecycle
 from services.bfc import normalise_name
 
 FLOW_TYPES = ("SEQUENCE", "CONDITIONAL", "PARALLEL", "HANDOFF")      # S2-1, = ck_bnf_flow_type
@@ -57,9 +60,13 @@ def _refuse_duplicate(rows: list[BfcNodeFlow], label: str | None, except_id: int
                                  "Give the second edge a different condition, or edit the first")
 
 
-def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int | None,
-                      to_id: int | None, flow_type: str, condition_label: str | None,
-                      seq_no: int | None, note: str | None) -> BfcNodeFlow:
+def _link_row(db: Session, actor_id: int, project_id: int, from_id: int | None, to_id: int | None,
+              flow_type: str, condition_label: str | None, seq_no: int | None,
+              note: str | None) -> tuple[BfcNodeFlow, bool]:
+    """The one per-arrow rule, with NO commit: (row, restored). SG-1: _link_row is the only path
+    that creates or re-links an arrow; every path that makes an arrow live (_link_row,
+    step_retire.restore) locks a step at one of its ends. link_process_flow and keep_arrows both
+    write through here, and the future flow JSON import will too."""
     if from_id is None and to_id is None:
         raise HTTPException(422, "An edge needs a from step, a to step, or both")
     for end_id in sorted({from_id, to_id} - {None}):          # SR-5: both ends FOR SHARE, in id order
@@ -76,12 +83,21 @@ def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int 
                    key=lambda r: r.deleted_at, reverse=True)
     if twins:                                     # restore the latest twin, never re-insert (S2-5)
         row = twins[0]
-        lifecycle.relink(db, actor_id, row)
+        lifecycle.relink(db, actor_id, row, detail={"previous": {
+            "flow_type": row.flow_type, "condition_label": row.condition_label,
+            "seq_no": row.seq_no, "note": row.note}})
     else:
         row = BfcNodeFlow(project_id=project_id, from_bfc_node_id=from_id, to_bfc_node_id=to_id,
                           created_by=actor_id)
         db.add(row)
     row.flow_type, row.condition_label, row.seq_no, row.note = flow_type, label, seq_no, _clean(note)
+    return row, bool(twins)
+
+
+def link_process_flow(db: Session, actor_id: int, project_id: int, from_id: int | None,
+                      to_id: int | None, flow_type: str, condition_label: str | None,
+                      seq_no: int | None, note: str | None) -> BfcNodeFlow:
+    row, _ = _link_row(db, actor_id, project_id, from_id, to_id, flow_type, condition_label, seq_no, note)
     db.commit()
     db.refresh(row)
     return row
@@ -289,7 +305,94 @@ def generate_process_flow(db: Session, node: BfcNode, variant: str = "AS_IS") ->
                                  for r in ext_rows if r.external_entity_id == x.external_entity_id]}
                       for x in sorted(exts.values(), key=lambda x: x.ext_number)],
         "layout": diagram_layout.positions(db, node.project_id, "PROCESS_FLOW", node.bfc_node_id),
+        "can_suggest": can_suggest(db, node),
     }
+
+
+# ---- suggest a flow's arrows from the chart order: preview, then keep (docs/draft_arrows_spec.md) ----
+
+ARROWS_KEPT = "FLOW_ARROWS_KEPT"
+
+
+def _frame(db: Session, node: BfcNode) -> list[BfcNode]:
+    """A-SG-4: the node's active children, in chart order, when every one is a process step."""
+    if not node.is_active:
+        raise HTTPException(409, "This node is retired. Restore it first")
+    if node.is_process:
+        raise HTTPException(422, "A process flow is drawn for a parent node, not a step")
+    kids = list(db.scalars(select(BfcNode).where(
+        BfcNode.project_id == node.project_id, BfcNode.parent_bfc_node_id == node.bfc_node_id,
+        BfcNode.is_active).order_by(BfcNode.seq_no, BfcNode.hier_code)))
+    if any(not k.is_process for k in kids):
+        raise HTTPException(422, "Suggest works on a function whose children are all steps")
+    if not kids:
+        raise HTTPException(422, "There are no process steps under this node")
+    return kids
+
+
+def _plan(db: Session, node: BfcNode) -> tuple[list[BfcNode], list[tuple[int | None, int | None]], str]:
+    """The whole suggest rule, read only: (frame steps, proposed pairs, confirm hash). 409 when a
+    live arrow joins two frame steps or a live start / end event sits on one (A-SG-2); a hand-off
+    from or to a step outside the frame does not block."""
+    steps = _frame(db, node)
+    ids = [s.bfc_node_id for s in steps]
+    inside = set(ids)
+    touching = list(db.scalars(select(BfcNodeFlow).where(
+        BfcNodeFlow.from_bfc_node_id.in_(ids) | BfcNodeFlow.to_bfc_node_id.in_(ids))))
+    for e in touching:
+        if e.is_active and all(end is None or end in inside for end in (e.from_bfc_node_id, e.to_bfc_node_id)):
+            raise HTTPException(409, "This flow already has arrows between its steps. "
+                                     "Suggest works only on a flow with none")
+    pairs = list(zip([None, *ids], [*ids, None]))       # start → each step in chart order → end
+    wanted = set(pairs)
+    retired = sorted([e.bfc_node_flow_id, e.row_version] for e in touching
+                     if not e.is_active and (e.from_bfc_node_id, e.to_bfc_node_id) in wanted)
+    body = {"frame": node.bfc_node_id,
+            "steps": sorted([s.bfc_node_id, s.row_version] for s in steps),
+            "retired": retired}
+    return steps, pairs, hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def can_suggest(db: Session, node: BfcNode) -> bool:
+    """The same rule as suggest_arrows, so the button never disagrees with the server."""
+    try:
+        _plan(db, node)
+    except HTTPException:
+        return False
+    return True
+
+
+def suggest_arrows(db: Session, node: BfcNode) -> dict:
+    """GET …/suggest. Nothing is written: every arrow is SEQUENCE with seq_no NULL (A-SG-1)."""
+    _, pairs, h = _plan(db, node)
+    return {"arrows": [{"from_bfc_node_id": a, "to_bfc_node_id": b, "flow_type": "SEQUENCE"} for a, b in pairs],
+            "confirm_hash": h}
+
+
+def keep_arrows(db: Session, actor_id: int, node: BfcNode, confirm_hash: str) -> dict:
+    """POST …/suggest/keep. Lock the frame's steps FOR NO KEY UPDATE in id order (a colleague's
+    link_process_flow holds an end FOR SHARE, so the two serialise), RE-RUN the whole suggest rule
+    under the lock, compare the hash, then write every arrow through _link_row (SG-1), flush, and
+    audit with the real ids. One commit: all the arrows, or none."""
+    ids = sorted(k.bfc_node_id for k in _frame(db, node))
+    db.scalars(select(BfcNode).where(BfcNode.bfc_node_id.in_(ids)).order_by(BfcNode.bfc_node_id)
+               .with_for_update(key_share=True, of=BfcNode)
+               .execution_options(populate_existing=True)).all()     # the locked versions, not stale copies
+    _, pairs, h = _plan(db, node)
+    if confirm_hash != h:
+        raise HTTPException(409, "The chart changed since the suggestion. Suggest again")
+    created, restored = [], []
+    for a, b in pairs:
+        row, was_restored = _link_row(db, actor_id, node.project_id, a, b, "SEQUENCE", None, None, None)
+        (restored if was_restored else created).append(row)
+    db.flush()
+    out = {"created": [r.bfc_node_flow_id for r in created], "restored": [r.bfc_node_flow_id for r in restored]}
+    audit.record(db, ARROWS_KEPT, actor_id=actor_id, project_id=node.project_id,
+                 target_table="bfc_node", target_id=node.bfc_node_id,
+                 detail={"frame_id": node.bfc_node_id, "confirm_hash": h,
+                         "created_ids": out["created"], "restored_ids": out["restored"]})
+    db.commit()
+    return out
 
 
 def _l1(hier_code: str) -> str:

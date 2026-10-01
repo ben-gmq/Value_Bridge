@@ -135,6 +135,29 @@ class ProcessFlowGraphOut(BaseModel):
     stores: list[FlowStore]
     externals: list[FlowExternal]
     layout: list[LayoutItem]
+    can_suggest: bool                      # the suggest rule holds (docs/draft_arrows_spec.md §4)
+
+
+# ---- suggest a flow's arrows: preview, then keep (docs/draft_arrows_spec.md) ----
+class SuggestedArrow(BaseModel):
+    from_bfc_node_id: int | None           # None = a start event
+    to_bfc_node_id: int | None             # None = an end event
+    flow_type: Literal["SEQUENCE"]
+
+
+class SuggestOut(BaseModel):
+    arrows: list[SuggestedArrow]
+    confirm_hash: str
+
+
+class KeepIn(BaseModel):
+    """The body only confirms; the server derives the arrows again (VB law 6)."""
+    confirm_hash: str = Field(min_length=64, max_length=64)
+
+
+class KeepOut(BaseModel):
+    created: list[int]                     # bfc_node_flow ids
+    restored: list[int]
 
 
 # ---- the DFD (D-31, slice 3a) ----
