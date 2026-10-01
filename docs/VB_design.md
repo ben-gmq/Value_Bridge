@@ -341,6 +341,25 @@ these rows and the section they cite disagree, **these rows win**.
 | S2-5 | **Indexes.** Full `ix_bnf_from` / `ix_bnf_to (…_bfc_node_id, project_id)` (the partial natural key cannot serve the guard-FK checks); five partial object-FK indexes on `diagram_layout`. Label twins match on `normalise_name`; the latest retired twin is restored | §6.3 | Q-1, Q-9, Q-15 |
 | S2-6 | **`diagram_layout` physical shape.** `vb_ops.presence_columns()` (four audit columns, no soft delete, no `row_version`); `uq_dl_object` is a table constraint so `save` upserts `ON CONFLICT ON CONSTRAINT`; `PUT` upserts only the listed objects, and a separate audited `DELETE /diagram-layouts/{type}/{scope_key}` resets a diagram; scope and EVENT markers are service-validated; `ck_dl_collapse_erd` added. `vb_app` gets DELETE on this table only, and the grant test asserts exactly that set | §5.3, §9, §6.6 | Q-10…Q-14, Q-16, Q-17 |
 
+### Slice 4 schema review — 2026-10-01
+
+`apple` made §5.3 `IMPORT_BATCH` and `IMPORT_ROW` physical for every import target (`docs/slice4_schema.md`,
+`[Q-n]` cited below). **Ben approved all 22 recommendations on 2026-10-01.** As with S1 and S2,
+where these rows and the section they cite disagree, **these rows win**.
+
+| # | Decision | Supersedes | apple |
+|---|---|---|---|
+| S4-1 | **Locator CHECK fixed.** RETIRE / KEPT rows are staged from the database and have no file locator. Replaced by `ck_ir_locator`: none for RETIRE/KEPT, a JSON pointer for flow rows, a sheet row for sheet rows | §6 `num_nonnulls(sheet_row_no, source_path) = 1` (a defect) | Q-1 |
+| S4-2 | **`import_row` carries `target_entity`**, with a composite FK to its batch and `ck_ir_kind_fits_target`, so a row kind can never mismatch its batch. What a RETIRE/KEPT row acts on is `payload.target {table, id, label}`, CHECK-required | §5.3 | Q-2, Q-3 |
+| S4-3 | **`committed_target_id` is set for every committed row except LANE.** STEP_IO and STEP_ROLE have their own ids since S1-5 | §5.3 (out of date) | Q-4 |
+| S4-4 | **Duplicate keys are caught in memory before staging.** Later copies are staged with the key NULL and a `DUPLICATE_KEY` error; the partial unique indexes stay as a backstop | §7.12 | Q-5 |
+| S4-5 | **A data field's import key is `DE-nnnn/<normalised field name>`** (`varchar(250)`). Renaming a field by spreadsheet arrives as an acknowledged INSERT; renames are done on screen | §5.3 (no field key) | Q-6 |
+| S4-6 | **Audit exemptions (deviation 7c).** `import_batch` has no soft delete (its status is its lifecycle) but keeps `row_version`, sent on commit (stale preview → 409); `uploaded_at` / `uploaded_by_user_id` are its created pair. `import_row` has no audit columns. Added: `committed_by_user_id` and `file_warning_detail jsonb` | §5.1 audit columns, for these two tables | Q-7, Q-8, Q-9 |
+| S4-7 | **Counts and status.** `row_count` = staged rows; `error_count` / `warning_count` count rows, not messages; verdict counts include invalid rows; MATCH and KEPT are not counted on the header; `ck_ib_retire_needs_replace`. VALIDATING exists only inside validate; VALIDATED even with errors; a failed re-validation at commit sets REJECTED in a follow-up transaction. IMPORT_STATUS resolves from the global tier only | §5.3, §7.12 | Q-10…Q-12 |
+| S4-8 | **Messages are objects** `{code, column, message, params}` (i18n, untrusted text). **Before/after is computed at preview, never stored.** Key and `source_ref` lengths are capped in the flow JSON Schema; `file_name` is a sanitised basename of at most 255 characters | §7.11, §7.12a/b | Q-13…Q-15 |
+| S4-9 | **Locks, grants, keys.** The purge locks batches first (`FOR UPDATE SKIP LOCKED`), so it can't deadlock a commit. `vb_app` gets DELETE on `import_row` only, plus a column-level UPDATE grant on `import_batch` (write-once trail). No process guard on the anchor; it is service-checked. `uq_import_batch_project` is created now, for WBS. The added CHECKs hold. One staged row per sheet row or pointer | §6.6, §5.3 | Q-16…Q-21 |
+| S4-10 | **Criterion 40 reads "after re-upload".** A commit is all or nothing, so the other rows never "still commit" | §10 criterion 40 (wording) | Q-22 |
+
 ### Slice 3 step retire — 2026-09-30
 
 | # | Decision | Supersedes | Spec |
