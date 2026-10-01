@@ -164,3 +164,30 @@ schedule, and an undo button (the before-values make a manual rebuild possible).
 **Design review:** round 1 on 2026-10-01 (`design-auditor`, 18 findings: 3 HIGH, 7 MEDIUM, 8 LOW).
 All 18 are fixed in this revision. Ben approved all 9 recommended answers to its questions
 (Q1–Q9), recorded as S4-11.
+
+**Round 2 of 2** (2026-10-01): 15 of 18 closed. **N1 is structural and goes to Ben** (see
+below). N2 is fixed in migration 0019 before it merges (`file_name` is added to the column
+grant). Everything else is **tracked, not redrafted**: the builder applies rules 4a-R1…R9 below.
+
+- **4a-R1 (round-1 item 10):** a *numeric* `fk_group` always means a stored relationship number;
+  it must exist, or the row is an error. A *non-numeric* value is a file-local label. The
+  preview names the relationship each new FK row joins.
+- **4a-R2 (round-1 item 12):** a new `pk_position` that another live field holds is an error,
+  the same rule as entity names. PK swaps go through the screen.
+- **4a-R3 (N3):** the token is readable claims (project, table, id, row_version) plus an
+  HMAC-SHA256 over them, using a **separate secret** (`ROW_TOKEN_KEY`, not the JWT secret).
+  Verify the MAC, then compare each claim so each case gets its own error: stale, moved, or
+  another project.
+- **4a-R4 (N4):** an entity row with a number but no token is an error: "export first to update".
+- **4a-R5 (N5):** column codes go in a locked hidden row 1 (cell values), not in comments, so the
+  read-only parser sees them and no extra XML part needs parsing.
+- **4a-R6 (N6):** `payload.before` on committed rows is kept for 90 days **from `committed_at`**.
+  Only those rows' purge is deferred.
+- **4a-R7 (N7):** "operational" means SQLSTATE 40001, 40P01, 55P03 or 57014. Anything else is a
+  rule failure. Every failed commit attempt is audited.
+- **4a-R8 (N8):** `X-VB-File-Name` is percent-encoded by the client and decoded before sanitising.
+- **4a-R9 (N9):** every cell write, including the lookup sheet, goes through one `write_cell`
+  with the full §7.12 escape set (`= + - @ \t \r`), forced to the string type. Criterion 8 gains
+  a lookup value that starts with `=`.
+- Also: MATCH compares parsed values (10 = 10.0, Y = true, blank = ''). The key resolves by
+  `lower(btrim)` **in SQL**.
