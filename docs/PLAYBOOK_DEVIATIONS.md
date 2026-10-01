@@ -17,6 +17,7 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 7 | `code_master.created_by` is nullable | §9.2 `created_by` from the JWT | Seeded FTC library rows are created by the seed CLI, not a user | §5.1 |
 | 7a | `app_user.created_by` is nullable | §9.2 | The first platform admin is created by nobody (first-run setup or `seeds.create_admin`) | §5.3 |
 | 7b | `import_row` is hard-deleted after 90 days (DELETE granted on that table only) | §9.7 soft delete | Raw client-supplied payloads are purged for data protection (Q14); the batch header is kept | §6.6, Q14 |
+| 7c | `import_batch` has no soft delete and no `updated_by` (`uploaded_at` / `uploaded_by_user_id` are its created pair; `row_version` kept); `import_row` carries no audit columns, soft delete or `row_version` | §9.7 soft delete, §5.1 audit columns | The batch's status is its lifecycle and the header is kept as the import trail; a staged row is short-lived staging whose provenance is its batch | S4-6, slice4_schema Q-7 |
 
 ## Frontend
 
