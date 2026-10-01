@@ -209,6 +209,8 @@ as HTML (VB law 9). Every cell that reaches an export goes through `escape_cell(
 
 ### 3.1 `import_row.payload` — an object, one envelope for every kind **[Q-14]**
 
+> **Amended by S4-11 (Ben, 2026-10-01):** at commit each UPDATE row also stores its before-values in `payload.before`, kept 90 days from `committed_at`. Preview before/after is still computed live, never stored.
+
 | Key | When | Content |
 |---|---|---|
 | `v` | always | envelope version, `1` |

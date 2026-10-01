@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 24 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 26 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -200,4 +200,10 @@ place.
   in `docs/slice4a_spec.md` "Round 2": fk_group meaning, PK-position collision, claim-carrying
   token with its own key, number-without-token, column codes in a hidden row, before-values from
   `committed_at`, the operational-error list, file-name encoding, one `write_cell`. Settle in the build.
+- sara LOW-1 · slice-4-schema review, 2026-10-01 · LOW · **"Merge never retires" is held only on the
+  batch header**: a RETIRE/KEPT row inside a MERGE flow batch passes every CHECK; the commit's
+  re-validation is the only guard. Carry `import_mode` onto `import_row` via the carrier FK + a CHECK —
+  a schema change, Ben's call.
+- sara LOW-2 · same · LOW · **Nothing proves a purged batch's name was blanked.** Optional
+  `ck_ib_purged_name (rows_purged_at IS NULL OR file_name = '(purged)')` — schema change, Ben's call.
 

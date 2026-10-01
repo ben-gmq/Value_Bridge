@@ -54,7 +54,7 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 
 ## The VB law (enforced in code; `sara` audits it)
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
-   `diagram_layout` (D-30) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
+   `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
    DELETE grant, so this fails at the database, not in review.
    Nothing cascades except a process step: `services/step_retire.OWNED` is the only list of rows
    that retire with something else; a new table that points at a step blocks until added to it.
