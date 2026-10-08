@@ -34,7 +34,7 @@ from urllib.parse import unquote
 
 from fastapi import HTTPException
 from sqlalchemy import bindparam, func, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 from sqlalchemy.types import Text
@@ -551,13 +551,19 @@ def _audit_failure(db: Session, actor_id: int, batch_id: int, project_id: int | 
                  detail={"kind": kind, "reason": reason[:500]}, source_ip=source_ip)
 
 
-def _reject(db: Session, batch_id: int, status: dict[str, int], row_errors: dict[int, list[dict]]) -> bool:
+def _reject(db: Session, batch_id: int, status: dict[str, int], row_errors: dict[int, list[dict]],
+            file_msg: dict | None = None) -> bool:
     """Follow-up transaction: REJECTED only if still VALIDATED, so a racing successful commit is
-    never overwritten. The fresh errors go onto their rows, so the preview explains why."""
+    never overwritten. The fresh errors go onto their rows, so the preview explains why; a
+    failure no row owns (a database error) leaves one file-level message instead (sara L-2)."""
+    values = {"status_code_id": status["REJECTED"], "row_version": ImportBatch.row_version + 1}
+    if file_msg is not None:
+        values["file_warning_detail"] = ImportBatch.file_warning_detail.op("||")(
+            bindparam("file_msg", [file_msg], type_=JSONB))
     res = db.execute(update(ImportBatch)
                      .where(ImportBatch.import_batch_id == batch_id,
                             ImportBatch.status_code_id == status["VALIDATED"])
-                     .values(status_code_id=status["REJECTED"], row_version=ImportBatch.row_version + 1)
+                     .values(**values)
                      .execution_options(synchronize_session=False))
     if res.rowcount != 1:
         return False
@@ -594,7 +600,7 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
         target = BY_CODE.get(batch.target_entity)
         if target is None:
             raise HTTPException(404, "Not found")
-        result = _commit(db, actor_id, batch, target, status, acknowledged_inserts)
+        result = _commit(db, actor_id, batch, target, status, acknowledged_inserts, source_ip)
         db.commit()                            # the one commit; a failure here is audited too
     except HTTPException as e:                 # refused before anything was applied: unchanged
         db.rollback()
@@ -606,7 +612,8 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
         sqlstate = getattr(e.orig, "sqlstate", None)
         operational = sqlstate in OPERATIONAL_SQLSTATES
         if not operational:
-            _reject(db, batch_id, status, {})
+            _reject(db, batch_id, status, {}, msg("APPLY_FAILED", f"The database refused the change "
+                                                  f"(SQLSTATE {sqlstate}).", None, reason=f"SQLSTATE {sqlstate}"))
         _audit_failure(db, actor_id, batch_id, project_id, "OPERATIONAL" if operational else "RULE",
                        f"SQLSTATE {sqlstate}", source_ip)
         db.commit()
@@ -622,7 +629,8 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
         raise HTTPException(422, e.message)
     except Exception as e:
         db.rollback()
-        _reject(db, batch_id, status, {})
+        _reject(db, batch_id, status, {}, msg("APPLY_FAILED", "An unexpected error stopped the commit.",
+                                              None, reason=type(e).__name__))
         _audit_failure(db, actor_id, batch_id, project_id, "RULE", type(e).__name__, source_ip)
         db.commit()
         raise
@@ -631,7 +639,7 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
 
 
 def _commit(db: Session, actor_id: int, batch: ImportBatch, target: Target, status: dict[str, int],
-            acknowledged_inserts: int | None) -> ImportBatch:
+            acknowledged_inserts: int | None, source_ip: str | None = None) -> ImportBatch:
     stored = _rows_of(db, batch)
     staged = {r.sheet_row_no: r for r in stored}
     rows = [Staged(r.sheet_row_no, dict(r.payload.get("cells", {}))) for r in stored]
@@ -687,6 +695,6 @@ def _commit(db: Session, actor_id: int, batch: ImportBatch, target: Target, stat
                              "update_count": sum(1 for r in rows if r.verdict == "UPDATE"),
                              "match_count": sum(1 for r in rows if r.verdict == "MATCH"),
                              "retire_count": 0, "file_sha256": file_info.get("sha256"),
-                             "sheet": file_info.get("sheet")})
+                             "sheet": file_info.get("sheet")}, source_ip=source_ip)
         db.flush()
     return batch

@@ -17,7 +17,7 @@ import openpyxl
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from database import SessionLocal
 from models import AuditEvent, CodeMaster, DataEntity, ImportBatch, ImportRow
@@ -224,6 +224,9 @@ def test_a_de_retired_after_validate_rejects_the_batch_at_commit(client, ed, db,
     d = live(db, ed["p"])["DE-0001"]
     assert d.is_active is False and d.description is None              # nothing applied
     assert commit(client, ed, after).status_code == 409                # a REJECTED batch is final
+    kinds = [e.detail["kind"] for e in db.scalars(select(AuditEvent).where(
+        AuditEvent.event_type == "IMPORT_COMMIT_FAILED").order_by(AuditEvent.audit_event_id))]
+    assert kinds == ["RULE", "REFUSED"]                                # the rejection is audited
 
 
 # ---- criterion 4 (40): a colleague's edit since export -----------------------------------------
@@ -448,6 +451,26 @@ def test_an_operational_failure_leaves_the_batch_validated_and_a_retry_succeeds(
     assert kinds == ["OPERATIONAL"]                                          # every failure audited
 
 
+class _UniqueViolation(Exception):
+    sqlstate = "23505"
+
+
+def test_a_database_error_that_is_not_operational_rejects_with_a_reason(client, ed, db, monkeypatch):
+    pv = staged(client, ed, book([{"de_name": "Customer"}]))
+
+    def clashed(*a, **k):
+        raise IntegrityError("INSERT …", {}, _UniqueViolation())
+    monkeypatch.setattr(de_service, "add_entity", clashed)
+    r = commit(client, ed, pv, ack=1)
+    assert r.status_code == 422, r.text
+    after = batch(client, ed, pv)["batch"]
+    assert after["status"] == "REJECTED" and live(db, ed["p"]) == {}
+    [w] = after["file_warnings"]                                       # sara L-2: the preview says why
+    assert w["code"] == "APPLY_FAILED" and w["params"]["reason"] == "SQLSTATE 23505"
+    [ev] = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "IMPORT_COMMIT_FAILED"))
+    assert ev.detail["kind"] == "RULE"
+
+
 def test_a_rule_failure_never_overwrites_a_racing_successful_commit(client, ed, db):
     pv = staged(client, ed, book([{"de_name": "Customer"}]))
     assert commit(client, ed, pv, ack=1).status_code == 200
@@ -607,10 +630,22 @@ def test_exactly_10mb_is_accepted_and_nothing_is_spooled_to_disk(client, ed, mon
         raise AssertionError("an upload touched the disk")
     for name in ("TemporaryFile", "NamedTemporaryFile", "SpooledTemporaryFile"):
         monkeypatch.setattr(tempfile, name, no_disk)
+    # Starlette binds its own name at import, so patching tempfile alone would miss it (sara L-4).
+    monkeypatch.setattr("starlette.formparsers.SpooledTemporaryFile", no_disk)
     r = upload(client, ed, _exactly(10 * xlsx.MB))
     assert r.status_code == 201, r.text
     r = upload(client, ed, _exactly(10 * xlsx.MB + 1))
     assert r.status_code == 413
+
+
+def test_an_upload_with_no_bearer_header_is_401_before_its_body_is_read(client, ed, monkeypatch):
+    """sara M-1: an anonymous client cannot make the server hold 10 MB per connection."""
+    from services import body_limit
+    reached = []
+    monkeypatch.setattr(bulk, "validate", lambda *a, **k: reached.append(1))
+    r = upload(client, ed, book([{"de_name": "Customer"}]), headers={"Accept": "application/json"})  # no login
+    assert r.status_code == 401 and reached == []
+    assert body_limit.cap_for("POST", "/api/v1/projects/1/data-entities", 1) == 1   # JSON routes unchanged
 
 
 def test_the_upload_must_be_the_raw_xlsx_body(client, ed):

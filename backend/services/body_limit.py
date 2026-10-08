@@ -5,7 +5,10 @@ The cap is the first ROUTE_CAPS entry matching (method, path), else the default.
 Content-Length over the cap is refused without reading a byte. Otherwise the body is read
 here, counting real bytes per chunk (a chunked body, or a Content-Length that lies), and only
 a body within the cap is replayed to the app — so on a 413 the app is never called at all.
-The body stays in memory: at most the route's cap, and nothing is spooled to disk."""
+The body stays in memory: at most the route's cap, held once, and nothing is spooled to disk.
+A route whose cap is above the default (an upload) is buffered only for a request that carries
+a Bearer header; anything else gets 401 before a byte is read (sara M-1). This is a header
+check, not authentication: the route's guard still verifies the token."""
 import re
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -37,6 +40,8 @@ class BodyLimitMiddleware:
         length = headers.get(b"content-length")
         if length is not None and length.isdigit() and int(length) > cap:
             return await _too_large(send)
+        if cap > self.default_cap and not headers.get(b"authorization", b"").lower().startswith(b"bearer "):
+            return await _refuse(send, 401, b'{"detail":"Not authenticated"}')
 
         chunks, seen = [], 0
         while True:
@@ -50,21 +55,25 @@ class BodyLimitMiddleware:
             chunks.append(body)
             if not message.get("more_body", False):
                 break
+        whole, chunks = b"".join(chunks), None               # one copy for the whole request
         replayed = False
 
         async def replay() -> Message:
             nonlocal replayed
             if not replayed:
                 replayed = True
-                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+                return {"type": "http.request", "body": whole, "more_body": False}
             return await receive()                        # disconnect, after the body
 
         await self.app(scope, replay, send)
 
 
 async def _too_large(send: Send) -> None:
-    body = b'{"detail":"The request is too large."}'
-    await send({"type": "http.response.start", "status": 413,
+    await _refuse(send, 413, b'{"detail":"The request is too large."}')
+
+
+async def _refuse(send: Send, status: int, body: bytes) -> None:
+    await send({"type": "http.response.start", "status": status,
                 "headers": [(b"content-type", b"application/json"),
                             (b"content-length", str(len(body)).encode())]})
     await send({"type": "http.response.body", "body": body})
