@@ -117,7 +117,8 @@ export default function DataEntitiesPage() {
           onClick={() => { setError(''); exportList.mutate(); }}>{t('data.import.exportList')}</Button>
         {canEdit && (
           <Button variant="outlined" startIcon={<UploadFileRounded />} onClick={() => setImporting(true)}>{t('data.import.open')}</Button>)}
-        <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>
+        {canEdit && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>)}
       </>)}>
       {(error || loadError) && <Alert severity="error" sx={ERR_SX}>{error || loadError}</Alert>}
       <WrapperBox>
