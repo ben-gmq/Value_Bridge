@@ -96,6 +96,38 @@ def _check_xml_head(name: str, head: bytes) -> None:
         raise refuse(f"The file is not a valid workbook: part {name[:100]} is not UTF-8.")
 
 
+_OVERRIDE = re.compile(rb"<Override\b[^>]*>", re.IGNORECASE)
+_PART_NAME = re.compile(rb"""PartName\s*=\s*["']/?([^"']+)["']""")
+
+
+def _looks_xml(head: bytes) -> bool:
+    """XML by content, not by name: a part can live at any path the package names. A UTF-16
+    part counts too, so _check_xml_head refuses it."""
+    h = head.removeprefix(b"\xef\xbb\xbf").removeprefix(b"\xff\xfe").removeprefix(b"\xfe\xff")
+    h = h.lstrip(b" \t\r\n")
+    return h[:1] == b"<" or h[:2] == b"\x00<"
+
+
+def _shared_string_parts(archive: zipfile.ZipFile) -> set[str]:
+    """The parts [Content_Types].xml declares as shared strings (openpyxl finds them that way)."""
+    try:
+        info = archive.getinfo("[Content_Types].xml")
+    except KeyError:
+        return set()
+    if info.file_size > MB:
+        raise refuse("The file is not a valid workbook: its content types are too large.")
+    with archive.open(info) as f:
+        types = f.read(MB + 1)
+    if len(types) > MB:
+        raise refuse("The file is not a valid workbook: its content types are too large.")
+    out = set()
+    for el in _OVERRIDE.findall(types):
+        m = _PART_NAME.search(el)
+        if m and b"sharedstrings+xml" in el.lower():
+            out.add(m.group(1).decode("utf-8", "replace").lower())
+    return out
+
+
 def zip_prepass(body: bytes) -> None:
     """Decompress every member in chunks, counting real bytes (never the header's claim), and
     refuse a document type declaration in any XML part before any parser sees it."""
@@ -107,10 +139,17 @@ def zip_prepass(body: bytes) -> None:
         members = archive.infolist()
         if len(members) > MAX_MEMBERS:
             raise refuse("The workbook has too many parts.")
+        try:
+            strings_parts = _shared_string_parts(archive)
+        except HTTPException:
+            raise
+        except Exception:
+            raise refuse("The file is not a readable .xlsx workbook.")
         total = 0
         for info in members:
             is_xml = bool(_XML_PART.search(info.filename))
-            is_strings = info.filename.lower().endswith("sharedstrings.xml")
+            name = info.filename.lower()
+            is_strings = name.endswith("sharedstrings.xml") or name in strings_parts
             seen, tail, first = 0, b"", True
             try:
                 with archive.open(info) as member:
@@ -121,10 +160,12 @@ def zip_prepass(body: bytes) -> None:
                             raise refuse("The workbook expands to more than 100 MB.")
                         if is_strings and seen > MAX_SHARED_STRINGS_BYTES:
                             raise refuse("The workbook's text table expands to more than 20 MB.")
-                        if is_xml:
-                            if first:
+                        if first:
+                            is_xml = is_xml or _looks_xml(chunk)
+                            if is_xml:
                                 _check_xml_head(info.filename, chunk)
-                                first = False
+                            first = False
+                        if is_xml:
                             window = (tail + chunk).lower()
                             if b"<!doctype" in window or b"<!entity" in window:
                                 raise refuse("The workbook contains an XML document type "
@@ -201,16 +242,24 @@ def _first_cell(wb, ws):
     return None
 
 
+def _unreadable(exc: BaseException) -> HTTPException:
+    """openpyxl wraps a parser refusal in a ValueError; name the entity refusal if it is one."""
+    seen = 0
+    while exc is not None and seen < 10:
+        if isinstance(exc, DefusedXmlException):
+            return refuse("The workbook contains an XML entity declaration, which is not accepted.")
+        exc, seen = exc.__cause__ or exc.__context__, seen + 1
+    return refuse("The file is not a readable .xlsx workbook.")
+
+
 def _open(body: bytes):
     try:
         return openpyxl.load_workbook(io.BytesIO(body), read_only=True, data_only=True,
                                       keep_links=False, keep_vba=False)
-    except DefusedXmlException:
-        raise refuse("The workbook contains an XML entity declaration, which is not accepted.")
     except HTTPException:
         raise
-    except Exception:
-        raise refuse("The file is not a readable .xlsx workbook.")
+    except Exception as e:
+        raise _unreadable(e)
 
 
 def read_rows(body: bytes, target_code: str, column_codes: tuple[str, ...]) -> SheetRead:
@@ -234,10 +283,8 @@ def read_rows(body: bytes, target_code: str, column_codes: tuple[str, ...]) -> S
             return _read_sheet(wb, ws, column_codes)
         except HTTPException:
             raise
-        except DefusedXmlException:
-            raise refuse("The workbook contains an XML entity declaration, which is not accepted.")
-        except Exception:
-            raise refuse("The file is not a readable .xlsx workbook.")
+        except Exception as e:
+            raise _unreadable(e)
     finally:
         wb.close()
 
@@ -246,7 +293,11 @@ def _read_sheet(wb, ws, column_codes: tuple[str, ...]) -> SheetRead:
     by_col: dict[int, str] = {}
     ignored: list[str] = []
     rows: list[tuple[int, dict]] = []
+    last = 0
     for idx, cells in _rows(wb, ws):
+        if idx <= last:                     # row numbers come from the file: never trust them
+            raise refuse("The sheet's rows are out of order or repeated.")
+        last = idx
         if any(c["column"] > MAX_COLS and c["value"] is not None for c in cells):
             raise refuse(f"The sheet has more than {MAX_COLS} columns.")
         if idx == 1:
