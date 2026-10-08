@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 26 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-09-30.**
+**Open: 2 entries (VB-006; VB-005, the standing backlog) · 28 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-08.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -206,4 +206,22 @@ place.
   a schema change, Ben's call.
 - sara LOW-2 · same · LOW · **Nothing proves a purged batch's name was blanked.** Optional
   `ck_ib_purged_name (rows_purged_at IS NULL OR file_name = '(purged)')` — schema change, Ben's call.
+- sara LOW-5 · `sara`, slice-4a-1 pre-merge review, 2026-10-08 · LOW · **"Refused mid-stream" is not
+  proven**: the 5,000-row / 200-column test passes for a parser that loads everything and counts
+  afterwards. Count the rows `xlsx._rows` yields and assert it stops at the cap. The code does stop
+  (`xlsx.py:330`); only the proof is missing.
+- sara LOW-6 · same · LOW · **A hostile upload leaves no trace**: a file refused for a DTD or a zip
+  bomb gets 422 and no audit row, though it is the clearest sign of probing. Write
+  `IMPORT_VALIDATE_REFUSED` (reason + IP) from the router. Before the cloud gate.
+- 4a-1 UI · builder note, 2026-10-08 · LOW · **Server messages translate poorly in places**:
+  `TOKEN_ROW_MISMATCH`/`ROW_STALE` come with or without their params; `INVALID`/`APPLY_FAILED` carry
+  the reason only in English (APPLY_FAILED on a reject now has `params.reason`); `COLUMN_IGNORED`
+  puts the column outside `params`; the plain 409 has no `X-VB-Error` kind; `VERDICT_CHANGED` sends
+  raw verdict codes. The screen falls back to the English text, so nothing is lost today.
+- 4a-1 UAT · ui-verifier, 2026-10-08 · LOW · **An error row still wears an "Add" chip** beside its
+  "Error" chip in the import review. The counts no longer include it (b546e6d); the chip is cosmetic.
+  Show only "Error" on an invalid row.
+- 4a-1 build · 2026-10-08 · LOW · **A description that starts with a tab or CR does not round-trip
+  exactly**: `clean_cell` strips leading Unicode whitespace, so re-importing an export trims it and
+  reports an UPDATE. Accepted as safer than writing control characters; revisit if a client hits it.
 
