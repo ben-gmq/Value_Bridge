@@ -205,3 +205,48 @@ grant). Everything else is **tracked, not redrafted**: the builder applies rules
   a lookup value that starts with `=`.
 - Also: MATCH compares parsed values (10 = 10.0, Y = true, blank = ''). The key resolves by
   `lower(btrim)` **in SQL**.
+
+**S4-12 review, round 1 of 2** (2026-10-08, `design-auditor`, 10 findings: 1 HIGH, 5 MEDIUM, 4 LOW,
+plus 5 questions). One finding is Ben's call (**ref_de_name**, below). The rest are build rules:
+
+- **4a-R10 (HIGH, half-model is silent) — 4a-2.** A half-built model is never invisible:
+  the Data page marks an entity with no live fields "no fields yet"; `consistency_check` gains
+  `entities_without_fields` (a warning, not must-be-0); after step 1 the wizard can be left only
+  by an explicit "Do fields later", with a before-unload prompt; the step-1 commit confirmation
+  says the fields are not checked yet and that undoing means retiring each entity on screen.
+  Criterion 20 gains the marker.
+- **4a-R11 (MEDIUM, sheet code) — 4a-1.** Each sheet carries its target code in hidden row 1,
+  cell A1 (`sheet:DATA_ENTITY` / `sheet:DATA_FIELD`); the column codes start at B1. **Exactly one**
+  sheet may carry a target's code: none or several → 422 naming the sheets. A one-sheet file from
+  4a-1's templates obeys the same rule. The preview header names the sheet it read. Sheet names
+  are untrusted text, cut to 31 characters in every message.
+- **4a-R12 (MEDIUM, parent resolved first) — 4a-2.** Every field row's parent is resolved in **one
+  SQL pass first**, scoped to the batch's project. Keys, duplicate checks, `fk_group` label groups,
+  the final name/PK sets and same-file `ref_field_name` all use the resolved entity id, never the
+  raw cell. Criterion 9 gains: one parent named by number on one row and by name on another, and
+  the same label `a` used under two parents (two relationships).
+- **4a-R13 (MEDIUM, parent pinned) — 4a-2.** The resolved parent is staged as the key's `DE-nnnn/`
+  part. At commit, a row whose parent now resolves differently is a verdict change, so an error.
+  The preview shows the resolved number and name for every row named by name.
+- **4a-R14 (MEDIUM, project scope) — 4a-1 and 4a-2.** Every name lookup is bound to the batch's
+  project. Test: a name live only in another project → "parent not found", and that project's
+  number never appears in any response.
+- **4a-R15 (LOW, whitespace) — 4a-1.** One `clean_cell` (Unicode whitespace, NBSP included, stripped
+  at both ends) runs on every text cell before validation or lookup. A not-found parent names any
+  live entity that matches once all whitespace is ignored.
+- **4a-R16 (LOW, re-read file) — 4a-1.** The wizard reads the file into memory once when it is
+  picked and posts that buffer at every step. Both steps show the file's name, size and modified time.
+- **4a-R17 (LOW, ignored sheet) — 4a-2.** When the fields step sees an entities sheet, it adds a
+  file warning: "the entities sheet was not read in this step".
+- **4a-R18 (LOW, linking the two batches) — 4a-1.** `IMPORT_COMMITTED` carries the SHA-256 of the
+  uploaded body in `audit_event.detail`, so the two batches of one workbook can be linked after
+  the 90-day purge.
+- **Questions settled in the build (no design change):** the wizard runs the fields sheet's
+  file-level checks (one sheet, every mapped column present) **before** step 1 commits; a file
+  with no entities sheet skips step 1; a combined **data-model** template and export
+  (`…/bulk/templates/data-model`, `…/bulk/data-model/export`) produce both sheets with one lookup
+  sheet, so nobody copies sheets between downloads (4a-2). Validate stays per target.
+- **Open for Ben:** (1) FKs between two new entities need a way to name the referenced entity
+  before it has a number: add `ref_de_name` under the parent's rule, or accept a corrected-file
+  round trip. (2) Should freezing a baseline warn about entities with no fields? That belongs to
+  the baseline slice, not 4a.
