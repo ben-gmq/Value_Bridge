@@ -24,8 +24,9 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`) ·
   `cd frontend && npm run lint && npm run build`.
 - **Test screenshots** go to `Evidence/<YYYY-MM-DD>/<slice>/NN-<check>.png` (date of the test run),
-  never loose in the repo root and never directly in `Evidence/`. ui-verifier writes to `.playwright-mcp/`;
-  move its PNGs there after every run. PNGs are gitignored; see `Evidence/README.md`.
+  never loose in the repo root and never directly in `Evidence/`. ui-verifier saves PNGs in the repo root
+  (sometimes `.playwright-mcp/`); move them after every run. PNGs are gitignored; see `Evidence/README.md`.
+  Files it must **upload** have to sit inside the repo: stage them in `.playwright-mcp/<slice>/` (gitignored).
 - **Demo/UAT data:** `VB_ALLOW_DEMO_SEED=1 ./venv/bin/python -m seeds.seed_demo --secrets-out <file outside the repo>`
   against a throwaway database whose name contains `uat` or `demo`; it refuses anything else.
 - **Two database roles (§6.6):** the app connects as `vb_app` (SELECT/INSERT/UPDATE, **no DELETE**
