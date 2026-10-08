@@ -10,7 +10,7 @@ if [[ -f $ENV_FILE ]] && grep -q '^DATABASE_URL=.\+' "$ENV_FILE"; then
 fi
 : "${VB_EMAIL_DOMAINS:?Set VB_EMAIL_DOMAINS to the FTC email domain(s), e.g. VB_EMAIL_DOMAINS=fortience.com}"
 gen() { python3 -c 'import secrets; print(secrets.token_urlsafe(32))'; }
-OWNER_PW=$(gen); APP_PW=$(gen); JWT=$(gen)$(gen)
+OWNER_PW=$(gen); APP_PW=$(gen); JWT=$(gen)$(gen); ROWKEY=$(gen)$(gen)
 psql -v ON_ERROR_STOP=1 -d postgres -q <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='vb_owner') THEN CREATE ROLE vb_owner LOGIN; END IF;
@@ -31,6 +31,7 @@ MIGRATION_DATABASE_URL=postgresql+psycopg://vb_owner:${OWNER_PW}@localhost:5432/
 TEST_DATABASE_URL=postgresql+psycopg://vb_app:${APP_PW}@localhost:5432/vb_test_db
 TEST_MIGRATION_DATABASE_URL=postgresql+psycopg://vb_owner:${OWNER_PW}@localhost:5432/vb_test_db
 JWT_SECRET_KEY=${JWT}
+ROW_TOKEN_KEY=${ROWKEY}
 FRONTEND_URL=http://localhost:5180
 ALLOWED_EMAIL_DOMAINS=${VB_EMAIL_DOMAINS}
 ENV

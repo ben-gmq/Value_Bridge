@@ -11,6 +11,7 @@ os.environ["MIGRATION_DATABASE_URL"] = _env["TEST_MIGRATION_DATABASE_URL"]
 os.environ["ALLOWED_EMAIL_DOMAINS"] = "example.test"
 os.environ["ALLOW_FIRST_RUN_SETUP"] = "true"
 os.environ.setdefault("JWT_SECRET_KEY", _env["JWT_SECRET_KEY"])
+os.environ.setdefault("ROW_TOKEN_KEY", _env["ROW_TOKEN_KEY"])
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
