@@ -126,3 +126,56 @@ export const erdApi = {
   mermaid: (projectId, area) => d(http.get(`${P(projectId)}/erd/export`,
     { params: { format: 'mermaid', ...(area ? { subject_area: area } : {}) }, ...asText })),
 };
+
+// Slice 4a — the one import pipeline (docs/slice4a_spec.md §9). `target` is the route slug
+// (`data-entities`; 4a-2 adds `data-fields`). The upload is the raw .xlsx body, never multipart
+// (A-4a-7), with the display name percent-encoded in X-VB-File-Name (4a-R8).
+export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// A blob response's error body is JSON underneath: parse it back so errorText can read detail.
+async function readBlobError(err) {
+  const data = err?.response?.data;
+  if (data instanceof Blob) {
+    try { err.response.data = JSON.parse(await data.text()); } catch { /* not JSON: keep the fallback */ }
+  }
+  return err;
+}
+
+// The server names the file (§7.11); never from user text. Saved via a throwaway object URL.
+const dispositionName = (headers, fallback) =>
+  /filename="([^"]+)"/.exec(String(headers?.['content-disposition'] ?? ''))?.[1] ?? fallback;
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function download(url, fallback) {
+  try {
+    const r = await http.get(url, { responseType: 'blob' });
+    const name = dispositionName(r.headers, fallback);
+    saveBlob(r.data, name);
+    return name;
+  } catch (err) {
+    throw await readBlobError(err);
+  }
+}
+
+export const importApi = {
+  template: (projectId, target) => download(`${P(projectId)}/bulk/templates/${target}`, `vb-${target}-template.xlsx`),
+  export: (projectId, target) => download(`${P(projectId)}/bulk/${target}/export`, `vb-${target}-export.xlsx`),
+  // `buffer` is the ArrayBuffer read once when the file was picked (4a-R16). 201 → the preview.
+  validate: (projectId, target, buffer, fileName) => d(http.post(`${P(projectId)}/bulk/${target}/validate`, buffer,
+    { headers: { 'Content-Type': XLSX_TYPE, 'X-VB-File-Name': encodeURIComponent(fileName) } })),
+  batch: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}`)),
+  preview: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}/preview`)),
+  // acknowledged_inserts is the count the user typed; the server re-validates and compares (R2-P2).
+  commit: (batchId, { row_version, acknowledged_inserts }) =>
+    d(http.post(`${V}/bulk/batches/${batchId}/commit`, { row_version, acknowledged_inserts })),
+};

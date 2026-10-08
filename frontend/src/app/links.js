@@ -33,4 +33,6 @@ export const keys = {
   flowGaps: (p) => ['flow-completeness', String(p)],
   flowGraph: (p, nodeId) => ['process-flows', String(p), 'graph', String(nodeId)],   // under flows(p): edge edits refresh it
   dfdGraph: (p, nodeId) => ['process-flows', String(p), 'dfd', String(nodeId)],     // under flows(p): step I/O edits refresh it
+  importBatch: (id) => ['import-batch', String(id)],
+  importPreview: (id) => ['import-batch', String(id), 'preview'],                     // under importBatch(id): a commit refreshes it
 };
