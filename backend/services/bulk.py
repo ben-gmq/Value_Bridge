@@ -457,8 +457,9 @@ def validate(db: Session, actor_id: int, project_id: int, target: Target, body: 
     batch.row_count = len(rows)
     batch.error_count = sum(1 for r in rows if r.errors)
     batch.warning_count = sum(1 for r in rows if r.warnings)
-    batch.insert_count = sum(1 for r in rows if r.verdict == "INSERT")
-    batch.update_count = sum(1 for r in rows if r.verdict == "UPDATE")
+    # A row with errors counts only as an error, never also as an add or change (UAT 2026-10-08).
+    batch.insert_count = sum(1 for r in rows if r.verdict == "INSERT" and not r.errors)
+    batch.update_count = sum(1 for r in rows if r.verdict == "UPDATE" and not r.errors)
     batch.status_code_id = status["VALIDATED"]
     db.commit()
     db.refresh(batch)
@@ -484,7 +485,7 @@ def batch_out(db: Session, batch: ImportBatch, rows: list[ImportRow] | None = No
             "row_count": batch.row_count, "error_count": batch.error_count,
             "warning_count": batch.warning_count, "insert_count": batch.insert_count,
             "update_count": batch.update_count,
-            "match_count": sum(1 for r in rows if r.verdict == "MATCH"),
+            "match_count": sum(1 for r in rows if r.verdict == "MATCH" and r.is_valid),
             "file_warnings": batch.file_warning_detail, "committed_at": batch.committed_at,
             "committed_by_user_id": batch.committed_by_user_id,
             "rows_purged_at": batch.rows_purged_at, "row_version": batch.row_version}

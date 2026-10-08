@@ -826,6 +826,8 @@ def test_duplicate_numbers_lengths_and_a_blank_name(client, ed, three):
     assert codes_of(rows[6]) == ["DUPLICATE_KEY"] and rows[6]["business_key"] is None
     assert codes_of(rows[4]) == ["TOO_LONG"] and rows[4]["errors"][0]["params"] == {"max": 4000, "length": 4001}
     assert codes_of(rows[5]) == ["REQUIRED"]
+    b = pv["batch"]                                    # an error row counts once, as an error
+    assert (b["error_count"], b["update_count"], b["match_count"]) == (3, 0, 1)
 
 
 # ---- 4a-R14: names are bound to the batch's project ----------------------------------------------
