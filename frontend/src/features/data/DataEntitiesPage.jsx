@@ -4,11 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link,
   Snackbar, Stack, Switch, TextField, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
+import DownloadRounded from '@mui/icons-material/DownloadRounded';
+import UploadFileRounded from '@mui/icons-material/UploadFileRounded';
 import SchemaRounded from '@mui/icons-material/SchemaRounded';
 import { DataGrid } from '@mui/x-data-grid';
-import { dataApi } from '../../api/scope';
+import { dataApi, importApi } from '../../api/scope';
 import { errorText } from '../../api/client';
 import { keys, links } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
+import { ImportWizard } from '../../components/ImportWizard';
 import { Page, WrapperBox } from '../../components/Page';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
@@ -62,6 +66,8 @@ export default function DataEntitiesPage() {
   const q = useQuery({ queryKey: showRetired ? [...keys.entities(projectId), 'with-retired'] : keys.entities(projectId),
     queryFn: () => dataApi.list(projectId, showRetired), placeholderData: (prev) => prev });
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const canEdit = useCanEdit();
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const rows = q.data ?? [];
@@ -73,6 +79,13 @@ export default function DataEntitiesPage() {
       qc.invalidateQueries({ queryKey: keys.entity(de.data_entity_id) });
       setNotice(t('data.restored', { label: entityLabel(de) })); },
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
+  });
+
+  // Export is a read (REVIEWER may); template, validate and commit are edits, so Import hides.
+  const exportList = useMutation({
+    mutationFn: () => importApi.export(projectId, 'data-entities'),
+    onSuccess: (name) => setNotice(t('data.import.exported', { name })),
+    onError: (err) => setError(errorText(err, t('data.import.downloadFailed'))),
   });
 
   const columns = [
@@ -100,7 +113,12 @@ export default function DataEntitiesPage() {
     <Page title={t('data.title')} subtitle={t('data.subtitle')}
       actions={(<>
         <Button component={RouterLink} to={links.erd(projectId)} startIcon={<SchemaRounded />}>{t('data.diagram')}</Button>
-        <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>
+        <Button startIcon={<DownloadRounded />} disabled={exportList.isPending}
+          onClick={() => { setError(''); exportList.mutate(); }}>{t('data.import.exportList')}</Button>
+        {canEdit && (
+          <Button variant="outlined" startIcon={<UploadFileRounded />} onClick={() => setImporting(true)}>{t('data.import.open')}</Button>)}
+        {canEdit && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>)}
       </>)}>
       {(error || loadError) && <Alert severity="error" sx={ERR_SX}>{error || loadError}</Alert>}
       <WrapperBox>
@@ -120,6 +138,7 @@ export default function DataEntitiesPage() {
       {adding && <AddEntityDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(de) => { qc.invalidateQueries({ queryKey: keys.entities(projectId) });
           setNotice(t('data.created', { number: de.de_number })); }} />}
+      {importing && <ImportWizard projectId={projectId} onClose={() => setImporting(false)} />}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Page>
   );

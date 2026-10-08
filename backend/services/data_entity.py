@@ -20,22 +20,40 @@ def list_entities(db: Session, project_id: int, include_retired: bool = False) -
     return list(db.scalars(q.order_by(DataEntity.de_number)))
 
 
-def create_entity(db: Session, actor_id: int, project_id: int, name: str, description: str | None,
-                  business_owner_note: str | None) -> DataEntity:
+ENTITY_COLUMNS = ("de_name", "description", "business_owner_note")
+
+
+def add_entity(db: Session, actor_id: int, project_id: int, name: str, description: str | None,
+               business_owner_note: str | None) -> DataEntity:
+    """The no-commit form (the import's commit owns the transaction). The number is minted here."""
     de = DataEntity(project_id=project_id, de_number=numbering.next_number(db, project_id, "DE"),
                     de_name=name, description=description,
                     business_owner_note=business_owner_note, created_by=actor_id)
     db.add(de)
+    db.flush()
+    return de
+
+
+def change_entity(db: Session, actor_id: int, de: DataEntity, row_version: int, fields: dict) -> DataEntity:
+    """The no-commit form: current version and live, then only the sent columns."""
+    lifecycle.check_live(de, row_version)
+    for k in ENTITY_COLUMNS:
+        if k in fields:
+            setattr(de, k, fields[k])
+    de.updated_by = actor_id
+    db.flush()
+    return de
+
+
+def create_entity(db: Session, actor_id: int, project_id: int, name: str, description: str | None,
+                  business_owner_note: str | None) -> DataEntity:
+    de = add_entity(db, actor_id, project_id, name, description, business_owner_note)
     db.commit()
     return de
 
 
 def update_entity(db: Session, actor_id: int, de: DataEntity, row_version: int, fields: dict) -> DataEntity:
-    lifecycle.check_live(de, row_version)
-    for k in ("de_name", "description", "business_owner_note"):
-        if k in fields:
-            setattr(de, k, fields[k])
-    de.updated_by = actor_id
+    change_entity(db, actor_id, de, row_version, fields)
     db.commit()
     return de
 
