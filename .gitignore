@@ -25,3 +25,5 @@ docs/mockups/node_modules/
 
 # Slice worktrees live inside the repo (one per slice)
 .worktrees/
+# Test screenshots live under Evidence/<date>/<slice>/ (CLAUDE.md); kept local, never committed
+/Evidence/**/*.png
