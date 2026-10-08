@@ -1,10 +1,10 @@
 # Slice 4a: the import pipeline, first used for Data Entities and Data Fields
 
-**Date:** 2026-10-01 · **Author:** Lilly · **Status:** rev 2 (after design review round 1; Ben's answers of 2026-10-01), for sign-off
+**Date:** 2026-10-01 · **Author:** Lilly · **Status:** rev 3 (N1 answered by Ben 2026-10-08 as S4-12), signed off
 **Builds on:** design §7.11 (`services/bulk.py`), §7.12 (`escape_cell`, `enforce_upload_limits`),
 §7.12b (body limits, `purge_import_rows`), D-5, Q14, R2-S8, and criteria 31, 32, 38, 39, 40, 47,
 75, 111, 138, 147 and 152. Schema: `docs/slice4_schema.md` with S4-1…S4-10, **amended by S4-11**
-(§1a, Ben 2026-10-01). Where this file and the design disagree, the design wins.
+(§1a, Ben 2026-10-01) and **S4-12** (§1a, Ben 2026-10-08). Where this file and the design disagree, the design wins.
 
 ## 1. Purpose
 A consultant downloads a template or an export of a project's data entities and fields, edits it
@@ -27,6 +27,13 @@ flow JSON.
 `import_row` has one row per staged sheet row (S4-9). One batch holds one uploaded sheet for one
 target: `DATA_ENTITY` or `DATA_FIELD`.
 
+**A data-model workbook (S4-12)** carries both sheets. It is uploaded once from the
+consultant's side but runs as **two batches in sequence**: entities (validate → preview → commit),
+then fields, validated against the entities that are now live. The browser keeps the file and
+sends it once per step; each target reads only its own sheet, found by its sheet code. The
+entities commit before the fields preview is seen (Ben accepts this). If the fields step fails,
+the consultant uploads the corrected file to the fields step alone.
+
 ## 4. Business Requirement grid
 
 | Function | Entity | Use | Logic → output |
@@ -36,7 +43,7 @@ target: `DATA_ENTITY` or `DATA_FIELD`.
 | `validate` | upload | — | 1. The **raw body** arrives as `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, with the display name in `X-VB-File-Name`. It is not multipart, so nothing is spooled to disk (A-4a-7).<br>2. Ingress cap is 10 MB of body bytes, set by an ordered `ROUTE_CAPS` pattern.<br>3. A **zip pre-pass** decompresses every member in chunks and counts real bytes: 100 MB total, 20 MB for `sharedStrings.xml`.<br>4. openpyxl parses it read-only, with defusedxml hardening and the 5,000-row / 200-column caps.<br>5. At most 2 uploads parse at once; a third gets 429 |
 | `validate` | file | — | **File-level checks.** A missing mapped column → 422 naming it. A row token from another project → 422 "this file was exported from another project". A formula cell with no cached value → row error |
 | `validate` | `data_entity` | R | **A DE row with a token** must resolve to that same live DE in this project. Otherwise it is an error ("retired or changed since export: re-export"), **never an INSERT** (Q2). A stale `row_version` inside the token → error naming the current values (D2). **A row with no token and no number** is an INSERT; a live DE with that name → error naming its number. A rename onto another live name → error. All values are checked against their column's maximum length |
-| `validate` | `data_field` | R | The key is `DE-nnnn/` followed by the name **normalised as the database's live-name index does, `lower(btrim(name))`** (Q8, S4-11). **A row with a token** must resolve to that same live field. A renamed, moved or retired field is an **error, never an INSERT** (Q2). **A row with no token** is an INSERT, unless its key already exists (error: "export first to update"). The parent DE must be live. The type must resolve. `ref_de_number` / `ref_field_name` resolve against live rows **or rows in this same file** (Q7). On a new row, `fk_group` is a **file-local label** per (DE, referenced DE); on an updated row it is the stored number (Q3). Each entity's final name set and PK-ordinal set (live plus file) must stay unique, so a swap is an error, not a mid-commit crash |
+| `validate` | `data_field` | R | The key is `DE-nnnn/` followed by the name **normalised as the database's live-name index does, `lower(btrim(name))`** (Q8, S4-11). **A row with a token** must resolve to that same live field. A renamed, moved or retired field is an **error, never an INSERT** (Q2). **A row with no token** is an INSERT, unless its key already exists (error: "export first to update"). The parent DE must be live. It is named by `de_number`, or, when that is blank, by `de_name` normalised as `lower(btrim(name))` and resolved **in SQL** against live entities; if both are given they must name the same entity (S4-12). The type must resolve. `ref_de_number` / `ref_field_name` resolve against live rows **or rows in this same file** (Q7). On a new row, `fk_group` is a **file-local label** per (DE, referenced DE); on an updated row it is the stored number (Q3). Each entity's final name set and PK-ordinal set (live plus file) must stay unique, so a swap is an error, not a mid-commit crash |
 | `validate` | each row | — | **Blank clears** a value; `mandatory` blank means "unknown"; a blank `ref_de_number` removes the FK (Q1). A resolving row with no changed value → **MATCH**, which is never written (Q4) |
 | `preview` | rows + live data | R | Per row: the verdict, any errors or warnings with their sheet row number, and before/after for every changed field, **computed now** (S4-8). Clears are shown explicitly. The header shows the insert, update, match and error counts |
 | `commit` | `import_batch` | U | `FOR UPDATE` the batch. It must be VALIDATED, its `row_version` must match, and it must have no errors. **Full re-validation inside the transaction** (D1): **any row whose fresh verdict differs from its staged one is an error** (a staged UPDATE that would now be an INSERT never slips through). `acknowledged_inserts` must equal the **re-validated** insert count whenever that count is above 0 (R2-P2) |
@@ -55,7 +62,7 @@ S4-11. That revision needs **no schema change**:
 **Column maps.** Each column has a code, a header, a parser, a maximum length and, where
 relevant, a code category.
 - **DATA_ENTITY:** `de_number`, `de_name` (200), `description`, `business_owner_note`, `row_token` (protected).
-- **DATA_FIELD:** `de_number`, `field_name` (200), `data_type`, `length`, `precision`, `scale`, `mandatory` (Y / N / blank), `pk_position`, `ref_de_number`, `ref_field_name`, `fk_group`, `description`, `row_token` (protected).
+- **DATA_FIELD:** `de_number`, `de_name` (parent, used only when `de_number` is blank), `field_name` (200), `data_type`, `length`, `precision`, `scale`, `mandatory` (Y / N / blank), `pk_position`, `ref_de_number`, `ref_field_name`, `fk_group`, `description`, `row_token` (protected).
 - A new field is positioned in sheet order, after the existing fields.
 
 ## 7. Function
@@ -108,9 +115,11 @@ piece of work. The screen is Grade 3.
    cached value → a row error.
 8. Export then re-import with no edits → every row MATCH, nothing written, no `row_version`
    bumped. A description starting with `-` round-trips unchanged.
-9. **A whole model in one file**: 3 new entities, then fields with a composite FK
-   (`fk_group` label `a`) and a self-reference. It commits, with every reference resolved and
-   one relationship per label.
+9. **A whole model in one workbook** (S4-12): an entities sheet with 3 new entities, and a fields
+   sheet whose rows name those parents by `de_name`, with a composite FK (`fk_group` label `a`)
+   and a self-reference. The entities step commits; the fields step then validates against them
+   and commits, with every reference resolved and one relationship per label. A field row whose
+   `de_number` and `de_name` disagree → a row error.
 10. A swap of two field names or two PK positions → a validation error, not a mid-commit crash.
 11. A failure **inside a service** on the last row (not at re-validation) → zero rows changed
     and the DE counter unchanged. A helper that tries to commit during the apply raises.
@@ -134,10 +143,15 @@ piece of work. The screen is Grade 3.
     the user can't see → 404.
 19. **On screen:** Data page → Import → target → template or export → upload → errors by sheet
     row → fix → re-upload → preview → type the count → commit → rows listed.
+20. *(S4-12)* A fields step that fails after its entities committed → the entities stay live with
+    no fields written. Uploading the corrected workbook to the fields step alone commits the
+    fields, and the entities sheet is not re-read (no "name already exists" errors).
 
 ## 11. Assumptions
 - **A-4a-1** Entities and fields are separate batches and templates. A field batch may
   reference entities only once they exist. Inside a field batch, fields may reference each other.
+- **A-4a-8** *(S4-12)* One workbook is two batches, never one. Nothing new is stored server-side
+  between the steps: the browser re-sends the file. No schema change.
 - **A-4a-3** An import is merge-only and never retires (§7.11).
 - **A-4a-4** `openpyxl` and `defusedxml` are design-named, so they are verified on PyPI and
   installed without a separate ask.
@@ -156,7 +170,7 @@ schedule, and an undo button (the before-values make a manual rebuild possible).
 - **Backend first:** `services/xlsx.py`, `services/bulk.py`, `routers/bulk.py`, and
   `tests/test_bulk_import.py` with one test per criterion. Criterion 14 includes the middleware
   and chunked tests.
-- **Frontend:** one `ImportWizard` in `frontend/src/components/`, reused later, opened from the
+- **Frontend:** one `ImportWizard` (with the two-step data-model workbook path in 4a-2) in `frontend/src/components/`, reused later, opened from the
   Data page, with strings in `en.data.json`.
 - **Reviews:** sara before commit, test-runner, then ui-verifier.
 - **Worktree:** `slice-4a`, from main **after** 0019/0020 merge.
