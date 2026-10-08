@@ -38,7 +38,7 @@ the consultant uploads the corrected file to the fields step alone.
 
 | Function | Entity | Use | Logic → output |
 |---|---|---|---|
-| `template` | `code_master` | R | Builds an `.xlsx` from the target's column map. The header row carries a **column code** in each header cell's comment, and VB matches columns by that code, never by position or by the translated text. Data-validation lists come from **this project's** resolved codes (47). If a list exceeds Excel's 255-character inline limit, it goes on a hidden lookup sheet |
+| `template` | `code_master` | R | Builds an `.xlsx` from the target's column map. A locked hidden row 1 carries the sheet code in A1 and a **column code** above each column (4a-R5, 4a-R11), and VB matches columns by that code, never by position or by the translated text. Data-validation lists come from **this project's** resolved codes (47). If a list exceeds Excel's 255-character inline limit, it goes on a hidden lookup sheet |
 | `export` | `data_entity` / `data_field` | R | Writes live rows in template shape. Each row carries the business key and a **signed row token** (A-4a-6) in a protected column. A text cell that starts with `=` `+` `-` `@` is written as an explicit string cell with Excel's `quotePrefix` style, so no apostrophe is added to its content (escape S5, symmetric on re-import) |
 | `validate` | upload | — | 1. The **raw body** arrives as `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, with the display name in `X-VB-File-Name`. It is not multipart, so nothing is spooled to disk (A-4a-7).<br>2. Ingress cap is 10 MB of body bytes, set by an ordered `ROUTE_CAPS` pattern.<br>3. A **zip pre-pass** decompresses every member in chunks and counts real bytes: 100 MB total, 20 MB for `sharedStrings.xml`.<br>4. openpyxl parses it read-only, with defusedxml hardening and the 5,000-row / 200-column caps.<br>5. At most 2 uploads parse at once; a third gets 429 |
 | `validate` | file | — | **File-level checks.** A missing mapped column → 422 naming it. A row token from another project → 422 "this file was exported from another project". A formula cell with no cached value → row error |
@@ -70,8 +70,8 @@ relevant, a code category.
 services/xlsx.py   zip_prepass(bytes) · read_rows(bytes, column_map) · write_book(...) — limits,
                    defusedxml, quotePrefix, column codes, a semaphore of 2
 services/bulk.py   COLUMN_MAP · template · export · validate · preview · commit · purge_import_rows
-                   row_token(project, table, id, row_version) = HMAC-SHA256 with a key derived
-                   from JWT_SECRET_KEY + "vb-row-token", compared in constant time
+                   row_token(project, table, id, row_version) = readable claims + HMAC-SHA256
+                   with ROW_TOKEN_KEY (never the JWT secret, 4a-R3), compared in constant time
 services/data_entity.py   no-commit create/update forms (the routes keep committing)
 ```
 Per-target logic sits in small functions inside `bulk.py`, so a later target adds a map and two
