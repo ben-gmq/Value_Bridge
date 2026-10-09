@@ -362,6 +362,18 @@ where these rows and the section they cite disagree, **these rows win**.
 | S4-11 | **Import identity and meaning (Ben, 2026-10-01, on Slice 4a review).** A row exported from VB carries a **signed row token** (project, table, id, `row_version`) instead of a bare `row_version`. A token row that no longer resolves to its live row is an **error, never an INSERT**: a rename or move by spreadsheet is refused, and renames are done on screen. The field key normalises as the live-name index does, `lower(btrim(name))`. Blank clears; a missing column is refused; unchanged rows are MATCH and never written. `fk_group` is a file-local label on new rows. Fields in one file may reference each other (two-pass commit). Before-values are kept in `payload.before` for the 90-day window. `file_name` becomes `(purged)` at purge. Only a rule failure rejects a batch; an operational failure leaves it retryable | S4-5 (rename "arrives as an acknowledged INSERT", `normalise_name`), §10 criterion 6 (Slice 4a) | — (`docs/slice4a_spec.md` Q1–Q9) |
 | S4-12 | **A whole data model from one workbook (Ben, 2026-10-08, on Slice 4a round-2 finding N1).** A workbook may carry an entities sheet and a fields sheet. Each sheet is still its **own batch for one target** (S4-2 and `ck_ir_kind_fits_target` unchanged), and the two run **in sequence**: the entities batch is validated, previewed and committed first, then the fields sheet is validated against the now-live entities. The browser keeps the file and sends it once per step; each target reads only its own sheet. A field row names its parent by `de_number` **or**, when that is blank, by parent entity name normalised as `lower(btrim(name))` and resolved in SQL against live entities; both given must agree. **Ben accepts that the entities commit before the fields preview is seen**: a failed fields step leaves the new entities live without fields until a corrected file is uploaded to the fields step alone. **Ben, 2026-10-09:** a referenced entity may likewise be named by `ref_de_name` (4a-R19); freezing a baseline **warns** about entities with no fields and still allows it (owed to the baseline slice); any project EDITOR may commit a batch another uploaded | §10 criterion 9 and A-4a-1 (Slice 4a) | — (`docs/slice4a_spec.md` §3, A-4a-8) |
 
+### Slice 5 solutions — 2026-10-09
+
+Schema `docs/slice5_schema.md` (apple), spec `docs/slice5_spec.md`; design review round 1 of 2 (8 findings, 0 HIGH).
+
+| # | Ruling | Changes | Source |
+|---|---|---|---|
+| S5-1 | **A BR's solution links retire and restore with its step** (Ben). `BrSolution` joins `step_retire.OWNED_BY_BR`; a step restore asks for a since-retired solution first (A-SR-5) | §5.4.15 row `br_solution` (still covered; now owned) | Q-3, DR1-P3 |
+| S5-2 | **A REJECTED solution can be linked** (Ben); the link shows its status, and coverage reports will not count it as an answer | §4.3 `br_coverage_report` (when built) | auditor Q1 |
+| S5-3 | **A link's coverage note is edited in place** (Ben): `PATCH /business-requirements/{id}/solutions/{link_id}`; the previous note goes into the audit detail | §4.3 `link_br_solution` (was C/D), §9 | auditor Q2 |
+| S5-4 | **`SOLUTION_CATEGORY` is a system category** (Ben): projects cannot rename or retire the five, because reports and `create_fr` branch on TECHNOLOGY / DATA | §8 | Q-5 |
+| S5-5 | **Physical choices adopted on apple's recommendation:** solution names unique among live solutions per project (`lower(btrim())`); `br_solution` has the S1-5 surrogate PK with `(br_id, solution_id)` as a full UNIQUE; new solutions start PROPOSED; the D-34 hook waits for FRs | §5.3 BR_SOLUTION (PK wording), §6.2 | Q-1, Q-2, Q-4, Q-7 |
+
 ### Slice 3 step retire — 2026-09-30
 
 | # | Decision | Supersedes | Spec |
@@ -2038,7 +2050,7 @@ target for `FR_INTERFACE`.
 
 **SOLUTION** *(added by Lilly, D-7)* — one row per transformation answer within one project. PK `solution_id`; FK `project_id`, `category_code_id`, `status_code_id`. UK `(project_id, solution_number)` → `SOL-0001`. `category_code_id` resolves to **ORG_AND_RULES / PEOPLE / PROCESS / DATA / TECHNOLOGY**. A solution in the first three categories legitimately has no Function Requirements at all — that is the model expressing that not every answer is software.
 
-**BR_SOLUTION** *(added, D-7)* — one row per (BR, solution) pairing. PK `(br_id, solution_id)`; `coverage_note` carries the relationship-specific fact ("this solution answers only the approval half of BR-0042"). M:N: one solution normally answers several requirements, and one requirement may need an org change *and* a system function.
+**BR_SOLUTION** *(added, D-7)* — one row per (BR, solution) pairing. Key `(br_id, solution_id)` (a full UNIQUE beside the S1-5 surrogate PK, S5-5); `coverage_note` carries the relationship-specific fact ("this solution answers only the approval half of BR-0042"). M:N: one solution normally answers several requirements, and one requirement may need an org change *and* a system function.
 
 **APPLICATION** *(added, D-8)* — one row per application or technology in one project's landscape. PK `application_id`; FK `project_id`, `app_kind_code_id`, `lifecycle_code_id`. UK `(project_id, application_code)`. `lifecycle_code` is **AS_IS / TO_BE / BOTH**, which is what lets one catalogue serve the current landscape and the target landscape without two tables.
 
@@ -2797,6 +2809,9 @@ is cleared rather than blocking, §5.3 FUNCTION_REQUIREMENT).
 
 Per frozen table (30), plus the live-only tables that have parents. "codes" means every
 `*_code_id` FK on the row, because a retired code still referenced is the same defect.
+*(As built, `lifecycle.EXCLUDED_TARGETS` leaves `code_master` out of `FK_LIVENESS`: a code is
+retired through `code_master.maintain`, never blocked by the rows that use it. Read "codes" in
+this table as that rule's concern, not an FK_LIVENESS entry — Slice 5 Q-8.)*
 
 | Table | FKs covered by `FK_LIVENESS` (child active ⇒ parent must be active) | Already DB-refused (proof only) |
 |---|---|---|
