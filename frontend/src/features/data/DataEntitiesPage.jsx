@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link,
-  Snackbar, Stack, Switch, TextField, Typography } from '@mui/material';
+  Menu, MenuItem, Snackbar, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import UploadFileRounded from '@mui/icons-material/UploadFileRounded';
 import SchemaRounded from '@mui/icons-material/SchemaRounded';
+import ArrowDropDownRounded from '@mui/icons-material/ArrowDropDownRounded';
 import { DataGrid } from '@mui/x-data-grid';
 import { dataApi, importApi } from '../../api/scope';
 import { errorText } from '../../api/client';
@@ -19,6 +20,24 @@ import { t } from '../../i18n/t';
 import { entityLabel, firstLine } from './fieldRules';
 
 const EMPTY = { de_name: '', description: '', business_owner_note: '' };
+// What the Import and Export menus offer: one target, or the data model's two sheets in one workbook.
+const BOOKS = [['data-entities', 'data.import.menuEntities'], ['data-fields', 'data.import.menuFields'],
+  ['data-model', 'data.import.menuModel']];
+
+// A button that opens a menu of BOOKS; onPick(slug) runs the choice.
+function BookMenu({ id, label, icon, variant, disabled, onPick }) {
+  const [anchor, setAnchor] = useState(null);
+  return (
+    <>
+      <Button id={id} variant={variant} startIcon={icon} endIcon={<ArrowDropDownRounded />} disabled={disabled}
+        onClick={(e) => setAnchor(e.currentTarget)}>{label}</Button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        {BOOKS.map(([slug, key]) => (
+          <MenuItem key={slug} id={`${id}-${slug}`} onClick={() => { setAnchor(null); onPick(slug); }}>{t(key)}</MenuItem>))}
+      </Menu>
+    </>
+  );
+}
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
 function AddEntityDialog({ projectId, onClose, onDone }) {
@@ -66,7 +85,7 @@ export default function DataEntitiesPage() {
   const q = useQuery({ queryKey: showRetired ? [...keys.entities(projectId), 'with-retired'] : keys.entities(projectId),
     queryFn: () => dataApi.list(projectId, showRetired), placeholderData: (prev) => prev });
   const [adding, setAdding] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(null);   // the target slug the wizard opens on
   const canEdit = useCanEdit();
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -83,7 +102,7 @@ export default function DataEntitiesPage() {
 
   // Export is a read (REVIEWER may); template, validate and commit are edits, so Import hides.
   const exportList = useMutation({
-    mutationFn: () => importApi.export(projectId, 'data-entities'),
+    mutationFn: (slug) => importApi.export(projectId, slug),
     onSuccess: (name) => setNotice(t('data.import.exported', { name })),
     onError: (err) => setError(errorText(err, t('data.import.downloadFailed'))),
   });
@@ -94,9 +113,17 @@ export default function DataEntitiesPage() {
         <Link component={RouterLink} to={links.entity(projectId, row.data_entity_id)} tabIndex={tabIndex}
           onClick={(e) => e.stopPropagation()}
           sx={{ fontFamily: MONO, fontSize: 13, color: 'brand.link' }}>{value}</Link>) },
-    { field: 'de_name', headerName: t('data.name'), flex: 1, minWidth: 180,
+    { field: 'de_name', headerName: t('data.name'), flex: 1, minWidth: 220,
       renderCell: ({ row, value }) => (
-        <Box component="span" sx={{ color: row.is_active === false ? 'text.secondary' : 'inherit' }}>{value}</Box>) },
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
+          <Box component="span" sx={{ color: row.is_active === false ? 'text.secondary' : 'inherit',
+            overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</Box>
+          {/* 4a-R10: a half-built model is never invisible */}
+          {row.is_active !== false && row.live_field_count === 0 && (
+            <Tooltip title={t('data.noFieldsTip')}>
+              <Chip size="small" variant="outlined" color="warning" label={t('data.noFieldsChip')} />
+            </Tooltip>)}
+        </Stack>) },
     { field: 'description', headerName: t('data.description'), flex: 2, minWidth: 240,
       valueGetter: (v) => firstLine(v) },
     ...(showRetired ? [{ field: 'is_active', headerName: '', width: 190, sortable: false,
@@ -113,10 +140,11 @@ export default function DataEntitiesPage() {
     <Page title={t('data.title')} subtitle={t('data.subtitle')}
       actions={(<>
         <Button component={RouterLink} to={links.erd(projectId)} startIcon={<SchemaRounded />}>{t('data.diagram')}</Button>
-        <Button startIcon={<DownloadRounded />} disabled={exportList.isPending}
-          onClick={() => { setError(''); exportList.mutate(); }}>{t('data.import.exportList')}</Button>
+        <BookMenu id="data-export" label={t('data.import.exportList')} icon={<DownloadRounded />}
+          disabled={exportList.isPending} onPick={(slug) => { setError(''); exportList.mutate(slug); }} />
         {canEdit && (
-          <Button variant="outlined" startIcon={<UploadFileRounded />} onClick={() => setImporting(true)}>{t('data.import.open')}</Button>)}
+          <BookMenu id="data-import" variant="outlined" label={t('data.import.open')} icon={<UploadFileRounded />}
+            onPick={(slug) => setImporting(slug)} />)}
         {canEdit && (
           <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>)}
       </>)}>
@@ -138,7 +166,7 @@ export default function DataEntitiesPage() {
       {adding && <AddEntityDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(de) => { qc.invalidateQueries({ queryKey: keys.entities(projectId) });
           setNotice(t('data.created', { number: de.de_number })); }} />}
-      {importing && <ImportWizard projectId={projectId} onClose={() => setImporting(false)} />}
+      {importing && <ImportWizard projectId={projectId} initialTarget={importing} onClose={() => setImporting(null)} />}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Page>
   );

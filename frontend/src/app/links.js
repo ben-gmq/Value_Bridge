@@ -25,6 +25,7 @@ export const keys = {
   br: (id) => ['br', String(id)],
   entities: (p) => ['entities', String(p)],
   entity: (id) => ['entity', String(id)],
+  everyEntity: () => ['entity'],                                                     // every entity(id): an import of fields
   erd: (p, area) => ['entities', String(p), 'erd', String(area ?? 'project')],   // under entities(p): field edits refresh it
   parties: (p) => ['parties', String(p)],
   units: (p) => ['org-units', String(p)],
