@@ -507,9 +507,11 @@ def test_the_check_route_runs_the_file_checks_and_stages_nothing(client, ed, db)
     body = model(["Customer"], [{"de_name": "Customer", "field_name": "id"}])
     r = post(client, ed, "data-fields/check", body)
     assert r.status_code == 200, r.text
-    assert r.json() == {"target": "data-fields", "sheet_name": "Data fields", "row_count": 1,
-                        "file_warnings": r.json()["file_warnings"],
-                        "other_sheets": [{"sheet": "Data entities", "target": "data-entities"}]}
+    out = r.json()
+    assert {k: v for k, v in out.items() if k != "file_warnings"} == {
+        "target": "data-fields", "sheet_name": "Data fields", "row_count": 1,
+        "other_sheets": [{"sheet": "Data entities", "target": "data-entities"}]}
+    assert [w["code"] for w in out["file_warnings"]] == ["SHEET_NOT_READ"]          # sara L-8
     assert db.scalar(select(ImportBatch.import_batch_id).limit(1)) is None
     no_fields = edit_fields(body, lambda ws, col: setc(ws, col, 1, "ref_field_name", None))
     r = post(client, ed, "data-fields/check", no_fields)
@@ -542,6 +544,18 @@ def test_the_existing_field_routes_still_commit(client, ed, db, three):
                      json={"row_version": a["row_version"], "description": "x"})
     assert r.status_code == 200
     assert fields_of(db, ed["p"])["DE-0001/a"].description == "x"
+
+
+def test_the_check_route_is_401_without_a_bearer_header_before_its_body_is_read(client, ed, monkeypatch):
+    """sara L-8: as the validate route (test_bulk_import), an anonymous upload is refused unread."""
+    reached = []
+    monkeypatch.setattr(bulk, "check_file", lambda *a, **k: reached.append(1))
+    r = client.post(
+        BULK.format(p=ed["p"], what="data-fields/check"),
+        content=model(None, [{"de_name": "Customer", "field_name": "id"}]),
+        headers={"Accept": "application/json", "Content-Type": xlsx.XLSX_MEDIA_TYPE,
+                 "X-VB-File-Name": quote("model.xlsx")})
+    assert r.status_code == 401 and reached == []
 
 
 # ---- sara M-1: swapping referenced fields inside one relationship -------------------------
