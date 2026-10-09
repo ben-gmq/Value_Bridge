@@ -466,7 +466,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
             {b?.status === 'REJECTED' && <Alert severity="error" sx={ERR_SX}>{t('data.import.rejected')}</Alert>}
             {b?.status === 'VALIDATED' && b.error_count > 0 && (
               <Alert severity="error" sx={ERR_SX}>
-                {t(fieldsOwed ? 'data.import.model.fixFields' : 'data.import.fixErrors', { n: b.error_count })}
+                {t((fieldsOwed ? 'data.import.model.fixFields' : 'data.import.fixErrors')
+                  + (b.error_count === 1 ? 'One' : ''), { n: b.error_count })}
               </Alert>)}
             {committable && b.insert_count + b.update_count === 0 && (
               <Alert severity="info" sx={ERR_SX}>{t('data.import.nothingToChange')}</Alert>)}

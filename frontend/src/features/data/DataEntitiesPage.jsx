@@ -121,7 +121,8 @@ export default function DataEntitiesPage() {
           {/* 4a-R10: a half-built model is never invisible */}
           {row.is_active !== false && row.live_field_count === 0 && (
             <Tooltip title={t('data.noFieldsTip')}>
-              <Chip size="small" variant="outlined" color="warning" label={t('data.noFieldsChip')} />
+              <Chip size="small" variant="outlined" label={t('data.noFieldsChip')}
+                sx={{ color: 'status.caution', borderColor: 'status.caution' }} />
             </Tooltip>)}
         </Stack>) },
     { field: 'description', headerName: t('data.description'), flex: 2, minWidth: 240,
