@@ -71,6 +71,12 @@ class BrSolution(AuditMixin, Base):
     solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     coverage_note: Mapped[str | None] = mapped_column(Text)
 
+    # Read-only: the two-ended label "BR-0042 ↔ SOL-0003" a 409 or a retire preview shows (DR1-P1).
+    br_row = relationship("BusinessRequirement", viewonly=True,
+                          primaryjoin="foreign(BrSolution.br_id) == BusinessRequirement.br_id")
+    solution_row = relationship("Solution", viewonly=True,
+                                primaryjoin="foreign(BrSolution.solution_id) == Solution.solution_id")
+
     __table_args__ = (
         UniqueConstraint("br_id", "solution_id", name="uq_brsol_grain"),
         ForeignKeyConstraint(["br_id", "project_id"],

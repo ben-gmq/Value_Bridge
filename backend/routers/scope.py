@@ -1,4 +1,4 @@
-"""Slice 1 routes (§9): the function chart, business requirements, data entities and fields,
+"""Slice 1 and 5 routes (§9): the function chart, business requirements, solutions, data entities and fields,
 external parties, the client organisation, and the links between them.
 
 Every route declares one guard. Project-scoped collections use project_ctx; everything under
@@ -13,7 +13,7 @@ from auth.dependencies import current_user
 from database import get_db
 from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
                     BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
-                    ExternalEntity, OrgRole, OrgUnit)
+                    ExternalEntity, OrgRole, OrgUnit, BrSolution, Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
@@ -25,8 +25,11 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            ProcessIn, ProcessOut, RaciIn, ReorderIn, RestoreCountOut,
                            RetireConfirmIn, RetirePreviewOut, StepIoIn, StepIoOut,
                            StepRaciOut, TreeNodeOut)
+from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
+                             SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
+from services import solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
 _read = project_ctx("REVIEWER")
@@ -244,6 +247,74 @@ def link_br_role(id: int, body: RaciIn, br: BusinessRequirement = Depends(_br_w.
 def unlink_br_role(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     raci.unlink(db, _uid(user), _child(db, BrOrgRole, link_id, "br_id", br.br_id), row_version)
+
+
+# ---- solutions and the BRs they answer (§7.5, §4.3, docs/slice5_spec.md) -----------------
+_sol_r, _sol_w = _og(Solution, "REVIEWER"), _og(Solution, "EDITOR")
+
+
+@router.get("/projects/{project_id}/solutions", response_model=list[SolutionListOut], **_read.route)
+def list_solutions(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return [SolutionListOut.model_validate(s).model_copy(update={"live_br_count": n})
+            for s, n in sol_service.list_solutions(db, project_id, include_retired)]
+
+
+@router.post("/projects/{project_id}/solutions", response_model=SolutionOut, status_code=201,
+             **_edit.route)
+def create_solution(project_id: int, body: SolutionIn, user: AppUser = Depends(current_user),
+                    db: Session = Depends(get_db)):
+    return sol_service.create_solution(db, _uid(user), project_id, body.solution_name, body.category_code,
+                                       body.model_dump(exclude={"solution_name", "category_code"}))
+
+
+@router.get("/solutions/{id}", response_model=SolutionOut, **_sol_r.route)
+def read_solution(id: int, sol: Solution = Depends(_sol_r.dep)):
+    return sol
+
+
+@router.patch("/solutions/{id}", response_model=SolutionOut, **_sol_w.route)
+def update_solution(id: int, body: SolutionPatch, sol: Solution = Depends(_sol_w.dep),
+                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    fields = body.model_dump(exclude_unset=True, exclude={"row_version", "category_code", "status_code"})
+    return sol_service.update_solution(db, _uid(user), sol, body.row_version, fields,
+                                       body.category_code, body.status_code)
+
+
+_retire_and_restore("solutions", Solution, SolutionOut, on_restore=sol_service.restore_solution)
+
+
+@router.get("/solutions/{id}/business-requirements", response_model=list[SolutionBrOut], **_sol_r.route)
+def list_solution_brs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session = Depends(get_db)):
+    return sol_service.links_of_solution(db, sol)
+
+
+@router.get("/business-requirements/{id}/solutions", response_model=list[BrSolutionOut], **_br_r.route)
+def list_br_solutions(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    return sol_service.links_of_br(db, br)
+
+
+@router.post("/business-requirements/{id}/solutions", response_model=BrSolutionOut, status_code=201,
+             **_br_w.route)
+def link_br_solution(id: int, body: BrSolutionIn, br: BusinessRequirement = Depends(_br_w.dep),
+                     user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = sol_service.link(db, _uid(user), br, body.solution_id, body.coverage_note)
+    return sol_service.as_br_link(db, row)
+
+
+@router.patch("/business-requirements/{id}/solutions/{link_id}", response_model=BrSolutionOut,
+              **_br_w.route)
+def edit_br_solution(id: int, link_id: int, body: BrSolutionPatch,
+                     br: BusinessRequirement = Depends(_br_w.dep), user: AppUser = Depends(current_user),
+                     db: Session = Depends(get_db)):
+    row = sol_service.edit_note(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id),
+                                body.row_version, body.coverage_note)
+    return sol_service.as_br_link(db, row)
+
+
+@router.delete("/business-requirements/{id}/solutions/{link_id}", status_code=204, **_br_w.route)
+def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
+                       user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    sol_service.unlink(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id), row_version)
 
 
 # ---- data entities and fields (§7.4) ------------------------------------------------------

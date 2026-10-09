@@ -3,10 +3,11 @@ as a CHECK still holds. Each key is one line of the report; an empty list means 
 
 Lines land with the slice that owns their rule. Slice 4a-3 adds `purge_overdue` (A-4a-5): import
 batches past their 90-day window that still hold rows, shown until a purge run removes them, so
-a forgotten or failing purge is visible while it runs as a CLI with no schedule."""
+a forgotten or failing purge is visible while it runs as a CLI with no schedule. Slice 5 adds
+`brsol_under_inactive` (DR1-D1), a must-be-empty line."""
 from sqlalchemy.orm import Session
 
-from services import consistency_data, import_purge
+from services import consistency_data, import_purge, solution
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
@@ -24,4 +25,5 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
         "purge_overdue": import_purge.overdue(db, project_id),
         "entities_without_fields": (consistency_data.entities_without_fields(db, project_id)
                                     if project_id is not None else []),
+        "brsol_under_inactive": solution.brsol_under_inactive(db, project_id),
     }
