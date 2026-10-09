@@ -1,8 +1,8 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-009 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 4 entries (VB-006, VB-007, VB-008; VB-005, the standing backlog) · 39 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 39 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -51,6 +51,17 @@ place.
   every one (403), so nothing is breached. Predates Slice 4a.
 - **root cause:** those controls never went through `useCanEdit` (CLAUDE.md "Edit controls").
   · **files:** `frontend/src/features/data/DataEntityPage.jsx`, `DataEntitiesPage.jsx`
+
+### VB-009 | A BR→data-entity link may land under an entity retired at the same instant (suspected) | OPEN
+
+- **type:** BUG (concurrency, unverified) · **found:** 2026-10-09 by `design-auditor` (Slice 5 design review round 1, side note to DR1-D1, MEDIUM) · **depends-on:** —
+- `business_requirement.link_data_entity` checks the entity through `step_io.live_entity`, a plain
+  `db.get` with no lock. A data-entity retire that commits between that read and the link's INSERT
+  would leave a live `br_data_entity` under a retired entity; the INSERT's FK check still passes.
+- **To confirm:** two sessions — hold a DataEntity retire open between its lock and its commit
+  while a link runs. Slice 5 adopts the locked form for `br_solution`, so the fix is the same
+  `lock_for_share` before the liveness check. · **files:** `backend/services/step_io.py:16-20`,
+  `backend/services/business_requirement.py`
 
 ---
 
