@@ -128,7 +128,7 @@ export const erdApi = {
 };
 
 // Slice 4a — the one import pipeline (docs/slice4a_spec.md §9). `target` is the route slug
-// (`data-entities`; 4a-2 adds `data-fields`). The upload is the raw .xlsx body, never multipart
+// (`data-entities`, `data-fields`); template and export also take `data-model` (both sheets, S4-12). The upload is the raw .xlsx body, never multipart
 // (A-4a-7), with the display name percent-encoded in X-VB-File-Name (4a-R8).
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -172,6 +172,10 @@ export const importApi = {
   export: (projectId, target) => download(`${P(projectId)}/bulk/${target}/export`, `vb-${target}-export.xlsx`),
   // `buffer` is the ArrayBuffer read once when the file was picked (4a-R16). 201 → the preview.
   validate: (projectId, target, buffer, fileName) => d(http.post(`${P(projectId)}/bulk/${target}/validate`, buffer,
+    { headers: { 'Content-Type': XLSX_TYPE, 'X-VB-File-Name': encodeURIComponent(fileName) } })),
+  // The file-level checks alone, nothing staged (the data-model wizard runs it on the fields sheet
+  // before step 1 commits): { target, sheet_name, row_count, file_warnings, other_sheets: [{sheet, target}] }.
+  check: (projectId, target, buffer, fileName) => d(http.post(`${P(projectId)}/bulk/${target}/check`, buffer,
     { headers: { 'Content-Type': XLSX_TYPE, 'X-VB-File-Name': encodeURIComponent(fileName) } })),
   batch: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}`)),
   preview: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}/preview`)),

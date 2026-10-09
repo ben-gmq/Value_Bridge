@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
   Radio, RadioGroup, Stack, Step, StepLabel, Stepper, Table, TableBody, TableCell, TableHead, TablePagination,
@@ -15,9 +15,23 @@ import { t, tOr } from '../i18n/t';
  * The one import wizard (VB law 8, docs/slice4a_spec.md §4 "review (manual)"): choose a target →
  * template or export → pick the .xlsx (read ONCE into memory, 4a-R16) → upload → read the preview
  * → fix in Excel and re-upload as often as needed (each upload is a new batch) → type the insert
- * count → commit. Everything a target changes lives in IMPORT_TARGETS, so 4a-2 adds data-fields
- * there. Every server text (messages, params, names, cell values) is untrusted and renders as text.
+ * count → commit. Everything a target changes lives in IMPORT_TARGETS. Every server text (messages,
+ * params, names, cell values) is untrusted and renders as text.
+ *
+ * A BOOK (`data-model`, S4-12) is one workbook run as two batches in sequence: the entities sheet
+ * (validate → preview → commit), then the fields sheet, validated against the now-live entities.
+ * The same in-memory buffer is posted at every step. Before step 1 commits, the fields sheet's
+ * file-level checks run (`check`, nothing staged); a file with no entities sheet skips step 1.
+ * Once step 1 has committed, the wizard is left only by "Do fields later" (4a-R10), and a failed
+ * fields step takes a corrected file to the fields step alone.
  */
+const FIELD_COLUMNS = { de_number: 'data.number', de_name: 'data.import.col.deName',
+  field_name: 'data.field.name', data_type: 'data.field.type', length: 'data.field.length',
+  precision: 'data.field.precision', scale: 'data.field.scale', mandatory: 'data.field.required',
+  pk_position: 'data.field.pkOrdinal', ref_de_number: 'data.import.col.refDeNumber',
+  ref_de_name: 'data.import.col.refDeName', ref_field_name: 'data.import.col.refFieldName',
+  fk_group: 'data.import.col.fkGroup', description: 'data.description', row_token: 'data.import.col.rowToken' };
+
 export const IMPORT_TARGETS = {
   'data-entities': {
     label: 'data.import.target.entities',
@@ -27,11 +41,25 @@ export const IMPORT_TARGETS = {
       business_owner_note: 'data.ownerNote', row_token: 'data.import.col.rowToken' },
     refresh: (p) => [keys.entities(p)],          // what a commit makes stale
   },
+  'data-fields': {
+    label: 'data.import.target.fields',
+    help: 'data.import.target.fieldsHelp',
+    columns: FIELD_COLUMNS,
+    refresh: (p) => [keys.entities(p), keys.everyEntity()],
+  },
+  'data-model': {
+    label: 'data.import.target.model',
+    help: 'data.import.target.modelHelp',
+    book: ['data-entities', 'data-fields'],      // template and export only; each step validates one
+    columns: FIELD_COLUMNS,
+    refresh: (p) => [keys.entities(p), keys.everyEntity()],
+  },
 };
 
 const MAX_BYTES = 10 * 1024 * 1024;              // the server's ingress cap (§4 validate, step 2)
 const PAGE = 100;
 const STEPS = ['target', 'file', 'review', 'done'];
+const BOOK_STEPS = ['target', 'file', 'entities', 'fields', 'done'];
 const VERDICT_COLOR = { INSERT: 'success', UPDATE: 'primary', MATCH: 'default' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
@@ -68,6 +96,7 @@ function Value({ v }) {
   if (v === null || v === undefined || v === '') {
     return <Box component="span" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>{t('data.import.blank')}</Box>;
   }
+  if (typeof v === 'boolean') return <Box component="span">{t(v ? 'data.import.yes' : 'data.import.no')}</Box>;
   return <Box component="span" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{String(v)}</Box>;
 }
 
@@ -90,6 +119,22 @@ function Changes({ row, cfg }) {
       )}
     </Box>
   ));
+}
+
+// What a row resolved to (4a-R13: the number and name of a parent or target named by name) and
+// the relationship a foreign-key row joins (4a-R1). Server values, rendered as text.
+function Resolved({ res }) {
+  if (!res) return null;
+  const lines = [];
+  if (res.parent?.by_name) lines.push(t('data.import.resolvedParent', { number: res.parent.de_number, name: res.parent.de_name }));
+  if (res.ref?.by_name) lines.push(t('data.import.resolvedRef', { number: res.ref.de_number, name: res.ref.de_name }));
+  const rel = res.relationship;
+  if (rel) {
+    const base = rel.kind === 'existing' ? t('data.import.relExisting', { group: rel.group, to: rel.to })
+      : rel.label ? t('data.import.relNewLabel', { label: rel.label, to: rel.to }) : t('data.import.relNew', { to: rel.to });
+    lines.push(rel.with?.length ? `${base} ${t('data.import.relWith', { names: rel.with.join(', ') })}` : base);
+  }
+  return lines.map((l) => <Typography key={l} sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{l}</Typography>);
 }
 
 function FileInfo({ file }) {
@@ -150,7 +195,7 @@ function Preview({ pv, cfg }) {
               <TableRow>
                 <TableCell sx={{ width: 64 }}>{t('data.import.col.row')}</TableCell>
                 <TableCell sx={{ width: 150 }}>{t('data.import.col.verdict')}</TableCell>
-                <TableCell sx={{ width: 110 }}>{t('data.import.col.key')}</TableCell>
+                <TableCell sx={{ width: 170 }}>{t('data.import.col.key')}</TableCell>
                 <TableCell>{t('data.import.col.changes')}</TableCell>
                 <TableCell sx={{ width: '34%' }}>{t('data.import.col.problems')}</TableCell>
               </TableRow>
@@ -166,7 +211,10 @@ function Preview({ pv, cfg }) {
                       {!r.is_valid && <Chip size="small" color="error" label={t('data.import.verdict.error')} />}
                     </Stack>
                   </TableCell>
-                  <TableCell sx={{ fontFamily: MONO, fontSize: 13 }}>{r.business_key ?? t('data.none')}</TableCell>
+                  <TableCell>
+                    <Box sx={{ fontFamily: MONO, fontSize: 13, wordBreak: 'break-word' }}>{r.business_key ?? t('data.none')}</Box>
+                    <Resolved res={r.resolved} />
+                  </TableCell>
                   <TableCell><Changes row={r} cfg={cfg} /></TableCell>
                   <TableCell>
                     <MsgList msgs={r.errors} cfg={cfg} color="error.main" />
@@ -196,15 +244,19 @@ function uploadError(err) {
   return errorText(err, t(s === 422 ? 'data.import.invalidFile' : 'data.import.uploadFailed'));
 }
 
-export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS), onClose, onCommitted }) {
+export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS), initialTarget, onClose, onCommitted }) {
   const qc = useQueryClient();
-  const [target, setTarget] = useState(targets[0]);
+  const [target, setTarget] = useState(initialTarget ?? targets[0]);
   const cfg = IMPORT_TARGETS[target];
-  const [step, setStep] = useState('target');
+  const isBook = Boolean(cfg.book);
+  const [step, setStep] = useState(initialTarget ? 'file' : 'target');
+  const [phase, setPhase] = useState(null);        // the target slug the current batch belongs to
   const [file, setFile] = useState(null);          // { name, size, lastModified, buffer } — read once (4a-R16)
   const [batchId, setBatchId] = useState(null);
   const [typed, setTyped] = useState('');
-  const [done, setDone] = useState(null);          // the COMMITTED BatchHeader
+  const [done, setDone] = useState(null);          // the COMMITTED BatchHeader (the last step's)
+  const [entitiesDone, setEntitiesDone] = useState(null);   // a book's step 1, once committed
+  const [skippedEntities, setSkippedEntities] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -212,6 +264,17 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     enabled: batchId != null, staleTime: 30_000 });
   const pv = pq.data;
   const b = pv?.batch;
+  const phaseCfg = IMPORT_TARGETS[phase] ?? cfg;
+  const inEntities = isBook && phase === 'data-entities';
+  // 4a-R10: after step 1 commits, the fields are owed until they commit or "Do fields later".
+  const fieldsOwed = isBook && entitiesDone != null && step !== 'done';
+
+  useEffect(() => {
+    if (!fieldsOwed) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [fieldsOwed]);
 
   const say = (err = '', info = '') => { setError(err); setNotice(info); };
 
@@ -238,26 +301,56 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     }
   };
 
+  const staged = (ph, data) => {
+    const id = data.batch.import_batch_id;
+    qc.setQueryData(keys.importPreview(id), data);
+    setPhase(ph);
+    setBatchId(id);
+    setTyped('');
+    setStep('review');
+  };
+
   const upload = useMutation({
-    mutationFn: () => importApi.validate(projectId, target, file.buffer, file.name),
-    onSuccess: (data) => {
-      const id = data.batch.import_batch_id;
-      qc.setQueryData(keys.importPreview(id), data);
-      setBatchId(id);
-      setTyped('');
-      say();
-      setStep('review');
+    mutationFn: async () => {
+      if (!isBook) return { ph: target, data: await importApi.validate(projectId, target, file.buffer, file.name) };
+      if (entitiesDone) {                          // a corrected file goes to the fields step alone
+        return { ph: 'data-fields', data: await importApi.validate(projectId, 'data-fields', file.buffer, file.name) };
+      }
+      // The fields sheet's file-level checks first, so a sheet that cannot be read is found
+      // before any entity is written; then step 1, or straight to fields with no entities sheet.
+      const chk = await importApi.check(projectId, 'data-fields', file.buffer, file.name);
+      const hasEntities = chk.other_sheets.some((x) => x.target === 'data-entities');
+      const ph = hasEntities ? 'data-entities' : 'data-fields';
+      return { ph, skipped: !hasEntities, data: await importApi.validate(projectId, ph, file.buffer, file.name) };
+    },
+    onSuccess: ({ ph, skipped, data }) => {
+      if (skipped !== undefined) setSkippedEntities(skipped);
+      staged(ph, data);
+      say('', skipped ? t('data.import.model.noEntitiesSheet') : '');
     },
     onError: (err) => say(uploadError(err)),
   });
 
+  // Step 2 of a book: the same buffer, validated against the entities step 1 just made live.
+  const fieldsStep = useMutation({
+    mutationFn: () => importApi.validate(projectId, 'data-fields', file.buffer, file.name),
+    onSuccess: (data) => { staged('data-fields', data); say('', t('data.import.model.entitiesCommitted')); },
+    onError: (err) => { setBatchId(null); setStep('file'); say(uploadError(err)); },
+  });
+
   const finish = (header, info = '') => {
     qc.setQueryData(keys.importBatch(header.import_batch_id), header);
-    for (const k of cfg.refresh(projectId)) qc.invalidateQueries({ queryKey: k });
+    for (const k of (phaseCfg.refresh ?? cfg.refresh)(projectId)) qc.invalidateQueries({ queryKey: k });
+    onCommitted?.(header);
+    if (inEntities) {                              // step 1 done: on to the fields, same file
+      setEntitiesDone(header);
+      say('', info);
+      fieldsStep.mutate();
+      return;
+    }
     setDone(header);
     say('', info);
     setStep('done');
-    onCommitted?.(header);
   };
 
   const commit = useMutation({
@@ -286,21 +379,35 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     },
   });
 
+  // Before step 1 commits, a corrected file starts over; after it, it goes to the fields step alone.
   const reupload = () => { setFile(null); setBatchId(null); setTyped(''); say(); setStep('file'); };
 
   const committable = b && b.status === 'VALIDATED' && b.error_count === 0 && !pv.purged;
   const countOk = !b?.insert_count || typed.trim() === String(b.insert_count);
-  const busy = upload.isPending || commit.isPending;
+  const busy = upload.isPending || commit.isPending || fieldsStep.isPending;
+  const steps = isBook ? BOOK_STEPS : STEPS;
+  const shownStep = isBook && step === 'review' ? (inEntities ? 'entities' : 'fields')
+    : isBook && step === 'file' && entitiesDone ? 'fields' : step;
+  const closable = !busy && !fieldsOwed;
+  const later = () => { say(); onClose(); };
 
   return (
-    <Dialog open onClose={busy ? undefined : onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>{t('data.import.title')}</DialogTitle>
+    <Dialog open onClose={closable ? onClose : undefined} maxWidth="lg" fullWidth>
+      <DialogTitle>{t(isBook ? 'data.import.model.title' : 'data.import.title')}</DialogTitle>
       <DialogContent>
-        <Stepper activeStep={STEPS.indexOf(step)} sx={{ mb: 3, mt: 1 }}>
-          {STEPS.map((s) => <Step key={s}><StepLabel>{t(`data.import.step.${s}`)}</StepLabel></Step>)}
+        <Stepper activeStep={steps.indexOf(shownStep)} sx={{ mb: 3, mt: 1 }}>
+          {steps.map((s) => (
+            <Step key={s} completed={s === 'entities' && (entitiesDone != null || skippedEntities) ? true : undefined}>
+              <StepLabel optional={s === 'entities' && skippedEntities
+                ? <Typography sx={{ fontSize: 12 }}>{t('data.import.model.skipped')}</Typography> : undefined}>
+                {t(`data.import.step.${s}`)}
+              </StepLabel>
+            </Step>))}
         </Stepper>
         {error && <Alert severity="error" sx={ERR_SX}>{error}</Alert>}
         {notice && <Alert severity="info" sx={ERR_SX}>{notice}</Alert>}
+        {fieldsOwed && step !== 'review' && (
+          <Alert severity="warning" sx={ERR_SX}>{t('data.import.model.fieldsOwed', { n: entitiesDone.insert_count })}</Alert>)}
 
         {step === 'target' && (
           <RadioGroup value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -316,19 +423,25 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
 
         {step === 'file' && (
           <Stack spacing={3}>
+            {!entitiesDone && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.getFile')}</Typography>
+                <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
+                  {t(isBook ? 'data.import.model.getFileHelp' : 'data.import.getFileHelp')}
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" startIcon={<DownloadRounded />} disabled={dl.isPending}
+                    onClick={() => { say(); dl.mutate('template'); }}>{t('data.import.template')}</Button>
+                  <Button variant="outlined" startIcon={<DownloadRounded />} disabled={dl.isPending}
+                    onClick={() => { say(); dl.mutate('export'); }}>{t('data.import.export')}</Button>
+                </Stack>
+              </Box>
+            )}
             <Box>
-              <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.getFile')}</Typography>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>{t('data.import.getFileHelp')}</Typography>
-              <Stack direction="row" spacing={1}>
-                <Button variant="outlined" startIcon={<DownloadRounded />} disabled={dl.isPending}
-                  onClick={() => { say(); dl.mutate('template'); }}>{t('data.import.template')}</Button>
-                <Button variant="outlined" startIcon={<DownloadRounded />} disabled={dl.isPending}
-                  onClick={() => { say(); dl.mutate('export'); }}>{t('data.import.export')}</Button>
-              </Stack>
-            </Box>
-            <Box>
-              <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.pickFile')}</Typography>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>{t('data.import.pickFileHelp')}</Typography>
+              <Typography variant="h6" sx={{ mb: 0.5 }}>{t(entitiesDone ? 'data.import.model.pickFields' : 'data.import.pickFile')}</Typography>
+              <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
+                {t(entitiesDone ? 'data.import.model.pickFieldsHelp' : 'data.import.pickFileHelp')}
+              </Typography>
               <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                 <Button component="label" variant="outlined" startIcon={<UploadFileRounded />} disabled={busy}>
                   {t(file ? 'data.import.pickOther' : 'data.import.pick')}
@@ -344,14 +457,23 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
         {step === 'review' && (
           <>
             {file && <Box sx={{ mb: 1 }}><FileInfo file={file} /></Box>}
+            {isBook && (
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600, mb: 1 }}>
+                {t(inEntities ? 'data.import.model.step1' : 'data.import.model.step2')}
+              </Typography>)}
             {!pv && !pq.error && <Typography sx={{ color: 'text.secondary' }}>{t('data.import.loading')}</Typography>}
             {pq.error && <Alert severity="error" sx={ERR_SX}>{errorText(pq.error, t('data.loadFailed'))}</Alert>}
             {b?.status === 'REJECTED' && <Alert severity="error" sx={ERR_SX}>{t('data.import.rejected')}</Alert>}
             {b?.status === 'VALIDATED' && b.error_count > 0 && (
-              <Alert severity="error" sx={ERR_SX}>{t('data.import.fixErrors', { n: b.error_count })}</Alert>)}
+              <Alert severity="error" sx={ERR_SX}>
+                {t((fieldsOwed ? 'data.import.model.fixFields' : 'data.import.fixErrors')
+                  + (b.error_count === 1 ? 'One' : ''), { n: b.error_count })}
+              </Alert>)}
             {committable && b.insert_count + b.update_count === 0 && (
               <Alert severity="info" sx={ERR_SX}>{t('data.import.nothingToChange')}</Alert>)}
-            {pv && <Preview key={b.import_batch_id} pv={pv} cfg={cfg} />}
+            {pv && <Preview key={b.import_batch_id} pv={pv} cfg={phaseCfg} />}
+            {committable && inEntities && (
+              <Alert severity="warning" sx={{ mt: 3, whiteSpace: 'pre-wrap' }}>{t('data.import.model.step1Confirm')}</Alert>)}
             {committable && b.insert_count > 0 && (
               <Box sx={{ mt: 3 }}>
                 <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.confirmBody', { n: b.insert_count })}</Typography>
@@ -366,9 +488,18 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
         )}
 
         {step === 'done' && done && (
-          <Alert severity="success">
-            {t('data.import.committed', { inserts: done.insert_count, updates: done.update_count, matches: done.match_count })}
-          </Alert>
+          <Stack spacing={1.5}>
+            {file && <FileInfo file={file} />}
+            {entitiesDone && (
+              <Alert severity="success">
+                {t('data.import.model.entitiesSummary', { inserts: entitiesDone.insert_count,
+                  updates: entitiesDone.update_count, matches: entitiesDone.match_count })}
+              </Alert>)}
+            <Alert severity="success">
+              {t(isBook ? 'data.import.model.fieldsSummary' : 'data.import.committed',
+                { inserts: done.insert_count, updates: done.update_count, matches: done.match_count })}
+            </Alert>
+          </Stack>
         )}
       </DialogContent>
       <DialogActions>
@@ -380,19 +511,28 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
         )}
         {step === 'file' && (
           <>
-            <Button onClick={() => { say(); setStep('target'); }} disabled={busy}>{t('data.import.back')}</Button>
-            <Button onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
+            {!entitiesDone && <Button onClick={() => { say(); setStep('target'); }} disabled={busy}>{t('data.import.back')}</Button>}
+            {fieldsOwed
+              ? <Button onClick={later} disabled={busy}>{t('data.import.model.later')}</Button>
+              : <Button onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>}
             <Button variant="contained" disabled={!file || busy}
               onClick={() => { say(); upload.mutate(); }}>{t(upload.isPending ? 'data.import.checking' : 'data.import.upload')}</Button>
           </>
         )}
         {step === 'review' && (
           <>
-            <Button onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
-            <Button onClick={reupload} disabled={busy}>{t('data.import.reupload')}</Button>
+            {fieldsOwed
+              ? <Button onClick={later} disabled={busy}>{t('data.import.model.later')}</Button>
+              : <Button onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>}
+            <Button onClick={reupload} disabled={busy}>
+              {t(fieldsOwed ? 'data.import.model.reuploadFields' : 'data.import.reupload')}
+            </Button>
             {committable && (
               <Button variant="contained" color="warning" disabled={!countOk || busy}
-                onClick={() => { say(); commit.mutate(); }}>{t(commit.isPending ? 'data.import.committing' : 'data.import.commit')}</Button>)}
+                onClick={() => { say(); commit.mutate(); }}>
+                {t(commit.isPending || fieldsStep.isPending ? 'data.import.committing'
+                  : inEntities ? 'data.import.model.commitEntities' : 'data.import.commit')}
+              </Button>)}
           </>
         )}
         {step === 'done' && <Button variant="contained" onClick={onClose}>{t('data.import.close')}</Button>}

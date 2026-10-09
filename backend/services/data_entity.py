@@ -113,7 +113,20 @@ def _group_no(db: Session, de: DataEntity, target_id: int, group, field: DataFie
     raise HTTPException(422, "fk_group must be 'new' or an existing relationship number to that entity")
 
 
-def create_field(db: Session, actor_id: int, de: DataEntity, name: str, spec: dict) -> DataField:
+def _lock_entity(db: Session, data_entity_id: int) -> None:
+    """sara H-1: the screen's field routes race an import into the same entity on seq_no (max+1)
+    and fk_group_no (max+1, _group_no); both read the entity's fields and then write. Take the
+    parent entity FOR NO KEY UPDATE, the strength the import's commit holds (bulk.resolve_entities),
+    so the two take turns. Entity first, then field rows — the import's order, so no deadlock.
+    Inside the import it re-takes a lock this transaction already holds."""
+    db.execute(select(DataEntity.data_entity_id).where(DataEntity.data_entity_id == data_entity_id)
+               .with_for_update(key_share=True))
+
+
+def add_field(db: Session, actor_id: int, de: DataEntity, name: str, spec: dict) -> DataField:
+    """The no-commit form (the import's commit owns the transaction): appended after the live
+    fields, so an import's new fields keep their sheet order."""
+    _lock_entity(db, de.data_entity_id)
     if not de.is_active:
         raise HTTPException(409, f"{de.de_number} is retired. Restore it first.")
     last = db.scalar(select(func.max(DataField.seq_no)).where(
@@ -124,21 +137,43 @@ def create_field(db: Session, actor_id: int, de: DataEntity, name: str, spec: di
                   field_name=name, created_by=actor_id)
     _apply(db, de, f, spec)
     db.add(f)
-    db.commit()
+    db.flush()
     return f
 
 
-def update_field(db: Session, actor_id: int, f: DataField, row_version: int, name: str | None,
+def change_field(db: Session, actor_id: int, f: DataField, row_version: int, name: str | None,
                  spec: dict) -> DataField:
+    """The no-commit form: current version and live, then the name and the sent keys only."""
+    _lock_entity(db, f.data_entity_id)
     lifecycle.check_live(f, row_version)
     de = db.get(DataEntity, f.data_entity_id)
     if name is not None:
         f.field_name = name
     _apply(db, de, f, spec)
     f.updated_by = actor_id
+    db.flush()
+    return f
+
+
+def create_field(db: Session, actor_id: int, de: DataEntity, name: str, spec: dict) -> DataField:
+    f = add_field(db, actor_id, de, name, spec)
+    db.commit()
+    return f
+
+
+def update_field(db: Session, actor_id: int, f: DataField, row_version: int, name: str | None,
+                 spec: dict) -> DataField:
+    change_field(db, actor_id, f, row_version, name, spec)
     db.commit()
     db.refresh(f)                 # reload the code relationship with the new id
     return f
+
+
+def live_field_counts(db: Session, project_id: int) -> dict[int, int]:
+    """Live fields per entity, for the Data page's "no fields yet" marker (4a-R10)."""
+    return dict(db.execute(select(DataField.data_entity_id, func.count())
+                           .where(DataField.project_id == project_id, DataField.is_active)
+                           .group_by(DataField.data_entity_id)).all())
 
 
 def restore_field(db: Session, actor_id: int, f: DataField) -> DataField:
