@@ -1346,3 +1346,9 @@ def _commit(db: Session, actor_id: int, batch: ImportBatch, target: Target, stat
                              "sheet": file_info.get("sheet")}, source_ip=source_ip)
         db.flush()
     return batch
+
+
+# ---- purge (Q14, §7.12b) -------------------------------------------------------------------
+# The 90-day row purge lives in services/import_purge.py; it is named here because the design's
+# function map calls it bulk.purge_import_rows.
+from services.import_purge import purge_import_rows  # noqa: E402,F401
