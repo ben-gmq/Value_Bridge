@@ -814,6 +814,25 @@ def _df_check_sets(rows: list[Staged], live_of: dict[int, list[DataField]]) -> N
             gid = (*base, "row", r.sheet_row_no)
             r.info["relationship"] = {"kind": "new", "label": None, "to": ref.de_number}
         members.setdefault(gid, []).append((r, r.plan.get("ref_field")))
+    # sara M-1: a referenced field another member of the same stored relationship holds, and that
+    # member's row in this file changes its reference, is a swap: the apply would hit
+    # uq_df_fk_group_field mid-commit. Swaps go through the screen, as key positions do (4a-R2).
+    for r in rows:
+        parent, ref, g, rf = r.plan["parent"], r.plan["ref"], r.plan.get("group"), r.plan.get("ref_field")
+        if r.verdict == "MATCH" or not r.plan.get("ref_pass") or parent is None or ref is None \
+                or g is None or g[0] not in ("num", "own") or rf is None or rf[0] != "live":
+            continue
+        own_id = r.target_id or 0
+        for h in live_of.get(parent.data_entity_id, []):
+            hr = in_file.get(h.data_field_id)
+            if h.data_field_id != own_id and h.is_foreign_key and h.ref_data_entity_id == ref.data_entity_id \
+                    and h.fk_group_no == g[1] and h.ref_data_field_id == rf[1] and hr is not None \
+                    and hr.verdict != "MATCH" and hr.plan.get("ref_pass"):
+                r.errors.append(msg("FK_SWAP", f"{h.field_name} (row {hr.sheet_row_no}) holds that field in "
+                                    "this relationship and this file changes it too. Swap relationship "
+                                    "columns on screen.", "ref_field_name", name=h.field_name,
+                                    first_row=hr.sheet_row_no))
+                break
     for gid, ms in members.items():
         seen: dict = {}
         for r, rf in ms:

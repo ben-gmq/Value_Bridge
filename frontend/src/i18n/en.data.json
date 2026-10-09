@@ -294,6 +294,7 @@
   "data.import.msg.REF_FIELD_NOT_FOUND": "{key} has no live field named “{name}”, and no row in this file adds one.",
   "data.import.msg.FK_GROUP_NOT_FOUND": "There is no stored relationship {group} to {key}. A number names a stored relationship; use a label such as a or b to start a new one.",
   "data.import.msg.FK_FIELD_TWICE": "This relationship already points at that field.",
+  "data.import.msg.FK_SWAP": "{name} (row {first_row}) holds that field in this relationship and this file changes it too. Swap relationship columns on screen.",
   "data.import.msg.PK_TAKEN": "{name} already holds primary-key position {position}. Change key positions on screen.",
   "data.import.msg.DUPLICATE_PK": "Row {first_row} also claims primary-key position {position}.",
   "data.import.msg.SIZE_NEEDS_TYPE": "A size needs a data type.",

@@ -544,6 +544,30 @@ def test_the_existing_field_routes_still_commit(client, ed, db, three):
     assert fields_of(db, ed["p"])["DE-0001/a"].description == "x"
 
 
+# ---- sara M-1: swapping referenced fields inside one relationship -------------------------
+
+def test_m1_a_swap_of_referenced_fields_in_one_relationship_is_a_validation_error(client, ed, db, three):
+    cust, order = three[0], three[1]
+    k1, k2 = pk(client, ed, cust, "id1", 1), pk(client, ed, cust, "id2", 2)
+    field(client, ed, order, "a", ref_data_entity_id=cust["data_entity_id"], ref_data_field_id=k1["data_field_id"])
+    field(client, ed, order, "b", ref_data_entity_id=cust["data_entity_id"], ref_data_field_id=k2["data_field_id"],
+          fk_group=1)
+
+    def swap(ws, col):
+        for row in range(3, ws.max_row + 1):
+            name = ws.cell(row, col["field_name"]).value
+            if name in ("a", "b"):
+                setc(ws, col, row, "ref_field_name", "id2" if name == "a" else "id1")
+    pv = stage(client, ed, "data-fields", edit_fields(get(client, ed, "data-fields/export"), swap))
+    codes = {r["business_key"]: codes_of(r) for r in pv["rows"]}
+    assert codes == {"DE-0001/id1": [], "DE-0001/id2": [], "DE-0002/a": ["FK_SWAP"],
+                     "DE-0002/b": ["FK_SWAP"]}, pv["rows"]
+    assert commit(client, ed, pv).status_code == 422
+    f = fields_of(db, ed["p"])
+    assert (f["DE-0002/a"].ref_data_field_id, f["DE-0002/b"].ref_data_field_id) == \
+        (k1["data_field_id"], k2["data_field_id"])
+
+
 # ---- sara H-1/H-2: the import and the screen take turns on an entity -----------------------
 
 @contextmanager
