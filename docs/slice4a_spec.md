@@ -62,7 +62,7 @@ S4-11. That revision needs **no schema change**:
 **Column maps.** Each column has a code, a header, a parser, a maximum length and, where
 relevant, a code category.
 - **DATA_ENTITY:** `de_number`, `de_name` (200), `description`, `business_owner_note`, `row_token` (protected).
-- **DATA_FIELD:** `de_number`, `de_name` (parent, used only when `de_number` is blank), `field_name` (200), `data_type`, `length`, `precision`, `scale`, `mandatory` (Y / N / blank), `pk_position`, `ref_de_number`, `ref_field_name`, `fk_group`, `description`, `row_token` (protected).
+- **DATA_FIELD:** `de_number`, `de_name` (parent, used only when `de_number` is blank), `field_name` (200), `data_type`, `length`, `precision`, `scale`, `mandatory` (Y / N / blank), `pk_position`, `ref_de_number`, `ref_de_name` (4a-R19), `ref_field_name`, `fk_group`, `description`, `row_token` (protected).
 - A new field is positioned in sheet order, after the existing fields.
 
 ## 7. Function
@@ -246,7 +246,12 @@ plus 5 questions). One finding is Ben's call (**ref_de_name**, below). The rest 
   with no entities sheet skips step 1; a combined **data-model** template and export
   (`…/bulk/templates/data-model`, `…/bulk/data-model/export`) produce both sheets with one lookup
   sheet, so nobody copies sheets between downloads (4a-2). Validate stays per target.
-- **Open for Ben:** (1) FKs between two new entities need a way to name the referenced entity
-  before it has a number: add `ref_de_name` under the parent's rule, or accept a corrected-file
-  round trip. (2) Should freezing a baseline warn about entities with no fields? That belongs to
-  the baseline slice, not 4a.
+- **Answered by Ben, 2026-10-09:**
+  - **4a-R19 — `ref_de_name`.** DATA_FIELD gains `ref_de_name` beside `ref_de_number`, under the
+    parent's rule (4a-R12/R13): number, or when blank the name normalised and resolved in one
+    project-scoped SQL pass; both given must agree; the resolved target is pinned at staging.
+    Criterion 9's FK and self-reference name their new targets this way.
+  - **Baseline freeze** warns about entities with no fields and still allows the freeze. Owed to the
+    baseline slice (design §1a S4-12).
+  - **Commit is shared**: any EDITOR on the project may commit a batch another editor uploaded
+    (`object_guard(ImportBatch, EDITOR)` as built). Uploader-only was considered and declined.

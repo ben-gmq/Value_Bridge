@@ -29,6 +29,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   Files it must **upload** have to sit inside the repo: stage them in `.playwright-mcp/<slice>/` (gitignored).
 - **Demo/UAT data:** `VB_ALLOW_DEMO_SEED=1 ./venv/bin/python -m seeds.seed_demo --secrets-out <file outside the repo>`
   against a throwaway database whose name contains `uat` or `demo`; it refuses anything else.
+- **Upload routes:** a route taking more than the 1 MB default body registers in `services/body_limit.ROUTE_CAPS`
+  (ordered, first match wins), and is refused with 401 before reading when there is no Bearer header.
 - **Two database roles (§6.6):** the app connects as `vb_app` (SELECT/INSERT/UPDATE, **no DELETE**
   except `diagram_layout` and `import_row`); migrations run as `vb_owner` (`MIGRATION_DATABASE_URL`).
 
@@ -74,8 +76,8 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
    `exposure_score`, `row_version` increments, numbers.
 7. **The bare word `role` is banned** in tables, models and routes: `org_role` vs
    `project_role_code`.
-8. **One import pipeline** (`bulk.py`: validate → preview → commit) for every import, flow JSON
-   included. **One canvas component** for process flow, DFD and ERD, and one position saver
+8. **One import pipeline** (`services/bulk.py`: validate → preview → commit) for every import, flow JSON
+   included; a new import adds a `Target` to `TARGETS` (column map + `validate`/`apply`). **One canvas component** for process flow, DFD and ERD, and one position saver
    (`canvas/useLayoutSave.js`) for all three.
 9. **Untrusted text renders as text.** `dangerouslySetInnerHTML` / `innerHTML` fail lint (§14.5).
    Every Mermaid label goes through `services/render.escape_mermaid`, and `_guard` ends every exporter.
