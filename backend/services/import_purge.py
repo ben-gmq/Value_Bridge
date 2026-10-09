@@ -30,12 +30,10 @@ RETENTION_DAYS = 90
 PURGED_FILE_NAME = "(purged)"
 
 # A row is due 90 days after its batch's upload, except a row holding before-values, which is due
-# 90 days after the commit (4a-R6). Before-values are written only at commit, so committed_at is
-# set for every such row (committed_at >= uploaded_at is a CHECK; a consistency line for
-# committed_at-iff-COMMITTED, import_batch_status_drift, is still owed).
-# coalesce: a before-value row whose batch somehow lost its committed_at falls back to the upload
-# clock rather than being kept for ever (sara round 2, L-1).
-ROW_DUE = "NOT (r.payload ? 'before' AND coalesce(b.committed_at >= :cutoff, false))"
+# 90 days after the commit (4a-R6). Before-values are written only at commit, and the database
+# guarantees committed_at for a COMMITTED batch (CHECK ck_ib_committed_pair, 0019), so the
+# comparison is never NULL (sara round 2 L-1: checked, no guard needed).
+ROW_DUE = "NOT (r.payload ? 'before' AND b.committed_at >= :cutoff)"
 # A batch is due when it is past its upload window and still holds at least one due row.
 DUE = f"""
     b.rows_purged_at IS NULL

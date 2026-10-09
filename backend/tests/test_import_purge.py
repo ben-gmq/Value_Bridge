@@ -203,21 +203,7 @@ def test_the_cli_purges_as_the_app_role_and_prints_a_summary(client, ed, db, own
         assert s.execute(text("SELECT current_user")).scalar_one() == "vb_app"
     cli.main()
     out = capsys.readouterr().out
-    assert "Purged 2 rows from 1 batches (1 uncommitted, now REJECTED)" in out
+    assert "Purged 2 rows from 1 batches, 1 now fully purged (1 uncommitted, now REJECTED)" in out
     assert "Still overdue" not in out
     assert row_count(db, b) == 0 and len(purge_events(db)) == 1
     assert import_purge.overdue(db) == []
-
-
-def test_a_before_value_row_with_no_commit_time_falls_back_to_the_upload_clock(client, ed, db, owner, three):
-    """sara round 2 L-1: drift that blanks committed_at must not keep client content for ever."""
-    body = edit(export(client, ed), lambda ws, col: cell(ws, col, 3, "description", "Who pays"))
-    pv = staged(client, ed, body)
-    assert commit(client, ed, pv, ack=None).status_code == 200
-    b = age(owner, pv, 91, 30)
-    with owner.begin() as c:
-        c.execute(text("UPDATE import_batch SET committed_at = NULL WHERE import_batch_id = :b"), {"b": b})
-    assert overdue_ids(db) == [b]
-    run = bulk.purge_import_rows(db)
-    assert run["purged"] == [b] and row_count(db, b) == 0
-
