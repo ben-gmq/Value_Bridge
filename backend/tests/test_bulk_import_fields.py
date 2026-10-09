@@ -4,15 +4,20 @@ R2, R10, R12…R17, R19). Grade 1 for the commit path: each rule is proven again
 
 A data-model workbook runs as two batches (S4-12): the entities sheet through `data-entities`,
 then the fields sheet through `data-fields`, posting the same bytes both times."""
+from contextlib import contextmanager
 import io
 from urllib.parse import quote
 
 import openpyxl
 import pytest
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 
+from database import SessionLocal
 from models import DataEntity, DataField, ImportRow
 from services import bulk, consistency_data, xlsx
+from services import data_entity as de_service
 from tests.test_bulk_import import CODES as DE_CODES, codes_of, commit, live
 from tests.test_erd_api import field, pk
 from tests.test_scope_api import API, ed, entity  # noqa: F401 — ed is a fixture
@@ -537,3 +542,77 @@ def test_the_existing_field_routes_still_commit(client, ed, db, three):
                      json={"row_version": a["row_version"], "description": "x"})
     assert r.status_code == 200
     assert fields_of(db, ed["p"])["DE-0001/a"].description == "x"
+
+
+# ---- sara H-1/H-2: the import and the screen take turns on an entity -----------------------
+
+@contextmanager
+def _timed_session(ms: int = 200):
+    """A session that gives up on a row lock after `ms` (55P03) instead of waiting for it."""
+    s = SessionLocal()
+    s.execute(text(f"SET lock_timeout = '{ms}ms'"))
+    s.commit()                                  # a SET inside a rolled-back transaction would vanish
+    try:
+        yield s
+    finally:
+        s.rollback()
+        s.execute(text("RESET lock_timeout"))
+        s.commit()
+        s.close()
+
+
+@contextmanager
+def _holding(sql: str, **params):
+    """A side transaction holding a row lock until the block ends."""
+    side = SessionLocal()
+    try:
+        side.execute(text(sql), params)
+        yield side
+    finally:
+        side.rollback()
+        side.close()
+
+
+@pytest.mark.parametrize("held", ["parent", "referenced"])
+def test_h2_the_imports_commit_waits_for_a_lock_on_an_entity_it_names(client, ed, db, world, three, held):
+    """The commit holds every entity the sheet names (parent and FK target) FOR NO KEY UPDATE.
+    A conflicting lock held elsewhere makes it wait; under lock_timeout that is an operational
+    failure (503) that applies nothing and leaves the batch VALIDATED for a retry."""
+    cust, order = three[0], three[1]
+    k = pk(client, ed, cust, "id", 1)
+    fk_ = field(client, ed, order, "cust_id", ref_data_entity_id=cust["data_entity_id"],
+                ref_data_field_id=k["data_field_id"])                               # relationship 1
+    pv = stage(client, ed, "data-fields", edit_fields(
+        get(client, ed, "data-fields/export"), lambda ws, col: setc(ws, col, 4, "fk_group", "b")))
+    assert [r["verdict"] for r in pv["rows"]] == ["MATCH", "UPDATE"], pv["rows"]
+    batch_id, rv = pv["batch"]["import_batch_id"], pv["batch"]["row_version"]
+    locked = (order if held == "parent" else cust)["data_entity_id"]
+
+    with _holding("SELECT 1 FROM data_entity WHERE data_entity_id = :i FOR SHARE", i=locked), \
+            _timed_session() as s:
+        with pytest.raises(HTTPException) as e:
+            bulk.commit(s, world["users"]["editor"], batch_id, rv, None)
+        assert e.value.status_code == 503
+    db.expire_all()
+    assert preview(client, ed, pv)["batch"]["status"] == "VALIDATED"
+    f = db.get(DataField, fk_["data_field_id"])
+    assert (f.fk_group_no, f.row_version) == (1, fk_["row_version"])
+
+
+@pytest.mark.parametrize("route", ["add", "change"])
+def test_h1_a_screen_field_write_waits_while_an_import_holds_the_entity(client, ed, db, world, three, route):
+    """sara H-1: seq_no and fk_group_no are max+1 reads; the screen must not write between an
+    import's read and its write. With the import's lock held, the screen's write waits for it."""
+    order = three[1]
+    a = field(client, ed, order, "a")
+    with _holding("SELECT 1 FROM data_entity WHERE data_entity_id = :i FOR NO KEY UPDATE",
+                  i=order["data_entity_id"]), _timed_session() as s:
+        with pytest.raises(OperationalError) as e:
+            if route == "add":
+                de_service.add_field(s, world["users"]["editor"], s.get(DataEntity, order["data_entity_id"]), "b", {})
+            else:
+                de_service.change_field(s, world["users"]["editor"], s.get(DataField, a["data_field_id"]), a["row_version"],
+                                        None, {"description": "x"})
+        assert e.value.orig.sqlstate == "55P03"
+    f = fields_of(db, ed["p"])
+    assert list(f) == ["DE-0002/a"] and f["DE-0002/a"].description is None

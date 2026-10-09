@@ -465,7 +465,8 @@ def resolve_entities(db: Session, project_id: int, numbers, names, lock: bool = 
     name_key = func.lower(func.btrim(DataEntity.de_name))
     q = (select(DataEntity.data_entity_id, DataEntity.de_number, DataEntity.de_name, name_key)
          .where(DataEntity.project_id == project_id, DataEntity.is_active,
-                or_(DataEntity.de_number.in_(numbers), name_key.in_(sorted(set(keys.values()))))))
+                or_(DataEntity.de_number.in_(numbers), name_key.in_(sorted(set(keys.values())))))
+         .order_by(DataEntity.data_entity_id))             # a fixed lock order (sara L-1)
     if lock:
         q = q.with_for_update(key_share=True, of=DataEntity)
     by_number, by_key = {}, {}
@@ -849,7 +850,7 @@ def _df_apply(ctx: Ctx, rows: list[Staged]) -> None:
         ctx.current_row = r
         v = r.values
         if r.verdict == "INSERT":
-            de = db.get(DataEntity, r.plan["parent"].data_entity_id)        # held FOR SHARE
+            de = db.get(DataEntity, r.plan["parent"].data_entity_id)        # held FOR NO KEY UPDATE
             r.target_id = de_service.add_field(db, ctx.actor_id, de, r.cells["field_name"],
                                                _df_spec(v)).data_field_id
         elif r.verdict == "UPDATE":
