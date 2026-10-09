@@ -1,8 +1,8 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-007 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-009 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 2 entries (VB-006; VB-005, the standing backlog) · 28 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-08.**
+**Open: 4 entries (VB-006, VB-007, VB-008; VB-005, the standing backlog) · 38 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -31,6 +31,26 @@ place.
   the shell (`frontend/src/components/AppShell.jsx`, cf. commit 07c6fbe "nav scrolls instead
   of squashing"). Evidence: `.playwright-mcp/page-2026-09-30T02-20-08-918Z.png`.
 - **root cause:** not yet investigated · **files:** `frontend/src/components/AppShell.jsx` (suspected)
+
+### VB-007 | Import wizard's "Do fields later" gate can be left with the browser Back button | OPEN
+
+- **type:** BUG · **found:** 2026-10-09 by `sara` (Slice 4a-2 pre-merge review, M-2) · **depends-on:** —
+- 4a-R10 says that after the entities step commits, the wizard can be left only through "Do fields
+  later". `beforeunload` covers reload and tab close, and the dialog blocks Esc and backdrop, but
+  browser Back unmounts the page with no prompt, so a half-built model can be left silently. The
+  "No fields yet" marker and `entities_without_fields` still show it afterwards.
+- **root cause:** `useBlocker` needs a data router; `frontend/src/main.jsx` uses `<BrowserRouter>`.
+  Fix by moving to `createBrowserRouter` (a routing change across the app) or a popstate guard in
+  `ImportWizard.jsx`. · **files:** `frontend/src/main.jsx`, `frontend/src/components/ImportWizard.jsx`
+
+### VB-008 | The data entity page shows edit controls to reviewers | OPEN
+
+- **type:** BUG (presentation) · **found:** 2026-10-09 by `sara` (Slice 4a-2 review, M-3) · **depends-on:** —
+- `DataEntityPage.jsx` shows Edit/Retire/Restore, Retire entity, Add field and the snackbar Restore
+  to a REVIEWER; `DataEntitiesPage.jsx` shows Restore on retired rows. The server guards refuse
+  every one (403), so nothing is breached. Predates Slice 4a.
+- **root cause:** those controls never went through `useCanEdit` (CLAUDE.md "Edit controls").
+  · **files:** `frontend/src/features/data/DataEntityPage.jsx`, `DataEntitiesPage.jsx`
 
 ---
 
@@ -224,4 +244,26 @@ place.
 - 4a-1 build · 2026-10-08 · LOW · **A description that starts with a tab or CR does not round-trip
   exactly**: `clean_cell` strips leading Unicode whitespace, so re-importing an export trims it and
   reports an UPDATE. Accepted as safer than writing control characters; revisit if a client hits it.
+- sara L-1 · `sara`, slice-4a-2 review, 2026-10-09 · LOW · **The import's view of the data model is
+  stale while a run is held**: field counts on the Data list are merged in the router
+  (`routers/scope.py:256`), not in `de_service` — move to a `list_entities_with_counts` (§10 layers).
+- sara L-5 · same · LOW · `bulk.live_names` re-implements `sql_keys`; call it instead.
+- sara L-6 · same · LOW · **Preview of a row's own FK group lists no members** (`"with": []`) even for
+  a composite relationship; fill it from `live_of` as the numeric branch does (4a-R1).
+- sara L-7 · same · LOW · **4a-R19's pin on the referenced entity has no direct test**: add a
+  rename-between-validate-and-commit case on `ref_de_name` expecting `RESOLVED_CHANGED`.
+- sara L-9 · same · LOW · **The 10 MB cap pattern is wider than needed**: `[^/]+/(validate|check)`
+  covers unknown slugs (which then 404); list the known targets in `body_limit.ROUTE_CAPS`.
+- sara L-10 · same · LOW · **`consistency_check` has no route or screen yet**: its lines
+  (`purge_overdue`, `entities_without_fields`) are reachable only from the service and the purge
+  CLI. Owed with the design's `GET /projects/{id}/consistency` and the baseline-freeze warning.
+- sara L-1 · `sara`, slice-4a-3 review, 2026-10-09 · LOW · **A purge nobody runs is visible to nobody**
+  until L-10's route exists; the purge CLI could also exit non-zero when batches are left over, for a
+  future scheduler.
+- sara L-3 · same · LOW · `import_purge` restates `bulk._statuses` (circular import); move the
+  global-tier status lookup to `code_master` and use it from both.
+- sara L-4 · same · LOW · **A preview racing a purge can read "not purged" with no rows**; re-read
+  `rows_purged_at` when the row list comes back empty.
+- sara L-6 · same · LOW · **Purge test gaps**: no mixed INSERT+UPDATE committed batch (pins the
+  retention ruling either way) and no purge of a batch REJECTED by a failed commit.
 
