@@ -244,9 +244,9 @@ place.
 - 4a-1 build · 2026-10-08 · LOW · **A description that starts with a tab or CR does not round-trip
   exactly**: `clean_cell` strips leading Unicode whitespace, so re-importing an export trims it and
   reports an UPDATE. Accepted as safer than writing control characters; revisit if a client hits it.
-- sara L-1 · `sara`, slice-4a-2 review, 2026-10-09 · LOW · **The import's view of the data model is
-  stale while a run is held**: field counts on the Data list are merged in the router
-  (`routers/scope.py:256`), not in `de_service` — move to a `list_entities_with_counts` (§10 layers).
+- sara L-4 · `sara`, slice-4a-2 review, 2026-10-09 · LOW · **Field counts on the Data list are merged
+  in the router** (`routers/scope.py:256`), not in `de_service`; move them to a
+  `list_entities_with_counts` (§10 layers).
 - sara L-5 · same · LOW · `bulk.live_names` re-implements `sql_keys`; call it instead.
 - sara L-6 · same · LOW · **Preview of a row's own FK group lists no members** (`"with": []`) even for
   a composite relationship; fill it from `live_of` as the numeric branch does (4a-R1).
