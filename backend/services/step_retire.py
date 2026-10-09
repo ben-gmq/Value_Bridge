@@ -16,8 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import (AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow,
-                    BfcNodeOrgRole, BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity,
-                    ExternalEntity, OrgRole)
+                    BfcNodeOrgRole, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
+                    DataEntity, ExternalEntity, OrgRole, Solution)
 from services import audit, bfc, lifecycle
 
 RETIRED = "STEP_RETIRED_WITH_DEPENDENTS"
@@ -26,13 +26,13 @@ RESTORED = "STEP_RESTORED_WITH_DEPENDENTS"
 # A-SR-1 / SR-4: exactly these, and a future FK-declared table blocks until it is added here.
 OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow,
                  BfcNodeFlow)
-OWNED_BY_BR = (BrDataEntity, BrOrgRole)
+OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution)          # BrSolution: S5-1 (Ben, 2026-10-09)
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BfcNodeOrgRole, BfcNodeFlow),
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, BfcNodeFlow),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -92,6 +92,9 @@ def describe(db: Session, row) -> str:
         return f"{de.de_number} {de.de_name} ({tag})"
     if isinstance(row, (BrOrgRole, BfcNodeOrgRole)):
         return f"{db.get(OrgRole, row.org_role_id).org_role_code} ({row.raci_code})"
+    if isinstance(row, BrSolution):
+        sol = db.get(Solution, row.solution_id)
+        return f"{sol.solution_number} {sol.solution_name}"
     if isinstance(row, BfcNodeExternalFlow):
         ext = db.get(ExternalEntity, row.external_entity_id)
         return f"{ext.ext_number} {ext.ext_name} ({row.direction})"

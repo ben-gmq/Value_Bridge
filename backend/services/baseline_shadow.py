@@ -4,7 +4,7 @@ For a live table `x`, `baseline_x` holds one row per live row as it stood at one
   - baseline_x_id (surrogate PK), baseline_id (FK → baseline), source_id (the live PK value)
   - every live column EXCEPT the §5.1 audit columns and the live PK
   - no row_version (snapshots are never updated) and no is_active (A-7)
-Slice 5 calls `shadow_table()` per frozen entity; the CI parity check (§13, §5.4.4) uses
+The baseline-freeze slice calls `shadow_table()` per frozen entity; the CI parity check (§13, §5.4.4) uses
 `parity_problems()` so a column added to a live table without its shadow fails the build.
 """
 from sqlalchemy import BigInteger, Column, ForeignKey, Identity, MetaData, Table

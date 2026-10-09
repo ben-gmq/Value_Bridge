@@ -21,7 +21,7 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                         ("REPORT", "Report", "REPORT"), ("BATCH", "Batch", "BATCH")]),
     ("FR_COMPLEXITY", False, [("SIMPLE", "Simple"), ("MEDIUM", "Medium"), ("COMPLEX", "Complex"),
                               ("VERY_COMPLEX", "Very complex")]),
-    ("SOLUTION_CATEGORY", False, [("ORG_AND_RULES", "Organization & rules"), ("PEOPLE", "People"),
+    ("SOLUTION_CATEGORY", True, [("ORG_AND_RULES", "Organization & rules"), ("PEOPLE", "People"),
                                   ("PROCESS", "Process"), ("DATA", "Data"),
                                   ("TECHNOLOGY", "Technology")]),
     ("SOLUTION_STATUS", False, [("PROPOSED", "Proposed"), ("AGREED", "Agreed"),

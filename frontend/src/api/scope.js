@@ -49,6 +49,21 @@ export const brApi = {
   roles: (id) => d(http.get(`${V}/business-requirements/${id}/org-roles`)),
   linkRole: (id, body) => d(http.post(`${V}/business-requirements/${id}/org-roles`, body)),
   unlinkRole: (id, linkId, rowVersion) => del(`${V}/business-requirements/${id}/org-roles/${linkId}`, rowVersion),
+  solutions: (id) => d(http.get(`${V}/business-requirements/${id}/solutions`)),
+  linkSolution: (id, body) => d(http.post(`${V}/business-requirements/${id}/solutions`, body)),
+  editSolutionLink: (id, linkId, body) => d(http.patch(`${V}/business-requirements/${id}/solutions/${linkId}`, body)),
+  unlinkSolution: (id, linkId, rowVersion) => del(`${V}/business-requirements/${id}/solutions/${linkId}`, rowVersion),
+};
+
+// Slice 5 (docs/slice5_spec.md). A link is always made through its BR's route, from either page.
+export const solutionApi = {
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/solutions`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/solutions`, body)),
+  get: (id) => d(http.get(`${V}/solutions/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/solutions/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/solutions/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/solutions/${id}/restore`)),
+  brs: (id) => d(http.get(`${V}/solutions/${id}/business-requirements`)),
 };
 
 export const dataApi = {

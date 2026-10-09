@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 39 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 41 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -281,4 +281,11 @@ place.
   misleading totals** if opened directly: `match_count` comes from the rows left (so 0) while the other
   counts come from the header, and the preview says `purged: false` with only the UPDATE rows listed.
   Derive match from the header, and return a `partly_purged` flag with a one-line notice.
-
+- sara L-1 · `sara`, Slice 5 pre-commit review, 2026-10-09 · LOW · **The link panel flags a
+  rejected solution by matching the code `REJECTED`** in the browser (S5-2). Before the coverage
+  report counts answers server-side, give `SOLUTION_STATUS` a `behaviour_code` (e.g.
+  `NOT_AN_ANSWER`) and branch on that, as law 5 does for FR type and RACI.
+- sara L-2 · same review · LOW · **`create_solution` needs `SOLUTION_STATUS/PROPOSED`**, a
+  non-system category: a project override that retires it makes every create a 500 (as
+  `BR_STATUS/DRAFT` already does for steps). Ben to rule: seed it `is_system=True`, or have
+  `code_master.maintain` refuse to retire a code a service uses as a default.

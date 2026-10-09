@@ -16,7 +16,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from models import (Base, BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity,
-                    OrgRole, OrgUnit)
+                    OrgRole, OrgUnit, Solution)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -26,7 +26,8 @@ EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_
 # plain (id, project_id) FK beside it, so they are ignored when matching rows.
 GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process"})
 
-RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole)
+RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
+              Solution)
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -42,6 +43,10 @@ LABELS = {
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
+    "solution": ("Solution", lambda r: f"{r.solution_number} {r.solution_name}"),
+    # Both ends, so a solution's 409 names the BRs and a step's preview names the solutions (DR1-P1).
+    "br_solution": ("Requirement ↔ solution",
+                    lambda r: f"{r.br_row.br_number} ↔ {r.solution_row.solution_number}"),
     "bfc_node_flow": ("Flow edge",
                       lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),
 }
