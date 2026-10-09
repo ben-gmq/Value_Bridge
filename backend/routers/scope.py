@@ -17,8 +17,8 @@ from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, Bf
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
-                           BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityOut, DataEntityPatch,
-                           DataEntityUseOut,
+                           BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
+                           DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
                            ExternalEntityOut, ExternalEntityPatch, ExternalFlowIn, ExternalFlowOut,
                            OrgRoleIn, OrgRoleOut, OrgRolePatch, OrgUnitIn, OrgUnitOut, OrgUnitPatch,
@@ -251,9 +251,12 @@ _de_r, _de_w = _og(DataEntity, "REVIEWER"), _og(DataEntity, "EDITOR")
 _df_w = _og(DataField, "EDITOR")
 
 
-@router.get("/projects/{project_id}/data-entities", response_model=list[DataEntityOut], **_read.route)
+@router.get("/projects/{project_id}/data-entities", response_model=list[DataEntityListOut], **_read.route)
 def list_entities(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
-    return de_service.list_entities(db, project_id, include_retired)
+    counts = de_service.live_field_counts(db, project_id)
+    return [DataEntityListOut.model_validate(de).model_copy(
+                update={"live_field_count": counts.get(de.data_entity_id, 0)})
+            for de in de_service.list_entities(db, project_id, include_retired)]
 
 
 @router.post("/projects/{project_id}/data-entities", response_model=DataEntityOut, status_code=201,

@@ -215,6 +215,10 @@ class DataEntityOut(Orm):
     row_version: int
 
 
+class DataEntityListOut(DataEntityOut):
+    live_field_count: int = 0        # 4a-R10: the Data page marks an entity with none "no fields yet"
+
+
 class DataEntityUseOut(BaseModel):
     br_id: int
     br_number: str
