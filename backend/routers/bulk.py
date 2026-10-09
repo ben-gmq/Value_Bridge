@@ -48,14 +48,21 @@ def _ip(request: Request) -> str | None:
 
 @router.get("/projects/{project_id}/bulk/templates/{target}", **_edit.route)
 def template(project_id: int, target: str, db: Session = Depends(get_db)):
-    t = bulk.target_for(target)
-    return _xlsx(bulk.template(db, project_id, t), bulk.download_name(t, "template", project_id))
+    """`target` is a target's slug, or `data-model`: both sheets in one workbook (S4-12)."""
+    books = bulk.book_for(target)
+    return _xlsx(bulk.template_book(db, project_id, books), bulk.download_name(target, "template", project_id))
 
 
 @router.get("/projects/{project_id}/bulk/{target}/export", **_read.route)
 def export(project_id: int, target: str, db: Session = Depends(get_db)):
-    t = bulk.target_for(target)
-    return _xlsx(bulk.export(db, project_id, t), bulk.download_name(t, "export", project_id))
+    books = bulk.book_for(target)
+    return _xlsx(bulk.export_book(db, project_id, books), bulk.download_name(target, "export", project_id))
+
+
+@router.post("/projects/{project_id}/bulk/{target}/check", **_edit.route)
+def check(project_id: int, target: str, body: bytes = Depends(_upload), db: Session = Depends(get_db)):
+    """The file-level checks alone; nothing is staged (the data-model wizard, before step 1 commits)."""
+    return bulk.check_file(db, project_id, bulk.target_for(target), body)
 
 
 @router.post("/projects/{project_id}/bulk/{target}/validate", status_code=201, **_edit.route)

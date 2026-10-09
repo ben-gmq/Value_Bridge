@@ -218,6 +218,8 @@ class SheetRead:
     sheet_name: str
     rows: list[tuple[int, dict]]                 # (sheet row number, {column code: value})
     ignored_columns: list[str] = field(default_factory=list)
+    other_sheets: list[tuple[str, str]] = field(default_factory=list)   # (title, target code) of
+                                                 # the other sheets tagged sheet:<code> (4a-R17)
 
 
 def _rows(wb, ws):
@@ -272,7 +274,8 @@ def read_rows(body: bytes, target_code: str, column_codes: tuple[str, ...]) -> S
         try:
             tag = SHEET_TAG + target_code
             sheets = wb.worksheets
-            tagged = [ws for ws in sheets if _first_cell(wb, ws) == tag]
+            a1s = [(ws, _first_cell(wb, ws)) for ws in sheets]
+            tagged = [ws for ws, a1 in a1s if a1 == tag]
             if len(tagged) != 1:
                 names = ", ".join(sheet_label(ws.title) for ws in (tagged or sheets)) or "none"
                 if not tagged:
@@ -280,7 +283,10 @@ def read_rows(body: bytes, target_code: str, column_codes: tuple[str, ...]) -> S
                                  "Start from a VB template or export.")
                 raise refuse(f"More than one sheet is marked {tag}: {names}. Keep one.")
             ws = tagged[0]
-            return _read_sheet(wb, ws, column_codes)
+            read = _read_sheet(wb, ws, column_codes)
+            read.other_sheets = [(o.title, a1[len(SHEET_TAG):]) for o, a1 in a1s
+                                 if o is not ws and isinstance(a1, str) and a1.startswith(SHEET_TAG)]
+            return read
         except HTTPException:
             raise
         except Exception as e:

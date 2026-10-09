@@ -17,7 +17,7 @@ MB = 1024 * 1024
 # Ordered: the first match wins, so the narrower pattern comes first (§7.12b).
 ROUTE_CAPS: list[tuple[str, re.Pattern, int]] = [
     ("POST", re.compile(r"^/api/v1/projects/[^/]+/bulk/process-flow/validate$"), 2 * MB),   # §7.12a
-    ("POST", re.compile(r"^/api/v1/projects/[^/]+/bulk/[^/]+/validate$"), 10 * MB),          # §7.12
+    ("POST", re.compile(r"^/api/v1/projects/[^/]+/bulk/[^/]+/(validate|check)$"), 10 * MB),  # §7.12
 ]
 
 

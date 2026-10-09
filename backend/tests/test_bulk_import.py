@@ -725,7 +725,7 @@ def test_the_template_and_unknown_targets(client, ed):
     assert r.headers["content-disposition"].startswith('attachment; filename="vb-data-entities-template-p')
     read = xlsx.read_rows(r.content, "DATA_ENTITY", CODES)
     assert read.rows == [] and read.sheet_name == "Data entities"
-    for target in ("data-fields", "issues"):
+    for target in ("issues", "data-modelx"):                  # data-fields joined in 4a-2
         assert client.get(f"{API}/projects/{ed['p']}/bulk/templates/{target}", headers=ed["h"]).status_code == 404
         assert client.get(f"{API}/projects/{ed['p']}/bulk/{target}/export", headers=ed["h"]).status_code == 404
         r = client.post(f"{API}/projects/{ed['p']}/bulk/{target}/validate", content=book([{"de_name": "X"}]),
