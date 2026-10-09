@@ -22,13 +22,15 @@ import DataEntitiesPage from '../features/data/DataEntitiesPage';
 import DataEntityPage from '../features/data/DataEntityPage';
 import ErdPage from '../features/data/ErdPage';
 import SettingsPage from '../features/settings/SettingsPage';
+import SolutionsPage from '../features/solutions/SolutionsPage';
+import SolutionPage from '../features/solutions/SolutionPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
 
 // Routes name their scope (§14.1): /p/:projectId for a project, /g/:programId for a program,
 // so the backend guard always receives it.
 const SECTIONS = [   // [path, i18n section key, build slice] — sections not built yet
-  ['br-fr', 'brfr', 3], ['interfaces', 'interfaces', 3],
+  ['interfaces', 'interfaces', 3],
 ];
 
 // Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
@@ -36,6 +38,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
+  ['br-fr', SolutionsPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];
 

@@ -12,6 +12,7 @@ import { ConflictDialog } from '../../components/ConflictDialog';
 import { t } from '../../i18n/t';
 import { LevelBadge, Mono, RaciPanel, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CrudGrid } from './CrudGrid';
+import { SolutionLinkPanel } from '../solutions/SolutionLinkPanel';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
 // shown read-only (the server refuses them too: business_requirement.SYSTEM_SET_STATUSES).
@@ -169,6 +170,8 @@ export default function RequirementPage() {
                 unlink={(id, rv) => brApi.unlinkRole(br.br_id, id, rv)} linkId="br_org_role_id" single={BR_SINGLE} />
             </Grid>
           </Grid>
+          <Divider sx={{ my: 3 }} />
+          <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!live} />
         </CardContent>
       </Card>
 
