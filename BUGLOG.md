@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-009 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 4 entries (VB-006, VB-007, VB-008; VB-005, the standing backlog) · 38 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: 4 entries (VB-006, VB-007, VB-008; VB-005, the standing backlog) · 39 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -266,4 +266,8 @@ place.
   `rows_purged_at` when the row list comes back empty.
 - sara L-6 · same · LOW · **Purge test gaps**: no mixed INSERT+UPDATE committed batch (pins the
   retention ruling either way) and no purge of a batch REJECTED by a failed commit.
+- sara round-2 L-2 · `sara`, slice-4a-3 per-row purge, 2026-10-09 · LOW · **A partly purged batch shows
+  misleading totals** if opened directly: `match_count` comes from the rows left (so 0) while the other
+  counts come from the header, and the preview says `purged: false` with only the UPDATE rows listed.
+  Derive match from the header, and return a `partly_purged` flag with a one-line notice.
 
