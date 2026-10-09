@@ -8,10 +8,15 @@ from sqlalchemy.orm import Session
 
 from services import import_purge
 
+# Lines that report an operations lapse, not scope drift: they never count toward the freeze
+# gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
+INFORMATIONAL = frozenset({"purge_overdue"})
 
-def consistency_check(db: Session, project_id: int | None = None) -> dict[str, list]:
+
+def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
     """The report for one project, or across every project when project_id is None (operators).
-    The caller owns access: a route checks require_project(…, REVIEWER) first (§7.12)."""
+    Argument order is the design's (§7.12). The caller owns access: a route checks
+    require_project(…, REVIEWER) first."""
     return {
         "purge_overdue": import_purge.overdue(db, project_id),
     }

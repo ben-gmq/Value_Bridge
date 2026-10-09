@@ -29,7 +29,7 @@ PURGED_FILE_NAME = "(purged)"
 
 # A batch is due when its rows are past the window: 90 days from upload, or, for a COMMITTED
 # batch holding before-values, 90 days from its commit (4a-R6). committed_at is set iff COMMITTED
-# (service-enforced; consistency line import_batch_status_drift), and committed_at >= uploaded_at
+# (service-enforced; a consistency line for it, import_batch_status_drift, is still owed), and committed_at >= uploaded_at
 # is a CHECK, so "committed_at < cutoff" implies the upload is past it too.
 DUE = """
     b.rows_purged_at IS NULL
@@ -46,15 +46,25 @@ def cutoff_of(db: Session, now: datetime | None = None) -> datetime:
                       {"now": now}).scalar_one()
 
 
-def purge_import_rows(db: Session, now: datetime | None = None) -> dict:
-    """Purge every due batch this session can lock; commit once. Returns the run's summary."""
-    now = db.execute(text("SELECT coalesce(CAST(:now AS timestamptz), now())"), {"now": now}).scalar_one()
+def purge_import_rows(db: Session) -> dict:
+    """Purge every due batch this session can lock; commit once. Returns the run's summary.
+    The clock is the database's only: no caller can pass a time that would purge young rows."""
+    now = db.execute(text("SELECT now()")).scalar_one()
     cutoff = cutoff_of(db, now)
     status = {r.code: r.code_id for r in code_master.resolve(db, None, "IMPORT_STATUS")}   # Q-12
 
     ids = list(db.execute(text(f"SELECT b.import_batch_id FROM import_batch b WHERE {DUE} "
                                "ORDER BY b.import_batch_id FOR UPDATE OF b SKIP LOCKED"),
                           {"cutoff": cutoff}).scalars())
+    if ids:
+        # sara H-1: a batch committed while the locking statement ran is re-checked by Postgres on
+        # its newest row, but the NOT EXISTS (… 'before') subquery still sees the statement's old
+        # snapshot, so a just-committed UPDATE batch can look due. Re-test DUE in a new statement
+        # (fresh snapshot) now that we hold the locks; one that drops out stays locked, harmlessly.
+        ids = list(db.execute(text(f"SELECT b.import_batch_id FROM import_batch b "
+                                   f"WHERE b.import_batch_id = ANY(:ids) AND {DUE} ORDER BY 1")
+                              .bindparams(bindparam("ids", ids, type_=ARRAY(BigInteger))),
+                              {"cutoff": cutoff}).scalars())
     rows, rejected = 0, []
     if ids:
         arr = bindparam("ids", ids, type_=ARRAY(BigInteger))

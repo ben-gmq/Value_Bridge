@@ -56,7 +56,7 @@ def purge_events(db) -> list[AuditEvent]:
 
 
 def overdue_ids(db, p=None) -> list[int]:
-    return [b["import_batch_id"] for b in consistency_check(db, p)["purge_overdue"]]
+    return [b["import_batch_id"] for b in consistency_check(p, db)["purge_overdue"]]
 
 
 # ---- criterion 16 (147, Q6) ---------------------------------------------------------------------
