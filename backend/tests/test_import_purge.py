@@ -116,24 +116,50 @@ def test_a_purged_uncommitted_batch_can_no_longer_be_committed(client, ed, db, o
 
 # ---- 4a-R6: before-values are kept 90 days from committed_at ------------------------------------
 
-def test_before_values_defer_a_committed_batch_to_90_days_from_its_commit(client, ed, db, owner, three):
+def before_rows(db, b) -> int:
+    return db.execute(text("SELECT count(*) FROM import_row WHERE import_batch_id = :b "
+                           "AND payload ? 'before'"), {"b": b}).scalar_one()
+
+
+def test_only_before_value_rows_wait_for_90_days_from_the_commit(client, ed, db, owner, three):
+    """4a-R6 per row (Ben, 2026-10-09): a mixed batch — one UPDATE row, two MATCH rows — loses the
+    MATCH rows 90 days after upload, keeps the UPDATE row's before-values until 90 days after its
+    commit, and is marked purged only when the last row goes."""
     body = edit(export(client, ed), lambda ws, col: cell(ws, col, 3, "description", "Who pays"))
     pv = staged(client, ed, body)
     assert commit(client, ed, pv, ack=None).status_code == 200
     b = age(owner, pv, 91, 30)                          # uploaded 91 days ago, committed 30 days ago
-    assert db.execute(text("SELECT count(*) FROM import_row WHERE import_batch_id = :b "
-                           "AND payload ? 'before'"), {"b": b}).scalar_one() == 1
+    assert (row_count(db, b), before_rows(db, b)) == (3, 1)
 
-    assert overdue_ids(db) == []
+    assert overdue_ids(db) == [b]                       # its two MATCH rows are past the window
     run = bulk.purge_import_rows(db)
-    assert run["batches"] == [] and row_count(db, b) == 3
-    assert header(db, b)["file_name"] == "model.xlsx" and header(db, b)["rows_purged_at"] is None
+    assert (run["batches"], run["purged"], run["rows"]) == ([b], [], 2)
+    assert (row_count(db, b), before_rows(db, b)) == (1, 1)        # only the before-values remain
+    h = header(db, b)
+    assert (h["file_name"], h["rows_purged_at"], h["status"]) == ("model.xlsx", None, "COMMITTED")
+    assert overdue_ids(db) == [] and bulk.purge_import_rows(db)["rows"] == 0   # nothing more is due
 
     age(owner, pv, 121, 91)                             # now 91 days since the commit
     assert overdue_ids(db) == [b]
-    assert bulk.purge_import_rows(db)["batches"] == [b]
+    run = bulk.purge_import_rows(db)
+    assert (run["batches"], run["purged"], run["rows"]) == ([b], [b], 1)
     h = header(db, b)
     assert (row_count(db, b), h["file_name"], h["status"]) == (0, "(purged)", "COMMITTED")
+    assert h["rows_purged_at"] is not None
+
+
+def test_a_batch_rejected_by_a_failed_commit_is_purged_and_stays_rejected(client, ed, db, owner, three):
+    body = edit(export(client, ed), lambda ws, col: cell(ws, col, 3, "description", "Who pays"))
+    pv = staged(client, ed, body)
+    de = client.get(f"/api/v1/data-entities/{three[0]['data_entity_id']}", headers=ed["h"]).json()
+    assert client.delete(f"/api/v1/data-entities/{de['data_entity_id']}", headers=ed["h"],
+                         params={"row_version": de["row_version"]}).status_code == 204
+    assert commit(client, ed, pv).status_code == 422                # REJECTED by the commit
+    b = age(owner, pv, 91)
+    run = bulk.purge_import_rows(db)
+    assert run["purged"] == [b] and run["rejected"] == []          # not counted as rejected by the purge
+    h = header(db, b)
+    assert (row_count(db, b), h["file_name"], h["status"]) == (0, "(purged)", "REJECTED")
 
 
 # ---- S4-9: batches are locked first, SKIP LOCKED -------------------------------------------------

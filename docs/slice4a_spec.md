@@ -196,7 +196,8 @@ grant). Everything else is **tracked, not redrafted**: the builder applies rules
 - **4a-R5 (N5):** column codes go in a locked hidden row 1 (cell values), not in comments, so the
   read-only parser sees them and no extra XML part needs parsing.
 - **4a-R6 (N6):** `payload.before` on committed rows is kept for 90 days **from `committed_at`**.
-  Only those rows' purge is deferred.
+  Only those rows' purge is deferred. *(Ben, 2026-10-09: per row, not per batch. Every other row
+  goes 90 days after upload; a batch is marked purged, with `(purged)`, only when its last row goes.)*
 - **4a-R7 (N7):** "operational" means SQLSTATE 40001, 40P01, 55P03 or 57014. Anything else is a
   rule failure. Every failed commit attempt is audited.
 - **4a-R8 (N8):** `X-VB-File-Name` is percent-encoded by the client and decoded before sanitising.
