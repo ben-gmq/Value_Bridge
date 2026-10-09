@@ -6,11 +6,14 @@ batches past their 90-day window that still hold rows, shown until a purge run r
 a forgotten or failing purge is visible while it runs as a CLI with no schedule."""
 from sqlalchemy.orm import Session
 
-from services import import_purge
+from services import consistency_data, import_purge
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
 INFORMATIONAL = frozenset({"purge_overdue"})
+# Warning lines: shown, and a freeze warns about them, but they never refuse it (4a-R10; Ben,
+# 2026-10-09: a baseline with fieldless entities warns and is still allowed).
+WARNINGS = frozenset({"entities_without_fields"})
 
 
 def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
@@ -19,4 +22,6 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
     require_project(…, REVIEWER) first."""
     return {
         "purge_overdue": import_purge.overdue(db, project_id),
+        "entities_without_fields": (consistency_data.entities_without_fields(db, project_id)
+                                    if project_id is not None else []),
     }
