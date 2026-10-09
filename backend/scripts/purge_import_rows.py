@@ -17,8 +17,8 @@ def main() -> None:
     with SessionLocal() as db:
         run = import_purge.purge_import_rows(db)
         left = import_purge.overdue(db)
-    print(f"Purged {run['rows']} rows from {len(run['batches'])} batches "
-          f"({len(run['rejected'])} uncommitted, now REJECTED); cutoff {run['cutoff']}.")
+    print(f"Purged {run['rows']} rows from {len(run['batches'])} batches, {len(run['purged'])} now fully "
+          f"purged ({len(run['rejected'])} uncommitted, now REJECTED); cutoff {run['cutoff']}.")
     if left:
         print(f"Still overdue (locked during this run): batches {', '.join(str(b['import_batch_id']) for b in left)}.")
 

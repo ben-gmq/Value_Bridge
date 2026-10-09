@@ -2,7 +2,7 @@
 
 One of VB's three hard deletes (VB law 1): staged rows hold raw client content — people's names
 among it — so 90 days after their batch was uploaded they are deleted, the batch's file name is
-overwritten with '(purged)' (Q6: a file name can identify a person) and `rows_purged_at` is set.
+overwritten with '(purged)' (S4-11/Q6: a file name can identify a person) and `rows_purged_at` is set.
 The header keeps who, when, what and the counts. A batch that never committed becomes REJECTED,
 so "purged ⇒ REJECTED or COMMITTED" holds.
 
@@ -33,7 +33,9 @@ PURGED_FILE_NAME = "(purged)"
 # 90 days after the commit (4a-R6). Before-values are written only at commit, so committed_at is
 # set for every such row (committed_at >= uploaded_at is a CHECK; a consistency line for
 # committed_at-iff-COMMITTED, import_batch_status_drift, is still owed).
-ROW_DUE = "NOT (r.payload ? 'before' AND b.committed_at >= :cutoff)"
+# coalesce: a before-value row whose batch somehow lost its committed_at falls back to the upload
+# clock rather than being kept for ever (sara round 2, L-1).
+ROW_DUE = "NOT (r.payload ? 'before' AND coalesce(b.committed_at >= :cutoff, false))"
 # A batch is due when it is past its upload window and still holds at least one due row.
 DUE = f"""
     b.rows_purged_at IS NULL
@@ -60,9 +62,9 @@ def purge_import_rows(db: Session) -> dict:
                           {"cutoff": cutoff}).scalars())
     if ids:
         # sara H-1: a batch committed while the locking statement ran is re-checked by Postgres on
-        # its newest row, but the NOT EXISTS (… 'before') subquery still sees the statement's old
-        # snapshot, so a just-committed UPDATE batch can look due. Re-test DUE in a new statement
-        # (fresh snapshot) now that we hold the locks; one that drops out stays locked, harmlessly.
+        # its newest row, but DUE's EXISTS (… ROW_DUE) subquery still reads the statement's old
+        # snapshot. The DELETE below re-applies ROW_DUE in a fresh statement, which is the guard;
+        # this re-test keeps `batches` honest. A batch that drops out stays locked, harmlessly.
         ids = list(db.execute(text(f"SELECT b.import_batch_id FROM import_batch b "
                                    f"WHERE b.import_batch_id = ANY(:ids) AND {DUE} ORDER BY 1")
                               .bindparams(bindparam("ids", ids, type_=ARRAY(BigInteger))),
