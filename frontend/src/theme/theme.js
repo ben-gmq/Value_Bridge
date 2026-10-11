@@ -93,7 +93,9 @@ export const theme = createTheme({
       styleOverrides: {
         root: ({ theme }) => ({ borderRadius: RADIUS.card, borderColor: theme.vars.palette.divider,
           backgroundColor: theme.vars.palette.background.paper, '--DataGrid-containerBackground': theme.vars.palette.background.paper,
-          '& .MuiDataGrid-columnSeparator': { display: 'none' } }),
+          '& .MuiDataGrid-columnSeparator': { display: 'none' },
+          '& .MuiDataGrid-columnHeader, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller':
+            { backgroundColor: theme.vars.palette.background.paper } }),
         columnHeaderTitle: ({ theme }) => ({ color: theme.vars.palette.brand.muted, fontWeight: 600, fontSize: 12.5 }),
         cell: ({ theme }) => ({ borderColor: theme.vars.palette.divider, fontSize: 13.5 }),
         row: ({ theme }) => ({ '&:hover': { backgroundColor: theme.vars.palette.brand.selected } }),

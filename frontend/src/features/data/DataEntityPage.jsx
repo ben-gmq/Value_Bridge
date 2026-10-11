@@ -213,7 +213,7 @@ export default function DataEntityPage() {
   const columns = [
     { field: 'seq_no', headerName: t('data.field.seqShort'), width: 48,
       renderCell: ({ value }) => <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12.5, color: 'text.secondary' }}>{value}</Typography> },
-    { field: 'field_name', headerName: t('data.field.name'), flex: 1, minWidth: 140,
+    { field: 'field_name', headerName: t('data.field.name'), flex: 1, minWidth: 120,
       renderCell: ({ row }) => (
         <Box component="span" sx={{ fontWeight: row.is_primary_key ? 700 : 400,
           color: row.is_active === false ? 'text.secondary' : 'inherit' }}>{row.field_name}</Box>) },
@@ -233,7 +233,7 @@ export default function DataEntityPage() {
           <KeyRounded sx={{ fontSize: 17, color: 'brand.amber' }} />
           <Box component="span" sx={{ fontFamily: MONO, fontSize: 12 }}>{row.pk_ordinal}</Box>
         </Stack>) },
-    { field: 'fk', headerName: t('data.field.fk'), flex: 1, minWidth: 190, sortable: false,
+    { field: 'fk', headerName: t('data.field.fk'), flex: 1, minWidth: 150, sortable: false,
       valueGetter: (_, row) => (row.is_foreign_key ? fkText(row) : ''),
       renderCell: ({ row, tabIndex }) => (row.is_foreign_key ? (
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
