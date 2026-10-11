@@ -356,6 +356,20 @@ five other changes Ben asked for in the same conversation.
 | **4** | English / Japanese / Thai (D-44) |
 | **Before first client use** | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · client read-only login and the offline viewer file (D-43) |
 
+### Slice 7 schema rulings — 2026-10-11
+
+Schema `docs/slice7_schema.md` (apple), covering 7a components, 7b access and 7c the DFD rework.
+Ben, 2026-10-11: *"I will accept your recommendations, so build it first."*
+
+| # | Ruling | Supersedes | Source |
+|---|---|---|---|
+| S7-1 | **All 33 [Q-n] in `slice7_schema.md` §10 are accepted as recommended**, as amended below (Ben) | — | apple Q-1…Q-33 |
+| S7-2 | **One BR per *to-be* process.** As-is processes carry no BR; the database enforces it (generated `'TO_BE'` column + FK on `business_requirement`) | D-2 "every process node carries exactly one BR" | apple §11.1 |
+| S7-3 | **The input/output completeness rule blocks the freeze only for a set whose DFD component is on.** A requirements-only project freezes without it | D-38 as written | apple §11.2, Q-29 |
+| S7-4 | **Applications need no other component; only the interface routes need FRs and Applications** | OR-2's "applications need FRs" | apple Q-4 |
+| S7-5 | **No layout rows are deleted.** Old `PROCESS_FLOW` positions stay as history, the type CHECK is unchanged, and the service refuses new ones | apple Q-31 (delete) | Lilly, to keep law 1 without exception |
+| S7-6 | **Grants are soft-revoked after being copied into `project_member` (0038)**; nothing is deleted, so it proceeds without a pause (Ben: build without stopping unless critical) | — | apple §8.5 |
+
 ### Slice 1 schema review — 2026-09-29
 
 Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
