@@ -11,7 +11,10 @@ from routers.guards import GUARD_DEPS, GUARD_KEY, GuardedRouter, RouteDefinition
 PUBLIC_ALLOWED = {("POST", "/auth/login"), ("GET", "/auth/setup"), ("POST", "/auth/setup")}
 # §9 lists these admin-only routes although they carry {project_id}. Named one by one, so
 # a new {project_id} route can never quietly skip PROJECT_CTX.
-PROJECT_ID_ADMIN_ALLOWED = {("DELETE", "/api/v1/programs/{program_id}/projects/{project_id}")}
+PROJECT_ID_ADMIN_ALLOWED = {("DELETE", "/api/v1/programs/{program_id}/projects/{project_id}"),
+                            # D-37/D-39 (Q-10): platform-admin switches; 7b moves them to project_ctx("ADMIN")
+                            ("PUT", "/api/v1/projects/{project_id}/components"),
+                            ("PUT", "/api/v1/projects/{project_id}/data-model-depth")}
 ID_PARAM = re.compile(r"\{(\w*id)\}")
 
 
@@ -85,3 +88,32 @@ def test_spoofed_marker_without_the_dependency_is_caught(monkeypatch):
     attached = [GUARD_DEPS.get(id(d.dependency)) for d in spoof.dependencies]
     assert all(a is None for a in attached)   # nothing real is attached → the check above fails it
     assert app is not None
+
+
+# ---- criterion 49b (D-37, slice7_schema §5.2): every write declares the component it needs -----
+# A path fragment → the component every non-GET route containing it must name in its marker.
+# A forgotten declaration fails here, as a forgotten guard fails criterion 49.
+ROUTE_COMPONENTS = (
+    ("/solutions", "SOLUTION"),
+    ("/function-requirements", "FUNCTION_REQUIREMENT"),
+    ("/applications", "APPLICATION"),
+    ("/rate-card", "EFFORT"),
+    ("/complexity", "EFFORT"),
+    ("/interface", "APPLICATION"),
+    ("/external-flows", "TO_BE_DFD"),
+    ("/process-flow", "TO_BE_DFD"),
+    ("/bfc-nodes/{id}/applications", "AS_IS"),
+)
+
+
+def test_every_component_write_declares_its_component():
+    bad = []
+    for r in _routes():
+        if r.methods <= {"GET", "HEAD"}:
+            continue
+        declared = r.openapi_extra[GUARD_KEY].get("component")
+        declared = set(declared) if isinstance(declared, list) else {declared} if declared else set()
+        for fragment, code in ROUTE_COMPONENTS:
+            if fragment in r.path and code not in declared:
+                bad.append(f"{sorted(r.methods)} {r.path}: needs {code}, declares {sorted(declared)}")
+    assert bad == []

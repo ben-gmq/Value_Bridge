@@ -15,6 +15,7 @@ export const links = {
   entity: (p, deId) => `/p/${p}/data/${deId}`,
   erd: (p, area) => (area ? `/p/${p}/data/diagram?area=${encodeURIComponent(area)}` : `/p/${p}/data/diagram`),
   settings: (p) => `/p/${p}/settings`,
+  components: (p) => `/p/${p}/settings/components`,
   access: (p) => `/p/${p}/access`,
   organisation: (p) => `/p/${p}/settings/organisation`,
   parties: (p) => `/p/${p}/settings/parties`,
@@ -27,6 +28,10 @@ export const links = {
 
 // TanStack Query keys, shared so a save on one screen refreshes the others.
 export const keys = {
+  components: (p) => ['components', String(p)],
+  componentCatalogue: () => ['component-catalogue'],
+  projectTemplates: () => ['project-templates'],
+  project: (p) => ['project', String(p)],
   tree: (p) => ['bfc-tree', String(p)],
   node: (id) => ['bfc-node', String(id)],
   retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview

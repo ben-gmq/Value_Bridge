@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow,
                     BfcNodeOrgRole, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
                     DataEntity, ExternalEntity, OrgRole, Solution)
-from services import audit, bfc, lifecycle
+from services import audit, bfc, components, lifecycle
 
 RETIRED = "STEP_RETIRED_WITH_DEPENDENTS"
 RESTORED = "STEP_RESTORED_WITH_DEPENDENTS"
@@ -239,6 +239,8 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
                                        else " (make it a process step again)")
                  for _, p in sorted(first.items())]
         raise HTTPException(409, "Restore these first: " + "; ".join(names), headers=RESTORE_FIRST)
+    # DR7-P2: rows coming back live must belong to components that are on (D-37).
+    components.require_on(db, step.project_id, components.needed_for_rows(rows))
     action_id = str(uuid.uuid4())
     by_model: dict[type, list] = {}
     for r in rows:

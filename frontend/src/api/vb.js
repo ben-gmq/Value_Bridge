@@ -20,6 +20,11 @@ export const api = {
   project: (id) => d(http.get(`/api/v1/projects/${id}`)),
   createProject: (body) => d(http.post('/api/v1/projects', body)),
   updateProject: (id, body) => d(http.patch(`/api/v1/projects/${id}`, body)),
+  projectTemplates: () => d(http.get('/api/v1/project-templates')),
+  componentCatalogue: () => d(http.get('/api/v1/project-components')),
+  components: (id) => d(http.get(`/api/v1/projects/${id}/components`)),
+  setComponents: (id, body) => d(http.put(`/api/v1/projects/${id}/components`, body)),
+  setDepth: (id, body) => d(http.put(`/api/v1/projects/${id}/data-model-depth`, body)),
   codes: (projectId, category) => d(http.get(`/api/v1/projects/${projectId}/code-master/${category}`)),
 
   access: (projectId) => d(http.get(`/api/v1/projects/${projectId}/access`)),

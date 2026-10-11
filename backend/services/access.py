@@ -55,10 +55,19 @@ def _rank_ok(role: str, min_role: str) -> bool:
     return PROJECT_ROLE_RANK[role] >= PROJECT_ROLE_RANK[min_role]
 
 
-def require_project(db: Session, user: AppUser, project_id: int, min_role: str) -> EffectiveGrant:
+def _component_ok(db: Session, project_id: int, min_role: str, component) -> None:
+    """D-37, slice7_schema §5.2: writes only, after 404 and 403, for admins too (Q-20)."""
+    if component and _rank_ok(min_role, "EDITOR"):
+        from services import components
+        components.require_on(db, project_id, component)
+
+
+def require_project(db: Session, user: AppUser, project_id: int, min_role: str,
+                    component: str | tuple[str, ...] | None = None) -> EffectiveGrant:
     if user.is_platform_admin:
         if db.get(Project, project_id) is None:
             raise HTTPException(404, NOT_FOUND)
+        _component_ok(db, project_id, min_role, component)
         return ADMIN_GRANT
     g = live_grant(db, user)
     p = db.get(Project, project_id)
@@ -73,6 +82,7 @@ def require_project(db: Session, user: AppUser, project_id: int, min_role: str) 
     role = grant_role(db, g)
     if not _rank_ok(role, min_role):
         raise HTTPException(403, "Your role on this project does not allow that")
+    _component_ok(db, project_id, min_role, component)
     return EffectiveGrant(role, via, g)
 
 

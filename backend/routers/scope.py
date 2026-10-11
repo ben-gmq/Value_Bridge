@@ -33,7 +33,7 @@ from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
-from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
+from services import components, external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
 from services import effort as effort_service, interface as iface_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
@@ -42,8 +42,15 @@ _read = project_ctx("REVIEWER")
 _edit = project_ctx("EDITOR")
 
 
-def _og(model, role):
-    return object_guard(model, role)
+def _og(model, role, component=None):
+    return object_guard(model, role, component=component)
+
+
+# D-37: the project component each family of writes needs on (slice7_schema §5.2 table).
+_edit_sol = project_ctx("EDITOR", "SOLUTION")
+_edit_fr = project_ctx("EDITOR", "FUNCTION_REQUIREMENT")
+_edit_app = project_ctx("EDITOR", "APPLICATION")
+_edit_effort = project_ctx("EDITOR", "EFFORT")
 
 
 def _uid(user: AppUser) -> int:
@@ -53,9 +60,9 @@ def _uid(user: AppUser) -> int:
 _child = lifecycle.child_of
 
 
-def _retire_and_restore(prefix: str, model, out, on_restore=None):
+def _retire_and_restore(prefix: str, model, out, on_restore=None, component=None):
     """DELETE (soft, refuse-with-dependents) and PATCH …/restore for one RESTORABLE entity."""
-    g = _og(model, "EDITOR")
+    g = _og(model, "EDITOR", component)
 
     @router.delete(f"/{prefix}/{{id}}", status_code=204, name=f"retire_{model.__tablename__}", **g.route)
     def _delete(id: int, row_version: int, obj=Depends(g.dep), user: AppUser = Depends(current_user),
@@ -74,6 +81,8 @@ def _retire_and_restore(prefix: str, model, out, on_restore=None):
 
 # ---- the function chart (§7.2) ------------------------------------------------------------
 _node_r, _node_w = _og(BfcNode, "REVIEWER"), _og(BfcNode, "EDITOR")
+_node_dfd_w = _og(BfcNode, "EDITOR", "TO_BE_DFD")
+_node_asis_w = _og(BfcNode, "EDITOR", ("APPLICATION", "AS_IS"))
 
 
 @router.get("/projects/{project_id}/bfc-tree", response_model=list[TreeNodeOut], **_read.route)
@@ -160,15 +169,15 @@ def list_external_flows(id: int, node: BfcNode = Depends(_node_r.dep), db: Sessi
 
 
 @router.post("/bfc-nodes/{id}/external-flows", response_model=ExternalFlowOut, status_code=201,
-             **_node_w.route)
-def link_external_flow(id: int, body: ExternalFlowIn, node: BfcNode = Depends(_node_w.dep),
+             **_node_dfd_w.route)
+def link_external_flow(id: int, body: ExternalFlowIn, node: BfcNode = Depends(_node_dfd_w.dep),
                        user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return bfc.link_external_flow(db, _uid(user), node, body.external_entity_id, body.direction,
                                   body.data_entity_id, body.flow_label, body.note)
 
 
-@router.delete("/bfc-nodes/{id}/external-flows/{link_id}", status_code=204, **_node_w.route)
-def unlink_external_flow(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_w.dep),
+@router.delete("/bfc-nodes/{id}/external-flows/{link_id}", status_code=204, **_node_dfd_w.route)
+def unlink_external_flow(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_dfd_w.dep),
                          user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     bfc.unlink_external_flow(db, _uid(user), _child(db, BfcNodeExternalFlow, link_id, "bfc_node_id",
                                                     node.bfc_node_id), row_version)
@@ -256,7 +265,9 @@ def unlink_br_role(id: int, link_id: int, row_version: int, br: BusinessRequirem
 
 
 # ---- solutions and the BRs they answer (§7.5, §4.3, docs/slice5_spec.md) -----------------
-_sol_r, _sol_w = _og(Solution, "REVIEWER"), _og(Solution, "EDITOR")
+_sol_r, _sol_w = _og(Solution, "REVIEWER"), _og(Solution, "EDITOR", "SOLUTION")
+_br_sol_w = _og(BusinessRequirement, "EDITOR", "SOLUTION")
+_sol_app_w = _og(Solution, "EDITOR", ("SOLUTION", "APPLICATION"))
 
 
 @router.get("/projects/{project_id}/solutions", response_model=list[SolutionListOut], **_read.route)
@@ -266,7 +277,7 @@ def list_solutions(project_id: int, include_retired: bool = False, db: Session =
 
 
 @router.post("/projects/{project_id}/solutions", response_model=SolutionOut, status_code=201,
-             **_edit.route)
+             **_edit_sol.route)
 def create_solution(project_id: int, body: SolutionIn, user: AppUser = Depends(current_user),
                     db: Session = Depends(get_db)):
     return sol_service.create_solution(db, _uid(user), project_id, body.solution_name, body.category_code,
@@ -286,7 +297,8 @@ def update_solution(id: int, body: SolutionPatch, sol: Solution = Depends(_sol_w
                                        body.category_code, body.status_code)
 
 
-_retire_and_restore("solutions", Solution, SolutionOut, on_restore=sol_service.restore_solution)
+_retire_and_restore("solutions", Solution, SolutionOut, on_restore=sol_service.restore_solution,
+                    component="SOLUTION")
 
 
 @router.get("/solutions/{id}/business-requirements", response_model=list[SolutionBrOut], **_sol_r.route)
@@ -300,31 +312,33 @@ def list_br_solutions(id: int, br: BusinessRequirement = Depends(_br_r.dep), db:
 
 
 @router.post("/business-requirements/{id}/solutions", response_model=BrSolutionOut, status_code=201,
-             **_br_w.route)
-def link_br_solution(id: int, body: BrSolutionIn, br: BusinessRequirement = Depends(_br_w.dep),
+             **_br_sol_w.route)
+def link_br_solution(id: int, body: BrSolutionIn, br: BusinessRequirement = Depends(_br_sol_w.dep),
                      user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     row = sol_service.link(db, _uid(user), br, body.solution_id, body.coverage_note)
     return sol_service.as_br_link(db, row)
 
 
 @router.patch("/business-requirements/{id}/solutions/{link_id}", response_model=BrSolutionOut,
-              **_br_w.route)
+              **_br_sol_w.route)
 def edit_br_solution(id: int, link_id: int, body: BrSolutionPatch,
-                     br: BusinessRequirement = Depends(_br_w.dep), user: AppUser = Depends(current_user),
+                     br: BusinessRequirement = Depends(_br_sol_w.dep), user: AppUser = Depends(current_user),
                      db: Session = Depends(get_db)):
     row = sol_service.edit_note(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id),
                                 body.row_version, body.coverage_note)
     return sol_service.as_br_link(db, row)
 
 
-@router.delete("/business-requirements/{id}/solutions/{link_id}", status_code=204, **_br_w.route)
-def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
+@router.delete("/business-requirements/{id}/solutions/{link_id}", status_code=204, **_br_sol_w.route)
+def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_sol_w.dep),
                        user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     sol_service.unlink(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id), row_version)
 
 
 # ---- function requirements (§7.5, D-27/D-28, docs/slice6a_spec.md) -------------------------
-_fr_r, _fr_w = _og(FunctionRequirement, "REVIEWER"), _og(FunctionRequirement, "EDITOR")
+_fr_r, _fr_w = _og(FunctionRequirement, "REVIEWER"), _og(FunctionRequirement, "EDITOR", "FUNCTION_REQUIREMENT")
+_fr_effort_w = _og(FunctionRequirement, "EDITOR", ("FUNCTION_REQUIREMENT", "EFFORT"))
+_fr_iface_w = _og(FunctionRequirement, "EDITOR", ("FUNCTION_REQUIREMENT", "APPLICATION"))
 
 
 def _fr_out(fr: FunctionRequirement, warnings: list[str] | None = None) -> FrOut:
@@ -338,8 +352,10 @@ def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = Fa
 
 
 @router.post("/projects/{project_id}/function-requirements", response_model=FrOut, status_code=201,
-             **_edit.route)
+             **_edit_fr.route)
 def create_fr(project_id: int, body: FrIn, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    if body.solution_id is not None:
+        components.require_on(db, project_id, "SOLUTION")
     fr, warnings = fr_service.create_fr(db, _uid(user), project_id, body.fr_name, body.fr_type_code,
                                         body.solution_id, body.model_dump(include={"description", "acceptance_note"}))
     return _fr_out(fr, warnings)
@@ -356,12 +372,22 @@ def update_fr(id: int, body: FrPatch, fr: FunctionRequirement = Depends(_fr_w.de
     sent = body.model_dump(exclude_unset=True)
     fields = {k: sent[k] for k in fr_service.EDITABLE if k in sent}
     extra = {"solution_id": sent["solution_id"]} if "solution_id" in sent else {}
+    if extra.get("solution_id") is not None:
+        components.require_on(db, fr.project_id, "SOLUTION")
     fr, warnings = fr_service.update_fr(db, _uid(user), fr, body.row_version, fields,
                                         sent.get("fr_type_code"), sent.get("fulfilment_status_code"), **extra)
     return _fr_out(fr, warnings).model_copy(update={"effort_change": getattr(fr, "effort_change", None)})
 
 
-_retire_and_restore("function-requirements", FunctionRequirement, FrOut)
+def _restore_fr(db: Session, actor_id: int, fr: FunctionRequirement) -> FunctionRequirement:
+    """DR7-P2: a rated FR needs EFFORT on, a linked one SOLUTION, before it comes back live."""
+    components.require_on(db, fr.project_id, components.needed_for_rows([fr]))
+    lifecycle.restore(db, actor_id, fr)
+    return fr
+
+
+_retire_and_restore("function-requirements", FunctionRequirement, FrOut, on_restore=_restore_fr,
+                    component="FUNCTION_REQUIREMENT")
 
 
 @router.get("/solutions/{id}/function-requirements", response_model=list[FrOut], **_sol_r.route)
@@ -380,14 +406,14 @@ def read_rate_card(project_id: int, db: Session = Depends(get_db)):
     return effort_service.read_card(db, project_id)
 
 
-@router.put("/projects/{project_id}/rate-card", response_model=RateCardChangeOut, **_edit.route)   # S6c-3: EDITOR
+@router.put("/projects/{project_id}/rate-card", response_model=RateCardChangeOut, **_edit_effort.route)   # S6c-3: EDITOR
 def maintain_rate_card(project_id: int, body: RateCardIn, user: AppUser = Depends(current_user),
                        db: Session = Depends(get_db)):
     return effort_service.maintain_card(db, _uid(user), project_id, body.change_rationale, body.cells, body.confirm_high)
 
 
-@router.patch("/function-requirements/{id}/complexity", response_model=FrOut, **_fr_w.route)
-def rate_function_requirement(id: int, body: ComplexityIn, fr: FunctionRequirement = Depends(_fr_w.dep),
+@router.patch("/function-requirements/{id}/complexity", response_model=FrOut, **_fr_effort_w.route)
+def rate_function_requirement(id: int, body: ComplexityIn, fr: FunctionRequirement = Depends(_fr_effort_w.dep),
                               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return effort_service.rate_fr(db, _uid(user), fr, body.row_version, body.complexity_code)
 
@@ -403,14 +429,14 @@ def read_interface(id: int, fr: FunctionRequirement = Depends(_fr_r.dep), db: Se
     return iface_service.read_interface(db, fr)
 
 
-@router.put("/function-requirements/{id}/interface", response_model=InterfaceOut, **_fr_w.route)
-def describe_interface(id: int, body: InterfaceIn, fr: FunctionRequirement = Depends(_fr_w.dep),
+@router.put("/function-requirements/{id}/interface", response_model=InterfaceOut, **_fr_iface_w.route)
+def describe_interface(id: int, body: InterfaceIn, fr: FunctionRequirement = Depends(_fr_iface_w.dep),
                        user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return iface_service.describe_interface(db, _uid(user), fr, body)
 
 
-@router.delete("/function-requirements/{id}/interface", status_code=204, **_fr_w.route)
-def remove_interface(id: int, row_version: int, fr: FunctionRequirement = Depends(_fr_w.dep),
+@router.delete("/function-requirements/{id}/interface", status_code=204, **_fr_iface_w.route)
+def remove_interface(id: int, row_version: int, fr: FunctionRequirement = Depends(_fr_iface_w.dep),
                      user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     iface_service.remove_interface(db, _uid(user), fr, row_version)
 
@@ -422,7 +448,7 @@ def interface_list(project_id: int, source: int | None = None, target: int | Non
 
 
 # ---- applications: catalogue, to-be allocation, as-is support (§7.5, D-8, docs/slice6b1_spec.md)
-_app_r, _app_w = _og(Application, "REVIEWER"), _og(Application, "EDITOR")
+_app_r, _app_w = _og(Application, "REVIEWER"), _og(Application, "EDITOR", "APPLICATION")
 
 
 @router.get("/projects/{project_id}/applications", response_model=list[ApplicationListOut], **_read.route)
@@ -431,7 +457,7 @@ def list_applications(project_id: int, include_retired: bool = False, db: Sessio
             for a, ns, nn in app_service.list_applications(db, project_id, include_retired)]
 
 
-@router.post("/projects/{project_id}/applications", response_model=ApplicationOut, status_code=201, **_edit.route)
+@router.post("/projects/{project_id}/applications", response_model=ApplicationOut, status_code=201, **_edit_app.route)
 def create_application(project_id: int, body: ApplicationIn, user: AppUser = Depends(current_user),
                        db: Session = Depends(get_db)):
     return app_service.create_application(db, _uid(user), project_id, body.application_code, body.application_name,
@@ -452,7 +478,8 @@ def update_application(id: int, body: ApplicationPatch, app: Application = Depen
     return ApplicationOut.model_validate(app).model_copy(update={"warnings": warnings})
 
 
-_retire_and_restore("applications", Application, ApplicationOut, on_restore=app_service.restore_application)
+_retire_and_restore("applications", Application, ApplicationOut, on_restore=app_service.restore_application,
+                    component="APPLICATION")
 
 
 @router.get("/applications/{id}/solutions", response_model=list[AllocationOut], **_app_r.route)
@@ -470,21 +497,21 @@ def list_solution_applications(id: int, sol: Solution = Depends(_sol_r.dep), db:
     return app_service.allocations(db, solution_id=sol.solution_id)
 
 
-@router.post("/solutions/{id}/applications", response_model=AllocationOut, status_code=201, **_sol_w.route)
-def allocate_application(id: int, body: AllocationIn, sol: Solution = Depends(_sol_w.dep),
+@router.post("/solutions/{id}/applications", response_model=AllocationOut, status_code=201, **_sol_app_w.route)
+def allocate_application(id: int, body: AllocationIn, sol: Solution = Depends(_sol_app_w.dep),
                          user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return app_service.as_alloc(app_service.link_solution(db, _uid(user), sol, body.application_id, body.note))
 
 
-@router.patch("/solutions/{id}/applications/{link_id}", response_model=AllocationOut, **_sol_w.route)
-def edit_allocation(id: int, link_id: int, body: LinkNotePatch, sol: Solution = Depends(_sol_w.dep),
+@router.patch("/solutions/{id}/applications/{link_id}", response_model=AllocationOut, **_sol_app_w.route)
+def edit_allocation(id: int, link_id: int, body: LinkNotePatch, sol: Solution = Depends(_sol_app_w.dep),
                     user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     row = _child(db, ApplicationSolution, link_id, "solution_id", sol.solution_id)
     return app_service.as_alloc(app_service.edit_note(db, _uid(user), row, body.row_version, body.note))
 
 
-@router.delete("/solutions/{id}/applications/{link_id}", status_code=204, **_sol_w.route)
-def unallocate_application(id: int, link_id: int, row_version: int, sol: Solution = Depends(_sol_w.dep),
+@router.delete("/solutions/{id}/applications/{link_id}", status_code=204, **_sol_app_w.route)
+def unallocate_application(id: int, link_id: int, row_version: int, sol: Solution = Depends(_sol_app_w.dep),
                            user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     app_service.unlink(db, _uid(user), _child(db, ApplicationSolution, link_id, "solution_id", sol.solution_id),
                        row_version)
@@ -495,22 +522,22 @@ def list_step_applications(id: int, node: BfcNode = Depends(_node_r.dep), db: Se
     return app_service.supports(db, bfc_node_id=node.bfc_node_id)
 
 
-@router.post("/bfc-nodes/{id}/applications", response_model=SupportOut, status_code=201, **_node_w.route)
-def link_step_application(id: int, body: SupportIn, node: BfcNode = Depends(_node_w.dep),
+@router.post("/bfc-nodes/{id}/applications", response_model=SupportOut, status_code=201, **_node_asis_w.route)
+def link_step_application(id: int, body: SupportIn, node: BfcNode = Depends(_node_asis_w.dep),
                           user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     row, warnings = app_service.link_step(db, _uid(user), node, body.application_id, body.note)
     return {**app_service.as_support(row), "warnings": warnings}
 
 
-@router.patch("/bfc-nodes/{id}/applications/{link_id}", response_model=SupportOut, **_node_w.route)
-def edit_step_application(id: int, link_id: int, body: LinkNotePatch, node: BfcNode = Depends(_node_w.dep),
+@router.patch("/bfc-nodes/{id}/applications/{link_id}", response_model=SupportOut, **_node_asis_w.route)
+def edit_step_application(id: int, link_id: int, body: LinkNotePatch, node: BfcNode = Depends(_node_asis_w.dep),
                           user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     row = _child(db, ApplicationBfcNode, link_id, "bfc_node_id", node.bfc_node_id)
     return app_service.as_support(app_service.edit_note(db, _uid(user), row, body.row_version, body.note))
 
 
-@router.delete("/bfc-nodes/{id}/applications/{link_id}", status_code=204, **_node_w.route)
-def unlink_step_application(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_w.dep),
+@router.delete("/bfc-nodes/{id}/applications/{link_id}", status_code=204, **_node_asis_w.route)
+def unlink_step_application(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_asis_w.dep),
                             user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     app_service.unlink(db, _uid(user), _child(db, ApplicationBfcNode, link_id, "bfc_node_id", node.bfc_node_id),
                        row_version)

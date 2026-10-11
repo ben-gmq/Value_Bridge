@@ -6,12 +6,27 @@ invisible. Freezing a baseline warns about these and still allows it (Ben, 2026-
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from models import DataEntity, DataField
+from models import DataEntity, DataField, Project
+from services import components
 
 
 def entities_without_fields(db: Session, project_id: int) -> list[dict]:
     has_field = exists().where(DataField.data_entity_id == DataEntity.data_entity_id, DataField.is_active)
     rows = db.execute(select(DataEntity.data_entity_id, DataEntity.de_number, DataEntity.de_name)
                       .where(DataEntity.project_id == project_id, DataEntity.is_active, ~has_field)
+                      .order_by(DataEntity.de_number)).all()
+    return [{"data_entity_id": i, "de_number": n, "de_name": name} for i, n, name in rows]
+
+
+def entities_keys_only(db: Session, project_id: int) -> list[dict]:
+    """D-39: on a FULL-depth project, a live entity whose live fields are all keys (PK or FK) —
+    it has keys but no other attributes. Never listed on a KEYS_ONLY project. A WARNING line."""
+    if components.depth(db.get(Project, project_id)) != "FULL":
+        return []
+    has_field = exists().where(DataField.data_entity_id == DataEntity.data_entity_id, DataField.is_active)
+    has_attr = exists().where(DataField.data_entity_id == DataEntity.data_entity_id, DataField.is_active,
+                              ~DataField.is_primary_key, ~DataField.is_foreign_key)
+    rows = db.execute(select(DataEntity.data_entity_id, DataEntity.de_number, DataEntity.de_name)
+                      .where(DataEntity.project_id == project_id, DataEntity.is_active, has_field, ~has_attr)
                       .order_by(DataEntity.de_number)).all()
     return [{"data_entity_id": i, "de_number": n, "de_name": name} for i, n, name in rows]

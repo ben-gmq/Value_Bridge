@@ -1087,3 +1087,47 @@ erDiagram
 10. **D-40 lists "house rate card" among admin functions**, but S6c Q-3 placed the FTC default in a seed
     constant, with no house tier in the database. There is nothing for an admin to edit until that is
     built. This is noted, not resolved here.
+
+
+---
+
+## 12. Design review round 1 — dispositions (2026-10-11)
+
+`design-auditor` round 1: 13 findings (3 HIGH, 5 MEDIUM, 5 LOW). Ben accepts Lilly's recommendations
+(S7-1); every finding is fixed or carried to the part that builds it. **This section overrides the text
+above where they differ.**
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| DR7-P1 | HIGH: `seed_project_components` re-enables chosen components on every deploy | **Fixed (7a).** One-off for the 7a deploy: touches only projects with **no `project_component` row at all, live or retired**. Not a step of every deploy | §5.3; `services/components.backfill` |
+| DR7-P2 | MEDIUM: restore and copy paths make rows live in an off component | **Fixed for 7a's paths**: step restore-with-dependents and FR restore call `require_on(needed_for_rows(...))` (an FR's rating needs EFFORT, its link SOLUTION). New INFORMATIONAL line `rows_in_off_component`. **7c** applies the same to copy-set and performer/trigger rows | `components.ROW_COMPONENTS`, `step_retire.restore` |
+| DR7-P3 | LOW: steps retired before 0041 lose their lane on restore | **7c:** extend the 0041 backfill to retired steps whose R link carries the same `deleted_at` | §9.4 |
+| DR7-D1 | MEDIUM: two set resolvers, catalogue needs any-of | **7c:** node CRUD → `set_component`; performer, trigger links, external flows, flow-file target → `dfd_component`; the catalogue uses a resolver returning the one DFD component that is on. **External flows are TO_BE_DFD (auditor Q1)** — gated in 7a already | §5.2 |
+| DR7-D2 | MEDIUM: copied members not shown at restrict | **7b:** the restrict preview lists who **keeps** access with each `member_note`, inside the hash | §8.3 |
+| DR7-D3 | LOW: spec text contradicts S7-5/S7-6 | **Fixed by this section:** §9.6's `diagram_layout` row, Q-31's delete and §8.10's "0038 pauses" are void; S7-5 and S7-6 hold | §9.6, §8.10 |
+| DR7-D4 | LOW: 0044 downgrade fails with trigger positions | **7c:** the 0044 downgrade deletes `process_trigger_id` layout rows first (D-30 presentation rows) | §9.10 |
+| DR7-S1 | HIGH: criterion 49b by router cannot work; `_retire_and_restore` takes no component | **Fixed (7a).** 49b keys on **path fragments** (`ROUTE_COMPONENTS` in `test_route_guards.py`), restore routes included; `_retire_and_restore(component=)` | §5.2 |
+| DR7-S2 | HIGH: nothing structural stops a restricted project leaking through a list route | **7b:** acceptance test — a restricted project with unique strings; every GET route called as a non-member USER; no string in any body. Becomes the client-viewer wall test at D-43 | §8.8 |
+| DR7-S3 | MEDIUM: client-viewer wall undone by a kind/binding change | **D-43 slice:** every kind or binding change re-runs `check_ftc_address`; rebinding is its own audited event with consent on the new project | §8.7 |
+| DR7-S4 | LOW: `require_on` locks global `code_master` rows | **Fixed (7a):** `FOR SHARE OF project_component` only | `components.enabled(lock=True)` |
+| DR7-S5 | LOW: depth has no route; PATCH placement | **Fixed (7a):** `PUT /projects/{id}/data-model-depth`, platform admin, audited, `row_version`; `ProjectPatch` accepts neither depth nor components. **7b** puts `PATCH /projects/{id}` at EDIT in §8.6 | `routers/projects.py` |
+| DR7-S6 | LOW: a demoted admin silently becomes an editor everywhere | **7b:** `set_platform_admin(false)` requires `user_kind`; `PLATFORM_ADMIN_REMOVED` records it | §8.2 |
+
+**Auditor questions answered (Lilly, under S7-1):** (1) external flows are TO_BE_DFD rows; (2) a program
+whose every project is restricted from a user is hidden from that user; (3) `process_trigger` freezes with
+TO_BE_DFD or AS_IS, whichever is on, and live catalogue rows block switching both DFD components off; (4)
+the seed is a one-off (DR7-P1).
+
+### `sara` pre-commit review of 7a — dispositions (2026-10-11)
+
+No CRITICAL or HIGH. **M1** fixed: the backfill also skips any project whose `PROJECT_CREATED` audit carries a
+component list (an empty choice is legitimate). **M2** fixed: asking to switch off a component that a staying
+component needs is a `NEEDED_BY` blocker with the reason, never kept on silently (§5.1 steps 1–2 amended).
+**M3** fixed: CLAUDE.md's first-time line adds `seed_project_templates`, and names the 7a one-off. LOW: L1
+ordered locks (fixed); L2 the body-dependent FR checks stay in the router until the FR import moves them into
+`fr_service` (1e); L3 `bulk.Target.component`, checked at validate and commit (fixed); L4 depth via
+`components.depth` (fixed); L5 deviation 7e (fixed); **L6 `validate_entity_model` and the import-preview hint
+do not exist yet — they read depth when the imports slice (1e) builds them**; L7 `BrSolution` in
+`ROW_COMPONENTS` (fixed); L8 blocker samples for To-be DFD rows show ids — 7c replaces them with step codes;
+L9 no-op confirm writes nothing (fixed); L10 ruling S7-7; L11 panels on always-on screens hidden (fixed);
+L12 query keys in `links.js` (fixed); L13 0033 downgrade note (fixed), migrations committed one per commit.

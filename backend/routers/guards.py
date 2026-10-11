@@ -47,6 +47,7 @@ class GuardSpec:
     dep: Callable[..., Any]
     min_role: str | None = None
     model: type | None = None
+    component: object = None            # D-37: str | tuple | resolver(obj) — writes only
     extra: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -55,9 +56,15 @@ class GuardSpec:
     @property
     def route(self) -> dict:
         """kwargs for the route decorator: the dependency plus the guard marker."""
+        comp = self.component
+        if callable(comp):
+            comp = f"<{comp.__name__}>"
+        elif isinstance(comp, tuple):
+            comp = list(comp)
         return {"dependencies": [Depends(self.dep)],
                 "openapi_extra": {GUARD_KEY: {"kind": self.kind.value, "min_role": self.min_role,
-                                              "model": self.model.__name__ if self.model else None}}}
+                                              "model": self.model.__name__ if self.model else None,
+                                              "component": comp}}}
 
 
 class GuardedRouter(APIRouter):
@@ -95,11 +102,13 @@ def platform_admin() -> GuardSpec:
     return GuardSpec(Guard.PLATFORM_ADMIN, dep)
 
 
-def project_ctx(min_role: str) -> GuardSpec:
+def project_ctx(min_role: str, component: str | tuple[str, ...] | None = None) -> GuardSpec:
+    """`component`: the project component(s) a write needs on (D-37); 409 COMPONENT_OFF after
+    the 404 and 403 checks. Ignored on read guards."""
     def dep(project_id: int, user: AppUser = Depends(current_user),
             db: Session = Depends(get_db)) -> access.EffectiveGrant:
-        return access.require_project(db, user, project_id, min_role)
-    return GuardSpec(Guard.PROJECT_CTX, dep, min_role)
+        return access.require_project(db, user, project_id, min_role, component)
+    return GuardSpec(Guard.PROJECT_CTX, dep, min_role, component=component)
 
 
 def program_ctx(min_role: str) -> GuardSpec:
@@ -109,10 +118,11 @@ def program_ctx(min_role: str) -> GuardSpec:
     return GuardSpec(Guard.PROGRAM_CTX, dep, min_role)
 
 
-def object_guard(model: type, min_role: str, id_param: str = "id") -> GuardSpec:
+def object_guard(model: type, min_role: str, id_param: str = "id", component=None) -> GuardSpec:
     """For routes carrying an object id and no project (finding S3). The owning project is
     resolved from the object before anything is returned. `model` must implement
-    owning_project_id(); an object that resolves to no project is platform-admin only."""
+    owning_project_id(); an object that resolves to no project is platform-admin only.
+    `component` is as for project_ctx, or a resolver obj → codes for row-dependent components."""
     if not hasattr(model, "owning_project_id"):
         raise RouteDefinitionError(f"{model.__name__} has no owning_project_id()")
 
@@ -127,6 +137,7 @@ def object_guard(model: type, min_role: str, id_param: str = "id") -> GuardSpec:
             if not user.is_platform_admin:
                 raise HTTPException(404, access.NOT_FOUND)
         else:
-            access.require_project(db, user, owner, min_role)
+            comp = component(obj) if callable(component) else component
+            access.require_project(db, user, owner, min_role, comp)
         return obj
-    return GuardSpec(Guard.OBJECT_GUARD, dep, min_role, model)
+    return GuardSpec(Guard.OBJECT_GUARD, dep, min_role, model, component=component)

@@ -31,6 +31,9 @@ import EffortPage from '../features/effort/EffortPage';
 import RateCardPage from '../features/effort/RateCardPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
+import ComponentsPage from '../features/settings/ComponentsPage';
+import ComponentOff from '../features/common/ComponentOff';
+import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
 import ApplicationPage from '../features/applications/ApplicationPage';
 
@@ -46,8 +49,30 @@ const PAGES = [
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
+  ['settings/components', ComponentsPage],
   ['settings/applications', ApplicationsPage], ['settings/rate-card', RateCardPage], ['settings/applications/:appId', ApplicationPage],
 ];
+
+// D-37: a screen of a component that is off shows why instead of its content. Any one listed
+// component being on opens it (the BR–FR map shows solutions or FRs). Presentation only.
+const NEEDS = {
+  'br-fr': ['SOLUTION', 'FUNCTION_REQUIREMENT'], 'br-fr/:solutionId': ['SOLUTION'],
+  'br-fr/frs': ['FUNCTION_REQUIREMENT'], 'br-fr/frs/:frId': ['FUNCTION_REQUIREMENT'],
+  'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
+  'settings/applications': ['APPLICATION'], 'settings/applications/:appId': ['APPLICATION'],
+  'processes/:nodeId/flow': ['TO_BE_DFD'], 'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'],
+};
+
+function Gated({ path, Screen }) {
+  const { projectId } = useParams();
+  const { anyOn, rows, ready } = useComponents(projectId);
+  const need = NEEDS[path];
+  if (need && !ready) return <Spinner />;
+  if (need && !anyOn(...need)) {
+    return <ComponentOff name={rows.find((c) => c.code === need[0])?.label ?? need[0]} />;
+  }
+  return <Screen />;
+}
 
 /** The shell's "DFD" item: a DFD is drawn for one branch of the chart, so it opens the chart
  * with a hint to pick one (Ben, 2026-09-30, sara M2). */
@@ -86,7 +111,7 @@ export default function App() {
       <Route path="/p/:projectId" element={<RequireAuth><ProjectHome /></RequireAuth>} />
       <Route path="/p/:projectId/access" element={<RequireAuth><AccessPage /></RequireAuth>} />
       {PAGES.map(([path, Screen]) => (
-        <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Screen /></RequireAuth>} />
+        <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Gated path={path} Screen={Screen} /></RequireAuth>} />
       ))}
       <Route path="/p/:projectId/dfd" element={<RequireAuth><PickDfd /></RequireAuth>} />
       {SECTIONS.map(([path, section, slice]) => (

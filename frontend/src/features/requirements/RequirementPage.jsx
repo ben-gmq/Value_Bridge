@@ -9,6 +9,7 @@ import { keys, links } from '../../app/links';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
+import { useComponents } from '../../app/useComponents';
 import { t } from '../../i18n/t';
 import { LevelBadge, Mono, RaciPanel, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CrudGrid } from './CrudGrid';
@@ -25,6 +26,7 @@ const pickBr = (b) => ({ br_statement: b.br_statement ?? '', business_logic: b.b
 
 export default function RequirementPage() {
   const { projectId, brId } = useParams();
+  const { isOn } = useComponents(projectId);
   const qc = useQueryClient();
   const brQ = useQuery({ queryKey: keys.br(brId), queryFn: () => brApi.get(brId) });
   const br = brQ.data;
@@ -171,10 +173,10 @@ export default function RequirementPage() {
                 unlink={(id, rv) => brApi.unlinkRole(br.br_id, id, rv)} linkId="br_org_role_id" single={BR_SINGLE} />
             </Grid>
           </Grid>
-          <Divider sx={{ my: 3 }} />
-          <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!live} />
-          <Divider sx={{ my: 3 }} />
-          <FrTracePanel projectId={projectId} side="br" id={br.br_id} />
+          {isOn('SOLUTION') && <><Divider sx={{ my: 3 }} />
+            <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!live} /></>}
+          {isOn('FUNCTION_REQUIREMENT') && <><Divider sx={{ my: 3 }} />
+            <FrTracePanel projectId={projectId} side="br" id={br.br_id} /></>}
         </CardContent>
       </Card>
 

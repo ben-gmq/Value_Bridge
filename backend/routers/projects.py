@@ -6,10 +6,11 @@ from database import get_db
 from models import AppUser, UserAccessGrant
 from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin,
                             program_ctx, project_ctx)
-from schemas.common import (CodeOut, EffectiveAccessOut, GrantIn, GrantOut, ProgramIn,
-                            ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
-                            ReassignIn)
-from services import code_master
+from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn,
+                            EffectiveAccessOut, GrantIn, GrantOut, ProgramIn, ProgramMoveIn,
+                            ProgramOut, ProjectIn, ProjectOut, ProjectPatch, ReassignIn,
+                            TemplateOut)
+from services import code_master, components
 from services import program as program_service
 from services import project as project_service
 
@@ -32,7 +33,9 @@ def list_projects(user: AppUser = Depends(_auth.dep), db: Session = Depends(get_
 def create_project(body: ProjectIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
     return project_service.create_project(db, actor, body.client_id, body.project_code,
                                           body.project_name, body.program_id, body.start_date,
-                                          body.end_date)
+                                          body.end_date, component_codes=body.component_codes,
+                                          template_code=body.template_code,
+                                          data_model_depth=body.data_model_depth)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectOut, **_reader.route)
@@ -52,6 +55,37 @@ def update_project(project_id: int, body: ProjectPatch, db: Session = Depends(ge
             **_reader.route)
 def project_codes(project_id: int, category: str, db: Session = Depends(get_db)):
     return code_master.resolve(db, project_id, category.upper())
+
+
+# ---- components and data model depth (D-37, D-39, slice7_schema §5) ----
+@router.get("/project-templates", response_model=list[TemplateOut], **_auth.route)
+def list_templates(db: Session = Depends(get_db)):
+    return components.templates(db)
+
+
+@router.get("/project-components", response_model=list[ComponentOut], **_auth.route)
+def component_catalogue(db: Session = Depends(get_db)):
+    return components.catalogue(db)
+
+
+@router.get("/projects/{project_id}/components", response_model=list[ComponentOut], **_reader.route)
+def read_components(project_id: int, db: Session = Depends(get_db)):
+    return components.describe(db, project_id)
+
+
+@router.put("/projects/{project_id}/components", response_model=ComponentsChangeOut, **_admin.route)
+def set_components(project_id: int, body: ComponentsIn, actor: AppUser = Depends(_admin.dep),
+                   db: Session = Depends(get_db)):
+    """Platform admin [Q-10]. Without confirm_hash: the preview. With it: applied, audited."""
+    return components.set_components(db, actor, project_service.get_project(db, project_id),
+                                     body.component_codes, body.confirm_hash)
+
+
+@router.put("/projects/{project_id}/data-model-depth", response_model=ProjectOut, **_admin.route)
+def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_admin.dep),
+              db: Session = Depends(get_db)):
+    return components.set_depth(db, actor, project_service.get_project(db, project_id),
+                                body.data_model_depth, body.row_version)
 
 
 # ---- access ----
