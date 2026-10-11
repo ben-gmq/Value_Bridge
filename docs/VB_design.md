@@ -374,6 +374,21 @@ Schema `docs/slice5_schema.md` (apple), spec `docs/slice5_spec.md`; design revie
 | S5-4 | **`SOLUTION_CATEGORY` is a system category** (Ben): projects cannot rename or retire the five, because reports and `create_fr` branch on TECHNOLOGY / DATA | §8 | Q-5 |
 | S5-5 | **Physical choices adopted on apple's recommendation:** solution names unique among live solutions per project (`lower(btrim())`); `br_solution` has the S1-5 surrogate PK with `(br_id, solution_id)` as a full UNIQUE; new solutions start PROPOSED; the D-34 hook waits for FRs | §5.3 BR_SOLUTION (PK wording), §6.2 | Q-1, Q-2, Q-4, Q-7 |
 
+### Slice 6c rate card and effort — 2026-10-11
+
+Schema `docs/slice6c_schema.md` (apple), spec `docs/slice6c_spec.md`; design review round 1 of 2 (11 findings, 1 HIGH — all fixed).
+
+| # | Ruling | Changes | Source |
+|---|---|---|---|
+| S6c-1 | **The FTC default card uses placeholder values** (Ben), marked unconfirmed until FTC confirms | §7.10 | apple Q-7 |
+| S6c-2 | **A rate change never reprices rated FRs**; it reports how many are not at the current rate; re-rating is per FR, audited (Ben) | §4.8 (as A-38) | apple Q-11 |
+| S6c-3 | **Owners and Editors change the rate card** (Ben). Supersedes OWNER-only in §4.8 `maintain_rate_card`, §7.13 and the §9 rate-card row | §4.8, §7.13, §9 | — |
+| S6c-4 | **Effort by L1 area waits for the reports slice** (Ben) | §7.9 | apple Q-9 |
+| S6c-5 | **Visibility, not approval, controls the Editor who rates and re-rates**: a standing per-cell "not at current rate" count and Σ days, visible to reviewers (Ben) | §7.9, §7.13 | DR6c-P1 |
+| S6c-6 | **Confirmed defaults update untouched cells only**, through an audited command (Ben) | §7.10 | auditor Q3 |
+| S6c-7 | **A cell above 60 man-days needs confirmation** and is flagged (Ben) | §6.2 | auditor Q4 |
+| S6c-8 | **FRs under a REJECTED solution are shown apart** in the effort summary (Ben) | §7.9 | auditor Q5 |
+
 ### Slice 6b-2 interfaces — 2026-10-11
 
 Schema `docs/slice6b_schema.md` §4–§7 (apple), spec `docs/slice6b2_spec.md`; design review round 1 of 2 (8 findings, 1 HIGH — all fixed).
@@ -679,7 +694,7 @@ pipeline. Six `.xlsx` column maps, one staging model, one commit.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `maintain_rate_card` | `EFFORT_RATE`, `AUDIT_EVENT` | C/U | (FR type × complexity) → standard man-days, per project. Seeded from an FTC default at `create_project`, then negotiated with the client. **OWNER; every change needs a rationale and writes an audit row with the old and new values** (R2-D7). **The rate card is frozen with each baseline** (`baseline_effort_rate`, §6.1), so a priced diff can name the card that priced it |
+| `maintain_rate_card` | `EFFORT_RATE`, `AUDIT_EVENT` | C/U | (FR type × complexity) → standard man-days, per project. Seeded from an FTC default at `create_project`, then negotiated with the client. **OWNER or EDITOR (S6c-3, was OWNER); every change needs a rationale and writes an audit row with the old and new values** (R2-D7). **The rate card is frozen with each baseline** (`baseline_effort_rate`, §6.1), so a priced diff can name the card that priced it |
 | `rate_function_requirement` | `FUNCTION_REQUIREMENT` | U | `complexity_code` ∈ SIMPLE / MEDIUM / COMPLEX / VERY_COMPLEX. `effort_days` is **derived** at save from the rate card, and **stored**, so a later rate change cannot silently reprice agreed scope |
 | `effort_summary` | `FUNCTION_REQUIREMENT`, `SOLUTION`, `PHASE` | R | Man-days by FR type, by solution, by phase, by L1 area → the resource plan and the vendor sizing. Unlinked FRs (D-28) sum into an **Unassigned** bucket, never dropped |
 | `priced_diff` | `BASELINE_FUNCTION_REQUIREMENT`, `BASELINE_BR_SOLUTION`, `BASELINE_BUSINESS_REQUIREMENT` | R | **Q3, R2-D3.** Per `source_fr_id`, **`effort_b − effort_a`, counted exactly once**: ADDED = +effort, REMOVED = −effort, CHANGED = the delta → **"v1.1: +340 man-days added, −60 removed, +12 re-rated, net +292"**. **Unlinked FR effort (D-28) is its own line.** A separate, informational **"effort exposed"** line is the effort of FRs reachable from changed BRs. It is never added to the net |
@@ -5085,7 +5100,7 @@ purge_import_rows():                       # daily scheduled job (§15), as the 
 ```
 # ---- size and effort (D-13) -----------------------------------------------
 maintain_rate_card(project_id, cells, change_rationale):              # R2-D7
-    access.require_project(user, project_id, OWNER)
+    access.require_project(user, project_id, EDITOR)                    # S6c-3 (was OWNER)
     if not change_rationale.strip():
         raise 422 "Changing the rate card is a commercial decision and needs a reason"
     changes = []
@@ -5524,7 +5539,7 @@ or a guard that does not fit its path.**
 | `GET /projects/{id}/code-master/{category}` | — | codes + labels for dropdowns, resolved two-tier via `code_master.resolve` (S10 — the unscoped route could only return the global tier or leak every project's custom labels) |
 | `PATCH /{entity}/{id}/restore` | — | un-delete (P5). **Registered once per `RESTORABLE` entity (§7.12), each with its own `object_guard`** — there is no generic `{entity}` parameter. No restore route exists for grants, control rules, users, `code_master`, programs or WBS lines (R2-S5). **409 while a parent is inactive** (R2-D2) |
 | `GET /projects/{id}/consistency` | — | `hier_code`/`level_no` drift and completeness (D11) |
-| `GET/PUT /projects/{id}/rate-card` | FR type × complexity × days, **`change_rationale`** | the effort rate card (D-13). **OWNER.** Refused without a rationale; audited old → new (R2-D7) |
+| `GET/PUT /projects/{id}/rate-card` | FR type × complexity × days, **`change_rationale`** | the effort rate card (D-13). **OWNER or EDITOR (S6c-3).** Refused without a rationale; audited old → new (R2-D7) |
 | `PATCH /function-requirements/{id}/complexity` | complexity_code, row_version | FR incl. derived `effort_days` |
 | `GET /projects/{id}/effort-summary` | — | man-days by FR type, solution, phase, L1 area, with an **Unassigned** bucket (D-28) |
 | `GET /baselines/diff?from={a}&to={b}&priced=true` | — | the diff with effort deltas per change class (D-13) |
