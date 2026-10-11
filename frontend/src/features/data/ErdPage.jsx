@@ -6,19 +6,22 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'rea
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNodesState, useReactFlow } from '@xyflow/react';
 import { Alert, Autocomplete, Box, Button, Link, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, TextField,
-  ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+  Tooltip } from '@mui/material';
 import { errorText } from '../../api/client';
 import { bfcApi, erdApi, layoutApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
+import { CanvasHeader, DiagramGrid, LegendSwatch } from '../../canvas/CanvasChrome';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CopyMermaidButton } from '../../components/CopyMermaidButton';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, Code, Segmented, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
+import { ErdInspector } from './ErdInspector';
 import { ERD_EDGE_TYPES, ERD_NODE_TYPES, ErdContext, ErdMarkers, cardinalityText } from './ErdParts';
 import { arrange, buildEdges, buildNodes, entityNodeId, ghostNodeId, initialCollapsed, neighbours } from './erdModel';
 import { entityLabel } from './fieldRules';
@@ -124,8 +127,12 @@ export default function ErdPage() {
     [relationships, outsideRefs]);
   const near = useMemo(() => (focusId ? neighbours(baseEdges, focusId) : null), [baseEdges, focusId]);
   focusRef.current = near;
-  const edges = useMemo(() => (near ? baseEdges.map((e) => (near.has(e.source) && near.has(e.target) ? e
-    : { ...e, className: DIM })) : baseEdges), [baseEdges, near]);
+  const focusIdRef = useRef(focusId);
+  focusIdRef.current = focusId;
+  // Dimmed outside the focus; the focused card's own lines in violet (the shared line look).
+  const edges = useMemo(() => (near ? baseEdges.map((e) => (near.has(e.source) && near.has(e.target)
+    ? (e.source === focusId || e.target === focusId ? { ...e, data: { ...e.data, hot: true } } : e)
+    : { ...e, className: DIM })) : baseEdges), [baseEdges, near, focusId]);
 
   useEffect(() => { setFocusId(null); }, [area]);
 
@@ -143,20 +150,22 @@ export default function ErdPage() {
       if (!live) return;
       const hot = focusRef.current;         // a highlight survives a re-arrange
       setNodes(buildNodes(cur, collapsedRef.current, positions)
-        .map((n) => ({ ...n, className: hot && !hot.has(n.id) ? DIM : undefined })));
+        .map((n) => ({ ...n, className: hot && !hot.has(n.id) ? DIM : undefined, selected: n.id === focusIdRef.current })));
       setLaidScope(cur.scope_key);
       setLayoutError('');
     }).catch((err) => { if (live) setLayoutError(t('data.erd.layoutFailed', { message: err.message })); });
     return () => { live = false; };
   }, [entities, baseEdges, resetTick, arrangeTick, setNodes]);
 
-  // Highlight: only the class changes, so a card's rows do not re-render (criterion 17).
+  // Highlight: only the class and the focused card's selection change, so other cards' rows do
+  // not re-render (criterion 17). The focus owns the selection ring, whoever set it.
   useEffect(() => {
     setNodes((ns) => ns.map((n) => {
       const c = near && !near.has(n.id) ? DIM : undefined;
-      return n.className === c ? n : { ...n, className: c };
+      const s = n.id === focusId;
+      return n.className === c && Boolean(n.selected) === s ? n : { ...n, className: c, selected: s };
     }));
-  }, [near, setNodes]);
+  }, [near, focusId, setNodes]);
 
   // Positions save through the one shared hook (§14.6). The ONLY ERD-specific extra is
   // `collapsed`: every item carries its card's current flag (R2-NEW-1), so a drag never
@@ -202,6 +211,11 @@ export default function ErdPage() {
   const ctx = useMemo(() => ({ getLabel, onToggle, canEdit }), [getLabel, onToggle, canEdit]);
 
   const onNodeClick = useCallback((_, n) => setFocusId((cur) => (cur === n.id ? null : n.id)), []);
+  // The inspector focuses a card by its relationships, and pans to it, as the search does.
+  const focusFromPanel = useCallback((id) => {
+    setFocusId(id);
+    if (id) setFocusRequest({ id, at: Date.now() });
+  }, []);
   const onPaneClick = useCallback(() => setFocusId(null), []);
   const onNodeDoubleClick = useCallback((_, n) => {
     const deId = n.type === 'entity' ? n.data.entity.data_entity_id : n.data.ghost.data_entity_id;
@@ -219,8 +233,16 @@ export default function ErdPage() {
 
   return (
     <Page title={t('data.erd.title')} subtitle={t('data.erd.subtitle')} error={q.error ? errorText(q.error, t('data.loadFailed')) : ''}
+      crumb={areaNode?.hier_code}
+      eyebrow={(
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {areaNode && <Code tone="muted">{areaNode.hier_code}</Code>}
+          <Tag tone="teal" sx={{ height: 22 }}>{areaNode ? areaNode.node_name : t('data.erd.areaAll')}</Tag>
+        </Box>)}
       actions={(<>
-        <Button component={RouterLink} to={links.data(projectId)} sx={NOWRAP}>{t('data.erd.back')}</Button>
+        <Segmented size="sm" label={t('data.erd.view')} value={view} onChange={setView}
+          options={[{ value: 'diagram', label: t('data.erd.viewDiagram') }, { value: 'table', label: t('data.erd.viewTable') }]} />
+        <Button variant="outlined" component={RouterLink} to={links.data(projectId)} sx={NOWRAP}>{t('data.erd.back')}</Button>
         <Tooltip title={t('data.erd.arrangeHelp')}>
           <span><Button sx={NOWRAP} disabled={!g || empty} onClick={() => setArrangeTick((n) => n + 1)}>{t('data.erd.arrange')}</Button></span>
         </Tooltip>
@@ -230,8 +252,8 @@ export default function ErdPage() {
             {t('data.erd.reset')}</Button>)}
       </>)}>
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
-      <WrapperBox>
-        <TextField select id="erd-area" label={t('data.erd.area')} value={area ?? WHOLE} sx={{ minWidth: 260 }}
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+        <TextField select size="small" id="erd-area" label={t('data.erd.area')} value={area ?? WHOLE} sx={{ minWidth: 260, maxWidth: '100%' }}
           onChange={(e) => navigate(links.erd(projectId, e.target.value === WHOLE ? null : e.target.value))}>
           <MenuItem value={WHOLE}>{t('data.erd.areaAll')}</MenuItem>
           {/* Until the chart has loaded (or for a node no longer live), the address still names a valid value. */}
@@ -241,39 +263,44 @@ export default function ErdPage() {
               <Box component="span" sx={{ fontFamily: MONO, fontSize: 12.5, mr: 1, color: 'text.secondary' }}>{n.hier_code}</Box>
               {n.node_name}</MenuItem>))}
         </TextField>
-        <Autocomplete id="erd-search" size="small" sx={{ minWidth: 260 }} options={options} value={null}
+        <Autocomplete id="erd-search" size="small" sx={{ minWidth: 260, maxWidth: '100%' }} options={options} value={null}
           disabled={!g || empty || view !== 'diagram'} blurOnSelect clearOnBlur
           getOptionLabel={(o) => `${o.e.de_number} ${o.e.de_name}`} isOptionEqualToValue={(a, b) => a.id === b.id}
           noOptionsText={t('data.erd.searchNone')}
           onChange={(_, o) => { if (o) { setFocusId(o.id); setFocusRequest({ id: o.id, at: Date.now() }); } }}
           renderInput={(p) => <TextField {...p} label={t('data.erd.search')} />} />
-        <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)} aria-label={t('data.erd.view')}>
-          <ToggleButton value="diagram">{t('data.erd.viewDiagram')}</ToggleButton>
-          <ToggleButton value="table">{t('data.erd.viewTable')}</ToggleButton>
-        </ToggleButtonGroup>
-        {g && (
-          <Typography sx={{ fontSize: 13, color: 'text.secondary', ml: 'auto' }}>
-            {t('data.erd.counts', { entities: g.entities.length, relationships: g.relationships.length, stubs: g.outside_refs.length })}
-          </Typography>)}
-      </WrapperBox>
+      </Box>
       {empty && <Alert severity="info">{t(area ? 'data.erd.emptyArea' : 'data.erd.empty')}</Alert>}
-      {g && !empty && view === 'diagram' && (
-        <ErdContext.Provider value={ctx}>
-          <ErdMarkers />
-          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>
-            {t(canEdit ? 'data.erd.help' : 'data.erd.helpReadOnly')}</Typography>
-          <Box sx={{ [`& .react-flow__node.${DIM}`]: { opacity: 0.2 }, [`& .react-flow__edge.${DIM}`]: { opacity: 0.1 } }}>
-            <ModelCanvas kind="erd" nodes={nodes} edges={edges} nodeTypes={ERD_NODE_TYPES} edgeTypes={ERD_EDGE_TYPES}
-              onNodesChange={handleNodesChange} draggable={canEdit} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
-              onNodeDoubleClick={onNodeDoubleClick} minimap height="72vh"
-              ariaLabel={t('data.erd.canvasLabel', { scope: scopeName })}>
-              <FocusOn request={focusRequest} />
-              <FitOnArea laid={laidScope} />
-            </ModelCanvas>
-          </Box>
-        </ErdContext.Provider>
+      {g && !empty && (
+        <DiagramGrid>
+          <Card bodySx={{ p: 0, gap: 0 }}>
+            <CanvasHeader
+              summary={t('data.erd.counts', { entities: g.entities.length, relationships: g.relationships.length, stubs: g.outside_refs.length })}
+              legend={view === 'diagram' && (<>
+                <LegendSwatch shape="entity" label={t('data.erd.legendEntity')} />
+                <LegendSwatch shape="ghost" label={t('data.erd.outside')} />
+                <LegendSwatch shape="line" label={t('data.erd.table.identifying')} />
+                <LegendSwatch shape="dashed" label={t('data.erd.table.nonIdentifying')} />
+              </>)} />
+            {view === 'diagram' ? (
+              <ErdContext.Provider value={ctx}>
+                <ErdMarkers />
+                <Box sx={{ [`& .react-flow__node.${DIM}`]: { opacity: 0.2 }, [`& .react-flow__edge.${DIM}`]: { opacity: 0.1 } }}>
+                  <ModelCanvas kind="erd" bare nodes={nodes} edges={edges} nodeTypes={ERD_NODE_TYPES} edgeTypes={ERD_EDGE_TYPES}
+                    onNodesChange={handleNodesChange} draggable={canEdit} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
+                    onNodeDoubleClick={onNodeDoubleClick} minimap height="max(480px, 70vh)"
+                    ariaLabel={t('data.erd.canvasLabel', { scope: scopeName })}>
+                    <FocusOn request={focusRequest} />
+                    <FitOnArea laid={laidScope} />
+                  </ModelCanvas>
+                </Box>
+              </ErdContext.Provider>
+            ) : <Box sx={{ p: 1 }}><ErdTable g={g} projectId={projectId} /></Box>}
+          </Card>
+          <ErdInspector g={g} focusId={view === 'diagram' ? focusId : null} onFocus={focusFromPanel} projectId={projectId}
+            scopeName={scopeName} canEdit={canEdit} />
+        </DiagramGrid>
       )}
-      {g && !empty && view === 'table' && <ErdTable g={g} projectId={projectId} />}
       <ConfirmDialog open={confirmReset} title={t('data.erd.resetTitle')} body={t('data.erd.resetBody')}
         confirmLabel={t('data.erd.reset')} busy={reset.isPending}
         onClose={() => setConfirmReset(false)} onConfirm={() => reset.mutate()} />
