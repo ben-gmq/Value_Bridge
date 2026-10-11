@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Chip, Snackbar, Stack, Typography } from '@mui/material';
+import { Box, Button, Snackbar, Stack } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { errorText } from '../../api/client';
 import { partyApi } from '../../api/scope';
@@ -9,7 +9,8 @@ import { keys } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, Code, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { RecordDialog, SettingsCrumbs, ShowRetired } from './settingsKit';
 
@@ -60,12 +61,13 @@ export default function PartiesPage() {
   };
 
   const columns = [
-    { field: 'ext_number', headerName: t('settings.party.number'), width: 120 },
+    { field: 'ext_number', headerName: t('settings.party.number'), width: 120,
+      renderCell: ({ value }) => <Code sx={{ fontSize: 12.5 }}>{value}</Code> },
     { field: 'ext_name', headerName: t('settings.party.name'), flex: 1, minWidth: 180,
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Box component="span" sx={{ color: row.is_active ? 'text.primary' : 'text.disabled' }}>{row.ext_name}</Box>
-          {!row.is_active && <Chip size="small" variant="outlined" label={t('settings.retiredChip')} />}
+          {!row.is_active && <Tag tone="neutral">{t('settings.retiredChip')}</Tag>}
         </Stack>) },
     { field: 'kind_code', headerName: t('settings.party.kind'), width: 160,
       valueGetter: (v) => (v ? getLabel(v) : '') },
@@ -92,14 +94,13 @@ export default function PartiesPage() {
         error={error || (q.error && errorText(q.error))}
         actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setEditing({ row: null }); }}>
           {t('settings.party.add')}</Button>}>
-        <WrapperBox>
-          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('settings.party.count', { n: rows.length })}</Typography>
-          <ShowRetired id="parties-show-retired" checked={showRetired} onChange={setShowRetired} />
-        </WrapperBox>
-        <DataGrid autoHeight rows={rows} getRowId={(r) => r.external_entity_id} columns={columns}
-          loading={q.isLoading} disableRowSelectionOnClick hideFooterSelectedRowCount
-          localeText={{ noRowsLabel: t('settings.party.none') }}
-          sx={{ bgcolor: 'background.paper', borderRadius: 3 }} />
+        <Card title={t('settings.party.count', { n: rows.length })} bodySx={{ px: 0, pb: 0 }}
+          action={<ShowRetired id="parties-show-retired" checked={showRetired} onChange={setShowRetired} />}>
+          <DataGrid autoHeight rows={rows} getRowId={(r) => r.external_entity_id} columns={columns}
+            loading={q.isLoading} disableRowSelectionOnClick hideFooterSelectedRowCount
+            localeText={{ noRowsLabel: t('settings.party.none') }}
+            sx={{ bgcolor: 'background.paper', border: 0, borderRadius: 0 }} />
+        </Card>
       </Page>
       {editing && (
         <RecordDialog open title={editing.row ? t('settings.party.editTitle', { number: editing.row.ext_number })

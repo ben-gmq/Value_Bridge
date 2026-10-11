@@ -7,7 +7,8 @@ import { api } from '../../api/vb';
 import { keys } from '../../app/links';
 import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -19,7 +20,18 @@ function useSave(fn, keys, onOk) {
   return { m, error, setError };
 }
 
-const grid = { autoHeight: true, disableRowSelectionOnClick: true, sx: { bgcolor: 'background.paper', borderRadius: 3 } };
+const grid = { autoHeight: true, disableRowSelectionOnClick: true, sx: { bgcolor: 'background.paper', border: 0, borderRadius: 0 } };
+
+// D-51 kit look: the create form and the list each sit in a card.
+function FormRow({ children }) {
+  return (
+    <Card sx={{ mb: 2, mt: 2 }} bodySx={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>{children}</Card>
+  );
+}
+
+function GridCard(props) {
+  return <Card bodySx={{ px: 0, pb: 0, pt: 0.5 }}><DataGrid {...props} /></Card>;
+}
 
 function ClientSelect({ id, value, onChange, clients }) {
   return (
@@ -55,7 +67,7 @@ function Users({ notify }) {
   return (
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <WrapperBox>
+      <FormRow>
         <TextField id="u-name" label={t('admin.name')} value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} />
         <TextField id="u-email" label={t('admin.email')} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <TextField id="u-pw" label={t('admin.initialPassword')} type="password" value={f.initial_password}
@@ -68,8 +80,8 @@ function Users({ notify }) {
           </Select>
         </FormControl>
         <Button variant="contained" disabled={create.m.isPending || !f.user_kind} onClick={() => create.m.mutate()}>{t('admin.createUser')}</Button>
-      </WrapperBox>
-      <DataGrid {...grid} rows={users.data ?? []} getRowId={(r) => r.app_user_id}
+      </FormRow>
+      <GridCard {...grid} rows={users.data ?? []} getRowId={(r) => r.app_user_id}
         columns={[
           { field: 'app_user_id', headerName: t('admin.id'), width: 70 },
           { field: 'display_name', headerName: t('admin.name'), flex: 1 },
@@ -124,13 +136,13 @@ function Clients({ notify }) {
   return (
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <WrapperBox>
+      <FormRow>
         <TextField id="c-code" label={t('admin.clientCode')} value={f.client_code} onChange={(e) => setF({ ...f, client_code: e.target.value })} />
         <TextField id="c-name" label={t('admin.clientName')} value={f.client_name} onChange={(e) => setF({ ...f, client_name: e.target.value })} />
         <TextField id="c-ind" label={t('admin.industry')} value={f.industry} onChange={(e) => setF({ ...f, industry: e.target.value })} />
         <Button variant="contained" disabled={m.isPending} onClick={() => m.mutate()}>{t('admin.createClient')}</Button>
-      </WrapperBox>
-      <DataGrid {...grid} rows={clients.data ?? []} getRowId={(r) => r.client_id}
+      </FormRow>
+      <GridCard {...grid} rows={clients.data ?? []} getRowId={(r) => r.client_id}
         columns={[{ field: 'client_code', headerName: t('admin.code'), width: 140 },
                   { field: 'client_name', headerName: t('admin.name'), flex: 1 },
                   { field: 'industry', headerName: t('admin.industry'), flex: 1 }]} />
@@ -147,13 +159,13 @@ function Programs({ notify }) {
   return (
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <WrapperBox>
+      <FormRow>
         <ClientSelect id="g-client" value={f.client_id} onChange={(v) => setF({ ...f, client_id: v })} clients={clients.data ?? []} />
         <TextField id="g-code" label={t('admin.programCode')} value={f.program_code} onChange={(e) => setF({ ...f, program_code: e.target.value })} />
         <TextField id="g-name" label={t('admin.programName')} value={f.program_name} onChange={(e) => setF({ ...f, program_name: e.target.value })} />
         <Button variant="contained" disabled={m.isPending} onClick={() => m.mutate()}>{t('admin.createProgram')}</Button>
-      </WrapperBox>
-      <DataGrid {...grid} rows={programs.data ?? []} getRowId={(r) => r.program_id}
+      </FormRow>
+      <GridCard {...grid} rows={programs.data ?? []} getRowId={(r) => r.program_id}
         columns={[{ field: 'program_code', headerName: t('admin.code'), width: 140 },
                   { field: 'program_name', headerName: t('admin.name'), flex: 1 }]} />
     </>
@@ -234,7 +246,7 @@ function Projects({ notify }) {
   return (
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <WrapperBox>
+      <FormRow>
         <ClientSelect id="p-client" value={f.client_id} onChange={(v) => setF({ ...f, client_id: v, program_id: '' })} clients={clients.data ?? []} />
         <TextField id="p-code" label={t('admin.projectCode')} value={f.project_code} onChange={(e) => setF({ ...f, project_code: e.target.value })} />
         <TextField id="p-name" label={t('admin.projectName')} value={f.project_name} onChange={(e) => setF({ ...f, project_name: e.target.value })} />
@@ -258,8 +270,8 @@ function Projects({ notify }) {
           </Select>
         </FormControl>
         <Button variant="contained" disabled={m.isPending || !f.is_restricted} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
-      </WrapperBox>
-      <DataGrid {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}
+      </FormRow>
+      <GridCard {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}
         columns={[{ field: 'project_code', headerName: t('admin.code'), width: 140 },
                   { field: 'project_name', headerName: t('admin.name'), flex: 1 },
                   { field: 'program_id', headerName: t('admin.program'), width: 140, valueGetter: (v) => programCode(v) }]} />

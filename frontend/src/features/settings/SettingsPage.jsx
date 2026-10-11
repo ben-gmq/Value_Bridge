@@ -1,5 +1,5 @@
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { Card, CardActionArea, CardContent, Grid, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { Page } from '../../components/Page';
 import { links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
@@ -16,20 +16,17 @@ export default function SettingsPage() {
   const { isAdmin } = useAuth();
   return (
     <Page title={t('settings.title')} subtitle={t('settings.subtitle')}>
-      <Grid container spacing={2}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}>
         {ITEMS.filter(([, , need, adminOnly]) => (!need || isOn(need)) && (!adminOnly || isAdmin)).map(([key, to]) => (
-          <Grid key={key} size={{ xs: 12, md: 4 }}>
-            <Card sx={{ height: '100%' }}>
-              <CardActionArea component={RouterLink} to={to(projectId)} sx={{ height: '100%' }}>
-                <CardContent>
-                  <Typography sx={{ fontWeight: 700, mb: 0.5 }}>{t(`settings.${key}`)}</Typography>
-                  <Typography sx={{ color: 'text.secondary' }}>{t(`settings.${key}What`)}</Typography>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
+          <Box key={key} component={RouterLink} to={to(projectId)} sx={(th) => ({ display: 'flex', flexDirection: 'column', gap: 0.5,
+            p: 2.25, borderRadius: '24px', bgcolor: th.vars.palette.background.paper, border: `1px solid ${th.vars.palette.divider}`,
+            color: 'inherit', textDecoration: 'none',
+            '&:hover, &:focus-visible': { borderColor: th.vars.palette.brand.ftcViolet, bgcolor: th.vars.palette.brand.selected } })}>
+            <Typography sx={{ fontWeight: 700, fontSize: 15 }}>{t(`settings.${key}`)}</Typography>
+            <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>{t(`settings.${key}What`)}</Typography>
+          </Box>
         ))}
-      </Grid>
+      </Box>
     </Page>
   );
 }

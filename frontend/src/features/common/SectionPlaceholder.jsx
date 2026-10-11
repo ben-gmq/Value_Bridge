@@ -1,4 +1,5 @@
-import { Card, CardContent, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
+import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 
@@ -8,10 +9,9 @@ export default function SectionPlaceholder({ section, slice }) {
   const what = t(`section.${section}.what`);
   return (
     <Page title={title}>
-      <Card><CardContent>
-        <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{t('section.arrives', { slice })}</Typography>
-        <Typography sx={{ color: 'text.secondary' }}>{what}</Typography>
-      </CardContent></Card>
+      <Card title={t('section.arrives', { slice })}>
+        <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>{what}</Typography>
+      </Card>
     </Page>
   );
 }

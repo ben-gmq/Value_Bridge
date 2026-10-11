@@ -76,5 +76,8 @@
   "settings.acc.open": "Open to all staff",
   "settings.acc.adminWhat": "See and change every project, and decide who has access.",
   "settings.acc.editWhat": "Opens the project and creates and changes its scope.",
-  "settings.acc.viewWhat": "Opens the project and reads everything; changes nothing."
+  "settings.acc.viewWhat": "Opens the project and reads everything; changes nothing.",
+  "settings.home.working": "Live in the working set",
+  "settings.home.latest": "Latest baseline",
+  "settings.home.open": "Open baselines"
 }
