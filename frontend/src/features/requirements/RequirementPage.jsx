@@ -13,6 +13,7 @@ import { t } from '../../i18n/t';
 import { LevelBadge, Mono, RaciPanel, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CrudGrid } from './CrudGrid';
 import { SolutionLinkPanel } from '../solutions/SolutionLinkPanel';
+import { FrTracePanel } from '../frs/FrTracePanel';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
 // shown read-only (the server refuses them too: business_requirement.SYSTEM_SET_STATUSES).
@@ -172,6 +173,8 @@ export default function RequirementPage() {
           </Grid>
           <Divider sx={{ my: 3 }} />
           <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!live} />
+          <Divider sx={{ my: 3 }} />
+          <FrTracePanel projectId={projectId} side="br" id={br.br_id} />
         </CardContent>
       </Card>
 

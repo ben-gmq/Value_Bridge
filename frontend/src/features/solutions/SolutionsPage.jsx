@@ -13,6 +13,7 @@ import { useCodes } from '../../app/useCodes';
 import { Page, WrapperBox } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { Mono, ShowRetired, SimpleSelect } from '../processes/chartKit';
+import { BrFrTabs } from '../frs/BrFrTabs';
 
 const EMPTY = { solution_name: '', category_code: '', description: '' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
@@ -107,6 +108,7 @@ export default function SolutionsPage() {
       error={q.error && errorText(q.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('solutions.add')}</Button>)}>
+      <BrFrTabs current="solutions" />
       <WrapperBox>
         {!q.error && (
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('solutions.count', { n: activeCount })}</Typography>)}

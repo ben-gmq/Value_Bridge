@@ -24,6 +24,8 @@ import ErdPage from '../features/data/ErdPage';
 import SettingsPage from '../features/settings/SettingsPage';
 import SolutionsPage from '../features/solutions/SolutionsPage';
 import SolutionPage from '../features/solutions/SolutionPage';
+import FrsPage from '../features/frs/FrsPage';
+import FrPage from '../features/frs/FrPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
 
@@ -38,7 +40,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
-  ['br-fr', SolutionsPage], ['br-fr/:solutionId', SolutionPage],
+  ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
 ];
 
