@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Autocomplete, Box, Button, Card, CardContent, Chip, Grid, IconButton, Stack, TextField, Tooltip,
+import { Alert, Autocomplete, Box, Button, Grid, IconButton, Stack, TextField, Tooltip,
   Typography } from '@mui/material';
 import CloseRounded from '@mui/icons-material/CloseRounded';
 import { errorText, isStale } from '../../api/client';
@@ -10,7 +10,8 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { t } from '../../i18n/t';
-import { Mono, SectionTitle, SimpleSelect, blankToNull } from '../processes/chartKit';
+import { Card, Code, SectionLabel, Tag } from '../../components/kit';
+import { SimpleSelect, blankToNull } from '../processes/chartKit';
 
 const toForm = (d) => ({
   source: d.source_application_id ?? '', target: d.target_application_id ?? '',
@@ -75,24 +76,24 @@ export function InterfaceCard({ projectId, fr, onNotice }) {
   const view = d?.described ? (
     <Grid container spacing={2}>
       <Grid size={{ xs: 12, md: 6 }}>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{t('interfaces.route')}</Typography>
-        <Typography><Mono>{d.source_application_code}</Mono> → <Mono>{d.target_application_code}</Mono></Typography>
+        <SectionLabel>{t('interfaces.route')}</SectionLabel>
+        <Typography sx={{ mt: 0.75 }}><Code>{d.source_application_code}</Code> → <Code>{d.target_application_code}</Code></Typography>
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-          {d.pattern_code && <Chip size="small" variant="outlined" label={patternLabel(d.pattern_code)} />}
-          {d.method_code && <Chip size="small" variant="outlined" label={methodLabel(d.method_code)} />}
-          {d.frequency_code && <Chip size="small" variant="outlined" label={freqLabel(d.frequency_code)} />}
+          {d.pattern_code && <Tag tone="navy">{patternLabel(d.pattern_code)}</Tag>}
+          {d.method_code && <Tag tone="navy">{methodLabel(d.method_code)}</Tag>}
+          {d.frequency_code && <Tag tone="neutral">{freqLabel(d.frequency_code)}</Tag>}
         </Stack>
       </Grid>
       {d.volume_note && <Grid size={12}><Typography sx={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{d.volume_note}</Typography></Grid>}
       <Grid size={12}>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 0.5 }}>{t('interfaces.card.carried')}</Typography>
+        <SectionLabel sx={{ mb: 0.75 }}>{t('interfaces.card.carried')}</SectionLabel>
         {d.carried.length === 0 && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('interfaces.card.noCarried')}</Typography>}
         <Stack spacing={0.5}>
           {d.carried.map((c) => (
             <Typography key={c.data_entity_id} sx={{ fontSize: 13.5 }}>
-              <Mono>{c.de_number}</Mono> {c.de_name}{c.note ? ` — ${c.note}` : ''}</Typography>))}
+              <Code tone="teal">{c.de_number}</Code> {c.de_name}{c.note ? ` — ${c.note}` : ''}</Typography>))}
         </Stack>
       </Grid>
     </Grid>
@@ -117,11 +118,11 @@ export function InterfaceCard({ projectId, fr, onNotice }) {
         <TextField id="iface-volume" fullWidth multiline minRows={2} label={t('interfaces.card.volume')} value={form.volume}
           onChange={(e) => set('volume', e.target.value)} slotProps={{ htmlInput: { maxLength: 4000 } }} /></Grid>
       <Grid size={12}>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 1 }}>{t('interfaces.card.carried')}</Typography>
+        <SectionLabel sx={{ mb: 1 }}>{t('interfaces.card.carried')}</SectionLabel>
         <Stack spacing={1}>
           {form.carried.map((c) => (
             <Stack key={c.data_entity_id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Typography sx={{ minWidth: 200, fontSize: 13.5 }}>{c.label}</Typography>
+              <Typography sx={{ flex: '0 1 200px', minWidth: 0, fontSize: 13.5 }}>{c.label}</Typography>
               <TextField size="small" fullWidth label={t('interfaces.card.noteFor', { de: c.label })} value={c.note}
                 onChange={(e) => setNote(c.data_entity_id, e.target.value)} slotProps={{ htmlInput: { maxLength: 4000 } }} />
               <Tooltip title={t('interfaces.card.removeEntity', { de: c.label })}>
@@ -139,27 +140,22 @@ export function InterfaceCard({ projectId, fr, onNotice }) {
   );
 
   return (
-    <Card sx={{ mt: 3 }}>
-      <CardContent>
-        <SectionTitle action={canEdit && !editing && (
-          <Stack direction="row" spacing={1}>
-            {d?.described && <Button size="small" color="warning" onClick={() => { setError(''); setConfirmRemove(true); }}>
-              {t('interfaces.card.remove')}</Button>}
-            <Button size="small" variant="outlined" disabled={!d} onClick={() => { setError(''); setForm(toForm(d?.described ? d : {})); }}>
-              {d?.described ? t('interfaces.card.edit') : t('interfaces.card.describe')}</Button>
-          </Stack>)}>
-          {t('interfaces.card.title')}
-        </SectionTitle>
-        {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
-        {q.error && <Alert severity="error" sx={{ mb: 2 }}>{errorText(q.error)}</Alert>}
-        {editing ? editor : (d && view)}
-        {editing && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-            <Button onClick={() => { setForm(null); setError(''); }}>{t('interfaces.card.cancel')}</Button>
-            <Button variant="contained" disabled={save.isPending || !form.source || !form.target}
-              onClick={() => { setError(''); save.mutate(); }}>{t('interfaces.card.save')}</Button>
-          </Box>)}
-      </CardContent>
+    <Card title={t('interfaces.card.title')} action={canEdit && !editing && (
+        <Stack direction="row" spacing={1}>
+          {d?.described && <Button size="small" color="warning" onClick={() => { setError(''); setConfirmRemove(true); }}>
+            {t('interfaces.card.remove')}</Button>}
+          <Button size="small" variant="outlined" disabled={!d} onClick={() => { setError(''); setForm(toForm(d?.described ? d : {})); }}>
+            {d?.described ? t('interfaces.card.edit') : t('interfaces.card.describe')}</Button>
+        </Stack>)}>
+      {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
+      {q.error && <Alert severity="error">{errorText(q.error)}</Alert>}
+      {editing ? editor : (d && view)}
+      {editing && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          <Button onClick={() => { setForm(null); setError(''); }}>{t('interfaces.card.cancel')}</Button>
+          <Button variant="contained" disabled={save.isPending || !form.source || !form.target}
+            onClick={() => { setError(''); save.mutate(); }}>{t('interfaces.card.save')}</Button>
+        </Box>)}
       <ConfirmDialog open={confirmRemove} title={t('interfaces.card.removeTitle')}
         body={t('interfaces.card.removeBody', { number: fr.fr_number })} confirmLabel={t('interfaces.card.remove')}
         busy={remove.isPending} onClose={() => setConfirmRemove(false)} onConfirm={() => remove.mutate()} />

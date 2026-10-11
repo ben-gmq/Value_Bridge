@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Breadcrumbs, Button, Card, CardContent, Chip, Divider, Grid, Link, Snackbar, Stack, TextField,
-  Typography } from '@mui/material';
+import { Alert, Box, Button, Snackbar, TextField, Typography } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
 import { appApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
@@ -10,8 +9,11 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
+import { Card, Code, ListRow, PurpleTile, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono, SectionTitle, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
+import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
+import { CodeTitle, SaveState, TwoCol } from '../frs/frKit';
 
 const pickApp = (a) => ({ application_code: a.application_code, application_name: a.application_name,
   lifecycle_code: a.lifecycle_code, kind_code: a.app_kind_code ?? '', vendor: a.vendor ?? '',
@@ -21,13 +23,12 @@ const pickApp = (a) => ({ application_code: a.application_code, application_name
 function UsedBy({ title, empty, query, render }) {
   const rows = query.data ?? [];
   return (
-    <Box>
-      <SectionTitle>{title}</SectionTitle>
-      {query.error && <Alert severity="error" sx={{ mb: 1 }}>{errorText(query.error)}</Alert>}
+    <Card title={title} action={query.data && <Tag tone="neutral">{rows.length}</Tag>} bodySx={{ gap: 1 }}>
+      {query.error && <Alert severity="error">{errorText(query.error)}</Alert>}
       {!query.isLoading && !query.error && rows.length === 0 && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{empty}</Typography>)}
-      <Stack spacing={1}>{rows.map(render)}</Stack>
-    </Box>
+      {rows.map(render)}
+    </Card>
   );
 }
 
@@ -90,15 +91,8 @@ export default function ApplicationPage() {
     onError: actionFail,
   });
 
-  const crumbs = (
-    <Breadcrumbs sx={{ mb: 1.5 }}>
-      <Link component={RouterLink} to={links.settings(projectId)} underline="hover" color="inherit">{t('settings.title')}</Link>
-      <Link component={RouterLink} to={links.applications(projectId)} underline="hover" color="inherit">{t('applications.back')}</Link>
-      <Typography sx={{ color: 'text.primary' }}>{app?.application_code ?? '…'}</Typography>
-    </Breadcrumbs>
-  );
-  if (q.error) return <Box>{crumbs}<Alert severity="error">{errorText(q.error)}</Alert></Box>;
-  if (!app || !form.values) return <Box>{crumbs}<Typography sx={{ color: 'text.secondary' }}>{t('applications.loading')}</Typography></Box>;
+  if (q.error) return <Page title={t('applications.back')} error={errorText(q.error)} />;
+  if (!app || !form.values) return <Page title={t('applications.loading')} />;
 
   const v = form.values;
   const live = app.is_active;
@@ -119,75 +113,72 @@ export default function ApplicationPage() {
     <SimpleSelect id={`app-${name}`} label={labels[name]} value={v[name]} onChange={(c) => form.set(name, c)} options={options} {...extra} />
   ) : <TextField fullWidth size="small" disabled label={labels[name]} value={shown(name)} />);
 
+  const actions = (
+    <>
+      {canEdit && (live ? (
+        <Button variant="outlined" color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('applications.retire')}</Button>
+      ) : (
+        <Button variant="outlined" disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('applications.restore')}</Button>
+      ))}
+      {editable && (
+        <>
+          <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('applications.discard')}</Button>
+          <Button variant="contained" disabled={!form.dirty || busy || !v.application_code.trim() || !v.application_name.trim()}
+            onClick={() => { save.setError(''); save.m.mutate(); }}>{t('applications.save')}</Button>
+        </>)}
+    </>
+  );
+  const linkRow = (key, to, code, codeTone, name) => (
+    <ListRow key={key} component={RouterLink} to={to}>
+      <Code tone={codeTone}>{code}</Code>
+      <Typography sx={{ fontSize: 13.5, fontWeight: 600, minWidth: 0 }}>{name}</Typography>
+    </ListRow>
+  );
+
+  const main = (
+    <Card title={t('applications.cardTitle')} action={<SaveState version={form.version} dirty={form.dirty} retired={!live} />}>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Tag tone="teal">{lifecycleLabel(app.lifecycle_code)}</Tag>
+        {app.app_kind_code && <Tag tone="neutral">{kindLabel(app.app_kind_code)}</Tag>}
+      </Box>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'minmax(0,1fr) minmax(0,2fr)' } }}>
+        {text('application_code', 1, 30)}
+        {text('application_name', 1, 200)}
+      </Box>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' } }}>
+        {select('lifecycle_code', lifecycles.map((c) => ({ value: c.code, label: c.label })))}
+        {select('kind_code', kinds.map((c) => ({ value: c.code, label: c.label })), { allowEmpty: true, emptyLabel: t('applications.noKind') })}
+        {text('vendor', 1, 200)}
+        {text('version_label', 1, 50)}
+      </Box>
+      {text('description', 3)}
+    </Card>
+  );
+  const side = (
+    <>
+      <PurpleTile label={t('applications.tiles.delivers')} value={solsQ.data ? solsQ.data.length : '—'} />
+      <UsedBy title={t('applications.deliversTitle')} empty={t('applications.noneDelivers')} query={solsQ}
+        render={(r) => linkRow(r.application_solution_id, links.solution(projectId, r.solution_id), r.solution_number, 'navy', r.solution_name)} />
+      <UsedBy title={t('applications.supportsTitle')} empty={t('applications.noneSupports')} query={stepsQ}
+        render={(r) => linkRow(r.application_bfc_node_id, links.node(projectId, r.bfc_node_id), r.hier_code, 'muted', r.node_name)} />
+    </>
+  );
+
   return (
-    <Box>
-      {crumbs}
-      <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" component="h1" sx={(th) => ({ fontWeight: 700, color: th.vars.palette.brand.title })}>
-            <Mono sx={(th) => ({ color: th.vars.palette.brand.link, mr: 1.5 })}>{app.application_code}</Mono>{app.application_name}
-          </Typography>
-          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>{t('applications.detailSubtitle')}</Typography>
-        </Box>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          {!live && <Chip variant="outlined" label={t('applications.retiredChip')} />}
-          {canEdit && (live ? (
-            <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('applications.retire')}</Button>
-          ) : (
-            <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('applications.restore')}</Button>
-          ))}
-          {editable && (
-            <>
-              <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('applications.discard')}</Button>
-              <Button variant="contained" disabled={!form.dirty || busy || !v.application_code.trim() || !v.application_name.trim()}
-                onClick={() => { save.setError(''); save.m.mutate(); }}>{t('applications.save')}</Button>
-            </>)}
-        </Stack>
-      </Stack>
+    <Page title={<CodeTitle code={app.application_code} name={app.application_name} />} subtitle={t('applications.detailSubtitle')}
+      crumb={app.application_code} actions={actions}>
       {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
       {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
       {warnings.map((w) => (
         <Alert key={w.code} severity="warning" sx={{ mb: 2 }} onClose={() => setWarnings([])}>
           {t(`applications.warn.${w.code}`, { items: w.items.join(', ') })}</Alert>))}
-
-      <Card>
-        <CardContent>
-          <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 2 }}>
-            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('applications.version_', { v: form.version })}</Typography>
-          </Stack>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 4, md: 3 }}>{text('application_code', 1, 30)}</Grid>
-            <Grid size={{ xs: 12, sm: 8, md: 5 }}>{text('application_name', 1, 200)}</Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2 }}>{select('lifecycle_code', lifecycles.map((c) => ({ value: c.code, label: c.label })))}</Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2 }}>
-              {select('kind_code', kinds.map((c) => ({ value: c.code, label: c.label })), { allowEmpty: true, emptyLabel: t('applications.noKind') })}</Grid>
-            <Grid size={{ xs: 12, md: 6 }}>{text('vendor', 1, 200)}</Grid>
-            <Grid size={{ xs: 12, md: 6 }}>{text('version_label', 1, 50)}</Grid>
-            <Grid size={12}>{text('description', 3)}</Grid>
-          </Grid>
-          <Divider sx={{ my: 3 }} />
-          <Grid container spacing={4}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <UsedBy title={t('applications.deliversTitle')} empty={t('applications.noneDelivers')} query={solsQ}
-                render={(r) => (
-                  <Link key={r.application_solution_id} component={RouterLink} to={links.solution(projectId, r.solution_id)} underline="hover">
-                    <Mono>{r.solution_number}</Mono> {r.solution_name}</Link>)} />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <UsedBy title={t('applications.supportsTitle')} empty={t('applications.noneSupports')} query={stepsQ}
-                render={(r) => (
-                  <Link key={r.application_bfc_node_id} component={RouterLink} to={links.node(projectId, r.bfc_node_id)} underline="hover">
-                    <Mono>{r.hier_code}</Mono> {r.node_name}</Link>)} />
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+      <TwoCol main={main} side={side} />
 
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('applications.retireTitle')}
         body={t('applications.retireBody', { code: app.application_code })} confirmLabel={t('applications.retire')}
         busy={retire.isPending} onClose={() => setConfirmRetire(false)} onConfirm={() => retire.mutate()} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
-    </Box>
+    </Page>
   );
 }

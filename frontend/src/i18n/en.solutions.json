@@ -52,5 +52,10 @@
   "solutions.links.removeTitle": "Remove this link?",
   "solutions.links.removeBody": "{br} will no longer be shown as answered by {solution}.",
   "solutions.links.rejectedTip": "This solution is rejected — it is not counted as answering the requirement.",
-  "solutions.links.stale": "Someone else changed this link. The list has been refreshed — try again."
+  "solutions.links.stale": "Someone else changed this link. The list has been refreshed — try again.",
+  "solutions.cardTitle": "Solution",
+  "solutions.mix.title": "Solution mix by category",
+  "solutions.mix.note": "Bar length is the number of live solutions in each category; the outlined row is this solution's.",
+  "solutions.tiles.live": "Live solutions",
+  "solutions.tiles.noBr": "Answer no requirement"
 }

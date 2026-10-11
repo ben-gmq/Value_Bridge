@@ -56,5 +56,12 @@
   "applications.links.removeBody": "{app} will no longer be linked here.",
   "applications.links.stale": "Someone else changed this link. The list has been refreshed — try again.",
   "settings.applications": "Applications",
-  "settings.applicationsWhat": "The application landscape: today's systems, the future ones, and both"
+  "settings.applicationsWhat": "The application landscape: today's systems, the future ones, and both",
+  "applications.cardTitle": "Application",
+  "applications.tiles.live": "Live applications",
+  "applications.tiles.delivering": "Delivering solutions",
+  "applications.tiles.deliveringNote": "Allocated to at least one to-be solution",
+  "applications.tiles.supporting": "Supporting steps today",
+  "applications.tiles.supportingNote": "Recorded against at least one as-is step",
+  "applications.tiles.delivers": "Solutions delivered"
 }
