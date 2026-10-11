@@ -36,7 +36,6 @@
   "frs.detailSubtitle": "One system function · traced to requirements through its solution",
   "frs.version": "Version {v}",
   "frs.staleAction": "Someone else changed this function requirement. It has been refreshed — try again.",
-  "frs.effortLater": "Complexity and effort days arrive with the rate card.",
   "frs.warn.no_solution": "Saved without a solution — it is not traced to any requirement yet.",
   "frs.warn.non_technology_solution": "Its solution is not a Technology or Data solution — check that is intended.",
   "frs.warn.rejected_solution": "Its solution is rejected.",
