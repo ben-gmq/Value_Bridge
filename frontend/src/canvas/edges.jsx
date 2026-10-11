@@ -10,3 +10,20 @@ export function LabelledEdge(props) {
 }
 
 export const EDGE_TYPES = { labelled: LabelledEdge };
+
+/**
+ * The mockups' line look (D-51), one place for every diagram: a quiet muted line with its label in
+ * a small pill; `hot` (a line touching the selected box) in FTC violet, a little heavier.
+ * `palette` is theme.vars.palette, so every value is a theme token.
+ */
+export function edgeLook(palette, hot = false) {
+  const stroke = hot ? palette.brand.ftcViolet : palette.brand.muted;
+  return {
+    style: { stroke, strokeWidth: hot ? 2 : 1.5 },
+    markerColor: stroke,
+    labelStyle: { fill: hot ? palette.brand.purpleText : palette.text.secondary, fontSize: 11.5, fontWeight: 500 },
+    labelBgStyle: { fill: palette.background.paper, stroke: palette.brand.lineStrong, strokeWidth: 1 },
+    labelBgPadding: [8, 4],
+    labelBgBorderRadius: 11,
+  };
+}

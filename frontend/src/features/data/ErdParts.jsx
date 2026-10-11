@@ -8,6 +8,8 @@ import KeyRounded from '@mui/icons-material/KeyRounded';
 import LinkRounded from '@mui/icons-material/LinkRounded';
 import UnfoldLessRounded from '@mui/icons-material/UnfoldLessRounded';
 import UnfoldMoreRounded from '@mui/icons-material/UnfoldMoreRounded';
+import { NodeFlag, nodeFrame, nodeHeader } from '../../canvas/CanvasChrome';
+import { edgeLook } from '../../canvas/edges';
 import { LOW_ZOOM } from '../../canvas/layout';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
@@ -39,7 +41,7 @@ function fieldTip(f, getLabel) {
     description: f.description ? t('data.erd.fieldTipDesc', { text: f.description }) : '' });
 }
 
-const ROW_SX = { position: 'relative', height: ROW_H, display: 'flex', alignItems: 'center', px: 1,
+const ROW_SX = { position: 'relative', height: ROW_H, display: 'flex', alignItems: 'center', px: 1.25,
   borderTop: 1, borderColor: 'divider' };
 
 function FieldRow({ f, low, getLabel }) {
@@ -62,7 +64,7 @@ function FieldRow({ f, low, getLabel }) {
   );
 }
 
-function EntityCardView({ data }) {
+function EntityCardView({ data, selected }) {
   const { entity, collapsed } = data;
   const { getLabel, onToggle, canEdit } = useContext(ErdContext);
   const low = useLowZoom();
@@ -71,23 +73,19 @@ function EntityCardView({ data }) {
   const toggleTip = t(canEdit ? (collapsed ? 'data.erd.expand' : 'data.erd.collapse')
     : (collapsed ? 'data.erd.expandLocal' : 'data.erd.collapseLocal'));
   return (
-    <Box sx={(th) => ({ width: CARD_W, borderRadius: 1.5, overflow: 'visible', bgcolor: th.vars.palette.background.paper,
-      border: 1.5, borderColor: th.vars.palette.brand.teal })}>
-      <Box sx={(th) => ({ position: 'relative', height: HEADER_H, px: 1, display: 'flex', alignItems: 'center', gap: 0.75,
-        bgcolor: th.vars.palette.brand.teal, color: th.vars.palette.brand.onTeal,
-        borderTopLeftRadius: 4, borderTopRightRadius: 4 })}>
+    <Box sx={(th) => ({ ...nodeFrame(th, 'teal', { selected, warn: noKey }), width: CARD_W, overflow: 'visible' })}>
+      {noKey && <NodeFlag title={t('data.erd.noKeyHelp')}>{t('data.erd.noKey')}</NodeFlag>}
+      <Box sx={(th) => ({ ...nodeHeader(th, 'teal', { selected }), position: 'relative', height: HEADER_H, px: 1.25,
+        display: 'flex', alignItems: 'center', gap: 0.75 })}>
         <Handle type="target" position={Position.Left} id={ENTITY_HANDLE} isConnectable={false} style={HIDDEN} />
         <Box sx={{ visibility: low ? 'hidden' : 'visible', minWidth: 0, flex: 1 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 11, lineHeight: 1.2 }}>{entity.de_number}</Typography>
+          <Typography sx={(th) => ({ fontFamily: MONO, fontSize: 11.5, lineHeight: 1.2, color: th.vars.palette.brand.tealText })}>
+            {entity.de_number}</Typography>
           <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.3 }}>{entity.de_name}</Typography>
         </Box>
-        {noKey && (
-          <Box title={t('data.erd.noKeyHelp')} sx={(th) => ({ px: 0.75, py: 0.25, borderRadius: 1, fontSize: 11, fontWeight: 700,
-            flexShrink: 0, bgcolor: th.vars.palette.status.cautionBg, color: th.vars.palette.status.caution })}>
-            {t('data.erd.noKey')}</Box>)}
         {canCollapse(entity) && (
           <Tooltip title={toggleTip} disableInteractive>
-            <IconButton size="small" className="nodrag" aria-label={toggleTip} sx={{ color: 'inherit', flexShrink: 0 }}
+            <IconButton size="small" className="nodrag" aria-label={toggleTip} sx={{ color: 'text.secondary', flexShrink: 0 }}
               onClick={(e) => { e.stopPropagation(); onToggle(entity.data_entity_id); }}
               onDoubleClick={(e) => e.stopPropagation()}>
               {collapsed ? <UnfoldMoreRounded fontSize="small" /> : <UnfoldLessRounded fontSize="small" />}
@@ -110,14 +108,14 @@ function EntityCardView({ data }) {
 }
 
 // A drag moves a card many times a second; its rows only change with its data (criterion 17).
-export const EntityCard = memo(EntityCardView, (a, b) => a.data === b.data);
+export const EntityCard = memo(EntityCardView, (a, b) => a.data === b.data && a.selected === b.selected);
 
-function GhostCardView({ data }) {
+function GhostCardView({ data, selected }) {
   const low = useLowZoom();
   const x = data.ghost;
   return (
-    <Box sx={(th) => ({ width: GHOST.w, height: GHOST.h, px: 1, py: 0.75, borderRadius: 1.5, position: 'relative',
-      border: 1.5, borderStyle: 'dashed', borderColor: th.vars.palette.brand.lineStrong,
+    <Box sx={(th) => ({ ...nodeFrame(th, 'teal', { selected, dashed: true }), width: GHOST.w, height: GHOST.h, px: 1.25, py: 0.75,
+      borderColor: selected ? th.vars.palette.brand.ftcViolet : th.vars.palette.brand.lineStrong,
       bgcolor: th.vars.palette.background.subtle })}>
       <Handle type="target" position={Position.Left} id={ENTITY_HANDLE} isConnectable={false} style={HIDDEN} />
       <Box sx={{ visibility: low ? 'hidden' : 'visible' }}>
@@ -131,7 +129,7 @@ function GhostCardView({ data }) {
   );
 }
 
-export const GhostCard = memo(GhostCardView, (a, b) => a.data === b.data);
+export const GhostCard = memo(GhostCardView, (a, b) => a.data === b.data && a.selected === b.selected);
 
 export const ERD_NODE_TYPES = { entity: EntityCard, ghost: GhostCard };
 
@@ -145,14 +143,15 @@ function ErdEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
   const theme = useTheme();
   const p = theme.vars.palette;
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY,
-    targetPosition, offset: 30, borderRadius: 6 });
+    targetPosition, offset: 30, borderRadius: 10 });
+  // The shared line look (canvas/edges.edgeLook); a line of the focused card is violet.
+  const { style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius } = edgeLook(p, Boolean(data.hot));
   return (
     <BaseEdge id={id} path={path} interactionWidth={12}
       markerStart={`url(#${childMark(data.child)})`} markerEnd={`url(#${parentMark(data.parent)})`}
-      style={{ stroke: p.text.secondary, strokeWidth: 1.5, strokeDasharray: data.identifying ? undefined : '6 4' }}
+      style={{ ...style, strokeDasharray: data.identifying ? undefined : '6 4' }}
       label={low ? undefined : label} labelX={labelX} labelY={labelY}
-      labelStyle={{ fill: p.text.primary, fontSize: 11.5 }} labelBgStyle={{ fill: p.background.paper }}
-      labelBgPadding={[4, 2]} />
+      labelStyle={labelStyle} labelBgStyle={labelBgStyle} labelBgPadding={labelBgPadding} labelBgBorderRadius={labelBgBorderRadius} />
   );
 }
 
@@ -166,8 +165,8 @@ export const ERD_EDGE_TYPES = { erd: ErdEdgeView };
 export function ErdMarkers() {
   const theme = useTheme();
   const p = theme.vars.palette;
-  const line = { stroke: p.text.secondary, strokeWidth: 1.5, fill: 'none' };
-  const ring = { stroke: p.text.secondary, strokeWidth: 1.5, fill: p.background.paper };
+  const line = { stroke: p.brand.muted, strokeWidth: 1.5, fill: 'none' };
+  const ring = { stroke: p.brand.muted, strokeWidth: 1.5, fill: p.background.paper };
   const marker = (markerId, children) => (
     <marker id={markerId} viewBox="0 0 20 20" refX="20" refY="10" markerWidth="20" markerHeight="20"
       markerUnits="userSpaceOnUse" orient="auto-start-reverse">{children}</marker>);
