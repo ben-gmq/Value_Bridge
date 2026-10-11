@@ -21,7 +21,8 @@ def entities_without_fields(db: Session, project_id: int) -> list[dict]:
 def entities_keys_only(db: Session, project_id: int) -> list[dict]:
     """D-39: on a FULL-depth project, a live entity whose live fields are all keys (PK or FK) —
     it has keys but no other attributes. Never listed on a KEYS_ONLY project. A WARNING line."""
-    if components.depth(db.get(Project, project_id)) != "FULL":
+    project = db.get(Project, project_id)
+    if project is None or components.depth(project) != "FULL":       # an unknown id holds nothing
         return []
     has_field = exists().where(DataField.data_entity_id == DataEntity.data_entity_id, DataField.is_active)
     has_attr = exists().where(DataField.data_entity_id == DataEntity.data_entity_id, DataField.is_active,
