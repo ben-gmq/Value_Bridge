@@ -18,6 +18,8 @@ export const links = {
   access: (p) => `/p/${p}/access`,
   organisation: (p) => `/p/${p}/settings/organisation`,
   parties: (p) => `/p/${p}/settings/parties`,
+  applications: (p) => `/p/${p}/settings/applications`,
+  application: (p, appId) => `/p/${p}/settings/applications/${appId}`,
 };
 
 // TanStack Query keys, shared so a save on one screen refreshes the others.
@@ -32,6 +34,10 @@ export const keys = {
   solutionLinks: () => ['solution-links'],                                           // both sides' link lists
   frs: (p) => ['frs', String(p)],
   fr: (id) => ['fr', String(id)],
+  applications: (p) => ['applications', String(p)],
+  application: (id) => ['application', String(id)],
+  appLinks: () => ['app-links'],
+  appLinksOf: (kind, id) => ['app-links', kind, String(id)],                                                     // allocations and as-is links, every page
   frTrace: () => ['fr-trace'],                                                       // FR panels on solution and BR pages
   entities: (p) => ['entities', String(p)],
   entity: (id) => ['entity', String(id)],

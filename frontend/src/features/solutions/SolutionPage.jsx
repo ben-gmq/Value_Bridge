@@ -14,6 +14,7 @@ import { t } from '../../i18n/t';
 import { Mono, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { SolutionLinkPanel } from './SolutionLinkPanel';
 import { FrTracePanel } from '../frs/FrTracePanel';
+import { AppLinkPanel } from '../applications/AppLinkPanel';
 
 const pickSolution = (s) => ({ solution_name: s.solution_name ?? '', category_code: s.category_code,
   status_code: s.status_code, description: s.description ?? '', benefit_note: s.benefit_note ?? '',
@@ -154,6 +155,16 @@ export default function SolutionPage() {
           <SolutionLinkPanel projectId={projectId} side="solution" solution={sol} disabled={!live} />
           <Divider sx={{ my: 3 }} />
           <FrTracePanel projectId={projectId} side="solution" id={sol.solution_id} />
+          <Divider sx={{ my: 3 }} />
+          {/* To-be allocation (D-8). An as-is only application cannot deliver a future solution (R2-D11). */}
+          <AppLinkPanel projectId={projectId} title={t('applications.links.deliveredBy')}
+            empty={t('applications.links.noneDelivered')} ownerKey={['solution', sol.solution_id]}
+            rowId="application_solution_id" disabled={!live} ruleHint={t('applications.links.asIsOnly')}
+            allow={(a) => a.lifecycle_code !== 'AS_IS'}
+            api={{ list: () => solutionApi.apps(sol.solution_id),
+              link: (applicationId, note) => solutionApi.allocate(sol.solution_id, { application_id: applicationId, note }),
+              edit: (row, note) => solutionApi.editAllocation(sol.solution_id, row.application_solution_id, { row_version: row.row_version, note }),
+              unlink: (row) => solutionApi.unallocate(sol.solution_id, row.application_solution_id, row.row_version) }} />
         </CardContent>
       </Card>
 

@@ -15,6 +15,7 @@ import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEdi
 import { FlowGaps, StepSequence } from './FlowSections';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
+import { AppLinkPanel } from '../applications/AppLinkPanel';
 
 const STEP_SINGLE = ['ACCOUNTABLE', 'RESPONSIBLE'];      // services/raci.py SINGLE[BfcNodeOrgRole]
 
@@ -242,6 +243,15 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
               unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
             <Divider sx={{ my: 3 }} />
             <StepFlows projectId={projectId} node={node} disabled={!editable} />
+            <Divider sx={{ my: 3 }} />
+            {/* As-is support (D-8, S6b-1): retires and restores with the step. */}
+            <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
+              empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
+              rowId="application_bfc_node_id" disabled={!editable}
+              api={{ list: () => bfcApi.apps(nodeId),
+                link: (applicationId, note) => bfcApi.linkApp(nodeId, { application_id: applicationId, note }),
+                edit: (row, note) => bfcApi.editAppLink(nodeId, row.application_bfc_node_id, { row_version: row.row_version, note }),
+                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} />
           </>
         )}
         {!node.is_process && (

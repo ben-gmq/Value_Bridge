@@ -34,6 +34,10 @@ export const bfcApi = {
   flows: (id) => d(http.get(`${V}/bfc-nodes/${id}/external-flows`)),
   linkFlow: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/external-flows`, body)),
   unlinkFlow: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/external-flows/${linkId}`, rowVersion),
+  apps: (id) => d(http.get(`${V}/bfc-nodes/${id}/applications`)),
+  linkApp: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/applications`, body)),
+  editAppLink: (id, linkId, body) => d(http.patch(`${V}/bfc-nodes/${id}/applications/${linkId}`, body)),
+  unlinkApp: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/applications/${linkId}`, rowVersion),
 };
 
 // There is no "create requirement": a BR appears with its process step (D-2).
@@ -65,6 +69,10 @@ export const solutionApi = {
   restore: (id) => d(http.patch(`${V}/solutions/${id}/restore`)),
   brs: (id) => d(http.get(`${V}/solutions/${id}/business-requirements`)),
   frs: (id) => d(http.get(`${V}/solutions/${id}/function-requirements`)),
+  apps: (id) => d(http.get(`${V}/solutions/${id}/applications`)),
+  allocate: (id, body) => d(http.post(`${V}/solutions/${id}/applications`, body)),
+  editAllocation: (id, linkId, body) => d(http.patch(`${V}/solutions/${id}/applications/${linkId}`, body)),
+  unallocate: (id, linkId, rowVersion) => del(`${V}/solutions/${id}/applications/${linkId}`, rowVersion),
 };
 
 // Slice 6a (docs/slice6a_spec.md). BR → FR is derived through solutions, never stored (D-7).
@@ -210,4 +218,17 @@ export const importApi = {
   // acknowledged_inserts is the count the user typed; the server re-validates and compares (R2-P2).
   commit: (batchId, { row_version, acknowledged_inserts }) =>
     d(http.post(`${V}/bulk/batches/${batchId}/commit`, { row_version, acknowledged_inserts })),
+};
+
+// Slice 6b-1 (docs/slice6b1_spec.md). Allocations are written through the solution's routes and
+// as-is links through the step's, whichever page the user is on.
+export const appApi = {
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/applications`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/applications`, body)),
+  get: (id) => d(http.get(`${V}/applications/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/applications/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/applications/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/applications/${id}/restore`)),
+  solutions: (id) => d(http.get(`${V}/applications/${id}/solutions`)),
+  steps: (id) => d(http.get(`${V}/applications/${id}/bfc-nodes`)),
 };
