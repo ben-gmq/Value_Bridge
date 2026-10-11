@@ -27,13 +27,14 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            StepRaciOut, TreeNodeOut)
 from schemas.application import (AllocationIn, AllocationOut, ApplicationIn, ApplicationListOut,
                                  ApplicationOut, ApplicationPatch, LinkNotePatch, SupportIn, SupportOut)
+from schemas.effort import ComplexityIn, EffortSummaryOut, RateCardChangeOut, RateCardIn, RateCardOut
 from schemas.interface import InterfaceIn, InterfaceListOut, InterfaceOut
 from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
-from services import interface as iface_service
+from services import effort as effort_service, interface as iface_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
@@ -357,7 +358,7 @@ def update_fr(id: int, body: FrPatch, fr: FunctionRequirement = Depends(_fr_w.de
     extra = {"solution_id": sent["solution_id"]} if "solution_id" in sent else {}
     fr, warnings = fr_service.update_fr(db, _uid(user), fr, body.row_version, fields,
                                         sent.get("fr_type_code"), sent.get("fulfilment_status_code"), **extra)
-    return _fr_out(fr, warnings)
+    return _fr_out(fr, warnings).model_copy(update={"effort_change": getattr(fr, "effort_change", None)})
 
 
 _retire_and_restore("function-requirements", FunctionRequirement, FrOut)
@@ -371,6 +372,29 @@ def list_solution_frs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session 
 @router.get("/business-requirements/{id}/function-requirements", response_model=list[BrFrOut], **_br_r.route)
 def list_br_frs(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return fr_service.frs_of_br(db, br)
+
+
+# ---- rate card and effort days (§4.8, §7.13, D-13, docs/slice6c_spec.md) ----------------------
+@router.get("/projects/{project_id}/rate-card", response_model=RateCardOut, **_read.route)
+def read_rate_card(project_id: int, db: Session = Depends(get_db)):
+    return effort_service.read_card(db, project_id)
+
+
+@router.put("/projects/{project_id}/rate-card", response_model=RateCardChangeOut, **_edit.route)   # S6c-3: EDITOR
+def maintain_rate_card(project_id: int, body: RateCardIn, user: AppUser = Depends(current_user),
+                       db: Session = Depends(get_db)):
+    return effort_service.maintain_card(db, _uid(user), project_id, body.change_rationale, body.cells, body.confirm_high)
+
+
+@router.patch("/function-requirements/{id}/complexity", response_model=FrOut, **_fr_w.route)
+def rate_function_requirement(id: int, body: ComplexityIn, fr: FunctionRequirement = Depends(_fr_w.dep),
+                              user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return effort_service.rate_fr(db, _uid(user), fr, body.row_version, body.complexity_code)
+
+
+@router.get("/projects/{project_id}/effort-summary", response_model=EffortSummaryOut, **_read.route)
+def effort_summary(project_id: int, db: Session = Depends(get_db)):
+    return effort_service.summary(db, project_id)
 
 
 # ---- interface detail and the generated interface list (§7.5, D-27, docs/slice6b2_spec.md) ---

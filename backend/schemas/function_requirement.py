@@ -29,6 +29,11 @@ class FrPatch(_Patch):
     acceptance_note: str | None = Note
 
 
+class EffortChange(BaseModel):
+    previous_days: Decimal | None = None
+    new_days: Decimal | None = None
+
+
 class FrOut(Orm):
     fr_id: int
     project_id: int
@@ -45,6 +50,7 @@ class FrOut(Orm):
     is_active: bool
     row_version: int
     warnings: list[str] = []          # D-28 and friends: never errors
+    effort_change: EffortChange | None = None   # DR6c-P2: set when a type change moved effort_days
 
 
 class BrFrOut(BaseModel):
