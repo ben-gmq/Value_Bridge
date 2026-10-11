@@ -3,7 +3,7 @@
 **App:** Value Bridge (VB) · **For:** Fortience Consulting Inc. — Strategic PMO practice
 **Scope of this spec:** MVP — Scope Management & Control
 **Status:** **SIGNED OFF by Ben, 2026-09-28, in Plan Mode.** Changes from here are proposed with evidence and approved before they land.
-**Date:** 2026-09-17 · **Revised:** 2026-09-28 (D-23…D-31, Ben's v8 review) · 2026-09-28 (round-2 review, D-32…D-36) · 2026-09-29 (Slice 1 schema review, S1-1…S1-7) · **Supersedes:** nothing. Builds on `docs/ASSESSMENT_BRIEF.md`.
+**Date:** 2026-09-17 · **Revised:** 2026-09-28 (D-23…D-31, Ben's v8 review) · 2026-09-28 (round-2 review, D-32…D-36) · 2026-09-29 (Slice 1 schema review, S1-1…S1-7) · slice rulings S2…S6c (§1a) · **2026-10-11 (one platform, many kinds of project, D-37…D-45 — recorded, OPEN rows awaiting Ben)** · **Supersedes:** nothing. Builds on `docs/ASSESSMENT_BRIEF.md`.
 
 ---
 
@@ -300,6 +300,58 @@ engagement end overrides the 5-year baseline retention.** Five years is the defa
 contract says nothing. The mechanism is per-project crypto-shredding of the evidence archive
 (§15.3), so the archive's storage stays write-once.
 
+### Revision 2026-10-11 — one platform, many kinds of project (D-37…D-45)
+
+**Status: RECORDED, NOT YET SIGNED OFF.** Ben's direction of 2026-10-11, given before the rest
+of wave 1 is built. Rows marked **DECIDED** are Ben's answers. Rows marked **OPEN** are
+proposals that still need his answer; each gives Lilly's recommendation. **No slice builds on
+an OPEN row.** These rows override the sections they name. Those sections are rewritten when
+the slice that builds them gets its spec, and until then each carries a pointer back here.
+
+**Why this revision exists.** VB will be used on engagements that need different parts of the
+model. Some need business requirements only. Some need no function requirements but do need
+as-is and to-be data flows. Some define every data attribute and some define primary keys
+only. The signed-off design assumed every project uses the whole chain (BFC → BR → Solution →
+FR → effort → baseline). This revision makes the chain configurable per project, and records
+five other changes Ben asked for in the same conversation.
+
+| # | Decision | Status | Effect | Overrides |
+|---|---|---|---|---|
+| D-37 | **The components a project uses are chosen per project.** Ben: *"some projects might just require business requirements … they might not have a functional requirement, but they might want an as-is data flow and a to-be data flow."* | **DECIDED** (direction); detail **OPEN** (OR-1…OR-3) | A per-project component set, chosen at project creation and changeable by an admin. Candidates: Solutions · Function requirements · Applications & interfaces · Effort & rate card · Issues · As-is DFD · To-be DFD · Step sequence (D-38) · WBS (D-41) · Benefits · Risks · Change requests. **A component that is off is hidden in the UI and its write routes are refused by the server**, with one guard check (presentation alone is never the control, as with `useCanEdit`). **A baseline freezes only the components that are on**, and the priced diff appears only when effort is on | The implicit "every project uses everything" in §4 and §7.7. D-33's "WBS optional per project" becomes one case of this |
+| D-38 | **There is no separate business process flow; every process is shown in the DFD.** Ben: *"In my philosophy there is no such thing as BPF because every process we are going to make in DFD."* | **DECIDED** (direction); what happens to step order is **OPEN** (OR-4) | The DFD becomes **the** process diagram, in as-is and to-be form. "Business process flow" stops being a screen name or a concept. **Open:** the process flow built in Slice 2 also records *order*: arrows saying step A happens before step B, branches ("if the credit check fails, go to C"), loops, and swimlanes by role. A DFD by definition shows only which data moves between steps, stores and outside parties, and never which step comes first | D-20, D-21, D-31 (two diagrams from one record); §4.1a. D-24 (step I/O recorded once) is unchanged and is what the DFD is drawn from |
+| D-39 | **How much of a data entity is defined is chosen per project.** Ben: *"some projects might want all of the data attributes defined, whereas some will only put the primary keys."* | **DECIDED** | A per-project setting **data model depth** ∈ `KEYS_ONLY` / `FULL`. `KEYS_ONLY` expects primary and foreign keys and does not warn about missing attributes. `FULL` warns when an entity has keys but no other attributes. Either way, extra fields are always accepted. The ERD, `validate_entity_model`, the import preview and the freeze warning "entities with no fields" (S4-12) read the setting | Extends D-26, which already makes a partial field list legal |
+| D-40 | **Three kinds of user. Staff users see every project.** Ben: *"The admin can see everything, including the admin functions. The users are able to see the whole projects and also the edit functions. There's another user that only can see."* Answer of 2026-10-11: **users see all projects** | **DECIDED**; viewer reach and the project wall are **OPEN** (OR-5, OR-6) | **Admin:** every project plus the admin functions (users, projects, programs, house rate card, global codes). **User:** every project, read and edit, but no admin functions. **Viewer:** read only, no edit controls and every write refused by the server. Program grants and the "one grant per user" rule stop being how FTC staff reach projects. Programs remain as roll-up groupings. **Cost to make visible:** the project is no longer a data wall *between FTC staff*. Any staff user can read every client's data. This is Ben's call to make, and OR-6 asks whether any engagement's confidentiality terms need an exception | D-9 (OWNER/EDITOR/REVIEWER), D-32 (one grant per user, the project as a hard data wall), Q10, Q16; §4.7, §7.8. The rule "a project you cannot see is 404, never 403" still holds wherever a project is restricted (OR-6) and for client logins (D-43) |
+| D-41 | **WBS: imported from MS Project, and progress is recorded in VB.** Answer of 2026-10-11: *"Import + progress only."* | **DECIDED**; precedence rule **OPEN** (OR-7) | Tasks still come from MS Project (D-33, keyed by Unique ID). VB adds **progress updates against each imported line**: % complete, actual start and finish, a status (on track / at risk / late), a comment, and the date of the update. Each update is a new dated row, so progress over time is kept and never overwritten. A **progress report** (plan vs actual, slip, % complete by phase and solution, latest comments) is generated from VB. Creating tasks, dependencies, Gantt editing and critical path stay out of scope (§12.2) | D-33 "read-only in VB except the phase/solution links": progress fields become editable through progress updates. §4.15 gains functions; §12.1 moves WBS to wave 2 (see below) |
+| D-42 | **Many reports can be produced as PDF.** | **DECIDED** (direction); report list and source **OPEN** (OR-8) | A PDF export for each client-facing report: BFC, BR register, DFD (as-is and to-be), ERD, solution and FR registers, interface list, effort summary, baseline and priced diff, issue log, WBS progress report. Every PDF prints its project, its baseline version (or "LIVE — not a baseline"), its generation time and who generated it, and every PDF generated is recorded in `AUDIT_EVENT`. Untrusted text renders as text in PDFs exactly as in the browser (§14.5) | §12.2 non-goal "no vendor hand-off package", narrowed |
+| D-43 | **Clients can view their project in a browser, two ways, only when the client agrees.** Answer of 2026-10-11: **both** | **DECIDED**; safeguards **OPEN** (OR-9) | **(a) Client read-only login:** client staff log in as viewers of **their own project only**, never of any other project. That limit holds even though FTC staff see every project (D-40), and it is the one place the project wall must survive. Access can be withdrawn and every view is audited. **(b) Offline viewer file:** one self-contained HTML file generated from a frozen baseline, opened in any browser with no login and no network, in which the client clicks through reports and drills down. **Once sent, it cannot be withdrawn and anyone holding it can read it.** Both need the client's consent recorded on the project first (who agreed, when). Each file generated is audited | D-11 (no client logins in MVP); the `CLIENT_REVIEWER` exclusion in §1a; §12.2 "client-user login" non-goal |
+| D-44 | **The UI is in English, Japanese and Thai.** | **DECIDED**, wave 4 | Each user chooses a language, and PDFs and the offline file print in the language of the user who generates them. Translated: every screen string (already through `t()`, one file per area, §14.8) and every seeded `code_master` label. **Content typed by consultants is never translated**; it shows as typed. Thai needs its own font (Noto Sans Thai) beside Noto Sans JP. The `code_master` label change is a schema change and goes to `apple` first | §14.8 "English for MVP" |
+| D-45 | **Spec before build.** Ben: *"make sure that we have the spec document updated according to the function that we are going to make."* | **DECIDED** | No slice after Slice 6 is built until (1) this revision's OPEN rows touching it are answered, and (2) its section of §4 is rewritten to match. The wave table below is reordered so the foundations of D-37 and D-40 land before the baseline freeze, because the freeze set depends on both | §12.1 order |
+
+**Open questions for Ben (each with Lilly's recommendation).**
+
+| # | Question | Recommendation |
+|---|---|---|
+| OR-1 | **Can a component be switched off after data exists in it?** | **No while live rows exist.** The switch is refused with a list naming them, as soft delete is (R2-D2). Data is never hidden while still live, and nothing is deleted |
+| OR-2 | **Dependencies between components.** Effort needs function requirements. Applications & interfaces need function requirements for interfaces. The to-be DFD shows systems through Solution → Application (D-22) | Switching a component on also switches on what it needs, and the admin is shown the list first. A to-be DFD without Solutions shows steps and data, with no systems |
+| OR-3 | **Is there a default set, or project templates** (e.g. "Requirements only", "Data & process", "Full delivery")? | Three named templates as a starting point, then any combination. Templates are `code_master`-style data, not code |
+| OR-4 | **Step order** (D-38). VB already records which step follows which (arrows, branches, loops, swimlanes), and the flow-file import carries it. Keep it or drop it? | **Keep it as an optional component, "Step sequence", off by default.** The DFD is the one diagram. Where a project switches sequence on, the same diagram also draws the step-to-step arrows. Nothing built is thrown away, and a project that never wants order never sees it |
+| OR-4b | **Is the to-be DFD the same steps with different systems (today's D-22), or a separately drawn future process with its own steps, stores and flows?** | Needs Ben. If the future process differs, each step and data flow needs an as-is / to-be / both marker, which is a schema change for `apple` |
+| OR-5 | **What may a viewer see?** Every project, like a user, or only projects they are given? | FTC viewers: every project, read only. Client viewers: their own project only (D-43). Otherwise there are two different viewers |
+| OR-6 | **Restricted projects.** Does any engagement's confidentiality agreement forbid staff outside the engagement from seeing its data? | A per-project **restricted** flag, off by default. A restricted project is visible only to admins and to named users, and keeps today's 404 behaviour. This keeps D-40 simple for the normal case and safe for the exception |
+| OR-7 | **WBS re-import vs VB progress.** When MS Project is re-imported with its own % complete and actual dates, which wins? | VB progress updates are the reporting source and are never overwritten by an import. Imported actuals are kept beside them, and the report flags lines where the two disagree |
+| OR-8 | **Which reports first, and may a PDF be made from live (unfrozen) data?** | Live data allowed, stamped "LIVE — not a baseline" on every page. Client-facing PDFs from a baseline. First five: BR register, DFD as-is/to-be, ERD, baseline diff, WBS progress |
+| OR-9 | **Offline file safeguards.** | Generated only from a frozen baseline. Admin or user only, never a viewer. Requires recorded client consent. Every page footer names the client, version and generation date. Opt-in to include issues and stakeholder names, which may carry personal data |
+
+**Delivery order, re-proposed for Ben** (supersedes the wave table in §12.1 once signed off):
+
+| Wave | Contents |
+|---|---|
+| **1 (remaining)** | **1a** Project components and data model depth (D-37, D-39) · **1b** Access: admin / user / viewer, restricted projects (D-40) · **1c** One DFD, as-is and to-be (D-38) · **1d** Baseline freeze over the enabled components · **1e** Imports 4b–4d · **1f** Reports, program roll-ups and PDF export (D-42) · **1g** Code maintenance |
+| **2** | Benefits (D-14) · change requests (D-16) · **WBS import + progress updates + progress report (D-33, D-41)** |
+| **3** | Risks (D-15) · decisions (D-17) · phasing and dependency (D-18) |
+| **4** | English / Japanese / Thai (D-44) |
+| **Before first client use** | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · client read-only login and the offline viewer file (D-43) |
+
 ### Slice 1 schema review — 2026-09-29
 
 Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
@@ -569,6 +621,8 @@ The entity × function × logic grid. `Use` is C / R / U / D. Manual steps are m
 
 ### 4.1a Business process flow and DFD (D-20…D-22, D-25, D-31)
 
+> **Revision 2026-10-11:** **D-38:** the DFD is the one process diagram, in as-is and to-be form. Whether step order survives as an optional component is OR-4, and what "to-be" means is OR-4b. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
+
 Generated from the BFC, the data entity list and the business requirements — plus one new
 thing, the flow edge.
 
@@ -673,6 +727,8 @@ pipeline. Six `.xlsx` column maps, one staging model, one commit.
 
 ### 4.7 Auth, users, projects and visibility (scope area 7 + Ben's addendum)
 
+> **Revision 2026-10-11:** **D-40:** admin / user / viewer, and staff users see every project, which supersedes the one-grant model and the project wall between staff below. **D-43:** client read-only logins, limited to their own project. Open: OR-5, OR-6. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
+
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `login` | `APP_USER` | R | Verify password hash, check `is_active` → JWT. Update `last_login_at` |
@@ -770,6 +826,8 @@ either a program header, an access fact, or a read that is assembled from per-pr
 | `(manual)` cross-project hand-off | `BFC_NODE_FLOW` | — | Drawn as a HANDOFF edge to an end event labelled with the other project — not a shared entity |
 
 ### 4.15 WBS import (D-33)
+
+> **Revision 2026-10-11:** **D-41:** progress updates are recorded in VB against imported lines, and a progress report is generated. WBS moves to wave 2. Open: OR-7. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
 
 **Optional per project** (Q13). The schedule's system of record stays in MS Project; VB
 imports it so the program dashboard can show plan-vs-actual, and so consultants can say which
@@ -6315,6 +6373,8 @@ those numbers were taken above):*
 
 ### 12.1 Waves — everything here is mandatory, only the order is a decision
 
+> **Revision 2026-10-11:** a re-proposed order (components and access first, then the freeze; WBS in wave 2; languages in wave 4) awaits Ben's sign-off. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
+
 D-13…D-19 are **requirements, not a roadmap** (Ben, 2026-09-18). Nothing below is dropped;
 the waves exist because the model must be built in dependency order, and because two of the
 seven cannot be retrofitted.
@@ -6346,6 +6406,8 @@ constraint is that D-13 precedes D-16, and that both precede any baseline anyone
 argue about.
 
 ### 12.2 Out of scope
+
+> **Revision 2026-10-11:** **D-42/D-43** bring PDF reports, client read-only logins and an offline viewer file into scope, and **D-41** brings WBS progress recording. Schedule authoring stays out. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
 
 Explicit, so this spec is not read as a promise. **Per D-1 these are later increments of the
 same platform, not rejected ideas** — §5 is modelled so they attach to this spine.
@@ -6626,6 +6688,8 @@ canvas spike of 2026-09-28 returned **GO**, with these rules:
   mode lists every RETIRE row.
 
 ### 14.8 Language
+
+> **Revision 2026-10-11:** **D-44:** English, Japanese and Thai in wave 4, chosen per user. Seeded `code_master` labels are translated too, and consultant content is not. See §1a "Revision 2026-10-11". This section is rewritten when its slice is specced.
 
 The UI is in English for MVP. Every string lives in one `en.json`, so a Japanese UI is a
 translation, not a refactor. Client content is often Japanese, hence Noto Sans JP.
