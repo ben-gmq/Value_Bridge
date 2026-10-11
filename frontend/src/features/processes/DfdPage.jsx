@@ -204,7 +204,7 @@ export default function DfdPage() {
   }, [g, palette, setNodes]);
 
   // As on the flow: positions save when a move ends, through the one shared hook (§14.6).
-  // A REVIEWER places nothing (the hook ignores their moves).
+  // A read-only user places nothing (the hook ignores their moves).
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const layout = useLayoutSave({

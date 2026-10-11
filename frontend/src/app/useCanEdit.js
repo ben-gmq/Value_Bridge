@@ -1,14 +1,18 @@
+import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../api/vb';
 import { useAuth } from './AuthContext';
+import { keys } from './links';
 
-// Whether the signed-in user may change the open project (sara LOW-3, L5). It reads the role the
-// server already resolved for /auth/me — never matches grant ids to the project in the browser.
-// A user holds one grant (D-32), so that one role applies to every project they can open.
-// Presentation only: the server refuses a REVIEWER's write whatever this returns.
-const EDIT_ROLES = new Set(['OWNER', 'EDITOR']);
-
+// Whether the signed-in user may change the open project (sara LOW-3, L5). It reads the level the
+// server resolved for this project (GET /projects/{id} → my_access_level, D-40): a restricted
+// project may cap a USER to VIEW. Never computed from memberships in the browser. Presentation
+// only: the server refuses a VIEW-level write whatever this returns.
 export function useCanEdit() {
-  const { me } = useAuth();
-  if (!me) return false;
-  if (me.scope === 'PLATFORM_ADMIN') return true;
-  return EDIT_ROLES.has(me.project_role_code);
+  const { projectId } = useParams();
+  const { isAdmin } = useAuth();
+  const q = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId),
+    enabled: Boolean(projectId) });
+  if (!projectId) return isAdmin;
+  return ['EDIT', 'ADMIN'].includes(q.data?.my_access_level);
 }

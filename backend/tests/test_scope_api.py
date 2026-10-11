@@ -2,18 +2,17 @@
 restore (§7.2, §7.3, §7.12, D-2, D-23, D-24, S1-2)."""
 import pytest
 
-from tests.conftest import login
+from tests.conftest import login, restrict
 
 API = "/api/v1"
 
 
 @pytest.fixture
 def ed(client, world):
-    """An EDITOR on p_solo, a REVIEWER on p_solo, and the project id."""
-    for name, role in (("editor", "EDITOR"), ("reviewer", "REVIEWER")):
-        r = client.post(f"{API}/projects/{world['p_solo']}/access", headers=world["admin"],
-                        json={"user_id": world["users"][name], "project_role_code": role})
-        assert r.status_code == 201, r.text
+    """p_solo restricted (D-40, OR-6) with the editor (EDIT) and the reviewer (VIEW) as members, so the
+    outsider — a USER who is not a member — still cannot see it (404)."""
+    restrict(client, world["admin"], world["p_solo"],
+             {world["users"]["editor"]: "EDIT", world["users"]["reviewer"]: "VIEW"})
     return {"h": login(client, "editor@example.test"), "rv": login(client, "reviewer@example.test"),
             "out": login(client, "outsider@example.test"), "p": world["p_solo"]}
 

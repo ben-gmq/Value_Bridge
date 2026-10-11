@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, platform_admin
-from schemas.common import ClientIn, ClientOut, PlatformAdminIn, UserIn, UserOut
+from schemas.common import ClientIn, ClientOut, PlatformAdminIn, UserIn, UserKindIn, UserOut
 from services import project as project_service
 from services import user_admin
 
@@ -20,14 +20,20 @@ def list_users(db: Session = Depends(get_db)):
 
 @router.post("/users", response_model=UserOut, status_code=201, **_admin.route)
 def create_user(body: UserIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
-    return user_admin.create_user(db, actor, body.email, body.display_name, body.initial_password)
+    return user_admin.create_user(db, actor, body.email, body.display_name, body.initial_password,
+                                  body.user_kind)
+
+
+@router.patch("/users/{id}/kind", response_model=UserOut, **_admin.route)
+def set_user_kind(id: int, body: UserKindIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
+    return user_admin.set_user_kind(db, actor, id, body.user_kind, body.row_version)
 
 
 @router.patch("/users/{id}/platform-admin", response_model=UserOut, **_admin.route)
 def set_platform_admin(id: int, body: PlatformAdminIn, actor: AppUser = Depends(_admin.dep),
                        db: Session = Depends(get_db)):
     return user_admin.set_platform_admin(db, actor, id, body.is_platform_admin, body.rationale,
-                                         body.row_version)
+                                         body.row_version, body.user_kind)
 
 
 @router.patch("/users/{id}/deactivate", response_model=UserOut, **_admin.route)

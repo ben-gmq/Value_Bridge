@@ -38,19 +38,19 @@ from services import effort as effort_service, interface as iface_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
-_read = project_ctx("REVIEWER")
-_edit = project_ctx("EDITOR")
+_read = project_ctx("VIEW")
+_edit = project_ctx("EDIT")
 
 
-def _og(model, role, component=None):
-    return object_guard(model, role, component=component)
+def _og(model, min_level, component=None):
+    return object_guard(model, min_level, component=component)
 
 
 # D-37: the project component each family of writes needs on (slice7_schema §5.2 table).
-_edit_sol = project_ctx("EDITOR", "SOLUTION")
-_edit_fr = project_ctx("EDITOR", "FUNCTION_REQUIREMENT")
-_edit_app = project_ctx("EDITOR", "APPLICATION")
-_edit_effort = project_ctx("EDITOR", "EFFORT")
+_edit_sol = project_ctx("EDIT", "SOLUTION")
+_edit_fr = project_ctx("EDIT", "FUNCTION_REQUIREMENT")
+_edit_app = project_ctx("EDIT", "APPLICATION")
+_edit_effort = project_ctx("EDIT", "EFFORT")
 
 
 def _uid(user: AppUser) -> int:
@@ -62,7 +62,7 @@ _child = lifecycle.child_of
 
 def _retire_and_restore(prefix: str, model, out, on_restore=None, component=None):
     """DELETE (soft, refuse-with-dependents) and PATCH …/restore for one RESTORABLE entity."""
-    g = _og(model, "EDITOR", component)
+    g = _og(model, "EDIT", component)
 
     @router.delete(f"/{prefix}/{{id}}", status_code=204, name=f"retire_{model.__tablename__}", **g.route)
     def _delete(id: int, row_version: int, obj=Depends(g.dep), user: AppUser = Depends(current_user),
@@ -80,9 +80,9 @@ def _retire_and_restore(prefix: str, model, out, on_restore=None, component=None
 
 
 # ---- the function chart (§7.2) ------------------------------------------------------------
-_node_r, _node_w = _og(BfcNode, "REVIEWER"), _og(BfcNode, "EDITOR")
-_node_dfd_w = _og(BfcNode, "EDITOR", "TO_BE_DFD")
-_node_asis_w = _og(BfcNode, "EDITOR", ("APPLICATION", "AS_IS"))
+_node_r, _node_w = _og(BfcNode, "VIEW"), _og(BfcNode, "EDIT")
+_node_dfd_w = _og(BfcNode, "EDIT", "TO_BE_DFD")
+_node_asis_w = _og(BfcNode, "EDIT", ("APPLICATION", "AS_IS"))
 
 
 @router.get("/projects/{project_id}/bfc-tree", response_model=list[TreeNodeOut], **_read.route)
@@ -202,7 +202,7 @@ def unlink_step_role(id: int, link_id: int, row_version: int, node: BfcNode = De
 
 
 # ---- business requirements (§7.3) ---------------------------------------------------------
-_br_r, _br_w = _og(BusinessRequirement, "REVIEWER"), _og(BusinessRequirement, "EDITOR")
+_br_r, _br_w = _og(BusinessRequirement, "VIEW"), _og(BusinessRequirement, "EDIT")
 
 
 @router.get("/projects/{project_id}/business-requirements", response_model=list[BrOut], **_read.route)
@@ -265,9 +265,9 @@ def unlink_br_role(id: int, link_id: int, row_version: int, br: BusinessRequirem
 
 
 # ---- solutions and the BRs they answer (§7.5, §4.3, docs/slice5_spec.md) -----------------
-_sol_r, _sol_w = _og(Solution, "REVIEWER"), _og(Solution, "EDITOR", "SOLUTION")
-_br_sol_w = _og(BusinessRequirement, "EDITOR", "SOLUTION")
-_sol_app_w = _og(Solution, "EDITOR", ("SOLUTION", "APPLICATION"))
+_sol_r, _sol_w = _og(Solution, "VIEW"), _og(Solution, "EDIT", "SOLUTION")
+_br_sol_w = _og(BusinessRequirement, "EDIT", "SOLUTION")
+_sol_app_w = _og(Solution, "EDIT", ("SOLUTION", "APPLICATION"))
 
 
 @router.get("/projects/{project_id}/solutions", response_model=list[SolutionListOut], **_read.route)
@@ -336,9 +336,9 @@ def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequ
 
 
 # ---- function requirements (§7.5, D-27/D-28, docs/slice6a_spec.md) -------------------------
-_fr_r, _fr_w = _og(FunctionRequirement, "REVIEWER"), _og(FunctionRequirement, "EDITOR", "FUNCTION_REQUIREMENT")
-_fr_effort_w = _og(FunctionRequirement, "EDITOR", ("FUNCTION_REQUIREMENT", "EFFORT"))
-_fr_iface_w = _og(FunctionRequirement, "EDITOR", ("FUNCTION_REQUIREMENT", "APPLICATION"))
+_fr_r, _fr_w = _og(FunctionRequirement, "VIEW"), _og(FunctionRequirement, "EDIT", "FUNCTION_REQUIREMENT")
+_fr_effort_w = _og(FunctionRequirement, "EDIT", ("FUNCTION_REQUIREMENT", "EFFORT"))
+_fr_iface_w = _og(FunctionRequirement, "EDIT", ("FUNCTION_REQUIREMENT", "APPLICATION"))
 
 
 def _fr_out(fr: FunctionRequirement, warnings: list[str] | None = None) -> FrOut:
@@ -406,7 +406,7 @@ def read_rate_card(project_id: int, db: Session = Depends(get_db)):
     return effort_service.read_card(db, project_id)
 
 
-@router.put("/projects/{project_id}/rate-card", response_model=RateCardChangeOut, **_edit_effort.route)   # S6c-3: EDITOR
+@router.put("/projects/{project_id}/rate-card", response_model=RateCardChangeOut, **_edit_effort.route)   # S6c-3: any User (EDIT)
 def maintain_rate_card(project_id: int, body: RateCardIn, user: AppUser = Depends(current_user),
                        db: Session = Depends(get_db)):
     return effort_service.maintain_card(db, _uid(user), project_id, body.change_rationale, body.cells, body.confirm_high)
@@ -448,7 +448,7 @@ def interface_list(project_id: int, source: int | None = None, target: int | Non
 
 
 # ---- applications: catalogue, to-be allocation, as-is support (§7.5, D-8, docs/slice6b1_spec.md)
-_app_r, _app_w = _og(Application, "REVIEWER"), _og(Application, "EDITOR", "APPLICATION")
+_app_r, _app_w = _og(Application, "VIEW"), _og(Application, "EDIT", "APPLICATION")
 
 
 @router.get("/projects/{project_id}/applications", response_model=list[ApplicationListOut], **_read.route)
@@ -544,8 +544,8 @@ def unlink_step_application(id: int, link_id: int, row_version: int, node: BfcNo
 
 
 # ---- data entities and fields (§7.4) ------------------------------------------------------
-_de_r, _de_w = _og(DataEntity, "REVIEWER"), _og(DataEntity, "EDITOR")
-_df_w = _og(DataField, "EDITOR")
+_de_r, _de_w = _og(DataEntity, "VIEW"), _og(DataEntity, "EDIT")
+_df_w = _og(DataField, "EDIT")
 
 
 @router.get("/projects/{project_id}/data-entities", response_model=list[DataEntityListOut], **_read.route)
@@ -623,7 +623,7 @@ def erd_export(project_id: int, format: str = "mermaid", subject_area: int | Non
 
 
 # ---- external parties (D-24a) -------------------------------------------------------------
-_ext_w = _og(ExternalEntity, "EDITOR")
+_ext_w = _og(ExternalEntity, "EDIT")
 
 
 @router.get("/projects/{project_id}/external-entities", response_model=list[ExternalEntityOut],
@@ -651,7 +651,7 @@ _retire_and_restore("external-entities", ExternalEntity, ExternalEntityOut)
 
 
 # ---- client organisation ------------------------------------------------------------------
-_unit_w, _role_w = _og(OrgUnit, "EDITOR"), _og(OrgRole, "EDITOR")
+_unit_w, _role_w = _og(OrgUnit, "EDIT"), _og(OrgRole, "EDIT")
 
 
 @router.get("/projects/{project_id}/org-units", response_model=list[OrgUnitOut], **_read.route)

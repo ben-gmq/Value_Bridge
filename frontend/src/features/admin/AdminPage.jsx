@@ -35,17 +35,23 @@ function ClientSelect({ id, value, onChange, clients }) {
 
 function Users({ notify }) {
   const users = useQuery({ queryKey: ['users'], queryFn: api.users });
-  const empty = { email: '', display_name: '', initial_password: '' };
+  const empty = { email: '', display_name: '', initial_password: '', user_kind: '' };
   const [f, setF] = useState(empty);
   const [deact, setDeact] = useState(null);
   const [adminChange, setAdminChange] = useState(null);
   const [reason, setReason] = useState('');
+  const [fallbackKind, setFallbackKind] = useState('VIEWER');
   const create = useSave(() => api.createUser(f), ['users'], () => { setF(empty); notify(t('admin.userCreated')); });
   const deactivate = useSave((id) => api.deactivateUser(id), ['users'], () => { setDeact(null); notify(t('admin.deactivated')); });
   const setAdmin = useSave((u) => api.setPlatformAdmin(u.app_user_id, {
-    is_platform_admin: !u.is_platform_admin, rationale: reason, row_version: u.row_version }),
+    is_platform_admin: !u.is_platform_admin, rationale: reason, row_version: u.row_version,
+    user_kind: u.is_platform_admin ? fallbackKind : null }),
   ['users'], () => { setAdminChange(null); setReason(''); notify(t('admin.adminChanged')); });
-  const error = create.error || deactivate.error || setAdmin.error;
+  const [kindChange, setKindChange] = useState(null);
+  const setKind = useSave((u) => api.setUserKind(u.app_user_id, {
+    user_kind: u.user_kind === 'USER' ? 'VIEWER' : 'USER', row_version: u.row_version }),
+  ['users'], () => { setKindChange(null); notify(t('admin.kindChanged')); });
+  const error = create.error || deactivate.error || setAdmin.error || setKind.error;
   return (
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -54,7 +60,14 @@ function Users({ notify }) {
         <TextField id="u-email" label={t('admin.email')} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <TextField id="u-pw" label={t('admin.initialPassword')} type="password" value={f.initial_password}
           onChange={(e) => setF({ ...f, initial_password: e.target.value })} />
-        <Button variant="contained" disabled={create.m.isPending} onClick={() => create.m.mutate()}>{t('admin.createUser')}</Button>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="u-kind-label">{t('admin.kind')}</InputLabel>
+          <Select labelId="u-kind-label" id="u-kind" label={t('admin.kind')} value={f.user_kind}
+            onChange={(e) => setF({ ...f, user_kind: e.target.value })}>
+            {['USER', 'VIEWER'].map((k) => <MenuItem key={k} value={k}>{t(`admin.kind.${k}`)}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <Button variant="contained" disabled={create.m.isPending || !f.user_kind} onClick={() => create.m.mutate()}>{t('admin.createUser')}</Button>
       </WrapperBox>
       <DataGrid {...grid} rows={users.data ?? []} getRowId={(r) => r.app_user_id}
         columns={[
@@ -62,9 +75,15 @@ function Users({ notify }) {
           { field: 'display_name', headerName: t('admin.name'), flex: 1 },
           { field: 'email', headerName: t('admin.email'), flex: 1 },
           { field: 'is_platform_admin', headerName: t('admin.isAdmin'), width: 90, type: 'boolean' },
+          { field: 'user_kind', headerName: t('admin.kind'), width: 110,
+            valueGetter: (v, row) => (row.is_platform_admin ? t('admin.kind.ADMIN') : t(`admin.kind.${v}`)) },
           { field: 'is_active', headerName: t('admin.active'), width: 90, type: 'boolean' },
-          { field: 'x', headerName: '', width: 240, sortable: false, renderCell: ({ row }) => row.is_active && (
+          { field: 'x', headerName: '', width: 360, sortable: false, renderCell: ({ row }) => row.is_active && (
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
+              {!row.is_platform_admin && (
+                <Button size="small" disabled={setKind.m.isPending}
+                  onClick={() => (row.user_kind === 'USER' ? setKind.m.mutate(row) : setKindChange(row))}>
+                  {row.user_kind === 'USER' ? t('admin.makeViewer') : t('admin.makeUser')}</Button>)}
               <Button size="small" onClick={() => { setAdmin.setError(''); setAdminChange(row); }}>
                 {row.is_platform_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}</Button>
               <Button size="small" color="warning" onClick={() => setDeact(row)}>{t('admin.deactivate')}</Button>
@@ -73,6 +92,10 @@ function Users({ notify }) {
       <ConfirmDialog open={Boolean(deact)} title={t('admin.deactivateTitle')}
         body={t('admin.deactivateBody', { name: deact?.display_name })} confirmLabel={t('admin.deactivate')}
         busy={deactivate.m.isPending} onClose={() => setDeact(null)} onConfirm={() => deactivate.m.mutate(deact.app_user_id)} />
+      {/* sara 7b L10: VIEWER → USER grants edit on every unrestricted project — confirm it. */}
+      <ConfirmDialog open={Boolean(kindChange)} title={t('admin.makeUserTitle')}
+        body={t('admin.makeUserBody', { name: kindChange?.display_name })} confirmLabel={t('admin.makeUser')}
+        busy={setKind.m.isPending} onClose={() => setKindChange(null)} onConfirm={() => setKind.m.mutate(kindChange)} />
       <ConfirmDialog open={Boolean(adminChange)} title={t('admin.adminTitle')}
         body={t(adminChange?.is_platform_admin ? 'admin.adminBodyRemove' : 'admin.adminBodyGrant', { name: adminChange?.display_name })}
         confirmLabel={adminChange?.is_platform_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}
@@ -80,6 +103,14 @@ function Users({ notify }) {
         onConfirm={() => setAdmin.m.mutate(adminChange)}>
         <TextField id="admin-reason" label={t('admin.reason')} value={reason} onChange={(e) => setReason(e.target.value)}
           fullWidth multiline minRows={2} />
+        {adminChange?.is_platform_admin && (
+          <FormControl size="small" fullWidth sx={{ mt: 2 }}>
+            <InputLabel id="admin-fallback-label">{t('admin.becomes')}</InputLabel>
+            <Select labelId="admin-fallback-label" id="admin-fallback" label={t('admin.becomes')} value={fallbackKind}
+              onChange={(e) => setFallbackKind(e.target.value)}>
+              {['USER', 'VIEWER'].map((k) => <MenuItem key={k} value={k}>{t(`admin.kind.${k}`)}</MenuItem>)}
+            </Select>
+          </FormControl>)}
       </ConfirmDialog>
     </>
   );
@@ -191,9 +222,10 @@ function Projects({ notify }) {
   const catalogue = useQuery({ queryKey: keys.componentCatalogue(), queryFn: api.componentCatalogue });
   const templates = useQuery({ queryKey: keys.projectTemplates(), queryFn: api.projectTemplates });
   const empty = { client_id: '', project_code: '', project_name: '', program_id: '', template_code: '',
-    component_codes: [], data_model_depth: 'FULL' };
+    component_codes: [], data_model_depth: 'FULL', is_restricted: '' };
   const [f, setF] = useState(empty);
   const { m, error } = useSave(() => api.createProject({ ...f, program_id: f.program_id || null,
+    is_restricted: f.is_restricted === 'yes',
     template_code: f.template_code || null,
     component_codes: [...closure(f.component_codes, catalogue.data ?? [])] }), ['projects'],
   () => { setF(empty); notify(t('admin.projectCreated')); });
@@ -216,7 +248,16 @@ function Projects({ notify }) {
           </Select>
         </FormControl>
         <ComponentPicker f={f} setF={setF} catalogue={catalogue.data ?? []} templates={templates.data ?? []} />
-        <Button variant="contained" disabled={m.isPending} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
+        {/* §8.10 risk 1: asked every time, no default — forgetting to restrict is not caught later. */}
+        <FormControl size="small" sx={{ minWidth: 260 }}>
+          <InputLabel id="p-restricted-label">{t('admin.restricted')}</InputLabel>
+          <Select labelId="p-restricted-label" id="p-restricted" label={t('admin.restricted')} value={f.is_restricted}
+            onChange={(e) => setF({ ...f, is_restricted: e.target.value })}>
+            <MenuItem value="no">{t('admin.restricted.no')}</MenuItem>
+            <MenuItem value="yes">{t('admin.restricted.yes')}</MenuItem>
+          </Select>
+        </FormControl>
+        <Button variant="contained" disabled={m.isPending || !f.is_restricted} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
       </WrapperBox>
       <DataGrid {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}
         columns={[{ field: 'project_code', headerName: t('admin.code'), width: 140 },

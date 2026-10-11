@@ -1,219 +1,324 @@
-"""Visibility and the one-grant rule (§7.8, §7.10, D-32, Q10, Q16, R2-S2/S4). Gate 2."""
-from tests.conftest import ALL_COMPONENTS, login
+"""Slice 7b access (D-40, OR-5, OR-6; slice7_schema §8): admin / USER / VIEWER, restricted projects
+and their members. Grade 1: who can see a client's data. Replaces the D-32 grant tests."""
+import re
 
+from fastapi.routing import APIRoute
+from sqlalchemy import select
 
-def grant(client, headers, project_id, user_id, role):
-    return client.post(f"/api/v1/projects/{project_id}/access", headers=headers,
-                       json={"user_id": user_id, "project_role_code": role})
+from models import AuditEvent
+from tests.conftest import ALL_COMPONENTS, PW, login, restrict
 
-
-def program_grant(client, w, user_id, role):
-    return client.post(f"/api/v1/programs/{w['program_id']}/access", headers=w["admin"],
-                       json={"user_id": user_id, "project_role_code": role})
+API = "/api/v1"
 
 
 def visible(client, headers):
-    return sorted(p["project_code"] for p in client.get("/api/v1/projects", headers=headers).json())
+    return sorted(p["project_code"] for p in client.get(f"{API}/projects", headers=headers).json())
 
 
-def test_gate2_grant_and_see(client, world):
-    """Gate 2 exit: grant a colleague access, they see exactly that project, an outsider sees
-    none and gets 404 — not 403 — on the project URL."""
+def preview_restrict(client, w, pid, value=True):
+    return client.put(f"{API}/projects/{pid}/restriction", headers=w["admin"], json={"is_restricted": value})
+
+
+# ---- visibility ---------------------------------------------------------------------------------
+def test_staff_see_every_unrestricted_project_and_a_restricted_one_only_as_members(client, world):
     w = world
-    assert grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").status_code == 201
-    editor = login(client, "editor@example.test")
-    assert visible(client, editor) == ["SOLO"]
-    outsider = login(client, "outsider@example.test")
-    assert visible(client, outsider) == []
-    assert client.get(f"/api/v1/projects/{w['p_solo']}", headers=outsider).status_code == 404
-    assert client.get(f"/api/v1/projects/{w['p_solo']}", headers=editor).status_code == 200
+    every = ["BETA1", "FIN", "SALES", "SOLO"]
+    ed, rv, out = (login(client, f"{n}@example.test") for n in ("editor", "reviewer", "outsider"))
+    assert visible(client, ed) == every and visible(client, rv) == every          # D-40, OR-5
+    restrict(client, w["admin"], w["p_solo"], {w["users"]["editor"]: "EDIT"})
+    assert visible(client, ed) == every
+    assert visible(client, out) == ["BETA1", "FIN", "SALES"]
+    assert client.get(f"{API}/projects/{w['p_solo']}", headers=out).status_code == 404   # never 403
+    assert visible(client, w["admin"]) == every                                      # admins always
 
 
-def test_program_grant_sees_every_project_in_program(client, world):
+def test_levels_user_edits_viewer_reads_and_membership_caps(client, world):
     w = world
-    assert program_grant(client, w, w["users"]["reviewer"], "REVIEWER").status_code == 201
-    rev = login(client, "reviewer@example.test")
-    assert visible(client, rev) == ["FIN", "SALES"]
-    assert client.get(f"/api/v1/projects/{w['p_solo']}", headers=rev).status_code == 404
-    # a project added to the program later is visible on the next request (D-32)
-    r = client.post("/api/v1/projects", headers=w["admin"], json={
-        "client_id": w["client_id"], "project_code": "HR", "project_name": "HR",
-        "program_id": w["program_id"], "component_codes": ALL_COMPONENTS})
-    assert r.status_code == 201
-    assert visible(client, rev) == ["FIN", "HR", "SALES"]
+    body = {"node_name": "Sales", "parent_bfc_node_id": None}
+    ed, rv, owner = (login(client, f"{n}@example.test") for n in ("editor", "reviewer", "owner"))
+    url = f"{API}/projects/{w['p_fin']}/bfc-nodes"
+    assert client.post(url, headers=ed, json=body).status_code == 201
+    assert client.post(url, headers=rv, json={**body, "node_name": "X"}).status_code == 403
+    r = client.get(f"{API}/projects/{w['p_fin']}", headers=rv).json()
+    assert r["my_access_level"] == "VIEW"
+    # restricted: a USER member at VIEW reads only; a VIEWER member at EDIT still reads only
+    r = client.post(f"{API}/projects/{w['p_sales']}/members", headers=w["admin"],
+                    json={"user_id": w["users"]["reviewer"], "access_level": "EDIT"})
+    assert r.status_code == 201 and r.json()["warnings"] == ["VIEWER_CAPPED"]
+    assert r.json()["effective_level"] == "VIEW"
+    restrict(client, w["admin"], w["p_sales"], {w["users"]["owner"]: "VIEW"})
+    url = f"{API}/projects/{w['p_sales']}/bfc-nodes"
+    assert client.post(url, headers=owner, json=body).status_code == 403
+    assert client.post(url, headers=rv, json=body).status_code == 403
+    assert client.get(f"{API}/projects/{w['p_sales']}", headers=owner).json()["my_access_level"] == "VIEW"
 
 
-def test_project_grant_sees_no_program_rollup(client, world):
-    """R2-S2: a project grant inside a program must not reach the program's roll-ups."""
+def test_me_reports_scope_and_kind(client, world):
+    me = client.get("/auth/me", headers=login(client, "reviewer@example.test")).json()
+    assert me["scope"] == "STAFF" and me["user_kind"] == "VIEWER"
+    assert client.get("/auth/me", headers=world["admin"]).json()["scope"] == "PLATFORM_ADMIN"
+
+
+# ---- restriction ----------------------------------------------------------------------------------
+def test_restricting_previews_loses_and_keeps_then_applies_and_audits(client, world, db):
     w = world
-    grant(client, w["admin"], w["p_sales"], w["users"]["editor"], "EDITOR")
-    editor = login(client, "editor@example.test")
-    assert client.get(f"/api/v1/programs/{w['program_id']}", headers=editor).status_code == 404
-    assert client.get(f"/api/v1/programs/{w['program_id']}/projects",
-                      headers=editor).status_code == 404
-    assert client.get("/api/v1/programs", headers=editor).json() == []
+    client.post(f"{API}/projects/{w['p_solo']}/members", headers=w["admin"],
+                json={"user_id": w["users"]["editor"], "access_level": "EDIT", "member_note": "NDA signatory"})
+    prev = preview_restrict(client, w, w["p_solo"]).json()
+    assert prev["applied"] is False and prev["changed"] is True
+    assert sorted(x["display_name"] for x in prev["loses"]) == ["Outsider", "Owner", "Reviewer"]
+    assert [(k["display_name"], k["member_note"]) for k in prev["keeps"]] == [("Editor", "NDA signatory")]
+    out = login(client, "outsider@example.test")
+    assert "SOLO" in visible(client, out)                                     # nothing written yet
+    url = f"{API}/projects/{w['p_solo']}/restriction"
+    r = client.put(url, headers=w["admin"], json={"is_restricted": True, "confirm_hash": prev["confirm_hash"]})
+    assert r.json()["applied"] is True and "SOLO" not in visible(client, out)
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "PROJECT_RESTRICTED")).one()
+    assert ev.detail["members"] == [{"user_id": w["users"]["editor"], "access_level": "EDIT"}]
+    back = preview_restrict(client, w, w["p_solo"], False).json()
+    assert sorted(x["display_name"] for x in back["gains"]) == ["Outsider", "Owner", "Reviewer"]
 
 
-def test_one_grant_per_user(client, world):
-    """R2-S4: a second scope is a 409 naming the first; the same scope is a role change."""
+def test_a_stale_restriction_preview_is_refused(client, world):
     w = world
-    assert grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").status_code == 201
-    r = grant(client, w["admin"], w["p_sales"], w["users"]["editor"], "EDITOR")
-    assert r.status_code == 409 and "SOLO" in r.json()["detail"]
-    # a role change on the same scope must carry row_version (D-6, sara M4)
-    r = grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "REVIEWER")
+    prev = preview_restrict(client, w, w["p_solo"]).json()
+    client.post(f"{API}/projects/{w['p_solo']}/members", headers=w["admin"],
+                json={"user_id": w["users"]["editor"], "access_level": "EDIT"})
+    r = client.put(f"{API}/projects/{w['p_solo']}/restriction", headers=w["admin"],
+                   json={"is_restricted": True, "confirm_hash": prev["confirm_hash"]})
+    assert r.status_code == 409
+
+
+def test_only_an_admin_manages_members_restriction_and_the_access_list(client, world):
+    w = world
+    ed = login(client, "editor@example.test")
+    pid = w["p_solo"]
+    assert client.get(f"{API}/projects/{pid}/access", headers=ed).status_code == 403
+    assert client.post(f"{API}/projects/{pid}/members", headers=ed,
+                       json={"user_id": w["users"]["owner"], "access_level": "EDIT"}).status_code == 403
+    assert client.put(f"{API}/projects/{pid}/restriction", headers=ed, json={"is_restricted": True}).status_code == 403
+    acc = client.get(f"{API}/projects/{pid}/access", headers=w["admin"]).json()
+    assert acc["is_restricted"] is False and acc["staff"] == {"USER": 3, "VIEWER": 1}
+
+
+# ---- members --------------------------------------------------------------------------------------
+def test_member_lifecycle_add_change_remove_and_readd_as_a_new_row(client, world, db):
+    w = world
+    pid, uid = w["p_solo"], w["users"]["editor"]
+    restrict(client, w["admin"], pid, {uid: "VIEW"})
+    ed = login(client, "editor@example.test")
+    m = client.get(f"{API}/projects/{pid}/members", headers=w["admin"]).json()[0]
+    assert client.post(f"{API}/projects/{pid}/members", headers=w["admin"],
+                       json={"user_id": uid, "access_level": "EDIT"}).status_code == 409
+    r = client.patch(f"{API}/project-members/{m['project_member_id']}", headers=w["admin"],
+                     json={"access_level": "EDIT", "row_version": m["row_version"]})
+    assert r.status_code == 200 and r.json()["effective_level"] == "EDIT"
+    assert client.get(f"{API}/projects/{pid}", headers=ed).json()["my_access_level"] == "EDIT"
+    r = client.delete(f"{API}/project-members/{m['project_member_id']}", headers=w["admin"],
+                      params={"row_version": r.json()["row_version"]})
+    assert r.status_code == 204
+    assert client.get(f"{API}/projects/{pid}", headers=ed).status_code == 404     # next request
+    r = client.post(f"{API}/projects/{pid}/members", headers=w["admin"], json={"user_id": uid, "access_level": "VIEW"})
+    assert r.json()["project_member_id"] != m["project_member_id"]                  # a new period
+    types = [e.event_type for e in db.scalars(select(AuditEvent).where(AuditEvent.event_type.like("MEMBER_%"))
+                                               .order_by(AuditEvent.audit_event_id))]
+    assert types == ["MEMBER_ADDED", "MEMBER_LEVEL_CHANGED", "MEMBER_REMOVED", "MEMBER_ADDED"]
+
+
+def test_admins_need_no_membership(client, world):
+    admin_id = client.get("/auth/me", headers=world["admin"]).json()["user"]["app_user_id"]
+    r = client.post(f"{API}/projects/{world['p_solo']}/members", headers=world["admin"],
+                    json={"user_id": admin_id, "access_level": "EDIT"})
     assert r.status_code == 422
-    access = client.get(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"]).json()
-    row = next(a for a in access if a["user_id"] == w["users"]["editor"])
-    r = client.post(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"], json={
-        "user_id": w["users"]["editor"], "project_role_code": "REVIEWER", "row_version": row["row_version"]})
-    assert r.status_code == 201
-    stale = client.post(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"], json={
-        "user_id": w["users"]["editor"], "project_role_code": "OWNER", "row_version": row["row_version"]})
-    assert stale.status_code == 409
-    access = client.get(f"/api/v1/projects/{w['p_solo']}/access", headers=w["admin"]).json()
-    editor_rows = [a for a in access if a["user_id"] == w["users"]["editor"]]
-    assert [a["project_role_code"] for a in editor_rows] == ["REVIEWER"]
 
 
-def test_program_owner_grants_inside_not_outside(client, world):
-    """Q16: a program OWNER may grant one project inside their program — never outside it,
-    and never the program itself."""
+# ---- programs -------------------------------------------------------------------------------------
+def test_programs_roll_up_visible_projects_and_hide_when_none_is_visible(client, world):
     w = world
-    program_grant(client, w, w["users"]["owner"], "OWNER")
-    owner = login(client, "owner@example.test")
-    assert grant(client, owner, w["p_fin"], w["users"]["editor"], "EDITOR").status_code == 201
-    assert grant(client, owner, w["p_solo"], w["users"]["reviewer"], "REVIEWER").status_code == 404
-    r = client.post(f"/api/v1/programs/{w['program_id']}/access", headers=owner,
-                    json={"user_id": w["users"]["reviewer"], "project_role_code": "REVIEWER"})
-    assert r.status_code == 403
+    out = login(client, "outsider@example.test")
+    assert [g["program_code"] for g in client.get(f"{API}/programs", headers=out).json()] == ["CSR27"]
+    restrict(client, w["admin"], w["p_sales"])
+    url = f"{API}/programs/{w['program_id']}/projects"
+    assert [p["project_code"] for p in client.get(url, headers=out).json()] == ["FIN"]   # silently omitted
+    restrict(client, w["admin"], w["p_fin"])
+    assert client.get(f"{API}/programs", headers=out).json() == []                       # auditor Q2
+    assert client.get(url, headers=out).status_code == 404
 
 
-def test_editor_cannot_grant_and_admin_needs_no_grant(client, world):
+def test_move_project_needs_preview_then_confirm_and_changes_no_access(client, world):
+    """R2-S3 kept; since D-40 a move changes roll-ups, never access."""
     w = world
-    grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR")
-    editor = login(client, "editor@example.test")
-    assert grant(client, editor, w["p_solo"], w["users"]["reviewer"], "REVIEWER").status_code == 403
-    admin_id = client.get("/auth/me", headers=w["admin"]).json()["user"]["app_user_id"]
-    assert grant(client, w["admin"], w["p_solo"], admin_id, "OWNER").status_code == 422
-
-
-def test_effective_access_lists_program_derived(client, world):
-    w = world
-    program_grant(client, w, w["users"]["reviewer"], "REVIEWER")
-    grant(client, w["admin"], w["p_sales"], w["users"]["editor"], "EDITOR")
-    rows = client.get(f"/api/v1/projects/{w['p_sales']}/access", headers=w["admin"]).json()
-    sources = {(r["display_name"], r["source"]) for r in rows}
-    assert ("Editor", "PROJECT") in sources
-    assert ("Reviewer", "PROGRAM") in sources
-    assert ("Admin", "PLATFORM_ADMIN") in sources
-
-
-def test_revoke_then_invisible_and_not_restorable(client, world):
-    w = world
-    g = grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").json()
-    editor = login(client, "editor@example.test")
-    assert client.delete(f"/api/v1/access/{g['user_access_grant_id']}", headers=editor
-                         ).status_code == 403     # EDITOR cannot revoke
-    assert client.delete(f"/api/v1/access/{g['user_access_grant_id']}", headers=w["admin"]
-                         ).status_code == 200
-    assert visible(client, editor) == []
-    # a new grant is a new row; the revoked one stays revoked
-    assert grant(client, w["admin"], w["p_fin"], w["users"]["editor"], "EDITOR").status_code == 201
-
-
-def test_revoke_route_is_404_for_other_projects(client, world):
-    """object_guard: an OWNER elsewhere cannot even discover another project's grant ids."""
-    w = world
-    g = grant(client, w["admin"], w["p_beta"], w["users"]["editor"], "EDITOR").json()
-    grant(client, w["admin"], w["p_solo"], w["users"]["owner"], "OWNER")
-    owner = login(client, "owner@example.test")
-    assert client.delete(f"/api/v1/access/{g['user_access_grant_id']}", headers=owner
-                         ).status_code == 404
-
-
-def test_deactivation_takes_effect_on_next_request(client, world):
-    w = world
-    grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR")
-    editor = login(client, "editor@example.test")
-    assert client.get("/api/v1/projects", headers=editor).status_code == 200
-    r = client.patch(f"/api/v1/users/{w['users']['editor']}/deactivate", headers=w["admin"])
-    assert r.status_code == 200
-    assert client.get("/api/v1/projects", headers=editor).status_code == 401
-
-
-def test_move_project_needs_preview_then_confirm(client, world):
-    """R2-S3: step 1 previews who gains access and writes nothing; step 2 applies it."""
-    w = world
-    program_grant(client, w, w["users"]["reviewer"], "REVIEWER")
-    rev = login(client, "reviewer@example.test")
-    url = f"/api/v1/programs/{w['program_id']}/projects"
+    url = f"{API}/programs/{w['program_id']}/projects"
     pre = client.post(url, headers=w["admin"], json={"project_id": w["p_solo"]}).json()
-    assert pre["applied"] is False
-    assert [g["display_name"] for g in pre["preview"]["gains"]] == ["Reviewer"]
-    assert "SOLO" not in visible(client, rev)
-    r = client.post(url, headers=w["admin"],
-                    json={"project_id": w["p_solo"], "confirm_hash": pre["preview_hash"]})
+    assert pre["applied"] is False and pre["preview"]["gains"] == [] and pre["preview"]["loses"] == []
+    r = client.post(url, headers=w["admin"], json={"project_id": w["p_solo"], "confirm_hash": pre["preview_hash"]})
     assert r.json()["applied"] is True
-    assert "SOLO" in visible(client, rev)
-    # another client's project can never join
-    r = client.post(url, headers=w["admin"], json={"project_id": w["p_beta"]})
-    assert r.status_code == 422
+    assert client.post(url, headers=w["admin"], json={"project_id": w["p_beta"]}).status_code == 422
 
 
 def test_non_admin_cannot_create_projects_or_move(client, world):
     w = world
-    grant(client, w["admin"], w["p_solo"], w["users"]["owner"], "OWNER")
     owner = login(client, "owner@example.test")
-    r = client.post("/api/v1/projects", headers=owner, json={
+    r = client.post(f"{API}/projects", headers=owner, json={
         "client_id": w["client_id"], "project_code": "X", "project_name": "X",
-        "component_codes": ALL_COMPONENTS})
+        "component_codes": ALL_COMPONENTS, "is_restricted": False})
     assert r.status_code == 403
-    r = client.post(f"/api/v1/programs/{w['program_id']}/projects", headers=owner,
-                    json={"project_id": w["p_solo"]})
+    r = client.post(f"{API}/programs/{w['program_id']}/projects", headers=owner, json={"project_id": w["p_solo"]})
     assert r.status_code == 403
 
 
 def test_admin_gets_404_for_missing_program_and_wrong_program_detach(client, world):
     """sara M2, M1."""
     w = world
-    assert client.get("/api/v1/programs/9999", headers=w["admin"]).status_code == 404
-    assert client.get("/api/v1/programs/9999/projects", headers=w["admin"]).status_code == 404
-    other = client.post("/api/v1/programs", headers=w["admin"], json={
+    assert client.get(f"{API}/programs/9999", headers=w["admin"]).status_code == 404
+    assert client.get(f"{API}/programs/9999/projects", headers=w["admin"]).status_code == 404
+    other = client.post(f"{API}/programs", headers=w["admin"], json={
         "client_id": w["client_id"], "program_code": "OTHER", "program_name": "Other"}).json()
-    r = client.delete(f"/api/v1/programs/{other['program_id']}/projects/{w['p_sales']}",
-                      headers=w["admin"])
-    assert r.status_code == 404      # SALES is not in OTHER — detaching must not happen
+    r = client.delete(f"{API}/programs/{other['program_id']}/projects/{w['p_sales']}", headers=w["admin"])
+    assert r.status_code == 404
 
 
-def test_revoke_records_who_and_when(client, world, db):
-    """sara M3: deleted_at and deleted_by are both set."""
-    from sqlalchemy import text
+def test_create_project_asks_whether_it_is_restricted(client, world, db):
     w = world
-    g = grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR").json()
-    client.delete(f"/api/v1/access/{g['user_access_grant_id']}", headers=w["admin"])
-    row = db.execute(text("SELECT deleted_at, deleted_by FROM user_access_grant "
-                          "WHERE user_access_grant_id = :g"), {"g": g["user_access_grant_id"]}).one()
-    assert row.deleted_at is not None and row.deleted_by is not None
+    body = {"client_id": w["client_id"], "project_code": "NDA", "project_name": "NDA",
+            "component_codes": ["ISSUE"]}
+    assert client.post(f"{API}/projects", headers=w["admin"], json=body).status_code == 422   # no default
+    r = client.post(f"{API}/projects", headers=w["admin"], json={**body, "is_restricted": True})
+    assert r.status_code == 201 and r.json()["is_restricted"] is True
+    assert "NDA" not in visible(client, login(client, "editor@example.test"))
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "PROJECT_CREATED",
+                                             AuditEvent.project_id == r.json()["project_id"])).one()
+    assert ev.detail["is_restricted"] is True
 
 
-def test_platform_admin_is_a_separate_audited_act(client, world):
-    """sara M7: no admin flag on create; promotion needs a reason and a clean grant state."""
+# ---- users and kinds --------------------------------------------------------------------------------
+def test_user_kind_is_required_changed_by_an_admin_and_audited(client, world, db):
     w = world
-    r = client.post("/api/v1/users", headers=w["admin"], json={
-        "email": "sneaky@example.test", "display_name": "Sneaky", "initial_password": "correct-horse-battery",
-        "is_platform_admin": True})
+    r = client.post(f"{API}/users", headers=w["admin"], json={
+        "email": "new@example.test", "display_name": "New", "initial_password": PW})
+    assert r.status_code == 422                                                  # no API default
+    rv = login(client, "reviewer@example.test")
+    url = f"{API}/projects/{w['p_fin']}/bfc-nodes"
+    assert client.post(url, headers=rv, json={"node_name": "A", "parent_bfc_node_id": None}).status_code == 403
+    u = next(x for x in client.get(f"{API}/users", headers=w["admin"]).json() if x["app_user_id"] == w["users"]["reviewer"])
+    r = client.patch(f"{API}/users/{u['app_user_id']}/kind", headers=w["admin"],
+                     json={"user_kind": "USER", "row_version": u["row_version"]})
+    assert r.status_code == 200 and r.json()["user_kind"] == "USER"
+    assert client.post(url, headers=rv, json={"node_name": "A", "parent_bfc_node_id": None}).status_code == 201
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "USER_KIND_CHANGED")).one()
+    assert ev.detail == {"from": "VIEWER", "to": "USER"}
+    assert client.patch(f"{API}/users/{u['app_user_id']}/kind", headers=login(client, "editor@example.test"),
+                        json={"user_kind": "USER", "row_version": 1}).status_code == 403
+
+
+def test_deactivation_takes_effect_on_next_request(client, world):
+    w = world
+    editor = login(client, "editor@example.test")
+    assert client.get(f"{API}/projects", headers=editor).status_code == 200
+    assert client.patch(f"{API}/users/{w['users']['editor']}/deactivate", headers=w["admin"]).status_code == 200
+    assert client.get(f"{API}/projects", headers=editor).status_code == 401
+
+
+def test_platform_admin_is_a_separate_audited_act_and_removal_names_the_kind(client, world, db):
+    """sara M7 kept; DR7-S6: removing admin rights says what the user becomes."""
+    w = world
+    r = client.post(f"{API}/users", headers=w["admin"], json={
+        "email": "sneaky@example.test", "display_name": "Sneaky", "initial_password": PW,
+        "user_kind": "VIEWER", "is_platform_admin": True})
     assert r.status_code == 201 and r.json()["is_platform_admin"] is False
     uid, rv = r.json()["app_user_id"], r.json()["row_version"]
-    url = f"/api/v1/users/{uid}/platform-admin"
+    url = f"{API}/users/{uid}/platform-admin"
     assert client.patch(url, headers=w["admin"], json={
         "is_platform_admin": True, "rationale": "", "row_version": rv}).status_code == 422
     ok = client.patch(url, headers=w["admin"], json={
         "is_platform_admin": True, "rationale": "Second admin for cover", "row_version": rv})
     assert ok.status_code == 200 and ok.json()["is_platform_admin"] is True
-    grant(client, w["admin"], w["p_solo"], w["users"]["editor"], "EDITOR")
-    ed = client.get("/api/v1/users", headers=w["admin"]).json()
-    ed = next(u for u in ed if u["app_user_id"] == w["users"]["editor"])
-    r = client.patch(f"/api/v1/users/{ed['app_user_id']}/platform-admin", headers=w["admin"], json={
-        "is_platform_admin": True, "rationale": "x", "row_version": ed["row_version"]})
-    assert r.status_code == 409      # holds a grant — revoke first
+    rv = ok.json()["row_version"]
+    assert client.patch(url, headers=w["admin"], json={
+        "is_platform_admin": False, "rationale": "Moved on", "row_version": rv}).status_code == 422
+    r = client.patch(url, headers=w["admin"], json={
+        "is_platform_admin": False, "rationale": "Moved on", "row_version": rv, "user_kind": "VIEWER"})
+    assert r.status_code == 200 and r.json()["user_kind"] == "VIEWER"
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "PLATFORM_ADMIN_REMOVED")).one()
+    assert ev.detail["user_kind"] == "VIEWER"
+
+
+# ---- DR7-S2: no GET route leaks a restricted project to a non-member ----------------------------------
+def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
+    """A restricted project in the program, with one marked row of every model a GET route serves:
+    chart nodes and a process with its BR, data entity and field, solution, FR, application, org unit
+    and role, external party (sara 7b M2a/b). Returns (project id, marks, every id it uses)."""
+    h = w["admin"]
+    marks = {"code": "ZQXCODE", "name": "Zqx secret project", "node": "Zqx hidden L1", "step": "Zqx hidden step",
+             "de": "Zqx ledger", "field": "zqx_field", "sol": "Zqx solution", "fr": "Zqx form",
+             "app": "ZQXAPP", "unit": "ZQXU", "role": "ZQXR", "ext": "Zqx bank"}
+    p = client.post(f"{API}/projects", headers=h, json={
+        "client_id": w["client_id"], "project_code": marks["code"], "project_name": marks["name"],
+        "program_id": w["program_id"], "component_codes": ALL_COMPONENTS, "is_restricted": True}).json()
+    pid, ids = p["project_id"], {p["project_id"]}
+
+    def post(path, body, key):
+        r = client.post(f"{API}{path}", headers=h, json=body)
+        assert r.status_code == 201, (path, r.text)
+        ids.add(r.json()[key])
+        return r.json()
+    l1 = post(f"/projects/{pid}/bfc-nodes", {"node_name": marks["node"], "parent_bfc_node_id": None}, "bfc_node_id")
+    l2 = post(f"/projects/{pid}/bfc-nodes", {"node_name": "Zqx L2", "parent_bfc_node_id": l1["bfc_node_id"]}, "bfc_node_id")
+    step = post(f"/projects/{pid}/bfc-nodes", {"node_name": marks["step"], "parent_bfc_node_id": l2["bfc_node_id"],
+                                               "is_process": True}, "bfc_node_id")
+    brs = client.get(f"{API}/projects/{pid}/business-requirements", headers=h).json()
+    ids.update(b["br_id"] for b in brs)
+    de = post(f"/projects/{pid}/data-entities", {"de_name": marks["de"]}, "data_entity_id")
+    post(f"/data-entities/{de['data_entity_id']}/fields", {"field_name": marks["field"]}, "data_field_id")
+    sol = post(f"/projects/{pid}/solutions", {"solution_name": marks["sol"], "category_code": "PROCESS"}, "solution_id")
+    post(f"/projects/{pid}/function-requirements", {"fr_name": marks["fr"], "fr_type_code": "FORM",
+                                                    "solution_id": sol["solution_id"]}, "fr_id")
+    post(f"/projects/{pid}/applications", {"application_code": marks["app"], "application_name": "Zqx app",
+                                           "lifecycle_code": "AS_IS"}, "application_id")
+    unit = post(f"/projects/{pid}/org-units", {"org_unit_code": marks["unit"], "org_unit_name": "Zqx unit"}, "org_unit_id")
+    post(f"/projects/{pid}/org-roles", {"org_unit_id": unit["org_unit_id"], "org_role_code": marks["role"],
+                                        "org_role_name": "Zqx role"}, "org_role_id")
+    post(f"/projects/{pid}/external-entities", {"ext_name": marks["ext"]}, "external_entity_id")
+    assert step["is_process"]
+    return pid, marks, ids
+
+
+def _sweep(client, headers, pid, ids) -> tuple[list[str], int, list[str]]:
+    """Call every GET route with every id; return (paths whose body carries a mark, calls, bodies)."""
+    from main import app
+    hits, bodies, called = [], [], 0
+    for r in app.routes:
+        if not isinstance(r, APIRoute) or "GET" not in r.methods:
+            continue
+        params = re.findall(r"\{(\w+)\}", r.path)
+        for i in sorted(ids | {1, 2, 3}) if params else [None]:
+            path = r.path
+            for prm in params:
+                path = path.replace(f"{{{prm}}}", str(pid if prm == "project_id" else i) if prm.endswith("id")
+                                    else "BFC_NODE")
+            resp = client.get(path, headers=headers)
+            called += 1
+            hits.append((r.path, path, resp.status_code, resp.text))
+    return hits, called, bodies
+
+
+def test_no_get_route_leaks_a_restricted_project(client, world):
+    """DR7-S2, strengthened (sara 7b M2): marked rows of every model, the project inside a program, a
+    sweep of every GET route as a non-member USER and as a non-member VIEWER, and a positive control —
+    the same sweep as the admin must find the marks, so the test cannot pass by finding nothing."""
+    w = world
+    pid, marks, ids = _seed_restricted(client, w)
+    found = lambda hits: {p for p, _, _, body in hits if any(v in body for v in marks.values())}  # noqa: E731
+    admin_hits, called, _ = _sweep(client, w["admin"], pid, ids)
+    seen_by_admin = found(admin_hits)
+    for must in ("/api/v1/projects", "/api/v1/projects/{project_id}", "/api/v1/projects/{project_id}/bfc-tree",
+                 "/api/v1/projects/{project_id}/data-entities", "/api/v1/projects/{project_id}/solutions",
+                 "/api/v1/projects/{project_id}/function-requirements", "/api/v1/projects/{project_id}/applications",
+                 "/api/v1/programs/{program_id}/projects"):
+        assert must in seen_by_admin, must                                              # positive control
+    assert called > 200
+    for who in ("outsider", "reviewer"):                          # a non-member USER and VIEWER
+        hits, _, _ = _sweep(client, login(client, f"{who}@example.test"), pid, ids)
+        assert found(hits) == set(), who
+        on_pid = [(p, path, code) for p, path, code, _ in hits if f"/projects/{pid}" in path and code != 404]
+        assert on_pid == [], (who, on_pid)                         # the project itself: never 403, always 404

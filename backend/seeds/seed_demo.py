@@ -23,7 +23,7 @@ from database import SessionLocal
 from models import AppUser, BfcNodeOrgRole
 from services import audit, bfc, client_org, data_entity, external_entity, process_flow, raci, step_io
 from services import components
-from services.project import create_client, create_project, grant_access
+from services.project import create_client, create_project
 from services.user_admin import check_ftc_address, create_user
 
 SAFE_MARKERS = ("uat", "demo")
@@ -83,11 +83,10 @@ def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
     a = admin.app_user_id
     client = create_client(db, admin, "DEMO", "Demo Trading Co", "Distribution")
     proj = create_project(db, admin, client.client_id, "DEMO", "Order to cash demo", None, None, None,
-                          component_codes=list(components.ALL))
+                          component_codes=list(components.ALL), is_restricted=False)
     pid = proj.project_id
-    for role in ("EDITOR", "REVIEWER"):
-        u = create_user(db, admin, f"uat.{role.lower()}@{domain}", f"UAT {role.title()}", pw)
-        grant_access(db, admin, u.app_user_id, role, project_id=pid)
+    for name, kind in (("editor", "USER"), ("reviewer", "VIEWER")):      # D-40: kinds, not grants
+        create_user(db, admin, f"uat.{name}@{domain}", f"UAT {name.title()}", pw, kind)
 
     # Client organisation → the lanes.
     sales = client_org.create_unit(db, a, pid, None, "SALES", "Sales Operations", "DEPARTMENT", None)

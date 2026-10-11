@@ -17,12 +17,12 @@ from schemas.process_flow import (DfdGraphOut, FlowCompletenessOut, KeepIn, Keep
 from services import diagram_layout, process_flow, render
 
 router = GuardedRouter(tags=["process-flow"])
-_read = project_ctx("REVIEWER")
-_edit = project_ctx("EDITOR")
-_edit_dfd = project_ctx("EDITOR", "TO_BE_DFD")              # D-37: flow arrows are DFD scope
-_flow_w = object_guard(BfcNodeFlow, "EDITOR", component="TO_BE_DFD")
-_node_r = object_guard(BfcNode, "REVIEWER")
-_node_w = object_guard(BfcNode, "EDITOR", component="TO_BE_DFD")
+_read = project_ctx("VIEW")
+_edit = project_ctx("EDIT")
+_edit_dfd = project_ctx("EDIT", "TO_BE_DFD")              # D-37: flow arrows are DFD scope
+_flow_w = object_guard(BfcNodeFlow, "EDIT", component="TO_BE_DFD")
+_node_r = object_guard(BfcNode, "VIEW")
+_node_w = object_guard(BfcNode, "EDIT", component="TO_BE_DFD")
 
 
 @router.get("/projects/{project_id}/process-flows", response_model=list[ProcessFlowOut], **_read.route)

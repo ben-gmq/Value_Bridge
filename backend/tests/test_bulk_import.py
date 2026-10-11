@@ -287,8 +287,6 @@ def test_a_row_going_stale_between_validate_and_commit_applies_nothing(client, e
 # ---- criterion 6: another project's export; a partial sort -------------------------------------
 
 def test_an_export_from_another_project_is_refused_whole(client, ed, world, db):
-    client.post(f"{API}/projects/{world['p_beta']}/access", headers=world["admin"],
-                json={"user_id": world["users"]["owner"], "project_role_code": "EDITOR"})
     other = {"h": world["admin"], "p": world["p_beta"]}
     entity(client, other, "Ledger")
     r = upload(client, ed, export(client, other))

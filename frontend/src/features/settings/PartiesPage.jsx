@@ -6,6 +6,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import { errorText } from '../../api/client';
 import { partyApi } from '../../api/scope';
 import { keys } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page, WrapperBox } from '../../components/Page';
@@ -16,6 +17,7 @@ import { RecordDialog, SettingsCrumbs, ShowRetired } from './settingsKit';
 // The EXT number is minted by the server; a DELETE is a soft retire, refused while a flow uses it.
 export default function PartiesPage() {
   const { projectId } = useParams();
+  const canEdit = useCanEdit();             // UAT 7b: viewers see no edit controls
   const qc = useQueryClient();
   const [showRetired, setShowRetired] = useState(false);
   // include_retired is requested for "Show retired"; see the hand-back note on api/scope.js.
@@ -69,7 +71,7 @@ export default function PartiesPage() {
       valueGetter: (v) => (v ? getLabel(v) : '') },
     { field: 'description', headerName: t('settings.description'), flex: 2, minWidth: 220 },
     { field: 'actions', headerName: '', width: 180, sortable: false, filterable: false,
-      renderCell: ({ row }) => (
+      renderCell: ({ row }) => canEdit && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           {row.is_active ? (
             <>
@@ -88,7 +90,7 @@ export default function PartiesPage() {
       <SettingsCrumbs projectId={projectId} current={t('settings.parties')} />
       <Page title={t('settings.parties')} subtitle={t('settings.partiesWhat')}
         error={error || (q.error && errorText(q.error))}
-        actions={<Button variant="contained" onClick={() => { setError(''); setEditing({ row: null }); }}>
+        actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setEditing({ row: null }); }}>
           {t('settings.party.add')}</Button>}>
         <WrapperBox>
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('settings.party.count', { n: rows.length })}</Typography>

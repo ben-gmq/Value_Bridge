@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, Computed, DateTime, ForeignKey,
-    ForeignKeyConstraint, Identity, Index, Integer, String, func, text,
+    ForeignKeyConstraint, Identity, Index, Integer, String, Text, func, text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -12,8 +12,8 @@ from models.base import AuditMixin, Base, TimestampMixin
 
 
 class AppUser(TimestampMixin, Base):
-    """One row per FTC staff member who can log in (D-11). No per-user role column:
-    the global tier is `is_platform_admin`, the project tier is the one active grant (D-9)."""
+    """One row per FTC staff member who can log in (D-11). Admin is `is_platform_admin`; every
+    other user is a USER (edit) or VIEWER (read only) on every visible project (D-40)."""
 
     __tablename__ = "app_user"
 
@@ -23,6 +23,7 @@ class AppUser(TimestampMixin, Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    user_kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default="VIEWER")   # D-40
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Nullable only because the first-run admin is created by nobody (scaffold §1).
     created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
@@ -32,12 +33,14 @@ class AppUser(TimestampMixin, Base):
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
 
     __mapper_args__ = {"version_id_col": row_version}
-    __table_args__ = (Index("uq_app_user_email", func.lower(email), unique=True),)
+    __table_args__ = (Index("uq_app_user_email", func.lower(email), unique=True),
+                      CheckConstraint("user_kind IN ('USER', 'VIEWER')", name="ck_app_user_kind"))
 
 
 class UserAccessGrant(AuditMixin, Base):
-    """One grant of one project role over ONE scope — a project or a program (D-32).
-    At most one live grant per user; program-derived access is computed, never stored."""
+    """RETIRED by D-40 (migration 0038): history only, SELECT-only for the app role. It held one
+    grant of one project role over one project or program (D-32); access is now user_kind plus
+    project_member on restricted projects."""
 
     __tablename__ = "user_access_grant"
 
@@ -81,6 +84,35 @@ class UserAccessGrant(AuditMixin, Base):
 
     def owning_project_id(self) -> int | None:
         """object_guard contract (§7.8). A program grant resolves to no project → admin only."""
+        return self.project_id
+
+
+class ProjectMember(AuditMixin, Base):
+    """A named member of a project, with a level (OR-6). Only matters while the project is
+    restricted. Each membership period is its own row; re-adding inserts, never restores."""
+
+    __tablename__ = "project_member"
+
+    project_member_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    project_is_active: Mapped[bool | None] = mapped_column(
+        Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
+    app_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
+    access_level: Mapped[str] = mapped_column(String(4), nullable=False)
+    member_note: Mapped[str | None] = mapped_column(Text)
+
+    user = relationship("AppUser", foreign_keys=[app_user_id])
+
+    __table_args__ = (
+        ForeignKeyConstraint(["project_id", "project_is_active"], ["project.project_id", "project.is_active"],
+                             name="fk_pm_live_project", onupdate="NO ACTION"),
+        CheckConstraint("access_level IN ('EDIT', 'VIEW')", name="ck_pm_level"),
+        CheckConstraint("member_note IS NULL OR btrim(member_note) <> ''", name="ck_pm_note_not_blank"),
+        Index("uq_pm_live", "project_id", "app_user_id", unique=True, postgresql_where=text("is_active")),
+        Index("ix_pm_user_live", "app_user_id", postgresql_where=text("is_active")),
+    )
+
+    def owning_project_id(self) -> int:
         return self.project_id
 
 

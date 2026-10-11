@@ -62,6 +62,8 @@ class Project(AuditMixin, Base):
     )
     # D-39: KEYS_ONLY or FULL. Read only through services.components.depth().
     data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False, server_default="FULL")
+    # OR-6: visible only to admins and live project_member rows. Read per request.
+    is_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     client = relationship("Client")
     program = relationship("Program", viewonly=True,

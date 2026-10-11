@@ -1,9 +1,12 @@
-"""Clients, projects and access grants (§7.10, D-32). One grant per user, over one scope."""
+"""Clients, projects, restriction and members (§7.10; D-40, OR-6, slice7_schema §8)."""
+import hashlib
+import json
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import AppUser, Client, CodeMaster, Program, Project, UserAccessGrant
+from models import AppUser, Client, Program, Project, ProjectMember
 from services import access, audit, components, effort, numbering
 from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
@@ -53,9 +56,10 @@ def list_visible_projects(db: Session, user: AppUser) -> list[Project]:
 
 def create_project(db: Session, actor: AppUser, client_id: int, project_code: str,
                    project_name: str, program_id: int | None, start_date, end_date, *,
-                   component_codes, template_code: str | None = None,
+                   component_codes, is_restricted: bool, template_code: str | None = None,
                    data_model_depth: str = "FULL") -> Project:
-    """Platform admin only (route guard). Creating a project grants nobody anything (D-32).
+    """Platform admin only (route guard). Creating a project grants nobody anything (D-32); it is
+    asked whether the project is restricted (§8.10 risk 1), and the answer is audited.
     Its components (D-37) are inserted in the same transaction; the list must be closed under
     their dependencies, and the template is provenance only."""
     client = db.get(Client, client_id)
@@ -76,7 +80,8 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     p = Project(client_id=client_id, program_id=program_id,
                 project_code=project_code.strip().upper(), project_name=project_name.strip(),
                 start_date=start_date, end_date=end_date, status_code_id=status.code_id,
-                data_model_depth=data_model_depth, created_by=actor.app_user_id)
+                data_model_depth=data_model_depth, is_restricted=is_restricted,
+                created_by=actor.app_user_id)
     db.add(p)
     db.flush()
     numbering.seed_all(db, p.project_id)            # all ten series, same transaction (R2-D14)
@@ -85,7 +90,8 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     # A later slice copies CONTROL_RULE house defaults here (§7.13).
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
                  detail={"program_id": program_id, **cells, "template_code": template_code,
-                         "components": on, "data_model_depth": data_model_depth})
+                         "components": on, "data_model_depth": data_model_depth,
+                         "is_restricted": is_restricted})
     db.commit()
     return p
 
@@ -103,130 +109,139 @@ def update_project(db: Session, actor: AppUser, project: Project, row_version: i
     return project
 
 
-# ---- grants ---------------------------------------------------------------------------
+# ---- members and restriction (OR-6, slice7_schema §8.3–§8.4; admin only by route guard) ----
 
-def _role(db: Session, project_role_code: str) -> CodeMaster:
-    return validate_required_code(db, None, "PROJECT_ROLE", project_role_code, "project_role_code")
-
-
-def _scope_name(db: Session, g: UserAccessGrant) -> str:
-    if g.project_id:
-        return f"project {db.get(Project, g.project_id).project_code}"
-    return f"program {db.get(Program, g.program_id).program_code}"
+def _staff(db: Session) -> list[AppUser]:
+    return list(db.scalars(select(AppUser).where(AppUser.is_active, ~AppUser.is_platform_admin)
+                           .order_by(AppUser.display_name)))
 
 
-def grant_access(db: Session, actor: AppUser, target_user_id: int, project_role_code: str, *,
-                 project_id: int | None = None, program_id: int | None = None,
-                 row_version: int | None = None) -> UserAccessGrant:
-    """Route guards: a project grant needs OWNER on the project — which a program OWNER holds
-    for every project in their program (Q16); a program grant needs a platform admin (Q10)."""
-    role = _role(db, project_role_code)
-    if program_id is not None:                               # L5 — a clear 404, not an FK 409
-        prog = db.get(Program, program_id)
-        if prog is None or not prog.is_active:
-            raise HTTPException(404, "Not found")
-    target = db.get(AppUser, target_user_id)
+def _live_members(db: Session, project_id: int) -> list[ProjectMember]:
+    """Live memberships of active users (sara 7b L8: a deactivated user opens nothing)."""
+    return list(db.scalars(select(ProjectMember).join(AppUser, AppUser.app_user_id == ProjectMember.app_user_id)
+                           .where(ProjectMember.project_id == project_id, ProjectMember.is_active,
+                                  AppUser.is_active)
+                           .order_by(ProjectMember.project_member_id)))
+
+
+def _share_lock(db: Session, project_id: int) -> None:
+    """Member writes and a restriction confirm serialise on the project row (sara 7b L1)."""
+    db.execute(select(Project.project_id).where(Project.project_id == project_id).with_for_update(read=True))
+
+
+def _person(u: AppUser) -> dict:
+    return {"user_id": u.app_user_id, "display_name": u.display_name, "user_kind": u.user_kind}
+
+
+def _member_row(db: Session, m: ProjectMember) -> dict:
+    u = db.get(AppUser, m.app_user_id)
+    return {**_person(u), "project_member_id": m.project_member_id, "access_level": m.access_level,
+            "effective_level": access._lower(access.KIND_CAP[u.user_kind], m.access_level),
+            "member_note": m.member_note, "row_version": m.row_version}
+
+
+def list_members(db: Session, project: Project) -> list[dict]:
+    return [_member_row(db, m) for m in _live_members(db, project.project_id)]
+
+
+def add_member(db: Session, actor: AppUser, project: Project, user_id: int, access_level: str,
+               member_note: str | None) -> tuple[ProjectMember, list[str]]:
+    _share_lock(db, project.project_id)
+    target = db.get(AppUser, user_id)
     if target is None or not target.is_active:
         raise HTTPException(422, "Choose an active user")
     if target.is_platform_admin:
-        raise HTTPException(422, "A platform admin needs no grant")
-    existing = access.live_grant(db, target)
-    if existing and existing.project_id == project_id and existing.program_id == program_id:
-        if row_version is None:                              # M4 — D-6 on role changes too
-            raise HTTPException(422, f"{target.display_name} already has access here. Send the "
-                                     "grant's row_version to change their role.")
-        if existing.row_version != row_version:
-            raise HTTPException(409, "Updated by another user. Please refresh.")
-        old = access.grant_role(db, existing)
-        existing.project_role_code_id = role.code_id           # a role change, not a 2nd grant
-        existing.updated_by = actor.app_user_id
-        audit.record(db, "ACCESS_ROLE_CHANGED", actor_id=actor.app_user_id, project_id=project_id,
-                     target_table="user_access_grant", target_id=existing.user_access_grant_id,
-                     detail={"user_id": target_user_id, "from": old, "to": role.code})
-        db.commit()
-        return existing
-    if existing:
-        raise HTTPException(409, f"{target.display_name} already has access to "
-                                 f"{_scope_name(db, existing)}. Only a platform admin can "
-                                 f"reassign them.")                      # R2-S4
-    g = UserAccessGrant(app_user_id=target_user_id, project_id=project_id, program_id=program_id,
-                        project_role_code_id=role.code_id, granted_by_user_id=actor.app_user_id,
-                        created_by=actor.app_user_id)
-    db.add(g)
-    db.flush()          # the partial unique index is the backstop against a concurrent grant
-    audit.record(db, "ACCESS_GRANTED", actor_id=actor.app_user_id, project_id=project_id,
-                 target_table="user_access_grant", target_id=g.user_access_grant_id,
-                 detail={"user_id": target_user_id, "program_id": program_id, "role": role.code})
+        raise HTTPException(422, "A platform admin sees every project and needs no membership")
+    if access.live_member(db, project.project_id, user_id) is not None:
+        raise HTTPException(409, f"{target.display_name} is already a member of this project")
+    m = ProjectMember(project_id=project.project_id, app_user_id=user_id, access_level=access_level,
+                      member_note=(member_note or "").strip() or None, created_by=actor.app_user_id)
+    db.add(m)
+    db.flush()                    # uq_pm_live is the backstop against a concurrent add (→ 409)
+    audit.record(db, "MEMBER_ADDED", actor_id=actor.app_user_id, project_id=project.project_id,
+                 target_table="project_member", target_id=m.project_member_id,
+                 detail={"user_id": user_id, "access_level": access_level})
     db.commit()
-    return g
+    warnings = (["VIEWER_CAPPED"] if access_level == "EDIT" and target.user_kind == "VIEWER" else [])
+    return m, warnings
 
 
-def reassign_access(db: Session, actor: AppUser, target_user_id: int, project_role_code: str,
-                    rationale: str, *, project_id: int | None = None,
-                    program_id: int | None = None) -> UserAccessGrant:
-    """Platform admin only. Revoke the user's one grant and issue the new one, atomically."""
-    if not rationale.strip():
-        raise HTTPException(422, "Moving someone between scopes needs a reason")
-    if (project_id is None) == (program_id is None):
-        raise HTTPException(422, "Name exactly one project or one program")
-    role = _role(db, project_role_code)
-    target = db.get(AppUser, target_user_id)
-    if target is None or not target.is_active or target.is_platform_admin:
-        raise HTTPException(422, "Choose an active, non-admin user")
-    old = access.live_grant(db, target)
-    old_scope = _scope_name(db, old) if old else None
-    if old:
-        soft_delete(old, actor.app_user_id)
-        db.flush()
-    g = UserAccessGrant(app_user_id=target_user_id, project_id=project_id, program_id=program_id,
-                        project_role_code_id=role.code_id, granted_by_user_id=actor.app_user_id,
-                        created_by=actor.app_user_id)
-    db.add(g)
-    db.flush()
-    audit.record(db, "ACCESS_REASSIGNED", actor_id=actor.app_user_id, project_id=project_id,
-                 target_table="user_access_grant", target_id=g.user_access_grant_id,
-                 detail={"user_id": target_user_id, "from": old_scope,
-                         "to": _scope_name(db, g), "role": role.code, "rationale": rationale})
+def change_member_level(db: Session, actor: AppUser, m: ProjectMember, access_level: str,
+                        row_version: int) -> ProjectMember:
+    _share_lock(db, m.project_id)
+    if not m.is_active:
+        raise HTTPException(409, "That membership was already removed")
+    if m.row_version != row_version:
+        raise HTTPException(409, "Updated by another user. Please refresh.")
+    if m.access_level != access_level:
+        old, m.access_level = m.access_level, access_level
+        m.updated_by = actor.app_user_id
+        audit.record(db, "MEMBER_LEVEL_CHANGED", actor_id=actor.app_user_id, project_id=m.project_id,
+                     target_table="project_member", target_id=m.project_member_id,
+                     detail={"user_id": m.app_user_id, "from": old, "to": access_level})
     db.commit()
-    return g
+    return m
 
 
-def revoke_access(db: Session, actor: AppUser, grant: UserAccessGrant) -> UserAccessGrant:
-    """Soft-revoke, audited (S9), and never restorable (R2-S5)."""
-    if not grant.is_active:
-        raise HTTPException(409, "That access was already revoked")
-    soft_delete(grant, actor.app_user_id)
-    audit.record(db, "ACCESS_REVOKED", actor_id=actor.app_user_id, project_id=grant.project_id,
-                 target_table="user_access_grant", target_id=grant.user_access_grant_id,
-                 detail={"user_id": grant.app_user_id, "program_id": grant.program_id})
+def remove_member(db: Session, actor: AppUser, m: ProjectMember, row_version: int) -> None:
+    """Soft-remove (law 1); never restored — access returns only through add (R2-S5)."""
+    _share_lock(db, m.project_id)
+    if not m.is_active:
+        raise HTTPException(409, "That membership was already removed")
+    if m.row_version != row_version:
+        raise HTTPException(409, "Updated by another user. Please refresh.")
+    soft_delete(m, actor.app_user_id)
+    audit.record(db, "MEMBER_REMOVED", actor_id=actor.app_user_id, project_id=m.project_id,
+                 target_table="project_member", target_id=m.project_member_id,
+                 detail={"user_id": m.app_user_id})
     db.commit()
-    return grant
 
 
-def effective_access(db: Session, project: Project) -> list[dict]:
-    """Everyone who can open the project, and why (D-32). OWNER or admin, by route guard."""
-    out: list[dict] = []
-    direct = db.scalars(select(UserAccessGrant).where(UserAccessGrant.project_id == project.project_id,
-                                                      UserAccessGrant.is_active))
-    for g in direct:
-        out.append(_row(db, g, "PROJECT", None))
-    if project.program_id:
-        prog = db.get(Program, project.program_id)
-        via = db.scalars(select(UserAccessGrant).where(UserAccessGrant.program_id == project.program_id,
-                                                       UserAccessGrant.is_active))
-        for g in via:
-            out.append(_row(db, g, "PROGRAM", prog.program_name))
-    for u in db.scalars(select(AppUser).where(AppUser.is_platform_admin, AppUser.is_active)):
-        out.append({"grant_id": None, "user_id": u.app_user_id, "display_name": u.display_name,
-                    "email": u.email, "project_role_code": "ALL", "source": "PLATFORM_ADMIN", "program": None,
-                    "granted_at": None, "row_version": None})
-    order = {"PROJECT": 0, "PROGRAM": 1, "PLATFORM_ADMIN": 2}
-    return sorted(out, key=lambda r: (order[r["source"]], r["display_name"].lower()))
+def set_restriction(db: Session, actor: AppUser, project: Project, restricted: bool,
+                    confirm_hash: str | None) -> dict:
+    """§8.3 + DR7-D2: preview who loses or gains access AND who keeps it (each member with the note
+    that explains why, e.g. a copied grant), inside the hash; then confirm. Audited."""
+    def plan() -> dict:
+        members = {m.app_user_id: m for m in _live_members(db, project.project_id)}
+        staff = _staff(db)
+        keeps = [{**_member_row(db, members[u.app_user_id])} for u in staff if u.app_user_id in members]
+        others = [_person(u) for u in staff if u.app_user_id not in members]
+        return {"restricted": restricted, "changed": restricted != project.is_restricted,
+                "loses": others if restricted and not project.is_restricted else [],
+                "gains": others if not restricted and project.is_restricted else [],
+                "keeps": keeps}
+    preview = plan()
+    h = hashlib.sha256(json.dumps(preview, sort_keys=True, default=str).encode()).hexdigest()
+    if confirm_hash is None:
+        return {**preview, "confirm_hash": h, "applied": False}
+    db.refresh(project, with_for_update=True)                 # sara 7b L1: re-read under the lock
+    preview = plan()
+    if hashlib.sha256(json.dumps(preview, sort_keys=True, default=str).encode()).hexdigest() != confirm_hash:
+        raise HTTPException(409, "Who can see this project changed since the preview. Review it again.")
+    if not preview["changed"]:
+        db.rollback()
+        return {**preview, "confirm_hash": confirm_hash, "applied": False}
+    project.is_restricted = restricted
+    project.updated_by = actor.app_user_id
+    audit.record(db, "PROJECT_RESTRICTED" if restricted else "PROJECT_UNRESTRICTED",
+                 actor_id=actor.app_user_id, project_id=project.project_id, target_table="project",
+                 target_id=project.project_id,
+                 detail={"members": [{"user_id": k["user_id"], "access_level": k["access_level"]}
+                                     for k in preview["keeps"]],
+                         "loses": [x["user_id"] for x in preview["loses"]],
+                         "gains": [x["user_id"] for x in preview["gains"]]})
+    db.commit()
+    return {**preview, "confirm_hash": confirm_hash, "applied": True}
 
 
-def _row(db: Session, g: UserAccessGrant, source: str, program: str | None) -> dict:
-    u = db.get(AppUser, g.app_user_id)
-    return {"grant_id": g.user_access_grant_id, "user_id": u.app_user_id,
-            "display_name": u.display_name, "email": u.email, "project_role_code": access.grant_role(db, g),
-            "source": source, "program": program, "granted_at": g.granted_at,
-            "row_version": g.row_version}
+def effective_access(db: Session, project: Project) -> dict:
+    """Everyone who can open the project, and why (§8.6). Admin only, by route guard. The access
+    review at each freeze reads this (§4.7)."""
+    admins = [_person(u) for u in db.scalars(select(AppUser).where(AppUser.is_platform_admin, AppUser.is_active)
+                                             .order_by(AppUser.display_name))]
+    members = list_members(db, project)
+    if project.is_restricted:
+        return {"is_restricted": True, "admins": admins, "members": members, "staff": None}
+    staff = _staff(db)
+    counts = {k: sum(1 for u in staff if u.user_kind == k) for k in access.KIND_CAP}
+    return {"is_restricted": False, "admins": admins, "members": members, "staff": counts}

@@ -1131,3 +1131,22 @@ do not exist yet — they read depth when the imports slice (1e) builds them**; 
 `ROW_COMPONENTS` (fixed); L8 blocker samples for To-be DFD rows show ids — 7c replaces them with step codes;
 L9 no-op confirm writes nothing (fixed); L10 ruling S7-7; L11 panels on always-on screens hidden (fixed);
 L12 query keys in `links.js` (fixed); L13 0033 downgrade note (fixed), migrations committed one per commit.
+
+### `sara` pre-commit review of 7b — dispositions (2026-10-11)
+
+No CRITICAL or HIGH. **M1** fixed: `tests/test_migration_0035_0038.py` steps the test database back to 0034,
+seeds a project OWNER grant, a program REVIEWER grant over two live projects and one retired, a user with no
+grant and an admin, upgrades to head, and asserts the kinds, the three member rows (levels, notes,
+`created_by`), the revoked grants, one `ACCESS_REVOKED` per grant, and that `vb_app` can neither INSERT nor
+UPDATE them. **M2** fixed: the leak test seeds a marked row of every model a GET route serves (chart nodes, a
+process and its BR, data entity and field, solution, FR, application, org unit and role, external party),
+puts the project in the program, sweeps every GET route as a non-member USER **and** VIEWER, asserts every
+path on the project is 404, and as a positive control requires the admin's sweep to find the marks. (A leak
+through a binary xlsx body is not covered; the export routes are project-scoped and guarded.) **M3** fixed:
+criterion 49 refuses any write guarded at `VIEW`. LOW: L1 the restriction confirm re-reads the project under
+`FOR UPDATE` and member writes take `FOR SHARE` on it; L2 0035 prints the per-kind counts; L3 the grant test
+asserts UPDATE too; L4 deviation 7f; L5 `_og(min_level)` and the "level" wording; L6 a no-op admin change is
+409; L7 the first-run admin is a USER; L8 members of deactivated users are not listed; L9 `keys.projectAccess`;
+L10 Unrestrict is amber and VIEWER → USER is confirmed; L11 member-removal copy depends on restriction and the
+stale REVIEWER comments are reworded. **Note for the project-retire / `purge_project` slice:** a live
+`project_member` blocks retiring its project (`fk_pm_live_project`) — remove members first.

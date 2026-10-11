@@ -43,7 +43,7 @@ place.
   Fix by moving to `createBrowserRouter` (a routing change across the app) or a popstate guard in
   `ImportWizard.jsx`. · **files:** `frontend/src/main.jsx`, `frontend/src/components/ImportWizard.jsx`
 
-### VB-008 | The data entity page shows edit controls to reviewers | OPEN
+### VB-008 | The data entity page shows edit controls to reviewers | CLOSED
 
 - **type:** BUG (presentation) · **found:** 2026-10-09 by `sara` (Slice 4a-2 review, M-3) · **depends-on:** —
 - `DataEntityPage.jsx` shows Edit/Retire/Restore, Retire entity, Add field and the snackbar Restore
@@ -51,6 +51,9 @@ place.
   every one (403), so nothing is breached. Predates Slice 4a.
 - **root cause:** those controls never went through `useCanEdit` (CLAUDE.md "Edit controls").
   · **files:** `frontend/src/features/data/DataEntityPage.jsx`, `DataEntitiesPage.jsx`
+- **closed:** 2026-10-11, slice 7b. Every control on both pages goes through `useCanEdit`, which now reads
+  the project's `my_access_level`. Found again by `ui-verifier` (7b UAT check 1) together with the same
+  gap on the BR page, Client organisation and External parties — all fixed in the same commit.
 
 ### VB-009 | A BR→data-entity link may land under an entity retired at the same instant (suspected) | OPEN
 

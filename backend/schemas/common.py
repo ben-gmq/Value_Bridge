@@ -30,35 +30,37 @@ class UserOut(Orm):
     display_name: str
     is_active: bool
     is_platform_admin: bool
+    user_kind: str                   # D-40: USER (edit) / VIEWER (read only)
     last_login_at: datetime | None
     row_version: int
+
+
+UserKind = Literal["USER", "VIEWER"]
 
 
 class UserIn(BaseModel):
     email: str = Email
     display_name: str = Field(min_length=1, max_length=200)
     initial_password: str = Field(min_length=10, max_length=200)
+    user_kind: UserKind                              # required, no API default (§8.2)
+
+
+class UserKindIn(BaseModel):
+    user_kind: UserKind
+    row_version: int
 
 
 class PlatformAdminIn(BaseModel):
     is_platform_admin: bool
     rationale: str = Field(min_length=1, max_length=500)
     row_version: int
-
-
-class GrantOut(Orm):
-    user_access_grant_id: int
-    project_id: int | None
-    program_id: int | None
-    granted_at: datetime
-    row_version: int
+    user_kind: UserKind | None = None                # required when removing admin rights (DR7-S6)
 
 
 class MeOut(BaseModel):
     user: UserOut
-    grant: GrantOut | None
-    project_role_code: str | None    # the grant's role, or None for admins / no grant
-    scope: str                        # PLATFORM_ADMIN / PROJECT / PROGRAM / NONE
+    scope: str                        # PLATFORM_ADMIN / STAFF (D-40)
+    user_kind: str
 
 
 class TokenOut(BaseModel):
@@ -107,6 +109,7 @@ class ProjectIn(BaseModel):
     # D-37: the components, closed under their dependencies (422 otherwise). The template is
     # provenance only, recorded in the audit; the UI pre-fills the list from it.
     component_codes: list[str] = Field(max_length=20)
+    is_restricted: bool                  # asked with no default (§8.10 risk 1, OR-6)
     template_code: str | None = Field(default=None, max_length=40)
     data_model_depth: Literal["KEYS_ONLY", "FULL"] = "FULL"          # D-39
 
@@ -134,7 +137,9 @@ class ProjectOut(Orm):
     start_date: date | None
     end_date: date | None
     data_model_depth: str
+    is_restricted: bool
     row_version: int
+    my_access_level: str | None = None   # VIEW / EDIT / ADMIN, on the single-project read (§8.6)
 
 
 class ComponentOut(BaseModel):
@@ -185,30 +190,58 @@ class ProgramMoveIn(BaseModel):
 
 
 # ---- access ----
-class GrantIn(BaseModel):
+class MemberIn(BaseModel):
     user_id: int
-    project_role_code: str
-    row_version: int | None = None       # required only for a role change on the same scope
+    access_level: Literal["EDIT", "VIEW"]
+    member_note: str | None = Field(default=None, max_length=500)
 
 
-class ReassignIn(BaseModel):
+class MemberPatch(BaseModel):
+    access_level: Literal["EDIT", "VIEW"]
+    row_version: int
+
+
+class MemberOut(BaseModel):
+    project_member_id: int
     user_id: int
-    project_role_code: str
-    rationale: str
-    project_id: int | None = None
-    program_id: int | None = None
+    display_name: str
+    user_kind: str
+    access_level: str
+    effective_level: str                 # the lower of the kind's cap and the membership level
+    member_note: str | None
+    row_version: int
+
+
+class MemberAddOut(MemberOut):
+    warnings: list[str] = []
+
+
+class PersonOut(BaseModel):
+    user_id: int
+    display_name: str
+    user_kind: str
 
 
 class EffectiveAccessOut(BaseModel):
-    grant_id: int | None
-    user_id: int
-    display_name: str
-    email: str
-    project_role_code: str
-    source: str
-    program: str | None
-    granted_at: datetime | None
-    row_version: int | None
+    is_restricted: bool
+    admins: list[PersonOut]
+    members: list[MemberOut]
+    staff: dict[str, int] | None         # counts by kind while unrestricted
+
+
+class RestrictionIn(BaseModel):
+    is_restricted: bool
+    confirm_hash: str | None = None      # omit for the preview
+
+
+class RestrictionOut(BaseModel):
+    restricted: bool
+    changed: bool
+    loses: list[PersonOut]
+    gains: list[PersonOut]
+    keeps: list[MemberOut]               # DR7-D2: who keeps access, and why
+    confirm_hash: str
+    applied: bool
 
 
 class CodeOut(Orm):

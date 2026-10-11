@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, authenticated, public
-from schemas.common import GrantOut, LoginIn, MeOut, SetupIn, TokenOut, UserOut
-from services import access, auth_service
+from schemas.common import LoginIn, MeOut, SetupIn, TokenOut, UserOut
+from services import auth_service
 
 router = GuardedRouter(prefix="/auth", tags=["auth"])
 _public = public()
@@ -32,7 +32,7 @@ def setup(body: SetupIn, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=MeOut, **_auth.route)
 def me(user: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
-    scope, g, code = access.describe_scope(db, user)          # M8 — logic in the service
-    return MeOut(user=UserOut.model_validate(user),
-                 grant=GrantOut.model_validate(g) if g else None,
-                 project_role_code=code, scope=scope)
+    # D-40: no grant to describe — the admin flag and the kind decide; a project's own level comes
+    # with GET /projects/{id} (my_access_level), since a restricted project may cap it.
+    return MeOut(user=UserOut.model_validate(user), user_kind=user.user_kind,
+                 scope="PLATFORM_ADMIN" if user.is_platform_admin else "STAFF")

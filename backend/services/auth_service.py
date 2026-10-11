@@ -52,7 +52,8 @@ def first_run_setup(db: Session, email: str, display_name: str, password: str) -
         raise HTTPException(409, "Setup is already complete")
     check_ftc_address(email)
     user = AppUser(email=email.strip(), display_name=display_name.strip(),
-                   password_hash=hash_password(password), is_platform_admin=True)
+                   password_hash=hash_password(password), is_platform_admin=True,
+                   user_kind="USER")                  # D-40: an admin falls back to USER (sara 7b L7)
     db.add(user)
     db.flush()
     audit.record(db, "FIRST_ADMIN_CREATED", actor_id=user.app_user_id,

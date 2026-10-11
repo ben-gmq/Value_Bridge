@@ -100,7 +100,7 @@ export default function DataEntitiesPage() {
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
   });
 
-  // Export is a read (REVIEWER may); template, validate and commit are edits, so Import hides.
+  // Export is a read (a read-only user may); template, validate and commit are edits, so Import hides.
   const exportList = useMutation({
     mutationFn: (slug) => importApi.export(projectId, slug),
     onSuccess: (name) => setNotice(t('data.import.exported', { name })),
@@ -131,8 +131,8 @@ export default function DataEntitiesPage() {
       renderCell: ({ row, tabIndex }) => row.is_active === false && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Chip size="small" variant="outlined" label={t('data.retiredChip')} />
-          <Button size="small" tabIndex={tabIndex} disabled={restore.isPending}
-            onClick={(e) => { e.stopPropagation(); setError(''); restore.mutate(row); }}>{t('data.restore')}</Button>
+          {canEdit && <Button size="small" tabIndex={tabIndex} disabled={restore.isPending}
+            onClick={(e) => { e.stopPropagation(); setError(''); restore.mutate(row); }}>{t('data.restore')}</Button>}
         </Stack>) }] : []),
   ];
 

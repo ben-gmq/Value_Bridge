@@ -5,14 +5,14 @@ asserted on every route family and its order against 404 and 403 is pinned."""
 from sqlalchemy import select
 
 from models import AuditEvent
-from tests.conftest import ALL_COMPONENTS, login
+from tests.conftest import ALL_COMPONENTS, login, restrict
 from tests.test_erd_api import erd, field, pk
 from tests.test_scope_api import API, ed, entity  # noqa: F401 — ed is a fixture
 
 
 def new_project(client, w, code, components, template=None, depth=None, expect=201):
     body = {"client_id": w["client_id"], "project_code": code, "project_name": code,
-            "component_codes": components}
+            "component_codes": components, "is_restricted": False}
     if template:
         body["template_code"] = template
     if depth:
@@ -23,9 +23,7 @@ def new_project(client, w, code, components, template=None, depth=None, expect=2
 
 
 def editor_on(client, w, project_id, user="editor"):
-    r = client.post(f"{API}/projects/{project_id}/access", headers=w["admin"],
-                    json={"user_id": w["users"][user], "project_role_code": "EDITOR"})
-    assert r.status_code == 201, r.text
+    """D-40: a USER edits every unrestricted project; nothing to grant."""
     return login(client, f"{user}@example.test")
 
 
@@ -106,10 +104,9 @@ def test_admins_are_refused_too_and_the_order_is_404_then_403_then_409(client, w
     body = {"solution_name": "S", "category_code": "PROCESS"}
     r = client.post(f"{API}/projects/{p}/solutions", headers=world["admin"], json=body)
     assert r.status_code == 409                                         # Q-20: admins gated too
+    restrict(client, world["admin"], p, {world["users"]["reviewer"]: "VIEW"})
     out = login(client, "outsider@example.test")
     assert client.post(f"{API}/projects/{p}/solutions", headers=out, json=body).status_code == 404
-    client.post(f"{API}/projects/{p}/access", headers=world["admin"],
-                json={"user_id": world["users"]["reviewer"], "project_role_code": "REVIEWER"})
     rv = login(client, "reviewer@example.test")
     assert client.post(f"{API}/projects/{p}/solutions", headers=rv, json=body).status_code == 403
 

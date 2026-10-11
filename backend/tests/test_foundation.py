@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import jwt
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 
 from database import SessionLocal
 from services import numbering
@@ -97,16 +97,24 @@ def test_retired_code_categories_stay_retired(db):
 
 # ---- declarative constraints (§5.3) -----------------------------------------------------
 
-def test_second_live_grant_refused_by_database(db, world):
-    """The partial unique index is the backstop behind grant_access's 409."""
-    role = db.execute(text("SELECT code_id FROM code_master WHERE category='PROJECT_ROLE' "
-                           "AND code='EDITOR' AND project_id IS NULL")).scalar()
-    uid, admin = world["users"]["editor"], world["users"]["owner"]
+def test_the_app_role_cannot_write_retired_grants(db, world):
+    """D-40 (0038): user_access_grant is history, SELECT-only for vb_app."""
     sql = text("INSERT INTO user_access_grant (app_user_id, project_id, project_role_code_id, "
-               "granted_by_user_id, created_by) VALUES (:u, :p, :r, :a, :a)")
-    db.execute(sql, {"u": uid, "p": world["p_solo"], "r": role, "a": admin})
+               "granted_by_user_id, created_by) VALUES (:u, :p, 1, :u, :u)")
+    with pytest.raises(ProgrammingError):
+        db.execute(sql, {"u": world["users"]["editor"], "p": world["p_solo"]})
+    db.rollback()
+    with pytest.raises(ProgrammingError):                       # sara 7b L3: UPDATE too
+        db.execute(text("UPDATE user_access_grant SET updated_at = now()"))
+    db.rollback()
+
+
+def test_two_live_memberships_of_one_user_on_one_project_are_refused(db, world):
+    sql = text("INSERT INTO project_member (project_id, app_user_id, access_level, created_by) "
+               "VALUES (:p, :u, 'VIEW', :u)")
+    db.execute(sql, {"u": world["users"]["editor"], "p": world["p_solo"]})
     with pytest.raises(IntegrityError):
-        db.execute(sql, {"u": uid, "p": world["p_fin"], "r": role, "a": admin})
+        db.execute(sql, {"u": world["users"]["editor"], "p": world["p_solo"]})
     db.rollback()
 
 

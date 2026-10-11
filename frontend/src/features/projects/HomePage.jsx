@@ -15,7 +15,7 @@ export default function HomePage() {
 
   return (
     <Page title={t('home.title')}
-      subtitle={isAdmin ? t('home.adminNote') : me?.scope === 'PROGRAM' ? t('home.programNote') : undefined}>
+      subtitle={isAdmin ? t('home.adminNote') : t(`home.kindNote.${me?.user_kind ?? 'VIEWER'}`)}>
       {(programs.data ?? []).length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h6" component="h2" sx={{ mb: 1.5 }}>{t('home.programs')}</Typography>

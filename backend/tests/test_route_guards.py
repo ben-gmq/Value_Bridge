@@ -11,10 +11,7 @@ from routers.guards import GUARD_DEPS, GUARD_KEY, GuardedRouter, RouteDefinition
 PUBLIC_ALLOWED = {("POST", "/auth/login"), ("GET", "/auth/setup"), ("POST", "/auth/setup")}
 # §9 lists these admin-only routes although they carry {project_id}. Named one by one, so
 # a new {project_id} route can never quietly skip PROJECT_CTX.
-PROJECT_ID_ADMIN_ALLOWED = {("DELETE", "/api/v1/programs/{program_id}/projects/{project_id}"),
-                            # D-37/D-39 (Q-10): platform-admin switches; 7b moves them to project_ctx("ADMIN")
-                            ("PUT", "/api/v1/projects/{project_id}/components"),
-                            ("PUT", "/api/v1/projects/{project_id}/data-model-depth")}
+PROJECT_ID_ADMIN_ALLOWED = {("DELETE", "/api/v1/programs/{program_id}/projects/{project_id}")}
 ID_PARAM = re.compile(r"\{(\w*id)\}")
 
 
@@ -58,8 +55,13 @@ def test_guards_fit_their_paths():
             if others and kind not in ("OBJECT_GUARD", "PROGRAM_CTX", "PLATFORM_ADMIN"):
                 bad.append(f"{m} {r.path}: an object-id route ({others}) must be OBJECT_GUARD")
         if kind in ("PROJECT_CTX", "PROGRAM_CTX", "OBJECT_GUARD") and \
-                not r.openapi_extra[GUARD_KEY]["min_role"]:
-            bad.append(f"{r.path}: {kind} without a minimum role")
+                not r.openapi_extra[GUARD_KEY]["min_level"]:
+            bad.append(f"{r.path}: {kind} without a minimum level")
+        # sara 7b M3: a write is never guarded at VIEW — a viewer can reach no write, by structure
+        if kind in ("PROJECT_CTX", "PROGRAM_CTX", "OBJECT_GUARD") and not r.methods <= {"GET", "HEAD"} \
+                and r.openapi_extra[GUARD_KEY]["min_level"] not in ("EDIT", "ADMIN"):
+            bad.append(f"{sorted(r.methods)} {r.path}: a write guarded at "
+                       f"{r.openapi_extra[GUARD_KEY]['min_level']}")
     assert bad == []
 
 
@@ -83,7 +85,7 @@ def test_spoofed_marker_without_the_dependency_is_caught(monkeypatch):
     from routers.guards import GUARD_KEY as K
     router = GuardedRouter()
     router.add_api_route("/spoof/{project_id}", lambda project_id: {}, methods=["GET"],
-                         openapi_extra={K: {"kind": "PROJECT_CTX", "min_role": "REVIEWER", "model": None}})
+                         openapi_extra={K: {"kind": "PROJECT_CTX", "min_level": "VIEW", "model": None}})
     spoof = [r for r in router.routes if isinstance(r, APIRoute)][0]
     attached = [GUARD_DEPS.get(id(d.dependency)) for d in spoof.dependencies]
     assert all(a is None for a in attached)   # nothing real is attached → the check above fails it
