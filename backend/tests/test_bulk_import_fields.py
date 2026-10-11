@@ -12,9 +12,10 @@ import openpyxl
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
-from database import SessionLocal
+from database import SessionLocal, engine  # noqa: F401
 from models import DataEntity, DataField, ImportRow
 from services import bulk, consistency_data, xlsx
 from services import data_entity as de_service
@@ -586,17 +587,22 @@ def test_m1_a_swap_of_referenced_fields_in_one_relationship_is_a_validation_erro
 
 @contextmanager
 def _timed_session(ms: int = 200):
-    """A session that gives up on a row lock after `ms` (55P03) instead of waiting for it."""
-    s = SessionLocal()
-    s.execute(text(f"SET lock_timeout = '{ms}ms'"))
-    s.commit()                                  # a SET inside a rolled-back transaction would vanish
+    """A session that gives up on a row lock after `ms` (55P03) instead of waiting for it. Bound to ONE
+    connection: a pooled session may check out a different connection after each commit (the pool is
+    FIFO), and the SET would then be on a connection the session no longer uses (slice 8: once more
+    sessions had run, the test waited forever)."""
+    conn = engine.connect()
+    conn.exec_driver_sql(f"SET lock_timeout = '{ms}ms'")
+    conn.commit()                               # a SET inside a rolled-back transaction would vanish
+    s = Session(bind=conn, autoflush=False, expire_on_commit=False)
     try:
         yield s
     finally:
-        s.rollback()
-        s.execute(text("RESET lock_timeout"))
-        s.commit()
         s.close()
+        conn.rollback()
+        conn.exec_driver_sql("RESET lock_timeout")
+        conn.commit()
+        conn.close()
 
 
 @contextmanager

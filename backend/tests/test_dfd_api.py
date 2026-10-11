@@ -342,7 +342,7 @@ def test_process_completeness_names_the_missing_input_and_output(client, ed, are
     assert mid["missing_input"] == [] and names(mid["missing_output"]) == ["Check credit"]
     out = consistency.consistency_check(ed["p"], db)            # the same gaps feed the freeze gate
     assert names(out["process_missing_input"]) == [] and names(out["process_missing_output"]) == ["Check credit"]
-    assert {"process_missing_input", "process_missing_output"} == consistency.FREEZE_BLOCKING_WARNINGS
+    assert {"process_missing_input", "process_missing_output"} <= consistency.FREEZE_BLOCKING_WARNINGS
 
 
 def test_io_licence_checks_are_empty_in_normal_use(client, ed, area):

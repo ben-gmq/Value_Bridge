@@ -307,4 +307,12 @@ place.
   steps are not shown on the step:** `as_is_support_on_to_be` lists them, but the panel renders only on as-is
   steps, so the consultant cannot unlink them there. Show a read-only list with Unlink on a to-be step while any
   exist. Related: restoring such a step with dependents needs `AS_IS` on (`ROW_COMPONENTS[ApplicationBfcNode]`).
-
+- sara 8 L6 · `sara`, slice 8 pre-commit, 2026-10-11 · LOW · **`COMPONENT_ROWS` probes no link tables**
+  (`br_solution`, `application_solution`, `fr_interface*`, legacy to-be `application_bfc_node`), so the
+  freeze's "a gate never silently drops a live row" leans on OR-1 and the must-be-empty dangling-link lines.
+  Add probes, or a test that a live link in an off component blocks the freeze.
+- sara 8 L7 · `sara`, slice 8 pre-commit, 2026-10-11 · LOW · **Baseline reads recompute the integrity
+  digest every time, and the diff is one synchronous response** (~50k rows a side at the A-35 bound, any
+  VIEWER). Cache `verify` per baseline (it cannot change) and page or stream the diff with D-50's screen.
+- sara 8 M4 (rest) · `sara`, slice 8 pre-commit, 2026-10-11 · LOW · **The first-freeze race (two v1.0s at
+  once) is held by `uq_baseline_first` + 23505 → 409 but not tested**; the prior-header race is.

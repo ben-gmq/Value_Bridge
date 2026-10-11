@@ -7,9 +7,9 @@ from services.baseline_shadow import parity_problems, shadow_table
 
 
 def test_shadow_drops_audit_and_pk_and_adds_snapshot_columns():
-    shadow = shadow_table(Client.__table__, MetaData(), baseline_fk=False)
+    shadow = shadow_table(Client.__table__, MetaData(), baseline_fk=False, source_fk=False)
     assert {c.name for c in shadow.columns} == {
-        "baseline_client_id", "baseline_id", "source_id", "client_code", "client_name", "industry"}
+        "baseline_client_id", "baseline_id", "source_id", "content_hash", "client_code", "client_name", "industry"}
     assert parity_problems(Client.__table__, shadow) == []
 
 

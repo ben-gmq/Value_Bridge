@@ -129,7 +129,7 @@ def object_guard(model: type, min_level: str, id_param: str = "id", component=No
     def dep(request: Request, user: AppUser = Depends(current_user),
             db: Session = Depends(get_db)):
         raw = request.path_params.get(id_param)
-        obj = db.get(model, int(raw)) if raw and str(raw).isdigit() else None
+        obj = db.get(model, int(raw)) if raw and str(raw).isdigit() and len(str(raw)) <= 18 else None   # sara 8 L4: no bigint overflow
         if obj is None:
             raise HTTPException(404, access.NOT_FOUND)
         owner = obj.owning_project_id()

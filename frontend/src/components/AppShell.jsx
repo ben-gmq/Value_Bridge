@@ -18,7 +18,7 @@ import { t } from '../i18n/t';
 export const NAV = [
   ['nav.dashboard', ''], ['nav.processes', 'processes'], ['nav.dfd', 'dfd', ['TO_BE_DFD', 'AS_IS']],
   ['nav.requirements', 'requirements'], ['nav.brfr', 'br-fr', ['SOLUTION', 'FUNCTION_REQUIREMENT']],
-  ['nav.interfaces', 'interfaces', ['APPLICATION']], ['nav.data', 'data'],
+  ['nav.interfaces', 'interfaces', ['APPLICATION']], ['nav.data', 'data'], ['nav.baselines', 'baselines'],
 ];
 
 const onFtc = (theme) => ({
@@ -100,8 +100,8 @@ function Header() {
           return (
             <Box key={key} component={RouterLink} to={path ? `${base}/${path}` : base}
               aria-current={active ? 'page' : undefined}
-              sx={(th) => ({ textDecoration: 'none', px: 1.5, py: 0.875, borderRadius: 999, fontSize: 14.5,
-                whiteSpace: 'nowrap', flexShrink: 0,
+              sx={(th) => ({ textDecoration: 'none', px: { xs: 1, xl: 1.5 }, py: 0.875, borderRadius: 999, fontSize: 14.5,
+                whiteSpace: 'nowrap', flexShrink: 0,                       // eight items fit at 1280 (UAT 8)
                 fontWeight: active ? 600 : 500,
                 color: active ? th.vars.palette.brand.ftc : th.vars.palette.brand.onFtc2,
                 bgcolor: active ? th.vars.palette.brand.onFtcPill : 'transparent',

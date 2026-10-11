@@ -177,7 +177,7 @@ def test_completeness_blocks_only_charts_whose_dfd_is_on(client, world, ed, db):
     _a, _b, s = step_in(client, ed)
     out = consistency_check(ed["p"], db)
     assert [r["bfc_node_id"] for r in out["process_missing_input"]] == [s["bfc_node_id"]]
-    assert set(FREEZE_BLOCKING_WARNINGS) == {"process_missing_input", "process_missing_output"}
+    assert {"process_missing_input", "process_missing_output"} <= set(FREEZE_BLOCKING_WARNINGS)
     t = client.post(f"{API}/projects/{ed['p']}/process-triggers", headers=ed["h"],
                     json={"trigger_name": "Customer calls", "trigger_kind": "EVENT"}).json()
     client.post(f"{API}/bfc-nodes/{s['bfc_node_id']}/triggers", headers=ed["h"], json={"process_trigger_id": t["process_trigger_id"]})

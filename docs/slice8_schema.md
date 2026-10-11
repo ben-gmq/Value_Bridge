@@ -580,3 +580,50 @@ by business columns except within one baseline, which the UK already narrows.
     one transaction, so a draft baseline cannot exist.
 24. **Serialization failures.** **Rec:** no automatic retry; 409 "Something changed while freezing. Nothing
     was saved; freeze again." A busy project may need a second click, which is visible and safe.
+
+---
+
+## 13. Design review round 1 — dispositions (design-auditor, 2026-10-11)
+
+7 findings (2 HIGH, 2 MEDIUM, 3 LOW), all fixed before the first commit. Ben's standing instruction
+(2026-10-11): recommendations are accepted.
+
+| # | Finding | Disposition |
+|---|---|---|
+| DR8-P1 HIGH | A checkpoint freeze while sign-off is pending leaves the signed version un-approvable (§5.2 accepted FROZEN only), and "agreed" was a status | **Fixed.** Approval may be recorded on a FROZEN **or SUPERSEDED** baseline; FROZEN → APPROVED, SUPERSEDED keeps its status and gains the approval set. `client_approved_on` must fall between the freeze date (ICT) and today. **The agreed baseline is the newest with a recorded approval** (`is_agreed` on the list and header), not a status — wave 2's CR targets it. The freeze preview names the baseline it supersedes and whether it still awaits sign-off; the audit row records it |
+| DR8-P2 MEDIUM | The typed confirmation binds the version label, not the content | **Fixed.** `/next` returns `preview_digest` (§DR8-S1's digest over the live set); the freeze body must carry it and the freeze recomputes it inside its snapshot → 409 "The scope changed since you opened this freeze" on mismatch |
+| DR8-D1 MEDIUM | A type change on a hashed column rewrites frozen evidence (ALTER … TYPE does not fire row triggers) | **Rule.** A shadow column's type is never ALTERed. A change to a shadowed live column's type **pauses for Ben** (destructive to evidence, law 10) and, if it changes the `::text` form of a hashed column, bumps `CURRENT_HASH_SPEC`. Recorded in `baseline_shadow.py` |
+| DR8-L1 LOW | The BR → BASELINED flip must bump `row_version` | **Already so** (`row_version + 1` in the bulk UPDATE); test `test_a_stale_br_form_after_a_freeze_is_409` |
+| DR8-L2 LOW | Separator/sentinel characters in text could forge a field boundary | **Fixed before pinning.** Each hashed value is length-prefixed: `char_length(v::text) || ':' || v::text`, NULL → `\x1e`. Literal-hash test pins it |
+| DR8-L3 LOW | A `to=live` diff read 24 SELECTs at READ COMMITTED | **Fixed.** Every diff runs in its own read-only REPEATABLE READ session |
+| DR8-S1 HIGH | `vb_app` keeps INSERT, so rows could be appended to an existing (even approved) baseline undetected | **Fixed twice.** (1) `trg_baseline_<t>_insert_guard` (AFTER INSERT, statement-level, transition table) refuses any row whose header was not written in the same transaction (`frozen_at = now()`). (2) `baseline.content_digest` = sha256 over every entity's ordered `source_id:content_hash` list, frozen with the header; the header read reports `intact`, and the diff and rows routes refuse (409) a baseline that fails it |
+
+**Questions the auditor raised for Ben, answered as recommended (D-48 pattern):**
+1. *Any staff USER may freeze or approve any unrestricted project (D-40).* Keep EDIT (S8-1, slice7 §8.6); the
+   freeze is audited with actor and the preview shows what is superseded. A project that needs a tighter
+   wall is restricted (OR-6).
+2. *Which baseline is contractual?* The newest with a recorded client approval (DR8-P1).
+3. *Evidence for an approval?* Optional `approval_reference` (the signed document's id or file hash), part of the
+   immutable approval set.
+4. *May a BASELINED BR go back to DRAFT/CONFIRMED by hand?* Yes — BR status is workflow, not hashed (Q-13); the
+   next freeze sets BASELINED again.
+5. *`client_approver_name` is personal data in an immutable column.* Erasure is by `purge_project` only
+   (Q15, before first client use); the name is a business signatory, recorded under the engagement contract.
+
+## 14. sara pre-commit audit — dispositions (2026-10-11)
+
+0 HIGH, 4 MEDIUM (all fixed), 7 LOW (5 fixed, 2 to the VB-005 backlog).
+
+| # | Finding | Disposition |
+|---|---|---|
+| M1 | An approval's empty optional fields could be filled in later | **Fixed** in 0047: once `client_approver_name` is set, no approval column may change. Test `test_a_recorded_approval_is_closed_even_its_empty_fields` |
+| M2 | The insert-guard test failed on the unique key before reaching the trigger | **Fixed**: inserts a row the baseline does not hold and matches the trigger's message; the other cases match trigger text (owner) or the grant refusal (app) |
+| M3 | The integrity check compared hashes only; the digest had no second record | **Fixed**: `verify` also recomputes every row's hash from its columns (`freeze_set.rehash_mismatches`); `BASELINE_FROZEN` records `content_digest` in the append-only audit |
+| M4 | Criteria 15, 30, 37 were argued, not tested | **Fixed**: failure partway (nothing written), an edit committed mid-freeze (in neither half), a concurrent change to the prior header (one 409, no new baseline). The first-freeze race (two v1.0s) rests on `uq_baseline_first` + 23505 → 409 and is not separately tested |
+| L1 | Every IntegrityError read "freeze again" | **Fixed**: only 23505 / 40001 / 40P01 → 409 |
+| L2 | Approve skipped the integrity check and allowed an older version after a newer approval | **Fixed** both |
+| L3 | Approve response always `is_agreed: false` | **Fixed** |
+| L4 | A 20-digit id overflowed bigint → 500 | **Fixed**: diff params max 18 digits; `object_guard` treats a longer id as not found (all routes) |
+| L5 | Hash-spec lookup was exact-key | **Fixed**: `freeze_set.columns_for` takes the newest list at or below the version; an entity that joined later diffs as ADDED |
+| L6 | Leak sweep's positive control missed parameterised baseline routes; doc citations; deviation row 4; link tables not probed by `COMPONENT_ROWS` | **Fixed** except the probe: OR-1 refuses switching a component off while its main rows live, and a live link under a retired parent is already a must-be-empty consistency error, so the gap is theoretical → VB-005 |
+| L7 | Rows paged in Python; every read recomputes the digest; the diff is synchronous at A-35 scale | Rows now **paged in SQL**. Digest-per-read and a synchronous large diff stay (a read is seconds at the bound) → VB-005, revisit with D-50's screen |

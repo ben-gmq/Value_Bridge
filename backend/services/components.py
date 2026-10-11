@@ -7,6 +7,7 @@ services call where the component depends on the body. Switching on and off goes
 rows (OR-1) or another enabled component needs it (OR-2).
 """
 import getpass
+from dataclasses import dataclass
 import hashlib
 import json
 import socket
@@ -71,6 +72,43 @@ COMPONENT_ROWS = {
 }
 
 
+@dataclass(frozen=True)
+class Gate:
+    """Which rows of a frozen table a baseline takes, given the components on (D-37, slice8_schema §3.2)."""
+    all_of: frozenset[str] = frozenset()        # every code on, else the table freezes no rows
+    any_of: frozenset[str] = frozenset()        # at least one on
+    by_step_set: dict | None = None             # {chart: component}: rows of that chart need it on; a chart
+                                                # missing from the dict is never filtered
+
+    def open(self, on: frozenset[str]) -> bool:
+        return self.all_of <= on and (not self.any_of or bool(self.any_of & on))
+
+    def closed_sets(self, on: frozenset[str]) -> list[str]:
+        return sorted(s for s, comp in (self.by_step_set or {}).items() if comp not in on)
+
+
+# [Q-12] Table gates plus a chart filter, never a column gate. A table not listed is always frozen. A gate
+# never silently drops a live row a project relies on: rows_in_off_component blocks the freeze instead.
+FREEZE_GATES: dict[str, Gate] = {
+    "bfc_node": Gate(by_step_set={"AS_IS": "AS_IS"}),
+    "bfc_node_data_entity": Gate(by_step_set={"AS_IS": "AS_IS"}),
+    "bfc_node_org_role": Gate(by_step_set={"AS_IS": "AS_IS"}),
+    "bfc_node_external_flow": Gate(by_step_set={"AS_IS": "AS_IS", "TO_BE": "TO_BE_DFD"}),
+    "bfc_node_trigger": Gate(by_step_set={"AS_IS": "AS_IS", "TO_BE": "TO_BE_DFD"}),
+    "process_trigger": Gate(any_of=frozenset({"TO_BE_DFD", "AS_IS"})),
+    "application": Gate(all_of=frozenset({"APPLICATION"})),
+    "application_bfc_node": Gate(all_of=frozenset({"APPLICATION"}), by_step_set={"AS_IS": "AS_IS"}),
+    "solution": Gate(all_of=frozenset({"SOLUTION"})),
+    "br_solution": Gate(all_of=frozenset({"SOLUTION"})),
+    "function_requirement": Gate(all_of=frozenset({"FUNCTION_REQUIREMENT"})),
+    "fr_interface": Gate(all_of=frozenset({"FUNCTION_REQUIREMENT", "APPLICATION"})),
+    "fr_interface_data_entity": Gate(all_of=frozenset({"FUNCTION_REQUIREMENT", "APPLICATION"})),
+    "application_solution": Gate(all_of=frozenset({"APPLICATION", "SOLUTION"})),
+    "effort_rate": Gate(all_of=frozenset({"EFFORT"})),
+}
+ALWAYS = Gate()
+
+
 # DR7-P2: the component(s) a row needs on before a restore may bring it back live.
 ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     Solution: ("SOLUTION",),
@@ -117,7 +155,7 @@ _catalogue = _rows(ProcessTrigger, ProcessTrigger.trigger_name)
 
 
 def rows_in_off_component(db: Session, project_id: int) -> list[dict]:
-    """INFORMATIONAL consistency line (DR7-P2): live rows of a component that is off — the
+    """Freeze-blocking consistency line (DR7-P2; slice 8 [Q-12]): live rows of a component that is off — the
     reconciliation for any gating gap. Empty when the guard and the restore checks hold."""
     on = enabled(db, project_id)
     out = []
