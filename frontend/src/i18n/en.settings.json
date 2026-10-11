@@ -65,5 +65,7 @@
   "settings.org.unitRestored": "Unit restored",
   "settings.org.roleRetired": "Role retired",
   "settings.org.roleRestored": "Role restored",
-  "settings.codeRetired": "{code} (no longer offered)"
+  "settings.codeRetired": "{code} (no longer offered)",
+  "settings.rateCard": "Rate card",
+  "settings.rateCardWhat": "Standard man-days per FR type and complexity, used to price function requirements"
 }

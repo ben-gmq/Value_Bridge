@@ -61,8 +61,7 @@ default. Riskiest concern: **days that do not come from the card** (typed, stale
   Unassigned bucket and unrated count; reviewer 403 on writes, outsider 404.
 - ui-verifier: Settings → Rate card shows the grid → change one cell with a reason → rate an FR → change
   its type → summary updates → reviewer read-only.
-- **Proposed separately, not in this slice (needs Ben's OK):** a mutation harness proving the effort tests
-  go red when the derivation is broken (Grade 1 rule).
+- **Done in-slice as a one-off check (not a harness):** three deliberate breakages of the derivation (days ≠ card, off-rate count inverted, type change keeping old days) each turned the effort tests red; code restored byte-for-byte. A standing mutation harness stays a separate ask.
 - **Deliberately uncovered:** two editors changing the same cell at the same instant (row_version decides).
 
 ## 9. Acceptance

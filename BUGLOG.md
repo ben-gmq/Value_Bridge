@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 43 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -284,7 +284,7 @@ place.
 - sara L-1 · `sara`, Slice 5 pre-commit review, 2026-10-09 · LOW · **The link panel flags a
   rejected solution by matching the code `REJECTED`** in the browser (S5-2). Before the coverage
   report counts answers server-side, give `SOLUTION_STATUS` a `behaviour_code` (e.g.
-  `NOT_AN_ANSWER`) and branch on that, as law 5 does for FR type and RACI. **Also the server copy in `services/function_requirement.py::_warnings`** (S6a-5). **And `services/interface.py::_pair_matches` matches `INTERFACE_PATTERN` code `BIDIRECTIONAL`** (S6b2-3; the category is not system — sara 6b-2 L2): give it a behaviour or make it system.
+  `NOT_AN_ANSWER`) and branch on that, as law 5 does for FR type and RACI. **Also the server copy in `services/function_requirement.py::_warnings`** (S6a-5). **And `services/interface.py::_pair_matches` matches `INTERFACE_PATTERN` code `BIDIRECTIONAL`** (S6b2-3; the category is not system — sara 6b-2 L2): give it a behaviour or make it system. **And `services/effort.py::summary` sets rejected-solution FRs apart by `SOLUTION_STATUS` code `REJECTED`** (S6c-8).
 - sara L-2 · same review · LOW · **`create_solution` needs `SOLUTION_STATUS/PROPOSED`**, a
   non-system category: a project override that retires it makes every create a 500 (as
   `BR_STATUS/DRAFT` already does for steps). Ben to rule: seed it `is_system=True`, or have
@@ -295,4 +295,9 @@ place.
 - design-auditor note · Slice 6b-2 design review, 2026-10-11 · LOW · **`maintain_fr_types`' override re-point** is
   refused by `fk_fri_fr_behaviour` when it would change a live interface FR's behaviour — today a generic FK 409.
   Name it ("…has interface detail") when the code-maintenance slice is built.
+- sara L-2 · `sara`, Slice 6c pre-commit review, 2026-10-11 · LOW · **`effort_rate` grants are table-wide:** the
+  change-guard trigger refuses a days change without a new version and a non-blank reason, but accepts a reused
+  reason, and a key re-point (type/complexity) is unguarded. Revoke table UPDATE and grant column-level UPDATE
+  (`standard_days, change_rationale, row_version, updated_by, is_active`), as 0019 does; add the key columns back
+  with A-16. Needs a migration on `main`.
 

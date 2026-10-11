@@ -14,6 +14,7 @@ import { t } from '../../i18n/t';
 import { Mono, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { FrWarnings, solutionOptions } from './frKit';
 import { InterfaceCard } from './InterfaceCard';
+import { FrEffort } from '../effort/FrEffort';
 
 const pickFr = (f) => ({ fr_name: f.fr_name ?? '', fr_type_code: f.fr_type_code,
   fulfilment_status_code: f.fulfilment_status_code, solution_id: f.solution_id ?? '',
@@ -32,6 +33,7 @@ export default function FrPage() {
   const form = useEditForm(fr, pickFr);
   const [notice, setNotice] = useState('');
   const [warnings, setWarnings] = useState([]);
+  const [effortChange, setEffortChange] = useState(null);     // DR6c-P2: a type change re-priced the FR
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
 
@@ -52,7 +54,8 @@ export default function FrPage() {
       return frApi.update(fr.fr_id, body);
     },
     onSaved: (row) => { form.saved(row); qc.setQueryData(keys.fr(frId), row); refreshAll();
-      setWarnings(row.warnings ?? []); setNotice(t('frs.saved')); },
+      setWarnings((row.warnings ?? []).filter((w) => w !== 'effort_changed')); setEffortChange(row.effort_change ?? null);
+      setNotice(t('frs.saved')); },
   });
   const reload = async () => {
     try {
@@ -148,6 +151,9 @@ export default function FrPage() {
       {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
       {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
       <FrWarnings warnings={warnings} onClose={() => setWarnings([])} />
+      {effortChange && (
+        <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setEffortChange(null)}>
+          {t('effort.fr.changed', { from: effortChange.previous_days ?? t('effort.fr.notRated'), to: effortChange.new_days })}</Alert>)}
 
       <Card>
         <CardContent>
@@ -161,15 +167,20 @@ export default function FrPage() {
               {select('fulfilment_status_code', statuses.map((c) => ({ value: c.code, label: c.label })))}</Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               {select('solution_id', solOpts, { allowEmpty: true, emptyLabel: t('frs.noSolution') })}</Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>{t('frs.effortLater')}</Typography>
-            </Grid>
+            <Grid size={{ xs: 12, md: 6 }} />
             <Grid size={12}>{text('description', 3)}</Grid>
             <Grid size={12}>{text('acceptance_note')}</Grid>
           </Grid>
         </CardContent>
       </Card>
 
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <FrEffort key={`${fr.row_version}-${fr.complexity_code}`} projectId={projectId} fr={fr}
+            onRated={(row) => { qc.setQueryData(keys.fr(frId), row); form.rebase(row); refreshAll();   // keeps typed edits (sara M-1)
+              setNotice(row.effort_days != null ? t('effort.fr.rated', { days: row.effort_days }) : t('frs.saved')); }} />
+        </CardContent>
+      </Card>
       {/* D-27: only an FR whose type behaves as an interface carries interface detail (never a code test) */}
       {fr.fr_type_behaviour === 'INTERFACE' && <InterfaceCard projectId={projectId} fr={fr} onNotice={setNotice} />}
 

@@ -240,3 +240,11 @@ export const ifaceApi = {
   remove: (frId, rowVersion) => del(`${V}/function-requirements/${frId}/interface`, rowVersion),
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/interfaces`, { params })),
 };
+
+// Slice 6c (docs/slice6c_spec.md). Effort days are derived from the card, never sent (VB law 6).
+export const effortApi = {
+  card: (projectId) => d(http.get(`${P(projectId)}/rate-card`)),
+  saveCard: (projectId, body) => d(http.put(`${P(projectId)}/rate-card`, body)),
+  rate: (frId, body) => d(http.patch(`${V}/function-requirements/${frId}/complexity`, body)),
+  summary: (projectId) => d(http.get(`${P(projectId)}/effort-summary`)),
+};

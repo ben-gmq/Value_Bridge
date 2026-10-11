@@ -6,7 +6,7 @@ import { t } from '../../i18n/t';
 
 // Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9).
 const ITEMS = [['access', links.access], ['organisation', links.organisation], ['parties', links.parties],
-  ['applications', links.applications]];
+  ['applications', links.applications], ['rateCard', links.rateCard]];
 
 export default function SettingsPage() {
   const { projectId } = useParams();

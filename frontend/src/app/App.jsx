@@ -27,6 +27,8 @@ import SolutionPage from '../features/solutions/SolutionPage';
 import FrsPage from '../features/frs/FrsPage';
 import FrPage from '../features/frs/FrPage';
 import InterfacesPage from '../features/interfaces/InterfacesPage';
+import EffortPage from '../features/effort/EffortPage';
+import RateCardPage from '../features/effort/RateCardPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
@@ -42,9 +44,9 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
-  ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
+  ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
-  ['settings/applications', ApplicationsPage], ['settings/applications/:appId', ApplicationPage],
+  ['settings/applications', ApplicationsPage], ['settings/rate-card', RateCardPage], ['settings/applications/:appId', ApplicationPage],
 ];
 
 /** The shell's "DFD" item: a DFD is drawn for one branch of the chart, so it opens the chart

@@ -13,7 +13,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import BusinessRequirement, FunctionRequirement, Solution
-from services import audit, interface, lifecycle, numbering
+from services import audit, effort, interface, lifecycle, numbering
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -134,7 +134,9 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
     lifecycle.lock(db, fr)                  # FOR UPDATE: a type change serialises with an interface PUT (sara 6b-2 L1)
     lifecycle.check_live(fr, row_version)
     before = {"previous_solution_number": fr.solution_row.solution_number if fr.solution_row else None,
-              "previous_fr_type_code": fr.fr_type_code}
+              "previous_fr_type_code": fr.fr_type_code,
+              "previous_effort_days": str(fr.effort_days) if fr.effort_days is not None else None}
+    moved_days = None
     sol = fr.solution_row
     if solution_id is not _UNSET:
         sol = _solution(db, fr.project_id, solution_id) if solution_id is not None else None
@@ -152,6 +154,7 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
         if (fr.fr_type_behaviour == "INTERFACE" and ftype.behaviour_code != "INTERFACE"   # behaviour, not code
                 and interface.live_detail_exists(db, fr.fr_id)):                         # criterion 102
             raise HTTPException(409, "This FR has interface detail. Remove it first, or keep an interface type")
+        moved_days = effort.rederive_on_type_change(db, fr, ftype.code_id)                  # D-13; 422 if no cell
         fr.fr_type_code_id, fr.fr_type_behaviour = ftype.code_id, ftype.behaviour_code
         retyped = True
     if status_code is not None:
@@ -164,8 +167,11 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
                      detail={"label": lifecycle.label(fr), **before})
     db.flush()
     warnings = _warnings(db, fr, sol)
+    if moved_days:                                         # DR6c-P2: a type change that moved the days says so
+        warnings.append("effort_changed")
     db.commit()
     db.refresh(fr)
+    fr.effort_change = {"previous_days": moved_days[0], "new_days": moved_days[1]} if moved_days else None
     return fr, warnings
 
 

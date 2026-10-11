@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import AppUser, Client, CodeMaster, Program, Project, UserAccessGrant
-from services import access, audit, numbering
+from services import access, audit, effort, numbering
 from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
 
@@ -72,9 +72,10 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     db.add(p)
     db.flush()
     numbering.seed_all(db, p.project_id)            # all ten series, same transaction (R2-D14)
-    # Later slices add here: seed EFFORT_RATE and copy CONTROL_RULE house defaults (§7.13).
+    cells = effort.seed_rate_card(db, p.project_id, actor.app_user_id)   # same transaction (§7.10, S6c-1)
+    # A later slice copies CONTROL_RULE house defaults here (§7.13).
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
-                 detail={"program_id": program_id})
+                 detail={"program_id": program_id, **cells})
     db.commit()
     return p
 
