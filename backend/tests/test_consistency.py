@@ -9,10 +9,12 @@ def test_the_report_carries_the_purge_and_the_fieldless_entity_lines(client, ed,
     assert r.status_code == 201, r.text
     out = consistency_check(ed["p"], db)
     assert set(out) == {"purge_overdue", "entities_without_fields", "brsol_under_inactive",
-                        "fr_under_inactive_solution"}
+                        "fr_under_inactive_solution", "appsol_under_inactive", "appnode_under_inactive",
+                        "as_is_allocated", "as_is_support_by_to_be"}
     assert [e["de_name"] for e in out["entities_without_fields"]] == ["Lonely"]
     assert consistency_check(None, db)["entities_without_fields"] == []   # per project only
     # The must-be-empty lines (Slices 5 and 6a) are the ones that can refuse a freeze.
-    must_be_empty = {"brsol_under_inactive", "fr_under_inactive_solution"}
+    must_be_empty = {"brsol_under_inactive", "fr_under_inactive_solution", "appsol_under_inactive",
+                     "appnode_under_inactive", "as_is_allocated"}
     assert set(out) - consistency.INFORMATIONAL - consistency.WARNINGS == must_be_empty
     assert all(out[k] == [] for k in must_be_empty)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from auth.dependencies import current_user
 from database import get_db
-from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
+from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolution, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
                     BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
                     ExternalEntity, OrgRole, OrgUnit, BrSolution, FunctionRequirement, Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
@@ -25,12 +25,14 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            ProcessIn, ProcessOut, RaciIn, ReorderIn, RestoreCountOut,
                            RetireConfirmIn, RetirePreviewOut, StepIoIn, StepIoOut,
                            StepRaciOut, TreeNodeOut)
+from schemas.application import (AllocationIn, AllocationOut, ApplicationIn, ApplicationListOut,
+                                 ApplicationOut, ApplicationPatch, LinkNotePatch, SupportIn, SupportOut)
 from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
-from services import function_requirement as fr_service, solution as sol_service
+from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
 _read = project_ctx("REVIEWER")
@@ -367,6 +369,101 @@ def list_solution_frs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session 
 @router.get("/business-requirements/{id}/function-requirements", response_model=list[BrFrOut], **_br_r.route)
 def list_br_frs(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return fr_service.frs_of_br(db, br)
+
+
+# ---- applications: catalogue, to-be allocation, as-is support (§7.5, D-8, docs/slice6b1_spec.md)
+_app_r, _app_w = _og(Application, "REVIEWER"), _og(Application, "EDITOR")
+
+
+@router.get("/projects/{project_id}/applications", response_model=list[ApplicationListOut], **_read.route)
+def list_applications(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+    return [ApplicationListOut.model_validate(a).model_copy(update={"live_solution_count": ns, "live_step_count": nn})
+            for a, ns, nn in app_service.list_applications(db, project_id, include_retired)]
+
+
+@router.post("/projects/{project_id}/applications", response_model=ApplicationOut, status_code=201, **_edit.route)
+def create_application(project_id: int, body: ApplicationIn, user: AppUser = Depends(current_user),
+                       db: Session = Depends(get_db)):
+    return app_service.create_application(db, _uid(user), project_id, body.application_code, body.application_name,
+                                          body.lifecycle_code, body.kind_code,
+                                          body.model_dump(include={"vendor", "version_label", "description"}))
+
+
+@router.get("/applications/{id}", response_model=ApplicationOut, **_app_r.route)
+def read_application(id: int, app: Application = Depends(_app_r.dep)):
+    return app
+
+
+@router.patch("/applications/{id}", response_model=ApplicationOut, **_app_w.route)
+def update_application(id: int, body: ApplicationPatch, app: Application = Depends(_app_w.dep),
+                       user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    app, warnings = app_service.update_application(db, _uid(user), app, body.row_version,
+                                                   body.model_dump(exclude_unset=True, exclude={"row_version"}))
+    return ApplicationOut.model_validate(app).model_copy(update={"warnings": warnings})
+
+
+_retire_and_restore("applications", Application, ApplicationOut, on_restore=app_service.restore_application)
+
+
+@router.get("/applications/{id}/solutions", response_model=list[AllocationOut], **_app_r.route)
+def list_application_solutions(id: int, app: Application = Depends(_app_r.dep), db: Session = Depends(get_db)):
+    return app_service.allocations(db, application_id=app.application_id)
+
+
+@router.get("/applications/{id}/bfc-nodes", response_model=list[SupportOut], **_app_r.route)
+def list_application_steps(id: int, app: Application = Depends(_app_r.dep), db: Session = Depends(get_db)):
+    return app_service.supports(db, application_id=app.application_id)
+
+
+@router.get("/solutions/{id}/applications", response_model=list[AllocationOut], **_sol_r.route)
+def list_solution_applications(id: int, sol: Solution = Depends(_sol_r.dep), db: Session = Depends(get_db)):
+    return app_service.allocations(db, solution_id=sol.solution_id)
+
+
+@router.post("/solutions/{id}/applications", response_model=AllocationOut, status_code=201, **_sol_w.route)
+def allocate_application(id: int, body: AllocationIn, sol: Solution = Depends(_sol_w.dep),
+                         user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return app_service.as_alloc(app_service.link_solution(db, _uid(user), sol, body.application_id, body.note))
+
+
+@router.patch("/solutions/{id}/applications/{link_id}", response_model=AllocationOut, **_sol_w.route)
+def edit_allocation(id: int, link_id: int, body: LinkNotePatch, sol: Solution = Depends(_sol_w.dep),
+                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = _child(db, ApplicationSolution, link_id, "solution_id", sol.solution_id)
+    return app_service.as_alloc(app_service.edit_note(db, _uid(user), row, body.row_version, body.note))
+
+
+@router.delete("/solutions/{id}/applications/{link_id}", status_code=204, **_sol_w.route)
+def unallocate_application(id: int, link_id: int, row_version: int, sol: Solution = Depends(_sol_w.dep),
+                           user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    app_service.unlink(db, _uid(user), _child(db, ApplicationSolution, link_id, "solution_id", sol.solution_id),
+                       row_version)
+
+
+@router.get("/bfc-nodes/{id}/applications", response_model=list[SupportOut], **_node_r.route)
+def list_step_applications(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    return app_service.supports(db, bfc_node_id=node.bfc_node_id)
+
+
+@router.post("/bfc-nodes/{id}/applications", response_model=SupportOut, status_code=201, **_node_w.route)
+def link_step_application(id: int, body: SupportIn, node: BfcNode = Depends(_node_w.dep),
+                          user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row, warnings = app_service.link_step(db, _uid(user), node, body.application_id, body.note)
+    return {**app_service.as_support(row), "warnings": warnings}
+
+
+@router.patch("/bfc-nodes/{id}/applications/{link_id}", response_model=SupportOut, **_node_w.route)
+def edit_step_application(id: int, link_id: int, body: LinkNotePatch, node: BfcNode = Depends(_node_w.dep),
+                          user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = _child(db, ApplicationBfcNode, link_id, "bfc_node_id", node.bfc_node_id)
+    return app_service.as_support(app_service.edit_note(db, _uid(user), row, body.row_version, body.note))
+
+
+@router.delete("/bfc-nodes/{id}/applications/{link_id}", status_code=204, **_node_w.route)
+def unlink_step_application(id: int, link_id: int, row_version: int, node: BfcNode = Depends(_node_w.dep),
+                            user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    app_service.unlink(db, _uid(user), _child(db, ApplicationBfcNode, link_id, "bfc_node_id", node.bfc_node_id),
+                       row_version)
 
 
 # ---- data entities and fields (§7.4) ------------------------------------------------------
