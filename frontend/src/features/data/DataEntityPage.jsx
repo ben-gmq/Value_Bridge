@@ -9,6 +9,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import { dataApi } from '../../api/scope';
 import { errorText, isStale } from '../../api/client';
 import { keys, links } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
@@ -153,6 +154,7 @@ function useRefFieldNames(fields) {
 
 export default function DataEntityPage() {
   const { projectId, deId } = useParams();
+  const canEdit = useCanEdit();             // UAT 7b / VB-008: viewers see no edit controls
   const qc = useQueryClient();
   const de = useQuery({ queryKey: keys.entity(deId), queryFn: () => dataApi.get(deId) });
   const [showRetired, setShowRetired] = useState(false);
@@ -236,7 +238,7 @@ export default function DataEntityPage() {
           <Chip size="small" variant="outlined" label={t('data.field.groupNo', { n: row.fk_group_no })} />
         </Stack>
       ) : none) },
-    { field: 'actions', headerName: '', width: 170, sortable: false, renderCell: ({ row, tabIndex }) => !retired && (
+    { field: 'actions', headerName: '', width: 170, sortable: false, renderCell: ({ row, tabIndex }) => !retired && canEdit && (
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', height: '100%' }}>
         {row.is_active === false ? (<>
           <Chip size="small" variant="outlined" label={t('data.retiredChip')} />
@@ -260,7 +262,7 @@ export default function DataEntityPage() {
     <Page title={title}
       subtitle={entity && fieldsQ.isSuccess && usedQ.isSuccess
         && t('data.detailSubtitle', { fields: fields.length, used: used.length })}
-      actions={entity && (retired
+      actions={entity && canEdit && (retired
         ? <Button variant="contained" disabled={restoreEntity.isPending} onClick={() => { setError(''); restoreEntity.mutate(); }}>{t('data.restore')}</Button>
         : <Button variant="outlined" color="warning" onClick={() => { setError(''); setConfirm('entity'); }}>{t('data.retireEntity')}</Button>)}>
       {pageError && <Alert severity="error" sx={ERR_SX}>{pageError}</Alert>}
@@ -268,7 +270,7 @@ export default function DataEntityPage() {
         <Link component={RouterLink} to={links.data(projectId)} sx={{ fontSize: 13, color: 'brand.link' }}>{t('data.back')}</Link>
       </Box>
       {retired && <Alert severity="warning" sx={{ mb: 2 }}>{t('data.retiredBanner')}</Alert>}
-      {entity && <EntityForm key={`${entity.data_entity_id}-${entity.is_active}`} entity={entity} disabled={retired}
+      {entity && <EntityForm key={`${entity.data_entity_id}-${entity.is_active}`} entity={entity} disabled={retired || !canEdit}
         onSaved={(saved) => { qc.setQueryData(keys.entity(deId), saved); qc.invalidateQueries({ queryKey: keys.entities(projectId) });
           setNotice({ text: t('data.saved') }); }} />}
       {entity && (
@@ -279,7 +281,7 @@ export default function DataEntityPage() {
                 <FormControlLabel label={t('data.showRetired')} slotProps={{ typography: { sx: { fontSize: 13 } } }}
                   control={<Switch id="df-show-retired" size="small" checked={showRetired}
                     onChange={(e) => setShowRetired(e.target.checked)} />} />
-                {!retired && <Button size="small" variant="outlined" startIcon={<AddRounded />}
+                {!retired && canEdit && <Button size="small" variant="outlined" startIcon={<AddRounded />}
                   disabled={!fieldsQ.isSuccess}
                   onClick={() => { setError(''); setEditing('new'); }}>{t('data.field.add')}</Button>}
               </Stack>)}>
@@ -311,7 +313,7 @@ export default function DataEntityPage() {
         busy={retireField.isPending} onClose={() => setConfirm(null)} onConfirm={() => retireField.mutate(confirm)} />
       <Snackbar open={Boolean(notice)} autoHideDuration={notice?.restore ? 8000 : 3000} onClose={() => setNotice(null)}
         message={notice?.text}
-        action={notice?.restore && (
+        action={notice?.restore && canEdit && (
           <Button size="small" color="inherit" disabled={restoreField.isPending}
             onClick={() => { setError(''); restoreField.mutate(notice.restore); }}>{t('data.restore')}</Button>)} />
     </Page>

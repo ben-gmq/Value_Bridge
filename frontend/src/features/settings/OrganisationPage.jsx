@@ -7,6 +7,7 @@ import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import { errorText } from '../../api/client';
 import { orgApi } from '../../api/scope';
 import { keys } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page, WrapperBox } from '../../components/Page';
@@ -32,6 +33,7 @@ function buildTree(units) {
 
 export default function OrganisationPage() {
   const { projectId } = useParams();
+  const canEdit = useCanEdit();             // UAT 7b: viewers see no edit controls
   const qc = useQueryClient();
   const [showRetired, setShowRetired] = useState(false);
   // include_retired is requested for "Show retired"; see the hand-back note on api/scope.js.
@@ -143,7 +145,7 @@ export default function OrganisationPage() {
     { field: 'responsibility_desc', headerName: t('settings.org.responsibility'), flex: 1.5, minWidth: 180 },
     { field: 'headcount', headerName: t('settings.org.headcount'), width: 110, type: 'number' },
     { field: 'actions', headerName: '', width: 170, sortable: false, filterable: false,
-      renderCell: ({ row }) => (
+      renderCell: ({ row }) => canEdit && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           {row.is_active ? (
             <>
@@ -168,6 +170,7 @@ export default function OrganisationPage() {
         error={error || (unitsQ.error && errorText(unitsQ.error)) || (rolesQ.error && errorText(rolesQ.error))}>
         <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 1 }}>{t('settings.org.raciHelp')}</Typography>
         <WrapperBox>
+          {canEdit && <>
           <Button variant="contained" onClick={() => open(() => setUnitDialog({ row: null, parent: null }))}>
             {t('settings.org.addTop')}</Button>
           <Button variant="outlined" disabled={!canAddChild}
@@ -181,6 +184,7 @@ export default function OrganisationPage() {
             <Button color="warning" disabled={!selected} onClick={() => open(() => setConfirm({ kind: 'unit', row: selected }))}>
               {t('settings.org.retireUnit')}</Button>
           )}
+          </>}
           <ShowRetired id="org-show-retired" checked={showRetired} onChange={setShowRetired} />
           {selected?.is_active && selected.level_no >= MAX_LEVEL && (
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('settings.org.maxLevel')}</Typography>
@@ -216,8 +220,8 @@ export default function OrganisationPage() {
                         </Typography>
                         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{levelLabel(selected.level_code)}</Typography>
                       </Box>
-                      <Button variant="contained" size="small" disabled={!selected.is_active}
-                        onClick={() => open(() => setRoleDialog({ row: null }))}>{t('settings.org.addRole')}</Button>
+                      {canEdit && <Button variant="contained" size="small" disabled={!selected.is_active}
+                        onClick={() => open(() => setRoleDialog({ row: null }))}>{t('settings.org.addRole')}</Button>}
                     </Stack>
                     {selected.description && (
                       <Typography sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary', mb: 1.5 }}>{selected.description}</Typography>

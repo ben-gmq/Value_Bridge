@@ -10,6 +10,7 @@ import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { useComponents } from '../../app/useComponents';
+import { useCanEdit } from '../../app/useCanEdit';
 import { t } from '../../i18n/t';
 import { LevelBadge, Mono, RaciPanel, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CrudGrid } from './CrudGrid';
@@ -27,6 +28,7 @@ const pickBr = (b) => ({ br_statement: b.br_statement ?? '', business_logic: b.b
 export default function RequirementPage() {
   const { projectId, brId } = useParams();
   const { isOn } = useComponents(projectId);
+  const canEdit = useCanEdit();             // UAT 7b: a viewer sees the page, not its controls
   const qc = useQueryClient();
   const brQ = useQuery({ queryKey: keys.br(brId), queryFn: () => brApi.get(brId) });
   const br = brQ.data;
@@ -94,6 +96,7 @@ export default function RequirementPage() {
 
   const v = form.values;
   const live = br.is_active;
+  const editable = live && canEdit;
   const statusSettable = SETTABLE_STATUSES.includes(form.base.status_code);
   const busy = save.m.isPending || retire.isPending || restore.isPending;
   const statusOptions = statuses.filter((c) => SETTABLE_STATUSES.includes(c.code)).map((c) => ({ value: c.code, label: c.label }));
@@ -101,7 +104,7 @@ export default function RequirementPage() {
     output_expectation: t('requirements.output'), status_code: t('requirements.status') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], k === 'status_code' ? getLabel(v[k]) : v[k]]));
   const text = (name, label, rows = 2) => (
-    <TextField fullWidth multiline minRows={rows} id={`br-${name}`} label={label} disabled={!live} value={v[name]}
+    <TextField fullWidth multiline minRows={rows} id={`br-${name}`} label={label} disabled={!editable} value={v[name]}
       onChange={(e) => form.set(name, e.target.value)} slotProps={{ htmlInput: { maxLength: 8000 } }} />
   );
 
@@ -125,14 +128,14 @@ export default function RequirementPage() {
         </Box>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           {!live && <Chip variant="outlined" label={t('processes.retiredChip')} />}
-          {live ? (
+          {canEdit && (live ? (
             <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('requirements.retire')}</Button>
           ) : (
             <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('requirements.restore')}</Button>
-          )}
-          <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>
-          <Button variant="contained" disabled={!live || !form.dirty || busy}
-            onClick={() => { save.setError(''); save.m.mutate(); }}>{t('requirements.save')}</Button>
+          ))}
+          {canEdit && <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>}
+          {canEdit && <Button variant="contained" disabled={!editable || !form.dirty || busy}
+            onClick={() => { save.setError(''); save.m.mutate(); }}>{t('requirements.save')}</Button>}
         </Stack>
       </Stack>
       {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
@@ -150,7 +153,7 @@ export default function RequirementPage() {
             <Grid size={12}>{text('business_logic', t('requirements.logic'), 3)}</Grid>
             <Grid size={{ xs: 12, md: 8 }}>{text('output_expectation', t('requirements.output'))}</Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              {statusSettable ? (
+              {statusSettable && editable ? (
                 <SimpleSelect id="br-status" label={t('requirements.status')} value={v.status_code}
                   onChange={(s) => form.set('status_code', s)} options={statusOptions} />
               ) : (
@@ -165,16 +168,16 @@ export default function RequirementPage() {
           <Divider sx={{ my: 3 }} />
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, lg: 7 }}>
-              <CrudGrid projectId={projectId} br={br} disabled={!live} />
+              <CrudGrid projectId={projectId} br={br} disabled={!editable} />
             </Grid>
             <Grid size={{ xs: 12, lg: 5 }}>
-              <RaciPanel projectId={projectId} queryKey={[...keys.br(brId), 'roles']} disabled={!live}
+              <RaciPanel projectId={projectId} queryKey={[...keys.br(brId), 'roles']} disabled={!editable}
                 list={() => brApi.roles(br.br_id)} link={(body) => brApi.linkRole(br.br_id, body)}
                 unlink={(id, rv) => brApi.unlinkRole(br.br_id, id, rv)} linkId="br_org_role_id" single={BR_SINGLE} />
             </Grid>
           </Grid>
           {isOn('SOLUTION') && <><Divider sx={{ my: 3 }} />
-            <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!live} /></>}
+            <SolutionLinkPanel projectId={projectId} side="br" br={br} disabled={!editable} /></>}
           {isOn('FUNCTION_REQUIREMENT') && <><Divider sx={{ my: 3 }} />
             <FrTracePanel projectId={projectId} side="br" id={br.br_id} /></>}
         </CardContent>
