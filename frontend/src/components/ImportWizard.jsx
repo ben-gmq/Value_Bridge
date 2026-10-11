@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
-  Radio, RadioGroup, Stack, Step, StepLabel, Stepper, Table, TableBody, TableCell, TableHead, TablePagination,
-  TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
+  Radio, RadioGroup, Stack, Table, TableBody, TableCell, TableHead, TablePagination,
+  TableRow, TextField, Typography } from '@mui/material';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import UploadFileRounded from '@mui/icons-material/UploadFileRounded';
 import { errorText, isStale } from '../api/client';
 import { importApi } from '../api/scope';
 import { keys } from '../app/links';
+import { Steps } from '../features/common/Steps';
 import { MONO } from '../theme/theme';
+import { Card, Code, SectionLabel, Segmented, Status, Tag, Tile, codeTone } from './kit';
 import { t, tOr } from '../i18n/t';
 
 /**
@@ -60,7 +62,7 @@ const MAX_BYTES = 10 * 1024 * 1024;              // the server's ingress cap (§
 const PAGE = 100;
 const STEPS = ['target', 'file', 'review', 'done'];
 const BOOK_STEPS = ['target', 'file', 'entities', 'fields', 'done'];
-const VERDICT_COLOR = { INSERT: 'success', UPDATE: 'primary', MATCH: 'default' };
+const VERDICT_TONE = { INSERT: 'purple', UPDATE: 'navy', MATCH: 'neutral' };     // mockup 08: New purple, Update navy
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
 function fmtSize(n) {
@@ -107,14 +109,14 @@ function Changes({ row, cfg }) {
   }
   return row.changes.map((c) => (
     <Box key={c.column} sx={{ fontSize: 13, mb: 0.5 }}>
-      <Box component="span" sx={{ fontWeight: 600 }}>{t('data.import.colPrefix', { column: colLabel(cfg, c.column) })}</Box>
+      <Box component="span" sx={{ color: 'text.secondary' }}>{t('data.import.colPrefix', { column: colLabel(cfg, c.column) })}</Box>
       {row.verdict === 'INSERT' ? <Value v={c.after} /> : (
         <>
-          <Value v={c.before} />
-          <Box component="span" sx={{ color: 'text.secondary', mx: 0.75 }}>{t('data.import.arrow')}</Box>
+          <Box component="span" sx={{ color: 'brand.muted', textDecoration: 'line-through' }}><Value v={c.before} /></Box>
+          <Box component="span" aria-hidden sx={{ color: 'brand.muted', mx: 0.75 }}>{t('data.import.arrow')}</Box>
           {c.cleared
-            ? <Chip size="small" variant="outlined" color="error" label={t('data.import.cleared')} />
-            : <Value v={c.after} />}
+            ? <Tag tone="escalate">{t('data.import.cleared')}</Tag>
+            : <Box component="span" sx={{ fontWeight: 500 }}><Value v={c.after} /></Box>}
         </>
       )}
     </Box>
@@ -147,15 +149,6 @@ function FileInfo({ file }) {
   );
 }
 
-function Count({ label, n, color }) {
-  return (
-    <Box sx={{ px: 1.5, py: 1, border: 1, borderColor: 'divider', borderRadius: 1, minWidth: 96 }}>
-      <Typography sx={{ fontSize: 20, fontWeight: 700, color }}>{n}</Typography>
-      <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{label}</Typography>
-    </Box>
-  );
-}
-
 function Preview({ pv, cfg }) {
   const b = pv.batch;
   const [filter, setFilter] = useState(b.error_count || b.warning_count ? 'issues' : 'all');
@@ -168,13 +161,15 @@ function Preview({ pv, cfg }) {
       <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
         {t('data.import.readFrom', { file: b.file_name ?? '', sheet: b.sheet_name ?? t('data.none'), n: b.row_count })}
       </Typography>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
-        <Count label={t('data.import.count.insert')} n={b.insert_count} color="success.main" />
-        <Count label={t('data.import.count.update')} n={b.update_count} color="primary.main" />
-        <Count label={t('data.import.count.match')} n={b.match_count} />
-        <Count label={t('data.import.count.errors')} n={b.error_count} color={b.error_count ? 'error.main' : undefined} />
-        <Count label={t('data.import.count.warnings')} n={b.warning_count} color={b.warning_count ? 'status.caution' : undefined} />
-      </Stack>
+      <Box sx={{ display: 'grid', gap: 1.5, mb: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+        <Tile label={t('components.import.rows')} value={b.row_count} />
+        <Tile label={t('components.import.new')} value={b.insert_count} note={t('data.import.count.insert')} />
+        <Tile label={t('components.import.update')} value={b.update_count} note={t('data.import.count.update')} />
+        <Tile label={t('components.import.unchanged')} value={b.match_count} note={t('data.import.count.match')} />
+        <Tile label={t('components.import.errors')} value={b.error_count} tone={b.error_count ? 'escalate' : undefined}
+          note={t('data.import.count.errors')} />
+        <Tile label={t('components.import.warnings')} value={b.warning_count} tone={b.warning_count ? 'caution' : undefined} />
+      </Box>
       {b.file_warnings?.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>{t('data.import.fileWarnings')}</Typography>
@@ -184,51 +179,55 @@ function Preview({ pv, cfg }) {
       {pv.purged && <Alert severity="info" sx={{ mb: 2 }}>{t('data.import.purged')}</Alert>}
       {!pv.purged && (
         <>
-          <ToggleButtonGroup size="small" exclusive value={filter} sx={{ mb: 1 }}
-            onChange={(_e, v) => { if (v) { setFilter(v); setPage(0); } }}>
-            <ToggleButton value="all">{t('data.import.filter.all', { n: pv.rows.length })}</ToggleButton>
-            <ToggleButton value="issues">{t('data.import.filter.issues')}</ToggleButton>
-            <ToggleButton value="changes">{t('data.import.filter.changes')}</ToggleButton>
-          </ToggleButtonGroup>
-          <Table size="small" sx={{ '& td': { verticalAlign: 'top' } }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 64 }}>{t('data.import.col.row')}</TableCell>
-                <TableCell sx={{ width: 150 }}>{t('data.import.col.verdict')}</TableCell>
-                <TableCell sx={{ width: 170 }}>{t('data.import.col.key')}</TableCell>
-                <TableCell>{t('data.import.col.changes')}</TableCell>
-                <TableCell sx={{ width: '34%' }}>{t('data.import.col.problems')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {shown.map((r) => (
-                <TableRow key={r.sheet_row_no}>
-                  <TableCell sx={{ fontFamily: MONO, fontSize: 13 }}>{r.sheet_row_no}</TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      <Chip size="small" variant="outlined" color={VERDICT_COLOR[r.verdict] ?? 'default'}
-                        label={t(`data.import.verdict.${r.verdict}`)} />
-                      {!r.is_valid && <Chip size="small" color="error" label={t('data.import.verdict.error')} />}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ fontFamily: MONO, fontSize: 13, wordBreak: 'break-word' }}>{r.business_key ?? t('data.none')}</Box>
-                    <Resolved res={r.resolved} />
-                  </TableCell>
-                  <TableCell><Changes row={r} cfg={cfg} /></TableCell>
-                  <TableCell>
-                    <MsgList msgs={r.errors} cfg={cfg} color="error.main" />
-                    <MsgList msgs={r.warnings} cfg={cfg} color="status.caution" />
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!shown.length && (
-                <TableRow><TableCell colSpan={5} sx={{ color: 'text.secondary' }}>{t('data.import.noRows')}</TableCell></TableRow>)}
-            </TableBody>
-          </Table>
-          {rows.length > PAGE && (
-            <TablePagination component="div" count={rows.length} page={page} rowsPerPage={PAGE}
-              rowsPerPageOptions={[PAGE]} onPageChange={(_e, p) => setPage(p)} />)}
+          <Card bodySx={{ px: 0, gap: 1 }} title={null} action={(
+            <Segmented size="sm" label={t('data.import.col.verdict')} value={filter}
+              onChange={(v) => { setFilter(v); setPage(0); }}
+              options={[{ value: 'all', label: t('data.import.filter.all', { n: pv.rows.length }) },
+                { value: 'issues', label: t('data.import.filter.issues') },
+                { value: 'changes', label: t('data.import.filter.changes') }]} />)}>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ '& td': { verticalAlign: 'top' } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 64, pl: 2.5 }}>{t('data.import.col.row')}</TableCell>
+                    <TableCell sx={{ width: 150 }}>{t('data.import.col.verdict')}</TableCell>
+                    <TableCell sx={{ width: 170 }}>{t('data.import.col.key')}</TableCell>
+                    <TableCell>{t('data.import.col.changes')}</TableCell>
+                    <TableCell sx={{ width: '34%', pr: 2.5 }}>{t('data.import.col.problems')}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {shown.map((r) => (
+                    <TableRow key={r.sheet_row_no} sx={(th) => (r.is_valid ? {} : { bgcolor: th.vars.palette.status.escalateBg })}>
+                      <TableCell sx={{ pl: 2.5, fontFamily: MONO, fontSize: 13, color: 'brand.muted' }}>{r.sheet_row_no}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                          <Tag tone={VERDICT_TONE[r.verdict] ?? 'neutral'}>{t(`data.import.verdict.${r.verdict}`)}</Tag>
+                          {!r.is_valid && <Status tone="escalate" size="sm">{t('data.import.verdict.error')}</Status>}
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        {r.business_key
+                          ? <Code tone={codeTone(r.business_key)} sx={{ fontSize: 12.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>{r.business_key}</Code>
+                          : <Box component="span" sx={{ color: 'text.secondary' }}>{t('data.none')}</Box>}
+                        <Resolved res={r.resolved} />
+                      </TableCell>
+                      <TableCell><Changes row={r} cfg={cfg} /></TableCell>
+                      <TableCell sx={{ pr: 2.5 }}>
+                        <MsgList msgs={r.errors} cfg={cfg} color="status.escalate" />
+                        <MsgList msgs={r.warnings} cfg={cfg} color="status.caution" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!shown.length && (
+                    <TableRow><TableCell colSpan={5} sx={{ pl: 2.5, color: 'text.secondary' }}>{t('data.import.noRows')}</TableCell></TableRow>)}
+                </TableBody>
+              </Table>
+            </Box>
+            {rows.length > PAGE && (
+              <TablePagination component="div" count={rows.length} page={page} rowsPerPage={PAGE}
+                rowsPerPageOptions={[PAGE]} onPageChange={(_e, p) => setPage(p)} />)}
+          </Card>
         </>
       )}
     </Box>
@@ -395,15 +394,12 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     <Dialog open onClose={closable ? onClose : undefined} maxWidth="lg" fullWidth>
       <DialogTitle>{t(isBook ? 'data.import.model.title' : 'data.import.title')}</DialogTitle>
       <DialogContent>
-        <Stepper activeStep={steps.indexOf(shownStep)} sx={{ mb: 3, mt: 1 }}>
-          {steps.map((s) => (
-            <Step key={s} completed={s === 'entities' && (entitiesDone != null || skippedEntities) ? true : undefined}>
-              <StepLabel optional={s === 'entities' && skippedEntities
-                ? <Typography sx={{ fontSize: 12 }}>{t('data.import.model.skipped')}</Typography> : undefined}>
-                {t(`data.import.step.${s}`)}
-              </StepLabel>
-            </Step>))}
-        </Stepper>
+        <Box sx={{ mb: 3, mt: 1 }}>
+          <Steps label={t('components.import.progress')} current={steps.indexOf(shownStep)}
+            steps={steps.map((s) => ({ key: s, label: t(`data.import.step.${s}`),
+              done: s === 'entities' && (entitiesDone != null || skippedEntities) ? true : undefined,
+              note: s === 'entities' && skippedEntities ? t('data.import.model.skipped') : undefined }))} />
+        </Box>
         {error && <Alert severity="error" sx={ERR_SX}>{error}</Alert>}
         {notice && <Alert severity="info" sx={ERR_SX}>{notice}</Alert>}
         {fieldsOwed && step !== 'review' && (
@@ -472,17 +468,22 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
             {committable && b.insert_count + b.update_count === 0 && (
               <Alert severity="info" sx={ERR_SX}>{t('data.import.nothingToChange')}</Alert>)}
             {pv && <Preview key={b.import_batch_id} pv={pv} cfg={phaseCfg} />}
-            {committable && inEntities && (
-              <Alert severity="warning" sx={{ mt: 3, whiteSpace: 'pre-wrap' }}>{t('data.import.model.step1Confirm')}</Alert>)}
-            {committable && b.insert_count > 0 && (
-              <Box sx={{ mt: 3 }}>
-                <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.confirmBody', { n: b.insert_count })}</Typography>
-                <TextField id="import-confirm-count" label={t('data.import.confirmLabel')} value={typed}
-                  onChange={(e) => setTyped(e.target.value)} sx={{ width: 220 }}
-                  error={typed.trim() !== '' && !countOk}
-                  helperText={typed.trim() !== '' && !countOk ? t('data.import.confirmMismatch') : ' '}
-                  slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
-              </Box>
+            {committable && (inEntities || b.insert_count > 0) && (
+              <Card sx={{ mt: 2 }} bodySx={{ gap: 1.25 }}>
+                <SectionLabel>{t('components.import.allOrNone')}</SectionLabel>
+                {inEntities && (
+                  <Alert severity="warning" sx={{ whiteSpace: 'pre-wrap' }}>{t('data.import.model.step1Confirm')}</Alert>)}
+                {b.insert_count > 0 && (
+                  <Box>
+                    <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.confirmBody', { n: b.insert_count })}</Typography>
+                    <TextField id="import-confirm-count" label={t('data.import.confirmLabel')} value={typed}
+                      onChange={(e) => setTyped(e.target.value)} sx={{ width: 220 }}
+                      error={typed.trim() !== '' && !countOk}
+                      helperText={typed.trim() !== '' && !countOk ? t('data.import.confirmMismatch') : ' '}
+                      slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
+                  </Box>
+                )}
+              </Card>
             )}
           </>
         )}
