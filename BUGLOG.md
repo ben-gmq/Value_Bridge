@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 42 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 43 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -292,4 +292,7 @@ place.
 - design-auditor Q5 · Slice 6b-1 design review, 2026-10-11 · LOW · **Design inconsistency:**
   `data_migration_map` (§7.9) reads `APPLICATION(AS_IS)` only, while `application_gap` reads
   AS_IS + BOTH. Settle whether BOTH is a migration source when the reports slice is specced.
+- design-auditor note · Slice 6b-2 design review, 2026-10-11 · LOW · **`maintain_fr_types`' override re-point** is
+  refused by `fk_fri_fr_behaviour` when it would change a live interface FR's behaviour — today a generic FK 409.
+  Name it ("…has interface detail") when the code-maintenance slice is built.
 
