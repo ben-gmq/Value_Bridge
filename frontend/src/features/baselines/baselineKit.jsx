@@ -1,44 +1,45 @@
-import { Box, Chip } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutlined';
 import SwapVertIcon from '@mui/icons-material/SwapVert';
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
+import { Tag } from '../../components/kit';
 import { t, tOr } from '../../i18n/t';
 
-// D-50: a change never rests on colour alone — every tag carries an icon and its word.
+// D-50: a change never rests on colour alone — every tag carries an icon and its word. Tones follow mockup 09.
 const CHANGE = {
-  ADDED: { icon: AddCircleOutlineIcon, fg: 'ok', bg: 'okBg' },
-  CHANGED: { icon: EditOutlinedIcon, fg: 'caution', bg: 'cautionBg' },
-  REMOVED: { icon: RemoveCircleOutlineIcon, fg: 'escalate', bg: 'escalateBg' },
-  MOVED: { icon: SwapVertIcon, fg: null, bg: null },
+  ADDED: { icon: AddCircleOutlineIcon, tone: 'purple' },
+  CHANGED: { icon: EditOutlinedIcon, tone: 'navy' },
+  REMOVED: { icon: RemoveCircleOutlineIcon, tone: 'teal' },
+  MOVED: { icon: SwapVertIcon, tone: 'neutral' },
 };
 export const CHANGE_KINDS = Object.keys(CHANGE);
 
 export function ChangeTag({ kind }) {
   const c = CHANGE[kind];
   const Icon = c.icon;
-  return (
-    <Box component="span" sx={(th) => ({
-      display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25, borderRadius: 1, fontSize: 12.5,
-      fontWeight: 600, whiteSpace: 'nowrap',
-      color: c.fg ? th.vars.palette.status[c.fg] : th.vars.palette.text.secondary,
-      bgcolor: c.bg ? th.vars.palette.status[c.bg] : th.vars.palette.action.hover,
-    })}>
-      <Icon sx={{ fontSize: 15 }} aria-hidden />{t(`baselines.change.${kind}`)}
-    </Box>
-  );
+  return <Tag tone={c.tone} icon={<Icon sx={{ fontSize: 14 }} aria-hidden />}>{t(`baselines.change.${kind}`)}</Tag>;
 }
 
 // FROZEN is the working state of a version, APPROVED is signed, SUPERSEDED is history.
 export function StatusChip({ code, label }) {
-  const color = code === 'APPROVED' ? 'success' : code === 'FROZEN' ? 'primary' : 'default';
-  return <Chip size="small" variant={code === 'SUPERSEDED' ? 'outlined' : 'filled'} color={color} label={label ?? code} />;
+  const tone = code === 'APPROVED' ? 'ok' : code === 'FROZEN' ? 'navy' : 'neutral';
+  return <Tag tone={tone}>{label ?? code}</Tag>;
 }
 
 export function AgreedChip() {
-  return <Chip size="small" color="success" variant="outlined" icon={<VerifiedOutlinedIcon />} label={t('baselines.agreed')}
-    title={t('baselines.agreedHelp')} />;
+  return (
+    <Tag tone="ok" icon={<VerifiedOutlinedIcon sx={{ fontSize: 14 }} aria-hidden />}>
+      <span title={t('baselines.agreedHelp')}>{t('baselines.agreed')}</span>
+    </Tag>
+  );
+}
+
+// A row label that starts with its code ("FR-0031 Credit hold", "01.02.02.03 Pack order") splits into the
+// code (shown coloured) and the name; a link ("BR-0042 ↔ SOL-0003") and any other label is all name.
+export function splitLabel(label = '') {
+  const m = /^([A-Z]{2,4}-\d+|\d{2}(?:\.\d{2})*)\s+(?![↔·])(.+)$/s.exec(label);
+  return m ? { code: m[1], name: m[2] } : { code: '', name: label };
 }
 
 const DATE = { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Bangkok' };

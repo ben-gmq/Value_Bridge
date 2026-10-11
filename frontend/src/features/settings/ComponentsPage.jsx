@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Checkbox, Chip, FormControlLabel, Radio, RadioGroup, Snackbar, Stack,
+import { Alert, Box, Button, Checkbox, FormControlLabel, Radio, RadioGroup, Snackbar, Stack,
   Typography } from '@mui/material';
 import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
 import { useAuth } from '../../app/AuthContext';
 import { keys, links } from '../../app/links';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, ListRow, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 
 // Settings → Components (D-37, D-39). Everyone sees what the project uses; only a platform admin
@@ -59,42 +60,40 @@ export default function ComponentsPage() {
       actions={<Button component={RouterLink} to={links.settings(projectId)}>{t('settings.title')}</Button>}>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {!isAdmin && <Alert severity="info" sx={{ mb: 2 }}>{t('components.adminOnly')}</Alert>}
-      <WrapperBox><Box sx={{ width: '100%' }}>
-        <Stack spacing={0.5}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' }, alignItems: 'start' }}>
+        <Card title={t('components.pick')} bodySx={{ gap: 1 }}
+          action={isAdmin && (
+            <Button variant="contained" size="small" disabled={send.isPending || !wanted} onClick={() => send.mutate(null)}>
+              {t('components.save')}</Button>)}>
           {wanted && rows.map((c) => (
-            <Stack key={c.code} direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-              <FormControlLabel label={c.label} disabled={!isAdmin}
+            <ListRow key={c.code} selected={wanted.has(c.code)} sx={{ py: 0.5, flexWrap: 'wrap' }}>
+              <FormControlLabel label={c.label} disabled={!isAdmin} sx={{ mr: 'auto' }}
                 control={<Checkbox checked={wanted.has(c.code)} onChange={() => toggle(c.code)} />} />
               {c.requires.length > 0 && <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {t('components.needs', { list: list(c.requires) })}</Typography>}
-              {!c.available && <Chip size="small" label={t('components.notYet')} />}
-            </Stack>
+              {!c.available && <Tag tone="neutral">{t('components.notYet')}</Tag>}
+            </ListRow>
           ))}
-        </Stack>
-        {isAdmin && (
-          <Box sx={{ mt: 2 }}>
-            <Button variant="contained" disabled={send.isPending || !wanted} onClick={() => send.mutate(null)}>
-              {t('components.save')}</Button>
-          </Box>
-        )}
-      </Box></WrapperBox>
+        </Card>
 
-      <Typography variant="h6" component="h2" sx={{ mt: 4, mb: 1 }}>{t('components.depthTitle')}</Typography>
-      <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>{t('components.depthWhat')}</Typography>
-      <WrapperBox><Box sx={{ width: '100%' }}>
-        {depth && (
-          <RadioGroup value={depth} onChange={(e) => setDepth(e.target.value)} aria-label={t('components.depthTitle')}>
-            {['KEYS_ONLY', 'FULL'].map((v) => (
-              <FormControlLabel key={v} value={v} disabled={!isAdmin} control={<Radio />} label={t(`components.depth.${v}`)} />
-            ))}
-          </RadioGroup>
-        )}
-        {isAdmin && (
-          <Button sx={{ mt: 1 }} variant="contained" onClick={() => saveDepth.mutate()}
-            disabled={saveDepth.isPending || !project.data || depth === project.data.data_model_depth}>
-            {t('components.saveDepth')}</Button>
-        )}
-      </Box></WrapperBox>
+        <Card title={t('components.depthTitle')} bodySx={{ gap: 1 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>{t('components.depthWhat')}</Typography>
+          {depth && (
+            <RadioGroup value={depth} onChange={(e) => setDepth(e.target.value)} aria-label={t('components.depthTitle')}>
+              {['KEYS_ONLY', 'FULL'].map((v) => (
+                <FormControlLabel key={v} value={v} disabled={!isAdmin} control={<Radio />} label={t(`components.depth.${v}`)} />
+              ))}
+            </RadioGroup>
+          )}
+          {isAdmin && (
+            <Box>
+              <Button variant="contained" onClick={() => saveDepth.mutate()}
+                disabled={saveDepth.isPending || !project.data || depth === project.data.data_model_depth}>
+                {t('components.saveDepth')}</Button>
+            </Box>
+          )}
+        </Card>
+      </Box>
 
       <ConfirmDialog open={Boolean(preview)} title={t('components.reviewTitle')} confirmLabel={t('components.apply')}
         body={unchanged ? t('components.nothing') : ''}
