@@ -99,7 +99,7 @@ Grade 1. Riskiest concern: **an FR linked to another project's Solution** — pr
   `lifecycle.EXCLUDED_FKS` so a hint never blocks a BR retire or an FR restore; (3) clear hints on BR
   retire inside `lifecycle.retire_row` (covers step retire) and in `solution.link` (the `# D-34 hook`);
   (4) exclude it from the baseline shadow and `content_hash`. apple's design for all four is in
-  `docs/slice6a_schema.md` §4 and Q-2/Q-4/Q-5. A 6a tripwire test guards (2) and (4).
+  `docs/slice6a_schema.md` §4 and Q-2/Q-4/Q-5. A 6a tripwire test guards (2) and (4); the import slice replaces it with a behavioural test (an FR with a hint never blocks a BR retire) — sara L-5.
 - **S6a-2** FR names are not unique; duplicates warn.
 - **S6a-3** Complexity is not settable until 6c (rate card); `complexity_code_id` and `effort_days` ship NULL with the D-13 CHECK.
 - **S6a-4** The FR register is a second tab under **BR–FR map** (Solutions · Function requirements).
