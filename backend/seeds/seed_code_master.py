@@ -7,12 +7,12 @@ from database import SessionLocal
 from models import CodeMaster
 
 # Categories that left the library. Their global rows are retired, never deleted: FLOW_TYPE
-# became a CHECK-listed column on bfc_node_flow (S2-1).
-RETIRED_CATEGORIES = ("FLOW_TYPE",)
+# became a CHECK-listed column on bfc_node_flow (S2-1); PROJECT_ROLE went with the grants (D-40,
+# slice7_schema §8.5 step 3 — old grants still reference its codes).
+RETIRED_CATEGORIES = ("FLOW_TYPE", "PROJECT_ROLE")
 
 # (category, is_system, [(code, label) or (code, label, behaviour)])
 LIBRARY: list[tuple[str, bool, list[tuple]]] = [
-    ("PROJECT_ROLE", True, [("OWNER", "Owner"), ("EDITOR", "Editor"), ("REVIEWER", "Reviewer")]),
     ("PROJECT_STATUS", False, [("PLANNING", "Planning"), ("ACTIVE", "Active"),
                                ("ON_HOLD", "On hold"), ("CLOSED", "Closed")]),
     ("RACI_TYPE", False, [("R", "Responsible", "RESPONSIBLE"), ("A", "Accountable", "ACCOUNTABLE"),

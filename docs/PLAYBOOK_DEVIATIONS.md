@@ -20,6 +20,7 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 7c | `import_batch` has no soft delete and no `updated_by` (`uploaded_at` / `uploaded_by_user_id` are its created pair; `row_version` kept); `import_row` carries no audit columns, soft delete or `row_version` | §9.7 soft delete, VB law 3 / design §5.1 audit columns | The batch's status is its lifecycle and the header is kept as the import trail; a staged row is short-lived staging whose provenance is its batch | S4-6, slice4_schema Q-7 |
 | 7d | `project_template_component.created_by` is nullable | §9.2 `created_by` from the JWT | Template rows are seeded by `seeds.seed_project_templates`, like `code_master` (deviation 7) | slice7_schema §3, Q-5 |
 | 7e | `project.data_model_depth` is a `CHECK` (`KEYS_ONLY` / `FULL`), not a `code_master` lookup | §9.3 all lookups in `code_master` | A two-value vocabulary the code branches on (S2-1 precedent) | slice7_schema §4, Q-8 |
+| 7f | `app_user.user_kind` (USER / VIEWER) and `project_member.access_level` (EDIT / VIEW) are `CHECK`-listed, not `code_master` | §9.3 all lookups in `code_master` | Closed access vocabularies the guard branches on (S2-1 precedent) | slice7_schema §8.2, §8.4, Q-11 |
 
 ## Frontend
 

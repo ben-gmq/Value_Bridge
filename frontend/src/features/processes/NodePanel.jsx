@@ -128,7 +128,7 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   if (!node || !form.values) return <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
 
   const live = node.is_active;
-  const editable = live && canEdit;      // a REVIEWER sees the panel, not its controls (sara LOW-3)
+  const editable = live && canEdit;      // a read-only user sees the panel, not its controls (sara LOW-3)
   const v = form.values;
   const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending;
   const restoreWithDependents = node.is_process && plainFor !== nodeId;

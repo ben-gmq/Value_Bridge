@@ -100,7 +100,7 @@ export default function DataEntitiesPage() {
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
   });
 
-  // Export is a read (REVIEWER may); template, validate and commit are edits, so Import hides.
+  // Export is a read (a read-only user may); template, validate and commit are edits, so Import hides.
   const exportList = useMutation({
     mutationFn: (slug) => importApi.export(projectId, slug),
     onSuccess: (name) => setNotice(t('data.import.exported', { name })),

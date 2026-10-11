@@ -13,7 +13,7 @@ import { t } from '../../i18n/t';
 const HIGH = 60;
 const key = (c) => `${c.fr_type_code}|${c.complexity_code}`;
 
-// The project's rate card (D-13, §4.8). Owners and Editors change it with a reason (S6c-3); nothing is
+// The project's rate card (D-13, §4.8). any User (EDIT level) changes it with a reason (S6c-3, D-40); nothing is
 // repriced (A-38) — each cell shows how many rated FRs are not at its current value (S6c-5).
 export default function RateCardPage() {
   const { projectId } = useParams();

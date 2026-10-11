@@ -8,7 +8,7 @@ import { MONO } from '../theme/theme';
 /** "Copy as Mermaid" (slice 3c) on the flow, DFD and ERD pages. It fetches the server's export
  * (every label already escaped, R2-S7) and writes it to the clipboard. Where the browser allows
  * no clipboard, the text opens in a read-only box to copy by hand — shown as a field value, so it
- * is always text, never markup. A read, so a REVIEWER can copy too.
+ * is always text, never markup. A read, so a read-only user can copy too.
  * `area` is the string-key prefix of the page's own i18n file (`processes` or `data.erd`). */
 export function CopyMermaidButton({ fetchText, area, disabled = false }) {
   const [busy, setBusy] = useState(false);

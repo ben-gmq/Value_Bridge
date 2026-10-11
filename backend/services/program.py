@@ -1,5 +1,6 @@
-"""Programs (§7.10a, D-32): a header, an access scope and a set of reads. It owns no business
-data, so it has no SQL over business tables — roll-ups call the per-project reports."""
+"""Programs (§7.10a, D-32, D-40): a header and a set of reads — a roll-up grouping, no longer an
+access scope. It owns no business data, so it has no SQL over business tables — roll-ups call the
+per-project reports."""
 import hashlib
 import json
 
@@ -7,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import AppUser, Client, Program, Project, UserAccessGrant
+from models import AppUser, Client, Program, Project
 from services import access, audit
 
 
@@ -53,20 +54,12 @@ def program_projects(db: Session, user: AppUser, program_id: int) -> list[Projec
     return list(db.scalars(q.order_by(Project.project_code)))
 
 
-def _holders(db: Session, program_id: int | None) -> list[dict]:
-    if program_id is None:
-        return []
-    rows = db.scalars(select(UserAccessGrant).where(UserAccessGrant.program_id == program_id,
-                                                    UserAccessGrant.is_active))
-    return sorted(({"user_id": g.app_user_id, "display_name": db.get(AppUser, g.app_user_id).display_name,
-                    "project_role_code": access.grant_role(db, g)} for g in rows), key=lambda r: r["user_id"])
-
-
 def move_project_program(db: Session, actor: AppUser, project_id: int,
                          target_program_id: int | None, confirm_hash: str | None,
                          expected_from_program_id: int | None = None) -> dict:
-    """Platform admin only (Q10). Step 1 (no hash) previews who gains and loses access and
-    writes nothing; step 2 applies it only if the preview is unchanged (R2-S3)."""
+    """Platform admin only (Q10). Step 1 (no hash) previews the move and writes nothing; step 2
+    applies it only if the preview is unchanged (R2-S3). Since D-40 a move changes roll-ups, not
+    access, so `gains` and `loses` are always empty (slice7_schema §8.6)."""
     p = db.get(Project, project_id)
     if p is None or not p.is_active:
         raise HTTPException(404, "Not found")
@@ -81,13 +74,12 @@ def move_project_program(db: Session, actor: AppUser, project_id: int,
         raise HTTPException(422, "The project is already there")
     preview = {"project": p.project_code, "from_program_id": p.program_id,
                "to_program_id": target_program_id,
-               "gains": _holders(db, target_program_id), "loses": _holders(db, p.program_id)}
+               "gains": [], "loses": []}
     h = hashlib.sha256(json.dumps(preview, sort_keys=True).encode()).hexdigest()
     if confirm_hash is None:
         return {"preview": preview, "preview_hash": h, "applied": False}
     if confirm_hash != h:
-        raise HTTPException(409, "Who gains or loses access changed since the preview. "
-                                 "Review it again.")
+        raise HTTPException(409, "The project's program changed since the preview. Review it again.")
     p.program_id = target_program_id
     p.updated_by = actor.app_user_id
     audit.record(db, "PROJECT_PROGRAM_CHANGED", actor_id=actor.app_user_id, project_id=project_id,

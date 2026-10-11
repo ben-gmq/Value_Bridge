@@ -191,7 +191,7 @@ export default function ErdPage() {
   });
 
   // Collapsing a card that was never dragged saves its current place, which pins it (the
-  // tooltip says so). A REVIEWER may fold a card on their own screen; nothing is saved.
+  // tooltip says so). A read-only user may fold a card on their own screen; nothing is saved.
   const onToggle = useCallback((deId) => {
     const next = !collapsedRef.current.get(deId);
     collapsedRef.current = new Map(collapsedRef.current).set(deId, next);

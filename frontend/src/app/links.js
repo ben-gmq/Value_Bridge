@@ -32,6 +32,7 @@ export const keys = {
   componentCatalogue: () => ['component-catalogue'],
   projectTemplates: () => ['project-templates'],
   project: (p) => ['project', String(p)],
+  projectAccess: (p) => ['access', String(p)],
   tree: (p) => ['bfc-tree', String(p)],
   node: (id) => ['bfc-node', String(id)],
   retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview

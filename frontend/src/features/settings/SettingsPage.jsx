@@ -3,19 +3,21 @@ import { Card, CardActionArea, CardContent, Grid, Typography } from '@mui/materi
 import { Page } from '../../components/Page';
 import { links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
+import { useAuth } from '../../app/AuthContext';
 import { t } from '../../i18n/t';
 
 // Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9).
-const ITEMS = [['access', links.access], ['components', links.components], ['organisation', links.organisation],
+const ITEMS = [['access', links.access, null, true], ['components', links.components], ['organisation', links.organisation],
   ['parties', links.parties], ['applications', links.applications, 'APPLICATION'], ['rateCard', links.rateCard, 'EFFORT']];
 
 export default function SettingsPage() {
   const { projectId } = useParams();
   const { isOn } = useComponents(projectId);
+  const { isAdmin } = useAuth();
   return (
     <Page title={t('settings.title')} subtitle={t('settings.subtitle')}>
       <Grid container spacing={2}>
-        {ITEMS.filter(([, , need]) => !need || isOn(need)).map(([key, to]) => (
+        {ITEMS.filter(([, , need, adminOnly]) => (!need || isOn(need)) && (!adminOnly || isAdmin)).map(([key, to]) => (
           <Grid key={key} size={{ xs: 12, md: 4 }}>
             <Card sx={{ height: '100%' }}>
               <CardActionArea component={RouterLink} to={to(projectId)} sx={{ height: '100%' }}>

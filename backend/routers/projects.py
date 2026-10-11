@@ -1,26 +1,27 @@
-"""Projects, programs, access and code lookups (§9, D-32)."""
+"""Projects, programs, components, members and code lookups (§9; D-37, D-40, slice7_schema §8)."""
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AppUser, UserAccessGrant
+from models import AppUser, ProjectMember
 from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin,
                             program_ctx, project_ctx)
 from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn,
-                            EffectiveAccessOut, GrantIn, GrantOut, ProgramIn, ProgramMoveIn,
-                            ProgramOut, ProjectIn, ProjectOut, ProjectPatch, ReassignIn,
-                            TemplateOut)
-from services import code_master, components
+                            EffectiveAccessOut, MemberAddOut, MemberIn, MemberOut, MemberPatch,
+                            ProgramIn, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
+                            RestrictionIn, RestrictionOut, TemplateOut)
+from services import access, code_master, components
 from services import program as program_service
 from services import project as project_service
 
 router = GuardedRouter(tags=["projects"])
 _auth = authenticated()
 _admin = platform_admin()
-_reader = project_ctx("REVIEWER")
-_owner = project_ctx("OWNER")
-_prog_reader = program_ctx("REVIEWER")
-_revoker = object_guard(UserAccessGrant, "OWNER")
+_reader = project_ctx("VIEW")
+_editor = project_ctx("EDIT")
+_proj_admin = project_ctx("ADMIN")             # only a platform admin reaches ADMIN (§8.6)
+_prog_reader = program_ctx("VIEW")
+_member_admin = object_guard(ProjectMember, "ADMIN")
 
 
 # ---- projects ----
@@ -34,16 +35,19 @@ def create_project(body: ProjectIn, actor: AppUser = Depends(_admin.dep), db: Se
     return project_service.create_project(db, actor, body.client_id, body.project_code,
                                           body.project_name, body.program_id, body.start_date,
                                           body.end_date, component_codes=body.component_codes,
+                                          is_restricted=body.is_restricted,
                                           template_code=body.template_code,
                                           data_model_depth=body.data_model_depth)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectOut, **_reader.route)
-def read_project(project_id: int, db: Session = Depends(get_db)):
-    return project_service.get_project(db, project_id)
+def read_project(project_id: int, eff: access.EffectiveAccess = Depends(_reader.dep),
+                 db: Session = Depends(get_db)):
+    p = project_service.get_project(db, project_id)
+    return ProjectOut.model_validate(p).model_copy(update={"my_access_level": eff.level})
 
 
-@router.patch("/projects/{project_id}", response_model=ProjectOut, **_owner.route)
+@router.patch("/projects/{project_id}", response_model=ProjectOut, **_editor.route)
 def update_project(project_id: int, body: ProjectPatch, db: Session = Depends(get_db),
                    user: AppUser = Depends(_auth.dep)):
     fields = body.model_dump(exclude_unset=True, exclude={"row_version"})
@@ -73,46 +77,62 @@ def read_components(project_id: int, db: Session = Depends(get_db)):
     return components.describe(db, project_id)
 
 
-@router.put("/projects/{project_id}/components", response_model=ComponentsChangeOut, **_admin.route)
-def set_components(project_id: int, body: ComponentsIn, actor: AppUser = Depends(_admin.dep),
+@router.put("/projects/{project_id}/components", response_model=ComponentsChangeOut, **_proj_admin.route)
+def set_components(project_id: int, body: ComponentsIn, actor: AppUser = Depends(_auth.dep),
                    db: Session = Depends(get_db)):
     """Platform admin [Q-10]. Without confirm_hash: the preview. With it: applied, audited."""
     return components.set_components(db, actor, project_service.get_project(db, project_id),
                                      body.component_codes, body.confirm_hash)
 
 
-@router.put("/projects/{project_id}/data-model-depth", response_model=ProjectOut, **_admin.route)
-def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_admin.dep),
+@router.put("/projects/{project_id}/data-model-depth", response_model=ProjectOut, **_proj_admin.route)
+def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_auth.dep),
               db: Session = Depends(get_db)):
     return components.set_depth(db, actor, project_service.get_project(db, project_id),
                                 body.data_model_depth, body.row_version)
 
 
-# ---- access ----
-@router.get("/projects/{project_id}/access", response_model=list[EffectiveAccessOut], **_owner.route)
+# ---- access: who can open the project, members, restriction (D-40, OR-6) ----
+@router.get("/projects/{project_id}/access", response_model=EffectiveAccessOut, **_proj_admin.route)
 def effective_access(project_id: int, db: Session = Depends(get_db)):
     return project_service.effective_access(db, project_service.get_project(db, project_id))
 
 
-@router.post("/projects/{project_id}/access", response_model=GrantOut, status_code=201,
-             **_owner.route)
-def grant_project(project_id: int, body: GrantIn, actor: AppUser = Depends(_auth.dep),
-                  db: Session = Depends(get_db)):
-    return project_service.grant_access(db, actor, body.user_id, body.project_role_code,
-                                        project_id=project_id, row_version=body.row_version)
+@router.get("/projects/{project_id}/members", response_model=list[MemberOut], **_proj_admin.route)
+def list_members(project_id: int, db: Session = Depends(get_db)):
+    return project_service.list_members(db, project_service.get_project(db, project_id))
 
 
-@router.delete("/access/{id}", response_model=GrantOut, **_revoker.route)
-def revoke(id: int, grant: UserAccessGrant = Depends(_revoker.dep),
-           actor: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
-    return project_service.revoke_access(db, actor, grant)
+@router.post("/projects/{project_id}/members", response_model=MemberAddOut, status_code=201,
+             **_proj_admin.route)
+def add_member(project_id: int, body: MemberIn, actor: AppUser = Depends(_auth.dep),
+               db: Session = Depends(get_db)):
+    m, warnings = project_service.add_member(db, actor, project_service.get_project(db, project_id),
+                                             body.user_id, body.access_level, body.member_note)
+    row = next(r for r in project_service.list_members(db, project_service.get_project(db, project_id))
+               if r["project_member_id"] == m.project_member_id)
+    return {**row, "warnings": warnings}
 
 
-@router.post("/access/reassign", response_model=GrantOut, **_admin.route)
-def reassign(body: ReassignIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
-    return project_service.reassign_access(db, actor, body.user_id, body.project_role_code,
-                                           body.rationale, project_id=body.project_id,
-                                           program_id=body.program_id)
+@router.patch("/project-members/{id}", response_model=MemberOut, **_member_admin.route)
+def change_member(id: int, body: MemberPatch, m: ProjectMember = Depends(_member_admin.dep),
+                  actor: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
+    project_service.change_member_level(db, actor, m, body.access_level, body.row_version)
+    return project_service._member_row(db, m)
+
+
+@router.delete("/project-members/{id}", status_code=204, **_member_admin.route)
+def remove_member(id: int, row_version: int, m: ProjectMember = Depends(_member_admin.dep),
+                  actor: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
+    project_service.remove_member(db, actor, m, row_version)
+
+
+@router.put("/projects/{project_id}/restriction", response_model=RestrictionOut, **_proj_admin.route)
+def set_restriction(project_id: int, body: RestrictionIn, actor: AppUser = Depends(_auth.dep),
+                    db: Session = Depends(get_db)):
+    """Preview (no hash) names who loses, gains and keeps access; confirm applies it (§8.3, DR7-D2)."""
+    return project_service.set_restriction(db, actor, project_service.get_project(db, project_id),
+                                           body.is_restricted, body.confirm_hash)
 
 
 # ---- programs ----
@@ -149,11 +169,3 @@ def remove_project_from_program(program_id: int, project_id: int, confirm_hash: 
                                 actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
     return program_service.move_project_program(db, actor, project_id, None, confirm_hash,
                                                 expected_from_program_id=program_id)   # M1
-
-
-@router.post("/programs/{program_id}/access", response_model=GrantOut, status_code=201,
-             **_admin.route)
-def grant_program(program_id: int, body: GrantIn, actor: AppUser = Depends(_admin.dep),
-                  db: Session = Depends(get_db)):
-    return project_service.grant_access(db, actor, body.user_id, body.project_role_code,
-                                        program_id=program_id, row_version=body.row_version)

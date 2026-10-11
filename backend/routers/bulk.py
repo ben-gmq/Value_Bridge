@@ -18,9 +18,9 @@ from routers.guards import GuardedRouter, object_guard, project_ctx
 from services import bulk, xlsx
 
 router = GuardedRouter(tags=["bulk"])
-_read = project_ctx("REVIEWER")
-_edit = project_ctx("EDITOR")
-_batch = object_guard(ImportBatch, "EDITOR", id_param="batch_id")
+_read = project_ctx("VIEW")
+_edit = project_ctx("EDIT")
+_batch = object_guard(ImportBatch, "EDIT", id_param="batch_id")
 
 
 class CommitIn(BaseModel):

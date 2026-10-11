@@ -13,6 +13,7 @@ export const api = {
   createUser: (body) => d(http.post('/api/v1/users', body)),
   deactivateUser: (id) => d(http.patch(`/api/v1/users/${id}/deactivate`)),
   setPlatformAdmin: (id, body) => d(http.patch(`/api/v1/users/${id}/platform-admin`, body)),
+  setUserKind: (id, body) => d(http.patch(`/api/v1/users/${id}/kind`, body)),
   clients: () => d(http.get('/api/v1/clients')),
   createClient: (body) => d(http.post('/api/v1/clients', body)),
 
@@ -28,13 +29,15 @@ export const api = {
   codes: (projectId, category) => d(http.get(`/api/v1/projects/${projectId}/code-master/${category}`)),
 
   access: (projectId) => d(http.get(`/api/v1/projects/${projectId}/access`)),
-  grant: (projectId, body) => d(http.post(`/api/v1/projects/${projectId}/access`, body)),
-  revoke: (grantId) => d(http.delete(`/api/v1/access/${grantId}`)),
+  members: (projectId) => d(http.get(`/api/v1/projects/${projectId}/members`)),
+  addMember: (projectId, body) => d(http.post(`/api/v1/projects/${projectId}/members`, body)),
+  changeMember: (id, body) => d(http.patch(`/api/v1/project-members/${id}`, body)),
+  removeMember: (id, rowVersion) => d(http.delete(`/api/v1/project-members/${id}`, { params: { row_version: rowVersion } })),
+  setRestriction: (projectId, body) => d(http.put(`/api/v1/projects/${projectId}/restriction`, body)),
 
   programs: () => d(http.get('/api/v1/programs')),
   program: (id) => d(http.get(`/api/v1/programs/${id}`)),
   programProjects: (id) => d(http.get(`/api/v1/programs/${id}/projects`)),
   createProgram: (body) => d(http.post('/api/v1/programs', body)),
-  grantProgram: (id, body) => d(http.post(`/api/v1/programs/${id}/access`, body)),
   moveIntoProgram: (id, body) => d(http.post(`/api/v1/programs/${id}/projects`, body)),
 };

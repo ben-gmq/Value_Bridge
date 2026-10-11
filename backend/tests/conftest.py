@@ -89,8 +89,9 @@ def login(client, email, remember=False) -> dict:
 
 @pytest.fixture
 def world(client):
-    """An admin, a client with a program of two projects plus one standalone project, and
-    four users with no grants yet."""
+    """An admin, a client with a program of two projects plus one standalone project, and four
+    staff users (D-40): owner, editor and outsider are USERs, reviewer a VIEWER. Every project is
+    unrestricted; a test that needs a wall restricts one (restrict())."""
     r = client.post("/auth/setup", json={"email": "admin@example.test", "display_name": "Admin",
                                          "password": PW})
     assert r.status_code == 201, r.text
@@ -98,7 +99,8 @@ def world(client):
     users = {}
     for name in ("owner", "editor", "reviewer", "outsider"):
         r = client.post("/api/v1/users", headers=admin, json={
-            "email": f"{name}@example.test", "display_name": name.title(), "initial_password": PW})
+            "email": f"{name}@example.test", "display_name": name.title(), "initial_password": PW,
+            "user_kind": "VIEWER" if name == "reviewer" else "USER"})
         assert r.status_code == 201, r.text
         users[name] = r.json()["app_user_id"]
     c = client.post("/api/v1/clients", headers=admin,
@@ -111,7 +113,7 @@ def world(client):
     def project(code, program_id=None, client_id=c["client_id"]):
         r = client.post("/api/v1/projects", headers=admin, json={
             "client_id": client_id, "project_code": code, "project_name": code.title(),
-            "program_id": program_id, "component_codes": ALL_COMPONENTS})
+            "program_id": program_id, "component_codes": ALL_COMPONENTS, "is_restricted": False})
         assert r.status_code == 201, r.text
         return r.json()["project_id"]
 
@@ -123,3 +125,16 @@ def world(client):
         "p_solo": project("SOLO"),
         "p_beta": project("BETA1", client_id=other["client_id"]),
     }
+
+
+def restrict(client, admin, project_id, members: dict[int, str] | None = None) -> None:
+    """Make a project restricted (OR-6) with these members {user_id: EDIT|VIEW}: preview, confirm."""
+    for uid, level in (members or {}).items():
+        r = client.post(f"/api/v1/projects/{project_id}/members", headers=admin,
+                        json={"user_id": uid, "access_level": level})
+        assert r.status_code == 201, r.text
+    url = f"/api/v1/projects/{project_id}/restriction"
+    prev = client.put(url, headers=admin, json={"is_restricted": True})
+    assert prev.status_code == 200, prev.text
+    r = client.put(url, headers=admin, json={"is_restricted": True, "confirm_hash": prev.json()["confirm_hash"]})
+    assert r.status_code == 200 and r.json()["applied"], r.text

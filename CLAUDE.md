@@ -40,11 +40,17 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
 - **Routing:** `backend/main.py`. `/auth/*` at the root; everything else under one
   `GuardedRouter(prefix="/api/v1")`. Routers declare only their sub-paths.
 - **Every route declares exactly one guard** — `backend/routers/guards.py`: `public`,
-  `authenticated`, `platform_admin`, `project_ctx(min_role)`, `object_guard(Model, min_role)`,
-  `program_ctx(min_role)`. Use `@router.get(path, **guard.route)`. A route without one
-  **fails at import**, and `tests/test_route_guards.py` (criterion 49) re-proves it.
+  `authenticated`, `platform_admin`, `project_ctx(min_level, component=)`, `object_guard(Model, min_level,
+  component=)`, `program_ctx(min_level)`; levels `VIEW` < `EDIT` < `ADMIN` (only platform admins reach
+  ADMIN). A write to a project component names it (`component=`), else 409 COMPONENT_OFF; criterion 49b
+  (`ROUTE_COMPONENTS` in `tests/test_route_guards.py`) fails a write that forgets. Use
+  `@router.get(path, **guard.route)`. A route without a guard **fails at import**, and criterion 49 re-proves it.
 - **Visibility has one owner:** `backend/services/access.py` (`visible_project_ids`,
-  `require_project`, `require_program`). A project you cannot see is **404, never 403**.
+  `require_project`, `require_program`). D-40: admins see all; staff (`app_user.user_kind` USER = edit,
+  VIEWER = read) see every project **except a restricted one they are not a live `project_member` of**.
+  A project you cannot see is **404, never 403**; order is 404 → 403 → 409. `user_access_grant` is
+  retired history (SELECT-only). `tests/test_access.py::test_no_get_route_leaks_a_restricted_project`
+  calls every GET route as a non-member — a new route that bypasses `visible_project_ids` fails it.
 - **Numbers are minted only by** `services/numbering.py::next_number`, at save time. All ten series
   are seeded by `create_project`; a missing series raises — never insert one lazily.
 - **Lookups:** `code_master`, two-tier (global + project override), resolved only by
@@ -55,8 +61,9 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   `en.<area>.json`, keys prefixed by area. No hard-coded UI text in new screens.
 - **Screen contracts:** page addresses and query keys in `frontend/src/app/links.js`; one API
   function per route in `frontend/src/api/scope.js`. Screens link to each other only through these.
-- **Edit controls** hide through `frontend/src/app/useCanEdit.js` (reads `/auth/me`) — never by
-  matching grants to the project in the browser. Presentation only; the guards still refuse.
+- **Edit controls** hide through `frontend/src/app/useCanEdit.js` (reads the project's `my_access_level`
+  from `GET /projects/{id}`) and components through `app/useComponents.js` — never computed from
+  memberships in the browser. Presentation only; the guards still refuse.
 - **Deviations** from the playbook: [docs/PLAYBOOK_DEVIATIONS.md](docs/PLAYBOOK_DEVIATIONS.md).
 - **Bugs:** [BUGLOG.md](BUGLOG.md) (`VB-###`). Standing review backlog is VB-005.
 
