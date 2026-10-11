@@ -305,5 +305,6 @@
   "data.import.msg.REF_NEEDS_ENTITY": "A foreign key names its entity first: FK DE number, or FK entity name.",
   "data.import.msg.CODE_UNKNOWN": "“{value}” is not a data type of this project.",
   "data.import.msg.FIELD_LIMIT": "An entity holds at most {max} fields.",
-  "data.import.msg.RESOLVED_CHANGED": "This row now resolves to {now}, not {was}: the data changed since the upload. Upload the file again."
+  "data.import.msg.RESOLVED_CHANGED": "This row now resolves to {now}, not {was}: the data changed since the upload. Upload the file again.",
+  "data.importFields": "Import fields"
 }
