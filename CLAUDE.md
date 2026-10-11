@@ -57,6 +57,10 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   `services/code_master.resolve`. Send codes, never labels. Seeds: `backend/seeds/`, never Alembic.
 - **Brand/theme:** `frontend/src/theme/brand.js` (`BRAND`, `STATUS_COLOR_MAP`, `TOKENS`) →
   `theme.js`. Components read `theme.vars.palette.*` — no hex anywhere else.
+- **Look (D-51):** the mockups in `docs/mockups/` (screenshots + source) are the visual reference; dark is the
+  default. Screens compose `components/kit.jsx` (Card, Tag, Code, Status, LevelBadge, Segmented, PurpleTile, Tile…)
+  inside the left-rail shell; `<Page crumb=…>` names the item in the header breadcrumb. A mockup element with no
+  data behind it is left out, never faked. New screens are checked side by side with their mockup before merge.
 - **Strings:** via `t()`, one file per screen area — `frontend/src/i18n/en.json` (shell) plus
   `en.<area>.json`, keys prefixed by area. No hard-coded UI text in new screens.
 - **Screen contracts:** page addresses and query keys in `frontend/src/app/links.js`; one API
