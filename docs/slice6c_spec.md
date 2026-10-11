@@ -103,6 +103,7 @@ default. Riskiest concern: **days that do not come from the card** (typed, stale
 
 **Further rulings (Ben, 2026-10-11):**
 - **S6c-5** Visibility is the control on an Editor who both rates and changes rates: the standing per-cell "not at current rate" count, visible to reviewers, plus the audit trail. No approval step. "Not at current rate" means `effort_days` ≠ the cell's current `standard_days`.
+- **S6c-6 action (Ben, 2026-10-11):** Ben or an FTC lead sends the real default rates; Lilly then updates `seeds/ftc_rate_card.py`, builds the confirmed-defaults command and applies it to untouched cells only.
 - **S6c-6** When FTC confirms the default card, an audited one-off command updates **untouched** cells only (row_version 1, no rationale) in existing projects; rated FRs keep their days and show as not at current rate. (The command is built when the values exist.)
 - **S6c-7** A cell above 60 man-days needs an explicit confirmation and is flagged on the card; the hard limit is the column's 99,999.99.
 - **S6c-8** FRs under a REJECTED solution are shown apart in the effort summary, outside the headline total.

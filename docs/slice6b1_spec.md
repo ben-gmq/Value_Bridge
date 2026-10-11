@@ -108,5 +108,5 @@ retired end, and the AS_IS rule slipping between its two write paths** — prove
 **Further rulings (Ben, 2026-10-11):**
 - **S6b-5** As-is links to a TO_BE application do **not** count as today's support in the gap report, but are never silent: a warning when created or when the lifecycle moves, and an informational consistency line.
 - **S6b-6** Application codes are editable until a baseline freezes them (the baseline slice adds that lock); allowed characters A–Z 0–9 `-` `_` `.`; the old code goes to the audit.
-- **S6b-7 (Lilly, pending Ben — sara L2):** a code freed by a rename may be taken by another application. Before
+- **S6b-7 (Ben, confirmed 2026-10-11 — sara L2):** a code freed by a rename may be taken by another application. Before
   baselines nothing quotes it; once a baseline freezes a code it can no longer be renamed (S6b-6), so a frozen code is never freed.

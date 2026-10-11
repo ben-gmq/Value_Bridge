@@ -385,7 +385,7 @@ Schema `docs/slice6c_schema.md` (apple), spec `docs/slice6c_spec.md`; design rev
 | S6c-3 | **Owners and Editors change the rate card** (Ben). Supersedes OWNER-only in §4.8 `maintain_rate_card`, §7.13 and the §9 rate-card row | §4.8, §7.13, §9 | — |
 | S6c-4 | **Effort by L1 area waits for the reports slice** (Ben) | §7.9 | apple Q-9 |
 | S6c-5 | **Visibility, not approval, controls the Editor who rates and re-rates**: a standing per-cell "not at current rate" count and Σ days, visible to reviewers (Ben) | §7.9, §7.13 | DR6c-P1 |
-| S6c-6 | **Confirmed defaults update untouched cells only**, through an audited command (Ben) | §7.10 | auditor Q3 |
+| S6c-6 | **Confirmed defaults update untouched cells only**, through an audited command (Ben). Ben or an FTC lead supplies the real values; the command is built then (Ben, 2026-10-11) | §7.10 | auditor Q3 |
 | S6c-7 | **A cell above 60 man-days needs confirmation** and is flagged (Ben) | §6.2 | auditor Q4 |
 | S6c-8 | **FRs under a REJECTED solution are shown apart** in the effort summary (Ben) | §7.9 | auditor Q5 |
 
@@ -413,6 +413,7 @@ Schema `docs/slice6b_schema.md` §1–§3 (apple), spec `docs/slice6b1_spec.md`;
 | S6b-4 | **A TO_BE application as today's support warns and is allowed** (Ben) | §4.4 | apple Q-7 |
 | S6b-5 | **Such links do not count as today's support in `application_gap`**, and are never silent: a warning on the link and on a lifecycle move to TO_BE, plus the informational line `as_is_support_by_to_be` (Ben) | §7.9 `application_gap` | DR6b-P1 |
 | S6b-6 | **Application codes are editable until a baseline freezes them**; characters A–Z 0–9 `.` `_` `-`; the old code goes to the audit (Ben) | §5.3, §6.2 (supersedes "code not editable") | auditor Q3 |
+| S6b-7 | **A code freed by a rename may be taken by another application** (Ben, 2026-10-11). Before baselines nothing quotes it; once frozen a code cannot be renamed (S6b-6) | §5.3 | sara L2 |
 
 ### Slice 6a function requirements — 2026-10-09
 
