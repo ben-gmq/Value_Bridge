@@ -4,10 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControl, FormControlLabel, InputLabel, Link, MenuItem, Select, Stack, Switch, TextField,
   ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import AddRounded from '@mui/icons-material/AddRounded';
 import { errorText, isStale } from '../../api/client';
 import { orgApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCodes } from '../../app/useCodes';
+import { SectionLabel } from '../../components/kit';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
 
@@ -20,15 +22,18 @@ export function ShowRetired({ id, checked, onChange }) {
   );
 }
 
+// The kit's small-caps section label (D-51), with the bottom margin the chart's sections expect.
 export function SectionTitle({ children, action }) {
-  return (
-    <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
-      <Typography component="h3" sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8,
-        textTransform: 'uppercase', color: 'text.secondary' }}>{children}</Typography>
-      {action}
-    </Stack>
-  );
+  return <SectionLabel action={action || undefined} sx={{ mb: 1, justifyContent: 'space-between' }}>{children}</SectionLabel>;
 }
+
+// The mockup's RACI pill toggle: one round pill per RACI code inside a pill track, held codes in violet.
+const raciGroupSx = (th) => ({ bgcolor: th.vars.palette.background.field, borderRadius: 999, p: '3px', gap: '2px',
+  border: `1px solid ${th.vars.palette.divider}`, flex: 'none',
+  '& .MuiToggleButton-root': { border: 0, borderRadius: '999px !important', minWidth: 30, height: 26, px: 0.75, py: 0,
+    fontSize: 12.5, fontWeight: 700, color: th.vars.palette.brand.muted },
+  '& .MuiToggleButton-root.Mui-selected': { bgcolor: `${th.vars.palette.brand.ftcViolet} !important`,
+    color: `${th.vars.palette.brand.onFtc} !important` } });
 
 export function LevelBadge({ level, process }) {
   return (
@@ -189,43 +194,42 @@ export function RaciPanel({ projectId, queryKey, list, link, unlink, linkId, sin
   const roleName = (r) => (r ? `${r.org_role_code} — ${r.org_role_name}` : '');
 
   return (
-    <Box>
-      <SectionTitle action={!disabled && (
-        <Button size="small" onClick={() => { setError(''); setAddCode(''); setAdding(true); }}>
-          {t('processes.addRole')}</Button>)}>
-        {rule ? t('processes.raciTitleRule', { rule }) : t('processes.raciTitle')}
-      </SectionTitle>
-      {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, minWidth: 0 }}>
+      <SectionLabel>{rule ? t('processes.raciTitleRule', { rule }) : t('processes.raciTitle')}</SectionLabel>
+      {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       {[q.error, rolesQ.error, unitsQ.error].some(Boolean) && (
-        <Alert severity="error" sx={{ mb: 1 }}>{errorText(q.error || rolesQ.error || unitsQ.error)}</Alert>)}
+        <Alert severity="error">{errorText(q.error || rolesQ.error || unitsQ.error)}</Alert>)}
       {!q.isLoading && !q.error && roleIds.length === 0 && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.noRoles')}</Typography>
       )}
-      <Stack spacing={1.25}>
-        {roleIds.map((roleId) => {
-          const role = roleById.get(roleId);
-          const held = linksList.filter((l) => l.org_role_id === roleId).map((l) => l.raci_code);
-          return (
-            <Stack key={roleId} direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 600 }}>{role ? role.org_role_name : `#${roleId}`}</Typography>
-                <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-                  {role && [role.org_role_code, unitById.get(role.org_unit_id)?.org_unit_name].filter(Boolean).join(' · ')}
-                </Typography>
-              </Box>
-              <ToggleButtonGroup size="small" value={held} aria-label={t('processes.raciFor', { role: roleName(role) })}>
-                {codes.map((c) => (
-                  <ToggleButton key={c.code} value={c.code} aria-label={c.label} disabled={disabled || toggle.isPending}
-                    sx={{ px: 1.25, py: 0.25, fontSize: 12 }}
-                    onClick={() => toggle.mutate({ roleId, code: c.code, on: !held.includes(c.code) })}>
-                    {c.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Stack>
-          );
-        })}
-      </Stack>
+      {roleIds.map((roleId) => {
+        const role = roleById.get(roleId);
+        const held = linksList.filter((l) => l.org_role_id === roleId).map((l) => l.raci_code);
+        return (
+          <Stack key={roleId} direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+            <Box sx={{ minWidth: 0, flex: '1 1 140px' }}>
+              <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{role ? role.org_role_name : `#${roleId}`}</Typography>
+              <Typography sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted })}>
+                {role && [role.org_role_code, unitById.get(role.org_unit_id)?.org_unit_name].filter(Boolean).join(' · ')}
+              </Typography>
+            </Box>
+            <ToggleButtonGroup size="small" value={held} aria-label={t('processes.raciFor', { role: roleName(role) })} sx={raciGroupSx}>
+              {codes.map((c) => (
+                <ToggleButton key={c.code} value={c.code} aria-label={c.label} title={c.label}
+                  disabled={disabled || toggle.isPending}
+                  onClick={() => toggle.mutate({ roleId, code: c.code, on: !held.includes(c.code) })}>
+                  {c.code}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Stack>
+        );
+      })}
+      {!disabled && (
+        <Button size="small" startIcon={<AddRounded />} sx={(th) => ({ alignSelf: 'flex-start', color: th.vars.palette.brand.purpleText })}
+          onClick={() => { setError(''); setAddCode(''); setAdding(true); }}>
+          {t('processes.addRole')}</Button>
+      )}
       {adding && (
         <PickDialog open title={t('processes.addRoleTitle')} optionLabel={t('processes.orgRole')}
           options={activeRoles} getOptionLabel={roleName} submitLabel={t('processes.add')}
