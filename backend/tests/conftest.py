@@ -46,9 +46,10 @@ def clean():
     yield
     eng = create_engine(OWNER_URL)
     with eng.begin() as c:
-        c.execute(text("DELETE FROM code_master WHERE project_id IS NOT NULL"))
-        # CASCADE also empties code_master (its audit columns reference app_user), so the
-        # library is re-seeded after every wipe.
+        # CASCADE also empties code_master, project-scoped rows included (its audit columns reference
+        # app_user), together with every row that references a code — so the library is re-seeded
+        # after every wipe. (A DELETE of project codes *before* this failed once FRs used a project
+        # FR type, Slice 6b-2; it is not needed at all.)
         c.execute(text(f"TRUNCATE {', '.join(DATA_TABLES)} RESTART IDENTITY CASCADE"))
     eng.dispose()
     from seeds.seed_code_master import seed

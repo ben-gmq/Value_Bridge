@@ -8,7 +8,7 @@ a forgotten or failing purge is visible while it runs as a CLI with no schedule.
 must-be-empty lines."""
 from sqlalchemy.orm import Session
 
-from services import application, consistency_data, function_requirement, import_purge, solution
+from services import application, consistency_data, function_requirement, import_purge, interface, solution
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
@@ -29,4 +29,5 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
         "brsol_under_inactive": solution.brsol_under_inactive(db, project_id),
         "fr_under_inactive_solution": function_requirement.fr_under_inactive_solution(db, project_id),
         **application.consistency_lines(db, project_id),
+        "interface_under_inactive": interface.interface_under_inactive(db, project_id),
     }

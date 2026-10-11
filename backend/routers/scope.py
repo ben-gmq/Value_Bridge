@@ -27,11 +27,13 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            StepRaciOut, TreeNodeOut)
 from schemas.application import (AllocationIn, AllocationOut, ApplicationIn, ApplicationListOut,
                                  ApplicationOut, ApplicationPatch, LinkNotePatch, SupportIn, SupportOut)
+from schemas.interface import InterfaceIn, InterfaceListOut, InterfaceOut
 from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
+from services import interface as iface_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
@@ -369,6 +371,30 @@ def list_solution_frs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session 
 @router.get("/business-requirements/{id}/function-requirements", response_model=list[BrFrOut], **_br_r.route)
 def list_br_frs(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return fr_service.frs_of_br(db, br)
+
+
+# ---- interface detail and the generated interface list (§7.5, D-27, docs/slice6b2_spec.md) ---
+@router.get("/function-requirements/{id}/interface", response_model=InterfaceOut, **_fr_r.route)
+def read_interface(id: int, fr: FunctionRequirement = Depends(_fr_r.dep), db: Session = Depends(get_db)):
+    return iface_service.read_interface(db, fr)
+
+
+@router.put("/function-requirements/{id}/interface", response_model=InterfaceOut, **_fr_w.route)
+def describe_interface(id: int, body: InterfaceIn, fr: FunctionRequirement = Depends(_fr_w.dep),
+                       user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return iface_service.describe_interface(db, _uid(user), fr, body)
+
+
+@router.delete("/function-requirements/{id}/interface", status_code=204, **_fr_w.route)
+def remove_interface(id: int, row_version: int, fr: FunctionRequirement = Depends(_fr_w.dep),
+                     user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    iface_service.remove_interface(db, _uid(user), fr, row_version)
+
+
+@router.get("/projects/{project_id}/interfaces", response_model=InterfaceListOut, **_read.route)
+def interface_list(project_id: int, source: int | None = None, target: int | None = None,
+                   status: str | None = None, db: Session = Depends(get_db)):
+    return iface_service.interface_list(db, project_id, source, target, status)
 
 
 # ---- applications: catalogue, to-be allocation, as-is support (§7.5, D-8, docs/slice6b1_spec.md)
