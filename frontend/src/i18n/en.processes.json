@@ -272,5 +272,9 @@
   "processes.dfdShowOrder": "Show the order (derived from the data)",
   "processes.dfdLane": "Performed by",
   "processes.dfdKind.TRIGGER": "Trigger",
-  "processes.chart.copyPreviewToBe": "This copies {nodes} nodes ({processes} process steps), {data} step data links and {triggers} triggers, with their performers. It creates {requirements} new draft requirements, one per process step."
+  "processes.chart.copyPreviewToBe": "This copies {nodes} nodes ({processes} process steps), {data} step data links and {triggers} triggers, with their performers. It creates {requirements} new draft requirements, one per process step.",
+  "processes.parentLevel": "Parent (level {n})",
+  "processes.unsaved": "Unsaved changes",
+  "processes.savedVersion": "Saved · v{v}",
+  "processes.removeEntity": "Remove {name}"
 }

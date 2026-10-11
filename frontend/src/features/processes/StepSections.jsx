@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, IconButton, Link, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, IconButton, Link, Stack, TextField, Typography } from '@mui/material';
+import AddRounded from '@mui/icons-material/AddRounded';
 import CloseIcon from '@mui/icons-material/Close';
 import { errorText, isStale } from '../../api/client';
 import { bfcApi, dataApi, partyApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
+import { Code, SectionLabel, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
-import { PickDialog, SectionTitle, SimpleSelect, blankToNull, entityLabel, Mono } from './chartKit';
+import { PickDialog, SectionTitle, SimpleSelect, blankToNull, entityLabel } from './chartKit';
 
 export const stepKey = (nodeId, what) => [...keys.node(nodeId), what];
 
@@ -29,12 +31,24 @@ const NoEntities = ({ projectId }) => (
   </Alert>
 );
 
-function EntityChip({ projectId, de, deId, onDelete, disabled }) {
+// A data entity on a step: the mockup's teal pill — code, name, and a remove button for editors.
+function EntityChip({ projectId, de, deId, onDelete, disabled, busy }) {
+  const name = de ? de.de_name : `#${deId}`;
   return (
-    <Chip variant="outlined" component={RouterLink} to={links.entity(projectId, deId)} clickable
-      label={de ? <><Mono>{de.de_number}</Mono> {de.de_name}</> : `#${deId}`}
-      onDelete={disabled ? undefined : (e) => { e.preventDefault(); onDelete(); }}
-      sx={(th) => ({ color: th.vars.palette.brand.tealText, borderColor: th.vars.palette.brand.teal })} />
+    <Box sx={(th) => ({ display: 'inline-flex', alignItems: 'center', gap: 1, height: 32, pl: 1.25, pr: disabled ? 1.25 : 0.5,
+      borderRadius: 999, bgcolor: th.vars.palette.brand.tealTint, border: `1px solid ${th.vars.palette.brand.teal}`, maxWidth: '100%' })}>
+      <Box component={RouterLink} to={links.entity(projectId, deId)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, minWidth: 0, color: 'text.primary', textDecoration: 'none',
+          '&:hover .vb-de-name': { textDecoration: 'underline' } }}>
+        {de && <Code tone="teal" sx={{ fontSize: 12 }}>{de.de_number}</Code>}
+        <Box component="span" className="vb-de-name" sx={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap' }}>{name}</Box>
+      </Box>
+      {!disabled && (
+        <IconButton size="small" aria-label={t('processes.removeEntity', { name })} onClick={onDelete} disabled={busy}
+          sx={{ width: 24, height: 24 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+      )}
+    </Box>
   );
 }
 
@@ -59,12 +73,12 @@ export function StepData({ projectId, node, disabled }) {
   });
   const rows = q.data ?? [];
   const column = (dir) => (
-    <Box sx={{ flex: 1, minWidth: 220 }}>
-      <SectionTitle>{t(dir === 'I' ? 'processes.dataIn' : 'processes.dataOut')}</SectionTitle>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      <SectionLabel>{t(dir === 'I' ? 'processes.dataIn' : 'processes.dataOut')}</SectionLabel>
       <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1 }}>
         {rows.filter((r) => r.direction === dir).map((r) => (
           <EntityChip key={r.bfc_node_data_entity_id} projectId={projectId} deId={r.data_entity_id}
-            de={entities.byId.get(r.data_entity_id)} disabled={disabled || unlink.isPending}
+            de={entities.byId.get(r.data_entity_id)} disabled={disabled} busy={unlink.isPending}
             onDelete={() => unlink.mutate(r)} />
         ))}
         {!q.isLoading && !q.error && !rows.some((r) => r.direction === dir) && (
@@ -74,15 +88,14 @@ export function StepData({ projectId, node, disabled }) {
     </Box>
   );
   return (
-    <Box>
-      {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <LoadError errors={[q.error, entities.error]} />
-      <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 3 }}>
-        {column('I')}
-        {column('O')}
-      </Stack>
+      {column('I')}
+      {column('O')}
       {!disabled && (
-        <Button size="small" sx={{ mt: 1 }} onClick={() => { setError(''); setDirection('I'); setAdding(true); }}>
+        <Button size="small" variant="outlined" startIcon={<AddRounded />} sx={{ alignSelf: 'flex-start' }}
+          onClick={() => { setError(''); setDirection('I'); setAdding(true); }}>
           {t('processes.addEntity')}</Button>
       )}
       {adding && (
@@ -125,7 +138,7 @@ export function StepFlows({ projectId, node, disabled }) {
   return (
     <Box>
       <SectionTitle action={!disabled && (
-        <Button size="small" onClick={() => {
+        <Button size="small" startIcon={<AddRounded />} onClick={() => {
           setError(''); setDraft({ direction: 'I', data_entity_id: '', flow_label: '' }); setAdding(true);
         }}>{t('processes.addParty')}</Button>)}>{t('processes.parties')}</SectionTitle>
       {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
@@ -139,8 +152,8 @@ export function StepFlows({ projectId, node, disabled }) {
           const de = r.data_entity_id ? entities.byId.get(r.data_entity_id) : null;
           return (
             <Stack key={r.bfc_node_external_flow_id} direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Chip size="small" label={t(r.direction === 'I' ? 'processes.fromParty' : 'processes.toParty')} />
-              <Typography sx={{ fontWeight: 600 }}>{p ? <><Mono>{p.ext_number}</Mono> {p.ext_name}</> : `#${r.external_entity_id}`}</Typography>
+              <Tag tone={r.direction === 'I' ? 'navy' : 'teal'}>{t(r.direction === 'I' ? 'processes.fromParty' : 'processes.toParty')}</Tag>
+              <Typography sx={{ fontWeight: 600 }}>{p ? <><Code sx={{ mr: 0.5 }}>{p.ext_number}</Code> {p.ext_name}</> : `#${r.external_entity_id}`}</Typography>
               {r.data_entity_id && (
                 <Link component={RouterLink} to={links.entity(projectId, r.data_entity_id)} sx={{ fontSize: 13 }}>
                   {de ? entityLabel(de) : `#${r.data_entity_id}`}</Link>
