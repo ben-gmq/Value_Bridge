@@ -121,12 +121,13 @@ export function Segmented({ options, value, onChange, label, size = 'md', sx }) 
 }
 
 /** The one key figure per screen, in FTC Dark Purple. */
-export function PurpleTile({ label, value, unit, note, sx }) {
+export function PurpleTile({ label, labelSuffix, value, unit, note, sx }) {
   return (
     <Box sx={(th) => ({ borderRadius: R.card, bgcolor: th.vars.palette.brand.ftc, p: 2.25, display: 'flex', flexDirection: 'column',
       gap: 0.5, minWidth: 0, ...sx })}>
       <Typography sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.onFtcTile,
-        textTransform: 'uppercase' })}>{label}</Typography>
+        textTransform: 'uppercase' })}>{label}
+        {labelSuffix && <Box component="span" sx={{ textTransform: 'none' }}> {labelSuffix}</Box>}</Typography>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
         <Typography sx={(th) => ({ fontFamily: MONO, fontSize: 30, fontWeight: 500, color: th.vars.palette.brand.onFtc, lineHeight: 1.1 })}>{value}</Typography>
         {unit && <Typography sx={(th) => ({ fontSize: 14, color: th.vars.palette.brand.onFtcTile })}>{unit}</Typography>}

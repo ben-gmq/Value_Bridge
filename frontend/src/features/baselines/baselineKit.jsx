@@ -38,7 +38,7 @@ export function AgreedChip() {
 // A row label that starts with its code ("FR-0031 Credit hold", "01.02.02.03 Pack order") splits into the
 // code (shown coloured) and the name; a link ("BR-0042 ↔ SOL-0003") and any other label is all name.
 export function splitLabel(label = '') {
-  const m = /^([A-Z]{2,4}-\d+|\d{2}(?:\.\d{2})*)\s+(?![↔·])(.+)$/s.exec(label);
+  const m = /^([A-Z]{2,4}-\d+|\d{2}(?:\.\d{2})*)\s+(?:·\s+)?(?![↔·])(.+)$/s.exec(label);
   return m ? { code: m[1], name: m[2] } : { code: '', name: label };
 }
 

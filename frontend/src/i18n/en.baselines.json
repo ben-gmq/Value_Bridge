@@ -263,7 +263,7 @@
   "baselines.dlg.chart.AS_IS": "as-is",
   "baselines.chart.TO_BE": "To-be",
   "baselines.chart.AS_IS": "As-is",
-  "baselines.netSince": "Net change since {label}",
+  "baselines.netSince": "Net change since",
   "baselines.col.object": "Object",
   "baselines.col.name": "Name",
   "baselines.before": "Before freezing {label}",

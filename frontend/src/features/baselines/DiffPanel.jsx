@@ -104,7 +104,7 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
             ? { xs: 'repeat(2, minmax(0, 1fr))', lg: 'minmax(0, 1.35fr) repeat(3, minmax(0, 1fr))' }
             : { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' } }}>
             {showDays && (
-              <PurpleTile label={t('baselines.netSince', { label: fromLabel })} value={fmtDays(pricing.totals.net_days)}
+              <PurpleTile label={t('baselines.netSince')} labelSuffix={fromLabel} value={fmtDays(pricing.totals.net_days)}
                 unit={t('baselines.days', { n: '' }).trim()} note={t('baselines.netOf', { base: pricing.totals.base_days, label: fromLabel })} />)}
             {tiles.map(({ k, days }) => (
               <Tile key={k} label={t(`baselines.change.${k}`)}
