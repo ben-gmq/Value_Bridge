@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Checkbox, Chip, Link, Table, TableBody, TableCell, TableContainer, TableHead,
+import { Alert, Box, Button, Checkbox, Link, Table, TableBody, TableCell, TableHead,
   TableRow, Typography } from '@mui/material';
+import AddRounded from '@mui/icons-material/AddRounded';
 import { errorText, isStale } from '../../api/client';
 import { brApi, dataApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { t } from '../../i18n/t';
-import { Mono, PickDialog, SectionTitle, dirLabel, entityLabel } from '../processes/chartKit';
+import { Code, MonoChip, SectionLabel } from '../../components/kit';
+import { MONO } from '../../theme/theme';
+import { PickDialog, dirLabel, entityLabel } from '../processes/chartKit';
 import { LoadError } from '../processes/StepSections';
 
 const CRUD = ['C', 'R', 'U', 'D'];
@@ -49,19 +52,21 @@ export function CrudGrid({ projectId, br, disabled }) {
   const available = (entQ.data ?? []).filter((e) => e.is_active && !entityIds.includes(e.data_entity_id));
 
   return (
-    <Box>
-      <SectionTitle action={!disabled && (
-        <Button size="small" onClick={() => { setError(''); setAdding(true); }}>{t('requirements.addEntity')}</Button>)}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <SectionLabel action={!disabled && (
+        <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }}
+          onClick={() => { setError(''); setAdding(true); }}>{t('requirements.addEntity')}</Button>)}>
         {t('requirements.crudTitle')}
-      </SectionTitle>
-      {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
+      </SectionLabel>
+      {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <LoadError errors={[q.error, entQ.error]} />
-      <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
+      <Box sx={(th) => ({ border: `1px solid ${th.vars.palette.divider}`, borderRadius: '16px', overflowX: 'auto' })}>
         <Table size="small" aria-label={t('requirements.crudTitle')}>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ bgcolor: 'background.subtle' }}>
               <TableCell>{t('requirements.entity')}</TableCell>
-              {CRUD.map((c) => <TableCell key={c} align="center" sx={{ width: 44 }}>{t(`requirements.crud.${c}`)}</TableCell>)}
+              {CRUD.map((c) => (
+                <TableCell key={c} align="center" sx={{ width: 44, fontFamily: MONO }}>{t(`requirements.crud.${c}`)}</TableCell>))}
               <TableCell sx={{ width: 90 }}>{t('requirements.derived')}</TableCell>
             </TableRow>
           </TableHead>
@@ -77,30 +82,33 @@ export function CrudGrid({ projectId, br, disabled }) {
               const dirs = ['I', 'O'].filter((d) => mine.some((l) => l.direction === d));
               return (
                 <TableRow key={deId}>
-                  <TableCell>
-                    <Link component={RouterLink} to={links.entity(projectId, deId)}>
-                      {de ? <><Mono>{de.de_number}</Mono> {de.de_name}</> : `#${deId}`}</Link>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
+                      {de ? <><Code tone="teal" sx={{ fontSize: 12, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
+                    </Link>
                   </TableCell>
                   {CRUD.map((c) => {
                     const link = mine.find((l) => l.crud_code === c);
                     return (
                       <TableCell key={c} align="center" padding="checkbox">
                         <Checkbox size="small" checked={Boolean(link)} disabled={disabled || toggle.isPending}
+                          sx={{ '&.Mui-checked': { color: 'brand.ftcViolet' } }}
                           slotProps={{ input: { 'aria-label': t('requirements.crudFor', { crud: t(`requirements.crudName.${c}`), entity: entityLabel(de) }) } }}
                           onChange={() => toggle.mutate({ deId, crud: c, link })} />
                       </TableCell>
                     );
                   })}
                   <TableCell>
-                    {dirs.length > 0 && <Chip size="small" label={dirs.map(dirLabel).join(' · ')} />}
+                    {dirs.length > 0 && (
+                      <MonoChip tone={dirs.includes('O') ? 'purple' : 'neutral'}>{dirs.map(dirLabel).join(' · ')}</MonoChip>)}
                   </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
-      </TableContainer>
-      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 1 }}>{t('requirements.crudHelp')}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('requirements.crudHelp')}</Typography>
       {adding && (
         <PickDialog open title={t('requirements.addEntityTitle')} optionLabel={t('requirements.entity')}
           options={available} getOptionLabel={entityLabel} submitLabel={t('processes.add')}
