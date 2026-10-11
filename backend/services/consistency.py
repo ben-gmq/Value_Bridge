@@ -8,11 +8,11 @@ a forgotten or failing purge is visible while it runs as a CLI with no schedule.
 must-be-empty lines."""
 from sqlalchemy.orm import Session
 
-from services import consistency_data, function_requirement, import_purge, solution
+from services import application, consistency_data, function_requirement, import_purge, solution
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
-INFORMATIONAL = frozenset({"purge_overdue"})
+INFORMATIONAL = frozenset({"purge_overdue", "as_is_support_by_to_be"})   # + 6b-1 S6b-5: shown, never refusing
 # Warning lines: shown, and a freeze warns about them, but they never refuse it (4a-R10; Ben,
 # 2026-10-09: a baseline with fieldless entities warns and is still allowed).
 WARNINGS = frozenset({"entities_without_fields"})
@@ -28,4 +28,5 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
                                     if project_id is not None else []),
         "brsol_under_inactive": solution.brsol_under_inactive(db, project_id),
         "fr_under_inactive_solution": function_requirement.fr_under_inactive_solution(db, project_id),
+        **application.consistency_lines(db, project_id),
     }

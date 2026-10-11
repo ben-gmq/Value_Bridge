@@ -374,6 +374,19 @@ Schema `docs/slice5_schema.md` (apple), spec `docs/slice5_spec.md`; design revie
 | S5-4 | **`SOLUTION_CATEGORY` is a system category** (Ben): projects cannot rename or retire the five, because reports and `create_fr` branch on TECHNOLOGY / DATA | §8 | Q-5 |
 | S5-5 | **Physical choices adopted on apple's recommendation:** solution names unique among live solutions per project (`lower(btrim())`); `br_solution` has the S1-5 surrogate PK with `(br_id, solution_id)` as a full UNIQUE; new solutions start PROPOSED; the D-34 hook waits for FRs | §5.3 BR_SOLUTION (PK wording), §6.2 | Q-1, Q-2, Q-4, Q-7 |
 
+### Slice 6b-1 applications — 2026-10-11
+
+Schema `docs/slice6b_schema.md` §1–§3 (apple), spec `docs/slice6b1_spec.md`; design review round 1 of 2 (5 findings, 0 HIGH — all fixed).
+
+| # | Ruling | Changes | Source |
+|---|---|---|---|
+| S6b-1 | **As-is support on a step is built now and retires/restores with the step** (Ben). `ApplicationBfcNode` joins `step_retire.OWNED_BY_STEP` | §5.4.15 row `application_bfc_node` (owned) | apple Q-1, Q-2 |
+| S6b-2 | **Application codes unique (never reused) and upper-case; live names unique** (Ben) | §5.3 APPLICATION | apple Q-3 |
+| S6b-3 | **Retiring an FR with live interface detail is refused until the detail is removed** (Ben; built in 6b-2) | §7.5 | apple Q-6 |
+| S6b-4 | **A TO_BE application as today's support warns and is allowed** (Ben) | §4.4 | apple Q-7 |
+| S6b-5 | **Such links do not count as today's support in `application_gap`**, and are never silent: a warning on the link and on a lifecycle move to TO_BE, plus the informational line `as_is_support_by_to_be` (Ben) | §7.9 `application_gap` | DR6b-P1 |
+| S6b-6 | **Application codes are editable until a baseline freezes them**; characters A–Z 0–9 `.` `_` `-`; the old code goes to the audit (Ben) | §5.3, §6.2 (supersedes "code not editable") | auditor Q3 |
+
 ### Slice 6a function requirements — 2026-10-09
 
 Schema `docs/slice6a_schema.md` (apple), spec `docs/slice6a_spec.md`; design review round 1 of 2 (5 findings, 1 HIGH — fixed).

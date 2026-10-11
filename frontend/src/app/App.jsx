@@ -28,6 +28,8 @@ import FrsPage from '../features/frs/FrsPage';
 import FrPage from '../features/frs/FrPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
+import ApplicationsPage from '../features/applications/ApplicationsPage';
+import ApplicationPage from '../features/applications/ApplicationPage';
 
 // Routes name their scope (§14.1): /p/:projectId for a project, /g/:programId for a program,
 // so the backend guard always receives it.
@@ -42,6 +44,7 @@ const PAGES = [
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
+  ['settings/applications', ApplicationsPage], ['settings/applications/:appId', ApplicationPage],
 ];
 
 /** The shell's "DFD" item: a DFD is drawn for one branch of the chart, so it opens the chart

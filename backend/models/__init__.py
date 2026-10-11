@@ -1,6 +1,7 @@
 """Every model is imported here, and alembic/env.py imports this package — a model that is
 not listed here is invisible to autogenerate (FTC-PC landmine 5)."""
 from models.base import Base  # noqa: F401
+from models.application import Application, ApplicationBfcNode, ApplicationSolution  # noqa: F401
 from models.bfc import (  # noqa: F401
     BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole, ExternalEntity,
 )
