@@ -23,6 +23,8 @@ export const links = {
   effort: (p) => `/p/${p}/br-fr/effort`,
   applications: (p) => `/p/${p}/settings/applications`,
   application: (p, appId) => `/p/${p}/settings/applications/${appId}`,
+  baselines: (p, from, to) => (from ? `/p/${p}/baselines?from=${from}&to=${to ?? 'live'}` : `/p/${p}/baselines`),
+  baseline: (p, id) => `/p/${p}/baselines/${id}`,
 };
 
 // TanStack Query keys, shared so a save on one screen refreshes the others.
@@ -64,6 +66,11 @@ export const keys = {
   triggers: (p) => ['process-triggers', String(p)],
   stepTriggers: (nodeId) => ['bfc-node', String(nodeId), 'triggers'],                // under node(id)
   chartCounts: (p) => ['bfc-sets', String(p)],
+  baselines: (p) => ['baselines', String(p)],
+  baselineNext: (p, bump) => ['baselines', String(p), 'next', bump],                    // under baselines(p)
+  baselineDiff: (p, a, b, priced) => ['baselines', String(p), 'diff', String(a), String(b), Boolean(priced)],
+  baseline: (id) => ['baseline', String(id)],
+  baselineRows: (id, entity, offset) => ['baseline', String(id), 'rows', entity, offset],  // under baseline(id)
   importBatch: (id) => ['import-batch', String(id)],
   importPreview: (id) => ['import-batch', String(id), 'preview'],                     // under importBatch(id): a commit refreshes it
 };

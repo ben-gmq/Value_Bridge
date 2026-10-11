@@ -256,3 +256,17 @@ export const effortApi = {
   rate: (frId, body) => d(http.patch(`${V}/function-requirements/${frId}/complexity`, body)),
   summary: (projectId) => d(http.get(`${P(projectId)}/effort-summary`)),
 };
+
+// Slice 8 (docs/slice8_schema.md §5). Read-only apart from freeze and approve; the version, status and
+// digest of the stored baseline are the server's (VB law 6). The freeze sends back the preview's digest, so
+// it freezes exactly what the person reviewed (DR8-P2).
+export const baselineApi = {
+  list: (projectId) => d(http.get(`${P(projectId)}/baselines`)),
+  next: (projectId, bump) => d(http.get(`${P(projectId)}/baselines/next`, { params: { bump } })),
+  freeze: (projectId, body) => d(http.post(`${P(projectId)}/baselines/freeze`, body)),
+  diff: (projectId, from, to, priced) =>
+    d(http.get(`${P(projectId)}/baselines/diff`, { params: { from, to, priced } })),
+  get: (id) => d(http.get(`${V}/baselines/${id}`)),
+  rows: (id, entity, offset, limit) => d(http.get(`${V}/baselines/${id}/rows/${entity}`, { params: { offset, limit } })),
+  approve: (id, body) => d(http.post(`${V}/baselines/${id}/approve`, body)),
+};

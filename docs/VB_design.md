@@ -372,6 +372,18 @@ Ben, 2026-10-11: *"I will accept your recommendations, so build it first."*
 | S7-6 | **Grants are soft-revoked after being copied into `project_member` (0038)**; nothing is deleted, so it proceeds without a pause (Ben: build without stopping unless critical) | — | apple §8.5 |
 | S7-7 | **Until 7c retires them, the process-flow arrows (`bfc_node_flow`) are gated under To-be DFD**, with external flows. A requirements-only project does not sequence steps; under D-38 sequence becomes derived in 7c anyway | slice7_schema §5.2 table | sara L10 (Lilly, under S7-1) |
 
+### Slice 8 schema rulings — the baseline freeze (wave 1d), 2026-10-11
+
+Schema `docs/slice8_schema.md` (apple). Ben, 2026-10-11: *"For every decision that I need to make, I will
+follow your recommendations."* These rows override §4.6, §6.1 ("30 shadow tables"), §7.7 and §9's baseline
+rows where they disagree; slice8_schema §11 lists each rewording.
+
+| # | Ruling | Supersedes | Source |
+|---|---|---|---|
+| S8-1 | **All 24 [Q-n] in `slice8_schema.md` §12 are accepted as recommended**, as amended below. In short: 24 shadows today (− `bfc_node_flow`, − the never-built `fr_bfc_node`, − the seven unbuilt wave 2–3 tables; + `process_trigger`, `bfc_node_trigger`, `project_component`); code **and** label copied, code hashed; no intra-baseline FKs; hash in SQL (`::text`, `\x1f`, NULL `\x1e`); freeze and client approval at EDIT; diff under `/projects/{id}/baselines/diff` with `to=live`; archive file and `purge_project` before first client use | §6.1 count, §7.7 `str(v)`, §9 routes, "OWNER only" | apple Q-1…Q-24 |
+| S8-2 | **No `BEFORE TRUNCATE` trigger on the shadows.** The row-level reject trigger, the revoked UPDATE and the absent DELETE/TRUNCATE privileges hold immutability for `vb_app`; a statement trigger would also refuse the owner's test-harness wipe and the future purge | slice8_schema §3 `trg_…_no_truncate` | Lilly |
+| S8-3 | **Criteria 13 and 30 read "every table in `FREEZE_SET` whose gate is open"**; criterion 41 is per entity | criteria 13, 30, 41 | apple §11 |
+
 ### Slice 1 schema review — 2026-09-29
 
 Before migration 0005, `apple` turned §5–§6 into a physical spec for the Slice 1 tables
@@ -736,6 +748,13 @@ pipeline. Six `.xlsx` column maps, one staging model, one commit.
 
 ### 4.6 Version control / baselines (scope area 6)
 
+> **Slice 8 (2026-10-11):** built as specified in `docs/slice8_schema.md` under rulings S8-1…S8-3 (§1a).
+> The freeze set is 24 tables filtered by the project's enabled components (D-37). Freeze and client approval
+> are at EDIT. The freeze refuses on consistency errors and on `FREEZE_BLOCKING_WARNINGS` (I/O gaps of a chart
+> whose DFD is on, and live rows in an off component). Every live BR becomes BASELINED after the snapshot, and
+> the prior baseline becomes SUPERSEDED. The diff compares any two baselines of one project, or a baseline
+> against the live working set.
+
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `freeze_baseline` | `BASELINE` | C | One transaction, **opened at REPEATABLE READ from its first statement, with `consistency_check` inside it** (R2-P6), so the check and the snapshot see the same data. Version label auto-increments (v1.0 → v1.1). `frozen_by` from JWT. Status → FROZEN |
@@ -743,6 +762,7 @@ pipeline. Six `.xlsx` column maps, one staging model, one commit.
 | `freeze_baseline` | `baseline_*` | C | Copy each live row into its snapshot table, retaining `source_id` → the immutable baseline |
 | `diff_baseline` | `baseline_*` | R | Full outer join baseline A to B on `source_id` → ADDED / CHANGED / REMOVED per entity, with the changed field list |
 | `(manual)` client sign-off | `BASELINE` | U | Consultant records the client's approval against a frozen baseline. VB records the decision; it does not route it |
+| `approve_baseline` | `BASELINE` | U | Records the client's sign-off (approver name, date, note) on the latest FROZEN baseline → APPROVED. Never undone; the next freeze supersedes it and keeps the approval facts |
 | `reopen_baseline` | `BASELINE` | — | **Not offered.** A frozen baseline is immutable; scope moves forward by freezing v1.1 |
 
 ### 4.7 Auth, users, projects and visibility (scope area 7 + Ben's addendum)

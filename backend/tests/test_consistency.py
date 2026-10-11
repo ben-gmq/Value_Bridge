@@ -23,7 +23,8 @@ def test_the_report_carries_the_purge_and_the_fieldless_entity_lines(client, ed,
     assert set(out) - consistency.INFORMATIONAL - consistency.WARNINGS \
         - consistency.FREEZE_BLOCKING_WARNINGS == must_be_empty
     assert all(out[k] == [] for k in must_be_empty)
-    assert consistency.FREEZE_BLOCKING_WARNINGS == {"process_missing_input", "process_missing_output"}
+    assert consistency.FREEZE_BLOCKING_WARNINGS == {"process_missing_input", "process_missing_output",
+                                                  "rows_in_off_component"}     # + slice 8 [Q-12]
     assert "as_is_support_on_to_be" in consistency.INFORMATIONAL
     assert not consistency.FREEZE_BLOCKING_WARNINGS & (consistency.INFORMATIONAL | consistency.WARNINGS)
     none = consistency_check(None, db)                                # per project only

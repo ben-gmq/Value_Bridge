@@ -11,7 +11,7 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 1 | Baseline snapshot rows are immutable and never soft-deleted | §9.7 soft delete everywhere | A frozen baseline is evidence; a soft-delete flag on it would be an edit | A-7, §6.2 |
 | 2 | CRUD letters on BR ↔ data entity are a `CHECK`, not `code_master` | §9.3 all lookups in `code_master` | Code branches on each value; a configurable CRUD letter would break the direction rule | §8 |
 | 3 | `diagram_type` and `code_master.behaviour_code` are `CHECK`-listed | §9.3 | Closed vocabularies the code branches on (D-27, Q7, D-30) | §8, §5.3 |
-| 4 | The `baseline` header is exempt from soft delete; only its status may change (column grant) | §9.7 | FROZEN → APPROVED → SUPERSEDED is the only allowed change; 5-year recoverability (Q12) | §6.2, §6.6 (P6) |
+| 4 | The `baseline` header is exempt from soft delete; only its status, the client-approval set (once, then closed), `updated_by` and `row_version` may change (column grant + `trg_baseline_header_guard`) | §9.7 | FROZEN → APPROVED → SUPERSEDED and one recorded sign-off are the only allowed changes; 5-year recoverability (Q12) | §6.2, §6.6 (P6); slice8_schema §2, §13 |
 | 5 | `diagram_layout` is hard-deleted and has no `row_version` | §9.7, D-6 concurrency | Presentation, not scope; last write wins per object (A-52) | D-30 |
 | 6 | `wbs_item.row_version` guards only the two consultant-editable link fields | D-6 | WBS rows are otherwise read-only imports from MS Project (D-33) | §5.3 |
 | 7 | `code_master.created_by` is nullable | §9.2 `created_by` from the JWT | Seeded FTC library rows are created by the seed CLI, not a user | §5.1 |
@@ -21,6 +21,8 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 7d | `project_template_component.created_by` is nullable | §9.2 `created_by` from the JWT | Template rows are seeded by `seeds.seed_project_templates`, like `code_master` (deviation 7) | slice7_schema §3, Q-5 |
 | 7e | `project.data_model_depth` is a `CHECK` (`KEYS_ONLY` / `FULL`), not a `code_master` lookup | §9.3 all lookups in `code_master` | A two-value vocabulary the code branches on (S2-1 precedent) | slice7_schema §4, Q-8 |
 | 7f | `app_user.user_kind` (USER / VIEWER) and `project_member.access_level` (EDIT / VIEW) are `CHECK`-listed, not `code_master` | §9.3 all lookups in `code_master` | Closed access vocabularies the guard branches on (S2-1 precedent) | slice7_schema §8.2, §8.4, Q-11 |
+| 8a | `baseline` (header) has no soft delete and no `created_at` / `created_by`; `frozen_at` / `frozen_by_user_id` are that pair | §9.7 soft delete; §5.1 audit columns | A baseline is never retracted (A-36); the design names the creation pair (§5.2) | slice8_schema §2, Q-6 |
+| 8b | `baseline_*` shadow tables carry no audit columns, no `is_active`, no `row_version` | §5.1 audit columns on every business table | A snapshot is never updated or deleted (A-7); `baseline_id` → the header carries who and when | slice8_schema §3 |
 
 ## Frontend
 

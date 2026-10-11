@@ -35,6 +35,8 @@ import ComponentOff from '../features/common/ComponentOff';
 import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
 import ApplicationPage from '../features/applications/ApplicationPage';
+import BaselinesPage from '../features/baselines/BaselinesPage';
+import BaselinePage from '../features/baselines/BaselinePage';
 
 // Routes name their scope (§14.1): /p/:projectId for a project, /g/:programId for a program,
 // so the backend guard always receives it.
@@ -50,6 +52,7 @@ const PAGES = [
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
   ['settings/components', ComponentsPage],
   ['settings/applications', ApplicationsPage], ['settings/rate-card', RateCardPage], ['settings/applications/:appId', ApplicationPage],
+  ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
 ];
 
 // D-37: a screen of a component that is off shows why instead of its content. Any one listed

@@ -317,7 +317,7 @@ def test_retired_field_name_can_be_reused(db, world):
     (BrOrgRole, {"br_id", "org_role_id", "raci_code_id", "raci_behaviour"}),
 ])
 def test_link_table_shadow_keeps_the_link(model, link_cols):
-    shadow = shadow_table(model.__table__, MetaData(), baseline_fk=False)
+    shadow = shadow_table(model.__table__, MetaData(), baseline_fk=False, source_fk=False)
     assert link_cols <= {c.name for c in shadow.columns}
 
 

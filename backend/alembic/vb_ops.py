@@ -61,3 +61,20 @@ def live_tag(name: str, value: str, length: int = 20) -> sa.Column:
     live_guard, for a guard FK onto a text key (fr_interface.fr_type_behaviour → 'INTERFACE')."""
     return sa.Column(name, sa.String(length),
                      sa.Computed(f"CASE WHEN is_active THEN '{value}' END", persisted=True))
+
+
+def immutable_guards(table: str) -> None:
+    """A-7, criteria 26/55: a frozen row is never updated or deleted — the reject trigger for every role,
+    and no UPDATE grant for the app (it never had DELETE or TRUNCATE). No TRUNCATE trigger (S8-2).
+    DR8-S1: rows may be inserted only into a baseline whose header was written in the same transaction
+    (fn_shadow_insert_guard, created by 0048), so nothing is ever appended to an existing baseline."""
+    op.execute(f"CREATE TRIGGER trg_{table}_immutable BEFORE UPDATE OR DELETE ON {table} "
+               f"FOR EACH ROW EXECUTE FUNCTION fn_reject_modification()")
+    op.execute(f"CREATE TRIGGER trg_{table}_insert_guard AFTER INSERT ON {table} "
+               f"REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION fn_shadow_insert_guard()")
+    op.execute(f"REVOKE UPDATE ON {table} FROM vb_app")
+
+
+def drop_immutable_guards(table: str) -> None:
+    op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_insert_guard ON {table}")
+    op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_immutable ON {table}")

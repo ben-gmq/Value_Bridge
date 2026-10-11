@@ -12,14 +12,16 @@ from services import application, components, consistency_data, function_require
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
-INFORMATIONAL = frozenset({"purge_overdue", "as_is_support_by_to_be", "rows_in_off_component",
+INFORMATIONAL = frozenset({"purge_overdue", "as_is_support_by_to_be",
                            "as_is_support_on_to_be"})                    # + 7c Q-23   # + 6b-1 S6b-5: shown, never refusing
 # Warning lines: shown, and a freeze warns about them, but they never refuse it (4a-R10; Ben,
 # 2026-10-09: a baseline with fieldless entities warns and is still allowed).
 WARNINGS = frozenset({"entities_without_fields", "entities_keys_only"})   # + D-39
 # D-38 / S7-3: amber while editing, a REFUSAL at freeze — a process of a chart whose DFD is on with no
 # input-or-trigger, or no output data entity (slice7_schema §9.7).
-FREEZE_BLOCKING_WARNINGS = frozenset({"process_missing_input", "process_missing_output"})
+# Slice 8 [Q-12]: live rows in an off component also refuse the freeze, so a component gate never silently
+# leaves a live row out of a baseline (slice8_schema §3.2).
+FREEZE_BLOCKING_WARNINGS = frozenset({"process_missing_input", "process_missing_output", "rows_in_off_component"})
 
 
 def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:

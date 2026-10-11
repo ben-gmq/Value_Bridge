@@ -251,7 +251,7 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
     h = w["admin"]
     marks = {"code": "ZQXCODE", "name": "Zqx secret project", "node": "Zqx hidden L1", "step": "Zqx hidden step",
              "de": "Zqx ledger", "field": "zqx_field", "sol": "Zqx solution", "fr": "Zqx form",
-             "app": "ZQXAPP", "unit": "ZQXU", "role": "ZQXR", "ext": "Zqx bank"}
+             "app": "ZQXAPP", "unit": "ZQXU", "role": "ZQXR", "ext": "Zqx bank", "baseline": "Zqx frozen note"}
     p = client.post(f"{API}/projects", headers=h, json={
         "client_id": w["client_id"], "project_code": marks["code"], "project_name": marks["name"],
         "program_id": w["program_id"], "component_codes": ALL_COMPONENTS, "is_restricted": True}).json()
@@ -280,6 +280,18 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
                                         "org_role_name": "Zqx role"}, "org_role_id")
     post(f"/projects/{pid}/external-entities", {"ext_name": marks["ext"]}, "external_entity_id")
     assert step["is_process"]
+    # slice 8: a frozen baseline, marked by its note — its step reads and writes data so the freeze passes
+    de2 = post(f"/projects/{pid}/data-entities", {"de_name": "Zqx journal"}, "data_entity_id")
+    br = next(b for b in brs if b["bfc_node_id"] == step["bfc_node_id"])
+    for d, crud in ((de, "R"), (de2, "C")):
+        post(f"/business-requirements/{br['br_id']}/data-entities",
+             {"data_entity_id": d["data_entity_id"], "crud_code": crud}, "br_data_entity_id")
+    pv = client.get(f"{API}/projects/{pid}/baselines/next", headers=h).json()
+    fz = client.post(f"{API}/projects/{pid}/baselines/freeze", headers=h, json={
+        "note": marks["baseline"], "bump": "MINOR", "confirm_text": pv["confirm_text"],
+        "preview_digest": pv["preview_digest"]})
+    assert fz.status_code == 201, fz.text
+    ids.add(fz.json()["baseline"]["baseline_id"])
     return pid, marks, ids
 
 
@@ -314,9 +326,19 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
     for must in ("/api/v1/projects", "/api/v1/projects/{project_id}", "/api/v1/projects/{project_id}/bfc-tree",
                  "/api/v1/projects/{project_id}/data-entities", "/api/v1/projects/{project_id}/solutions",
                  "/api/v1/projects/{project_id}/function-requirements", "/api/v1/projects/{project_id}/applications",
-                 "/api/v1/programs/{program_id}/projects"):
+                 "/api/v1/programs/{program_id}/projects", "/api/v1/projects/{project_id}/baselines",
+                 "/api/v1/baselines/{id}"):
         assert must in seen_by_admin, must                                              # positive control
     assert called > 200
+    # slice 8 (sara L6): the parameterised baseline reads, as admin (positive) and as each non-member
+    bl = max(i for i in ids if client.get(f"{API}/baselines/{i}", headers=w["admin"]).status_code == 200)
+    extra = [f"{API}/baselines/{bl}/rows/business_requirement",
+             f"{API}/projects/{pid}/baselines/diff?from={bl}&to=live"]
+    assert all(client.get(u, headers=w["admin"]).status_code == 200 for u in extra)
+    assert any(marks["baseline"] in client.get(f"{API}/baselines/{bl}", headers=w["admin"]).text for _ in [0])
+    for who in ("outsider", "reviewer"):
+        hh = login(client, f"{who}@example.test")
+        assert all(client.get(u, headers=hh).status_code == 404 for u in extra + [f"{API}/baselines/{bl}"]), who
     for who in ("outsider", "reviewer"):                          # a non-member USER and VIEWER
         hits, _, _ = _sweep(client, login(client, f"{who}@example.test"), pid, ids)
         assert found(hits) == set(), who

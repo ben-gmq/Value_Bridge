@@ -74,7 +74,13 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
    Nothing cascades except a process step: `services/step_retire.OWNED` is the only list of rows
    that retire with something else; a new table that points at a step blocks until added to it.
 2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
-   trigger, and shadows are **generated** by `services/baseline_shadow.py`, never hand-written.
+   trigger and the insert guard (`vb_ops.immutable_guards`), and shadows are **generated** by
+   `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
+   that adds a column to a shadowed live table adds the shadow column **in the same migration** (the parity
+   test in `tests/test_baseline.py` reads the database), and a shadow column's type is **never** ALTERed
+   (pauses for Ben). The freeze set, its component gates and the hashed columns are data in
+   `services/freeze_set.py` (+ `components.FREEZE_GATES`); a new frozen table is added there and to
+   `models/baseline.SHADOWED`.
 3. **Audit columns, soft delete and `row_version` are born with every business table**
    (`models/base.py::AuditMixin`, `alembic/vb_ops.py::audit_columns`). `updated_at` is set by the
    `fn_set_updated_at()` trigger — never `onupdate=`. Stale `row_version` → 409.
