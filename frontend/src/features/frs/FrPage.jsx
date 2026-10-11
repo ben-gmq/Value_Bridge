@@ -13,6 +13,7 @@ import { ConflictDialog } from '../../components/ConflictDialog';
 import { t } from '../../i18n/t';
 import { Mono, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { FrWarnings, solutionOptions } from './frKit';
+import { InterfaceCard } from './InterfaceCard';
 
 const pickFr = (f) => ({ fr_name: f.fr_name ?? '', fr_type_code: f.fr_type_code,
   fulfilment_status_code: f.fulfilment_status_code, solution_id: f.solution_id ?? '',
@@ -168,6 +169,9 @@ export default function FrPage() {
           </Grid>
         </CardContent>
       </Card>
+
+      {/* D-27: only an FR whose type behaves as an interface carries interface detail (never a code test) */}
+      {fr.fr_type_behaviour === 'INTERFACE' && <InterfaceCard projectId={projectId} fr={fr} onNotice={setNotice} />}
 
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('frs.retireTitle')}

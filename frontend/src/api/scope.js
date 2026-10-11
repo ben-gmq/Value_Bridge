@@ -232,3 +232,11 @@ export const appApi = {
   solutions: (id) => d(http.get(`${V}/applications/${id}/solutions`)),
   steps: (id) => d(http.get(`${V}/applications/${id}/bfc-nodes`)),
 };
+
+// Slice 6b-2 (docs/slice6b2_spec.md). The detail is one PUT (the whole carried set) per FR.
+export const ifaceApi = {
+  get: (frId) => d(http.get(`${V}/function-requirements/${frId}/interface`)),
+  put: (frId, body) => d(http.put(`${V}/function-requirements/${frId}/interface`, body)),
+  remove: (frId, rowVersion) => del(`${V}/function-requirements/${frId}/interface`, rowVersion),
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/interfaces`, { params })),
+};
