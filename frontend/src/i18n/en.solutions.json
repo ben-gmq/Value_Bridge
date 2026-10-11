@@ -57,5 +57,6 @@
   "solutions.mix.title": "Solution mix by category",
   "solutions.mix.note": "Bar length is the number of live solutions in each category; the outlined row is this solution's.",
   "solutions.tiles.live": "Live solutions",
-  "solutions.tiles.noBr": "Answer no requirement"
+  "solutions.tiles.noBr": "Answer no requirement",
+  "solutions.count_one": "{n} solution"
 }

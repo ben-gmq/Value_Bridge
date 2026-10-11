@@ -82,7 +82,7 @@ export function CrudGrid({ projectId, br, disabled }) {
               const dirs = ['I', 'O'].filter((d) => mine.some((l) => l.direction === d));
               return (
                 <TableRow key={deId}>
-                  <TableCell sx={{ minWidth: 120, wordBreak: 'break-word' }}>
+                  <TableCell sx={{ minWidth: 150 }}>
                     <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
                       {de ? <><Code tone="teal" sx={{ fontSize: 12, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
                     </Link>

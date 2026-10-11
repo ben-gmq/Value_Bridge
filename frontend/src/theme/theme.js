@@ -1,8 +1,9 @@
 import { createTheme } from '@mui/material/styles';
-import { BRAND, LEVEL_COLORS, RADIUS, STATUS_COLOR_MAP, TOKENS } from './brand';
+import { BRAND, LEVEL_COLORS, LEVEL_COLORS_LIGHT, RADIUS, STATUS_COLOR_MAP, TOKENS } from './brand';
 
 const scheme = (mode) => {
   const t = TOKENS[mode];
+  const lv = mode === 'dark' ? LEVEL_COLORS : LEVEL_COLORS_LIGHT;
   return {
     palette: {
       mode,
@@ -17,8 +18,7 @@ const scheme = (mode) => {
       brand: { ...BRAND, title: t.title, link: t.link, data: t.data, teal: t.teal, tealText: t.tealText, tealTint: t.tealTint,
                onTeal: t.onTeal, selected: t.selected, lineStrong: t.lineStrong, field: t.field, muted: t.muted,
                purpleText: t.purpleText, purpleTint: t.purpleTint, navyTint: t.navyTint, raised: t.raised,
-               level1: LEVEL_COLORS[0], level2: LEVEL_COLORS[1], level3: LEVEL_COLORS[2], level4: LEVEL_COLORS[3],
-               level5: LEVEL_COLORS[4] },
+               level1: lv[0], level2: lv[1], level3: lv[2], level4: lv[3], level5: lv[4] },
       status: STATUS_COLOR_MAP[mode],
     },
   };
@@ -95,7 +95,10 @@ export const theme = createTheme({
           backgroundColor: theme.vars.palette.background.paper, '--DataGrid-containerBackground': theme.vars.palette.background.paper,
           '& .MuiDataGrid-columnSeparator': { display: 'none' },
           '& .MuiDataGrid-columnHeader, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller':
-            { backgroundColor: theme.vars.palette.background.paper } }),
+            { backgroundColor: theme.vars.palette.background.paper },
+          // the sort arrow sits inline with the title, never as a filled circle over it (UAT 9 D6)
+          '& .MuiDataGrid-iconButtonContainer .MuiIconButton-root, & .MuiDataGrid-sortButton':
+            { backgroundColor: 'transparent', padding: 2, width: 22, height: 22 } }),
         columnHeaderTitle: ({ theme }) => ({ color: theme.vars.palette.brand.muted, fontWeight: 600, fontSize: 12.5 }),
         cell: ({ theme }) => ({ borderColor: theme.vars.palette.divider, fontSize: 13.5 }),
         row: ({ theme }) => ({ '&:hover': { backgroundColor: theme.vars.palette.brand.selected } }),

@@ -123,7 +123,7 @@ export default function BaselinesPage() {
             </Button>)}
         </>
       )}>
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: '320px minmax(0, 1fr)' } }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '320px minmax(0, 1fr)' } }}>
         <Stack spacing={2} sx={{ minWidth: 0 }}>
           <Card title={t('baselines.versions')} bodySx={{ gap: 1 }}>
             <ListRow selected={to === LIVE} onClick={to === LIVE || !from ? undefined : () => pick('to', LIVE)}>
@@ -138,7 +138,7 @@ export default function BaselinesPage() {
         <Box sx={{ minWidth: 0 }}>
           {list.length === 0
             ? (q.isSuccess && <Alert severity="info">{t('baselines.pickTwo')}</Alert>)
-            : <DiffPanel projectId={projectId} from={from} to={to} fromLabel={labelOf(from)} toLabel={labelOf(to)} />}
+            : <DiffPanel key={`${from}-${to}`} projectId={projectId} from={from} to={to} fromLabel={labelOf(from)} toLabel={labelOf(to)} />}
         </Box>
       </Box>
       <FreezeDialog projectId={projectId} open={open} onClose={() => setOpen(false)}

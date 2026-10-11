@@ -17,7 +17,8 @@ import baselines from './en.baselines.json';
 const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components, ...baselines };
 
 export function t(key, vars = {}) {
-  const s = ALL[key] ?? key;
+  const s = (vars.n === 1 && ALL[`${key}_one`]) || ALL[key] || key;      // "{n} fields" → "1 field"
+
   return s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
 }
 

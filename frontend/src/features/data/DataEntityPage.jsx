@@ -81,9 +81,10 @@ function EntityForm({ entity, disabled, onSaved }) {
         <TextField id="de-owner" label={t('data.ownerNote')} value={f.business_owner_note}
           onChange={set('business_owner_note')} disabled={disabled} multiline maxRows={6} sx={{ flex: 1 }}
           slotProps={{ htmlInput: { maxLength: 4000 } }} />
-        <Button variant="contained" disabled={disabled || !dirty || !f.de_name.trim() || m.isPending}
-          onClick={() => { setError(''); setInfo(''); m.mutate(); }} sx={{ flexShrink: 0, alignSelf: { md: 'center' } }}>
-          {t('data.save')}</Button>
+        {!disabled && (
+          <Button variant="contained" disabled={!dirty || !f.de_name.trim() || m.isPending}
+            onClick={() => { setError(''); setInfo(''); m.mutate(); }} sx={{ flexShrink: 0, alignSelf: { md: 'center' } }}>
+            {t('data.save')}</Button>)}
       </Stack>
       <ConflictDialog open={conflict} onReload={reload} onClose={() => setConflict(false)}
         unsaved={Object.fromEntries(changed.map((k) => [labels[k], f[k]]))} />
@@ -213,16 +214,16 @@ export default function DataEntityPage() {
   const columns = [
     { field: 'seq_no', headerName: t('data.field.seqShort'), width: 48,
       renderCell: ({ value }) => <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12.5, color: 'text.secondary' }}>{value}</Typography> },
-    { field: 'field_name', headerName: t('data.field.name'), flex: 1, minWidth: 120,
+    { field: 'field_name', headerName: t('data.field.name'), flex: 1, minWidth: 110,
       renderCell: ({ row }) => (
         <Box component="span" sx={{ fontWeight: row.is_primary_key ? 700 : 400,
           color: row.is_active === false ? 'text.secondary' : 'inherit' }}>{row.field_name}</Box>) },
     { field: 'data_type_code', headerName: t('data.field.type'), width: 120,
       valueGetter: (v) => (v ? getLabel(v) : ''),
       renderCell: ({ value }) => (value ? <Box component="span" sx={mono}>{value}</Box> : none) },
-    { field: 'size', headerName: t('data.field.size'), width: 76, sortable: false, valueGetter: (_, row) => sizeText(row),
+    { field: 'size', headerName: t('data.field.size'), width: 64, sortable: false, valueGetter: (_, row) => sizeText(row),
       renderCell: ({ value }) => <Box component="span" sx={mono}>{value}</Box> },
-    { field: 'is_mandatory', headerName: t('data.field.required'), width: 88, align: 'center', headerAlign: 'center',
+    { field: 'is_mandatory', headerName: t('data.field.required'), width: 80, align: 'center', headerAlign: 'center',
       valueGetter: (v) => requiredText(v),
       renderCell: ({ row }) => (
         <Stack sx={{ alignItems: 'center', justifyContent: 'center', height: '100%' }}><RequiredMark value={row.is_mandatory} /></Stack>) },
@@ -233,7 +234,7 @@ export default function DataEntityPage() {
           <KeyRounded sx={{ fontSize: 17, color: 'brand.amber' }} />
           <Box component="span" sx={{ fontFamily: MONO, fontSize: 12 }}>{row.pk_ordinal}</Box>
         </Stack>) },
-    { field: 'fk', headerName: t('data.field.fk'), flex: 1, minWidth: 150, sortable: false,
+    { field: 'fk', headerName: t('data.field.fk'), flex: 1, minWidth: 120, sortable: false,
       valueGetter: (_, row) => (row.is_foreign_key ? fkText(row) : ''),
       renderCell: ({ row, tabIndex }) => (row.is_foreign_key ? (
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
@@ -245,7 +246,7 @@ export default function DataEntityPage() {
           <MonoChip>{t('data.field.groupNo', { n: row.fk_group_no })}</MonoChip>
         </Stack>
       ) : none) },
-    { field: 'actions', headerName: '', width: showRetired ? 176 : 96, sortable: false, align: 'right', renderCell: ({ row, tabIndex }) => !retired && canEdit && (
+    { field: 'actions', headerName: '', width: showRetired ? 150 : 96, sortable: false, align: 'right', renderCell: ({ row, tabIndex }) => !retired && canEdit && (
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
         {row.is_active === false ? (<>
           <Tag tone="neutral">{t('data.retiredChip')}</Tag>
@@ -273,7 +274,7 @@ export default function DataEntityPage() {
   return (
     <Page title={title} crumb={entity ? entityLabel(entity) : undefined}
       subtitle={entity && fieldsQ.isSuccess && usedQ.isSuccess
-        && t('data.detailSubtitle', { fields: fields.length, used: used.length })}
+        && t('data.detailSubtitle', { fields: t('data.fieldsN', { n: fields.length }), used: t('data.reqsN', { n: used.length }) })}
       actions={entity && canEdit && (retired
         ? <Button variant="contained" disabled={restoreEntity.isPending} onClick={() => { setError(''); restoreEntity.mutate(); }}>{t('data.restore')}</Button>
         : (<>

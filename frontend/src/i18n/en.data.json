@@ -15,7 +15,7 @@
   "data.saved": "Entity saved",
   "data.reloaded": "Reloaded the latest version. Your changes are still in the form: check them and save again.",
   "data.back": "← All data entities",
-  "data.detailSubtitle": "{fields} fields · used by {used} requirements",
+  "data.detailSubtitle": "{fields} · used by {used}",
   "data.fields": "Fields",
   "data.edit": "Edit",
   "data.retire": "Retire",
@@ -317,5 +317,10 @@
   "data.erd.referredBy": "Referred to by",
   "data.erd.relNone": "None in this view.",
   "data.erd.openEntity": "Open the data entity",
-  "data.erd.summary": "This diagram"
+  "data.erd.summary": "This diagram",
+  "data.erd.fieldCount_one": "{n} field",
+  "data.fieldsN": "{n} fields",
+  "data.fieldsN_one": "{n} field",
+  "data.reqsN": "{n} requirements",
+  "data.reqsN_one": "{n} requirement"
 }

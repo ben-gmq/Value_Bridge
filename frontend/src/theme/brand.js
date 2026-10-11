@@ -20,6 +20,8 @@ export const BRAND = {
 
 // Levels 1–5 of the business function chart, stepped in the FTC purple scale (mockup kit LEVEL_COLORS).
 export const LEVEL_COLORS = ['#E3DCFA', '#C9B9F5', '#B09AEE', '#9679E5', '#7848DC'];
+// On white the outline levels (1–3) need depth to read; 4–5 stay filled light steps with purple text.
+export const LEVEL_COLORS_LIGHT = ['#5B3FB8', '#6A50C2', '#7A62CC', '#B09AEE', '#9679E5'];
 
 // Semantic status colours — separate from BRAND, never overridden by it (§6).
 export const STATUS_COLOR_MAP = {

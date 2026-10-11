@@ -122,7 +122,7 @@ export default function SolutionPage() {
             options={categories.map((c) => ({ value: c.code, label: c.label }))} />
         ) : <Tag>{categoryLabel(v.category_code)}</Tag>}
       </Box>
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'minmax(0,2fr) minmax(0,1fr)' } }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,2fr) minmax(0,1fr)' } }}>
         {text('solution_name', 1, 200)}
         {editable ? (
           <SimpleSelect id="sol-status" label={labels.status_code} value={v.status_code}

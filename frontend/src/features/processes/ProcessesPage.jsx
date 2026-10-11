@@ -238,7 +238,7 @@ export default function ProcessesPage() {
           {t('processes.pickDfd')}</Alert>
       )}
       <Box sx={{ display: 'grid', gap: 2, alignItems: 'stretch',
-        gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'minmax(300px,400px) minmax(0,1fr)' } }}>
+        gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(300px,400px) minmax(0,1fr)' } }}>
         <Card title={t('processes.hierarchy')} action={hierarchyAction} bodySx={{ gap: 1.25, px: 1.5 }}>
           <Box sx={{ px: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
             <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
