@@ -13,12 +13,12 @@ import { MONO } from '../../theme/theme';
 import { useComponents } from '../../app/useComponents';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEditForm, useFormSave } from './chartKit';
-import { FlowGaps, StepSequence } from './FlowSections';
+import { CompletenessPanel, PerformerPanel, TriggerPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
 
-const STEP_SINGLE = ['ACCOUNTABLE', 'RESPONSIBLE'];      // services/raci.py SINGLE[BfcNodeOrgRole]
+const STEP_SINGLE = ['ACCOUNTABLE'];      // services/raci.py SINGLE[BfcNodeOrgRole] — several R are normal (D-46)
 
 const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose_desc ?? '',
   data_processing_desc: n.data_processing_desc ?? '' });
@@ -50,8 +50,7 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     qc.invalidateQueries({ queryKey: keys.tree(projectId) });
     qc.invalidateQueries({ queryKey: keys.node(nodeId) });
     qc.invalidateQueries({ queryKey: keys.brs(projectId) });
-    qc.invalidateQueries({ queryKey: keys.flows(projectId) });
-    qc.invalidateQueries({ queryKey: keys.flowGaps(projectId) });
+    qc.invalidateQueries({ queryKey: keys.flows(projectId) });      // every DFD and its gaps
   };
 
   const save = useFormSave({
@@ -129,6 +128,8 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
 
   const live = node.is_active;
   const editable = live && canEdit;      // a read-only user sees the panel, not its controls (sara LOW-3)
+  const asIs = node.bfc_set_code === 'AS_IS';
+  const dfdOn = asIs ? isOn('AS_IS') : isOn('TO_BE_DFD');      // the chart's DFD component (D-37, D-47)
   const v = form.values;
   const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending;
   const restoreWithDependents = node.is_process && plainFor !== nodeId;
@@ -238,16 +239,18 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             <Divider sx={{ my: 3 }} />
             <StepData projectId={projectId} node={node} disabled={!editable} />
             <Divider sx={{ my: 3 }} />
-            {isOn('TO_BE_DFD') && <><StepSequence projectId={projectId} node={node} disabled={!editable} />
+            {dfdOn && <><PerformerPanel projectId={projectId} node={node} disabled={!editable} />
+              <Divider sx={{ my: 3 }} />
+              <TriggerPanel projectId={projectId} node={node} disabled={!editable} />
               <Divider sx={{ my: 3 }} /></>}
             <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
               list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
               unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
             <Divider sx={{ my: 3 }} />
-            {isOn('TO_BE_DFD') && <><StepFlows projectId={projectId} node={node} disabled={!editable} />
+            {dfdOn && <><StepFlows projectId={projectId} node={node} disabled={!editable} />
               <Divider sx={{ my: 3 }} /></>}
-            {/* As-is support (D-8, S6b-1): retires and restores with the step. Hidden when off (D-37). */}
-            {isOn('APPLICATION', 'AS_IS') && <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
+            {/* Supporting systems of an as-is step (Q-23): a to-be step's come from its solutions. */}
+            {asIs && isOn('APPLICATION', 'AS_IS') && <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
               empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
               rowId="application_bfc_node_id" disabled={!editable}
               api={{ list: () => bfcApi.apps(nodeId),
@@ -263,12 +266,10 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && (
               <>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 2, flexWrap: 'wrap' }}>
-                  <Button variant="outlined" component={RouterLink} to={links.flow(projectId, nodeId)}>
-                    {t('processes.openFlow')}</Button>
-                  <Button variant="outlined" component={RouterLink} to={links.dfd(projectId, nodeId)}>
-                    {t('processes.openDfd')}</Button>
+                  {dfdOn && <Button variant="outlined" component={RouterLink} to={links.dfd(projectId, nodeId)}>
+                    {t('processes.openDfd')}</Button>}
                 </Stack>
-                <Box sx={{ mt: 3 }}><FlowGaps projectId={projectId} node={node} /></Box>
+                {dfdOn && <Box sx={{ mt: 3 }}><CompletenessPanel projectId={projectId} node={node} /></Box>}
               </>
             )}
           </Box>

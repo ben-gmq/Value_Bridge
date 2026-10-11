@@ -1,71 +1,33 @@
-"""Slice 2b through the API: the process flow graph and saved diagram positions (§7.2a,
-D-21, D-30, S2-6). Grade 2 for the graph (a client reads it); Grade 3 for positions, except
-the one hard delete the app role may run, which is proven to stay inside its scope.
+"""Saved diagram positions (D-29, D-30, S2-6; slice 7c S7-5). Grade 3 for positions, except the one
+hard delete the app role may run, which is proven to stay inside its scope. The process-flow graph
+these tests once drew was retired by D-38 (0045): its saved positions stay readable as history and are
+refused for writes (409); the DFD places steps, entities, parties and triggers.
 
 Not covered: concurrent first saves of one object (the ON CONFLICT arbiter is the design's
-answer and is not raced here), and the TO_BE variant's systems, which wait for APPLICATION."""
+answer and is not raced here)."""
+import pytest
 from sqlalchemy import text
 
-from tests.test_process_flow_api import edge, steps  # noqa: F401 — steps is a fixture
-from tests.test_scope_api import API, _org_role, ed, node  # noqa: F401 — ed is a fixture
+from tests.test_dfd_api import starts, trigger
+from tests.test_scope_api import API, ed, node  # noqa: F401 — ed is a fixture
 
 
-def graph(client, ed, node_id, headers=None, **q):
-    return client.get(f"{API}/bfc-nodes/{node_id}/process-flow", headers=headers or ed["h"], params=q)
+@pytest.fixture
+def steps(client, ed):
+    """Three process steps under one L2 parent."""
+    a = node(client, ed, "Sales")
+    b = node(client, ed, "Order to cash", a["bfc_node_id"])
+    return {"parent": b, **{k: node(client, ed, n, b["bfc_node_id"], is_process=True)
+                            for k, n in (("s1", "Receive order"), ("s2", "Check credit"),
+                                         ("s3", "Confirm order"))}}
 
 
-def layout_url(ed, scope, kind="PROCESS_FLOW"):
+def dfd(client, ed, node_id, headers=None):
+    return client.get(f"{API}/bfc-nodes/{node_id}/dfd", headers=headers or ed["h"])
+
+
+def layout_url(ed, scope, kind="DFD"):
     return f"{API}/projects/{ed['p']}/diagram-layouts/{kind}/{scope}"
-
-
-def test_graph_is_the_steps_under_the_node_with_edges_lanes_stores_and_parties(client, ed, steps):
-    s1, s2, s3, parent = steps["s1"], steps["s2"], steps["s3"], steps["parent"]
-    area = node(client, ed, "Fulfilment")
-    far = node(client, ed, "Ship", node(client, ed, "Dispatch", area["bfc_node_id"])["bfc_node_id"],
-               is_process=True)
-    edge(client, ed, None, s1)
-    edge(client, ed, s1, s2, "CONDITIONAL", "Credit OK")
-    edge(client, ed, s2, far, "HANDOFF")
-    clerk = _org_role(client, ed, "CLERK")
-    client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/org-roles", headers=ed["h"],
-                json={"org_role_id": clerk["org_role_id"], "raci_code": "R"})
-    de = client.post(f"{API}/projects/{ed['p']}/data-entities", headers=ed["h"],
-                     json={"de_name": "Sales order"}).json()
-    client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/data-entities", headers=ed["h"],
-                json={"data_entity_id": de["data_entity_id"], "direction": "O"})
-    client.post(f"{API}/bfc-nodes/{s2['bfc_node_id']}/data-entities", headers=ed["h"],
-                json={"data_entity_id": de["data_entity_id"], "direction": "I"})
-    cust = client.post(f"{API}/projects/{ed['p']}/external-entities", headers=ed["h"],
-                       json={"ext_name": "Customer"}).json()
-    client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/external-flows", headers=ed["h"],
-                json={"external_entity_id": cust["external_entity_id"], "direction": "I"})
-
-    r = graph(client, ed, parent["bfc_node_id"], headers=ed["rv"])
-    assert r.status_code == 200, r.text
-    g = r.json()
-    assert [n["node_name"] for n in g["nodes"]] == ["Receive order", "Check credit", "Confirm order"]
-    assert g["nodes"][0]["br_number"] and g["nodes"][0]["lane_org_role_id"] == clerk["org_role_id"]
-    assert g["nodes"][1]["lane_org_role_id"] is None                          # the unassigned lane
-    assert [ln["org_role_code"] for ln in g["lanes"]] == ["CLERK"]
-    kinds = {(e["from_bfc_node_id"], e["to_bfc_node_id"]): e for e in g["edges"]}
-    assert kinds[(s2["bfc_node_id"], far["bfc_node_id"])]["is_external"] is True
-    assert kinds[(None, s1["bfc_node_id"])]["is_external"] is False
-    assert [o["node_name"] for o in g["outside"]] == ["Ship"]                 # the hand-off leaves the frame
-    assert g["stores"] == [{"data_entity_id": de["data_entity_id"], "de_number": de["de_number"],
-                            "de_name": "Sales order", "reads": [s2["bfc_node_id"]],
-                            "writes": [s1["bfc_node_id"]]}]
-    assert g["externals"][0]["ext_name"] == "Customer" and g["externals"][0]["flows"][0]["direction"] == "I"
-    assert g["layout"] == []
-    far_graph = graph(client, ed, area["bfc_node_id"]).json()                 # the other area sees it too
-    assert [n["node_name"] for n in far_graph["nodes"]] == ["Ship"]
-    assert far_graph["edges"][0]["is_external"] is True
-
-
-def test_graph_refuses_a_step_a_bad_variant_and_outsiders(client, ed, steps):
-    assert graph(client, ed, steps["s1"]["bfc_node_id"]).status_code == 422
-    assert graph(client, ed, steps["parent"]["bfc_node_id"], variant="BEST").status_code == 422
-    assert graph(client, ed, steps["parent"]["bfc_node_id"], variant="TO_BE").status_code == 200
-    assert graph(client, ed, steps["parent"]["bfc_node_id"], headers=ed["out"]).status_code == 404
 
 
 def test_positions_upsert_per_object_and_keep_the_first_placer(client, ed, steps, world, db):
@@ -85,7 +47,7 @@ def test_positions_upsert_per_object_and_keep_the_first_placer(client, ed, steps
     who = db.execute(text("SELECT created_by, updated_by FROM diagram_layout WHERE bfc_node_id = :n"),
                      {"n": s1["bfc_node_id"]}).one()
     assert who.created_by == world["users"]["editor"] and who.updated_by != who.created_by
-    g = graph(client, ed, scope).json()
+    g = dfd(client, ed, scope).json()
     assert {p["object_id"] for p in g["layout"]} == {s1["bfc_node_id"], s2["bfc_node_id"]}
 
 
@@ -103,25 +65,27 @@ def test_reset_hard_deletes_only_its_own_diagram_and_is_audited(client, ed, step
     ev = db.execute(text("SELECT target_table, target_id, detail FROM audit_event "
                          "WHERE event_type = 'LAYOUT_RESET'")).all()
     assert [tuple(e) for e in ev] == [("bfc_node", scope,
-                                       {"diagram_type": "PROCESS_FLOW", "scope_key": str(scope), "positions": 1})]
+                                       {"diagram_type": "DFD", "scope_key": str(scope), "positions": 1})]
 
 
 def test_positions_are_validated_against_scope_type_and_project(client, ed, steps, world):
     scope, s1, s2 = steps["parent"]["bfc_node_id"], steps["s1"], steps["s2"]
-    start = edge(client, ed, None, s1)
-    middle = edge(client, ed, s1, s2)
     other = client.post(f"{API}/projects/{world['p_fin']}/bfc-nodes", headers=world["admin"],
                         json={"node_name": "Elsewhere"}).json()
     de = client.post(f"{API}/projects/{ed['p']}/data-entities", headers=ed["h"], json={"de_name": "Order"}).json()
+    month = trigger(client, ed, "Month-end close")
+    starts(client, ed, s1, month)
 
-    def put(scope_key, items, kind="PROCESS_FLOW", headers=None):
+    def put(scope_key, items, kind="DFD", headers=None):
         return client.put(layout_url(ed, scope_key, kind), headers=headers or ed["h"], json=items)
 
     def one(**kw):
         return [{"x": 0, "y": 0, **kw}]
 
-    assert put(scope, one(object_type="EVENT", object_id=start["bfc_node_flow_id"])).status_code == 200
-    assert put(scope, one(object_type="EVENT", object_id=middle["bfc_node_flow_id"])).status_code == 422
+    assert put(scope, one(object_type="TRIGGER", object_id=month["process_trigger_id"])).status_code == 200
+    assert put(scope, one(object_type="TRIGGER", object_id=10 ** 9)).status_code == 422
+    assert put(scope, one(object_type="EVENT", object_id=1)).status_code == 422        # history only
+    assert put(scope, one(object_type="BOGUS", object_id=1)).status_code == 422
     assert put(scope, one(object_type="STEP", object_id=other["bfc_node_id"])).status_code == 422
     assert put(scope, one(object_type="STEP", object_id=s1["bfc_node_id"], collapsed=True)).status_code == 422
     assert put(s1["bfc_node_id"], one(object_type="STEP", object_id=s2["bfc_node_id"])).status_code == 422
@@ -135,16 +99,26 @@ def test_positions_are_validated_against_scope_type_and_project(client, ed, step
     assert put("project", one(object_type="STEP", object_id=s1["bfc_node_id"]), kind="ERD").status_code == 422
 
 
+def test_process_flow_positions_are_history_readable_but_never_written(client, ed, steps, db):
+    """S7-5 / D-38: a PROCESS_FLOW layout can still be read; a save or a reset is 409, and nothing moves."""
+    scope, s1 = steps["parent"]["bfc_node_id"], steps["s1"]
+    url = layout_url(ed, scope, "PROCESS_FLOW")
+    db.execute(text("INSERT INTO diagram_layout (project_id, diagram_type, scope_bfc_node_id, bfc_node_id, x, y, "
+                    "is_collapsed, created_by) SELECT project_id, 'PROCESS_FLOW', :scope, bfc_node_id, 5, 6, false, "
+                    "created_by FROM bfc_node WHERE bfc_node_id = :s"), {"scope": scope, "s": s1["bfc_node_id"]})
+    db.commit()                                                     # a position saved before 7c
+    before = client.get(url, headers=ed["rv"])
+    assert before.status_code == 200
+    assert [(p["object_type"], p["object_id"], p["x"]) for p in before.json()] == [("STEP", s1["bfc_node_id"], 5)]
+    r = client.put(url, headers=ed["h"], json=[{"object_type": "STEP", "object_id": s1["bfc_node_id"], "x": 9, "y": 9}])
+    assert r.status_code == 409 and "D-38" in r.json()["detail"]
+    assert client.delete(url, headers=ed["h"]).status_code == 409
+    assert client.get(url, headers=ed["h"]).json() == before.json()
+    assert dfd(client, ed, scope).json()["layout"] == []              # the DFD never reads them
+    assert client.put(url, headers=ed["out"], json=[]).status_code == 404
+
+
 # ---- sara L6: the remaining proofs -------------------------------------------------------
-
-def test_a_cycle_draws_like_any_other_flow(client, ed, steps):
-    s1, s2 = steps["s1"], steps["s2"]
-    edge(client, ed, s1, s2)
-    edge(client, ed, s2, s1, "CONDITIONAL", "Rejected")
-    edge(client, ed, s1, s1, "CONDITIONAL", "Rework")
-    g = graph(client, ed, steps["parent"]["bfc_node_id"])
-    assert g.status_code == 200 and len(g.json()["edges"]) == 3
-
 
 def test_layout_routes_are_hidden_from_outsiders(client, ed, steps):
     url = layout_url(ed, steps["parent"]["bfc_node_id"])

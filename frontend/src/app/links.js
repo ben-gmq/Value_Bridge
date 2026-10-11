@@ -1,9 +1,8 @@
 // The page addresses every screen links to (§14.1: a URL names its scope). Screens link to
 // each other only through these, so the three Slice 1 screens agree without knowing each other.
 export const links = {
-  processes: (p) => `/p/${p}/processes`,
-  node: (p, nodeId) => `/p/${p}/processes?node=${nodeId}`,
-  flow: (p, nodeId) => `/p/${p}/processes/${nodeId}/flow`,
+  processes: (p, bfcSet) => (bfcSet === 'AS_IS' ? `/p/${p}/processes?set=AS_IS` : `/p/${p}/processes`),
+  node: (p, nodeId, bfcSet) => `/p/${p}/processes?node=${nodeId}${bfcSet === 'AS_IS' ? '&set=AS_IS' : ''}`,
   dfd: (p, nodeId) => `/p/${p}/processes/${nodeId}/dfd`,
   requirements: (p) => `/p/${p}/requirements`,
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
@@ -59,10 +58,12 @@ export const keys = {
   parties: (p) => ['parties', String(p)],
   units: (p) => ['org-units', String(p)],
   roles: (p) => ['org-roles', String(p)],
-  flows: (p) => ['process-flows', String(p)],
-  flowGaps: (p) => ['flow-completeness', String(p)],
-  flowGraph: (p, nodeId) => ['process-flows', String(p), 'graph', String(nodeId)],   // under flows(p): edge edits refresh it
+  flows: (p) => ['process-flows', String(p)],                                       // every DFD of the project
+  flowGaps: (p) => ['process-flows', String(p), 'completeness'],                    // under flows(p)
   dfdGraph: (p, nodeId) => ['process-flows', String(p), 'dfd', String(nodeId)],     // under flows(p): step I/O edits refresh it
+  triggers: (p) => ['process-triggers', String(p)],
+  stepTriggers: (nodeId) => ['bfc-node', String(nodeId), 'triggers'],                // under node(id)
+  chartCounts: (p) => ['bfc-sets', String(p)],
   importBatch: (id) => ['import-batch', String(id)],
   importPreview: (id) => ['import-batch', String(id), 'preview'],                     // under importBatch(id): a commit refreshes it
 };

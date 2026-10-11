@@ -15,9 +15,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNodeExternalFlow, BfcNodeFlow,
-                    BrSolution, CodeMaster, FunctionRequirement, Project, ProjectComponent,
-                    ProjectTemplateComponent, Solution)
+from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
+                    BfcNodeTrigger, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
+                    ProjectComponent, ProjectTemplateComponent, Solution)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
@@ -36,13 +36,20 @@ DEPTHS = ("KEYS_ONLY", "FULL")
 _SAMPLE = 10
 
 
-def _rows(model, label_col, *extra):
-    """A live-row probe for one table: (count, up to 10 labels)."""
+def _rows(model, label_col, *extra, step_set: str | None = None):
+    """A live-row probe for one table: (count, up to 10 labels). `step_set` keeps step-owned rows of
+    one chart only and labels them by their step's code (L8)."""
     def probe(db: Session, project_id: int) -> tuple[int, list[str]]:
         where = (model.project_id == project_id, model.is_active, *extra)
-        n = db.scalar(select(func.count()).select_from(model).where(*where))
-        names = [str(v) for v in db.scalars(select(label_col).where(*where)
-                                            .order_by(label_col).limit(_SAMPLE))] if n else []
+        q = select(func.count()).select_from(model)
+        lq = select(label_col)
+        if step_set is not None:
+            on = BfcNode.bfc_node_id == model.bfc_node_id
+            q, lq = q.join(BfcNode, on), select(BfcNode.hier_code).select_from(model).join(BfcNode, on)
+            where = (*where, BfcNode.bfc_set_code == step_set)
+        n = db.scalar(q.where(*where))
+        names = [str(v) for v in db.scalars(lq.where(*where).order_by(lq.selected_columns[0])
+                                            .limit(_SAMPLE))] if n else []
         return n, names
     return probe
 
@@ -54,9 +61,13 @@ COMPONENT_ROWS = {
     "APPLICATION": (_rows(Application, Application.application_code),),
     "EFFORT": (_rows(FunctionRequirement, FunctionRequirement.fr_number,
                      FunctionRequirement.complexity_code_id.is_not(None)),),
-    "TO_BE_DFD": (_rows(BfcNodeExternalFlow, BfcNodeExternalFlow.bfc_node_external_flow_id),
-                  _rows(BfcNodeFlow, BfcNodeFlow.bfc_node_flow_id)),
-    "AS_IS": (_rows(ApplicationBfcNode, ApplicationBfcNode.application_bfc_node_id),),
+    # 7c: the to-be DFD's own rows — external flows, trigger links and performers on to-be steps.
+    "TO_BE_DFD": (_rows(BfcNodeExternalFlow, None, step_set="TO_BE"),
+                  _rows(BfcNodeTrigger, None, step_set="TO_BE"),
+                  _rows(BfcNode, BfcNode.hier_code, BfcNode.performer_kind.is_not(None),
+                        BfcNode.bfc_set_code == "TO_BE")),
+    # the as-is chart itself (D-47): its nodes carry everything else of it
+    "AS_IS": (_rows(BfcNode, BfcNode.hier_code, BfcNode.bfc_set_code == "AS_IS"),),
 }
 
 
@@ -65,19 +76,33 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     Solution: ("SOLUTION",),
     FunctionRequirement: ("FUNCTION_REQUIREMENT",),
     Application: ("APPLICATION",),
-    BfcNodeExternalFlow: ("TO_BE_DFD",),
-    BfcNodeFlow: ("TO_BE_DFD",),
     ApplicationBfcNode: ("APPLICATION", "AS_IS"),
     BrSolution: ("SOLUTION",),
 }
+DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 
 
-def needed_for_rows(rows) -> tuple[str, ...]:
+def dfd_component(bfc_set: str) -> str:
+    """The component that owns a chart's DFD data: TO_BE_DFD or AS_IS (DR7-D1)."""
+    return "AS_IS" if bfc_set == "AS_IS" else "TO_BE_DFD"
+
+
+def node_dfd_component(node) -> str:
+    """Guard resolver (DR7-D1): performer, trigger links and external flows belong to the node's
+    chart's DFD component. One definition, imported by every router."""
+    return dfd_component(node.bfc_set_code)
+
+
+def needed_for_rows(rows, bfc_set: str | None = None) -> tuple[str, ...]:
     """Every component the rows about to become live need, including an FR's rating (EFFORT)
-    and its solution link (SOLUTION)."""
+    and its solution link (SOLUTION), and a step's DFD rows and performer (its chart's DFD)."""
     out: set[str] = set()
     for r in rows:
         out.update(ROW_COMPONENTS.get(type(r), ()))
+        if bfc_set is not None and (isinstance(r, DFD_ROWS) or (isinstance(r, BfcNode) and r.performer_kind)):
+            out.add(dfd_component(bfc_set))
+        if isinstance(r, BfcNode) and r.bfc_set_code == "AS_IS":
+            out.add("AS_IS")
         if isinstance(r, FunctionRequirement):
             if r.complexity_code_id is not None:
                 out.add("EFFORT")
@@ -86,11 +111,20 @@ def needed_for_rows(rows) -> tuple[str, ...]:
     return tuple(sorted(out))
 
 
+# The trigger catalogue serves both DFDs (§12 auditor Q3): its live rows block switching BOTH off.
+DFD_CODES = frozenset({"TO_BE_DFD", "AS_IS"})
+_catalogue = _rows(ProcessTrigger, ProcessTrigger.trigger_name)
+
+
 def rows_in_off_component(db: Session, project_id: int) -> list[dict]:
     """INFORMATIONAL consistency line (DR7-P2): live rows of a component that is off — the
     reconciliation for any gating gap. Empty when the guard and the restore checks hold."""
     on = enabled(db, project_id)
     out = []
+    if not DFD_CODES & on:
+        n, names = _catalogue(db, project_id)
+        if n:
+            out.append({"component": "TO_BE_DFD", "count": n, "sample": names})
     for code, probes in COMPONENT_ROWS.items():
         if code in on:
             continue
@@ -217,6 +251,12 @@ def _blockers(db: Session, project_id: int, turn_off: set[str], staying: set[str
         out.append({"component": c, "reason": "NEEDED_BY", "by": needers,
                     "message": f"{', '.join(labels[n].label for n in needers)} "
                                f"need{'s' if len(needers) == 1 else ''} {labels[c].label}"})
+    if DFD_CODES & turn_off and not DFD_CODES & staying:        # both DFD components end up off
+        n, names = _catalogue(db, project_id)
+        if n:
+            out.append({"component": "TO_BE_DFD", "reason": "LIVE_ROWS", "count": n, "sample": names,
+                        "message": f"The trigger catalogue still has {n} live trigger{'s' if n != 1 else ''}: "
+                                   f"{', '.join(names)}" + (" …" if n > len(names) else "")})
     for c in sorted(turn_off):
         for probe in COMPONENT_ROWS.get(c, ()):
             n, names = probe(db, project_id)

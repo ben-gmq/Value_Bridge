@@ -15,24 +15,27 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow,
-                    BfcNodeOrgRole, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
-                    DataEntity, ExternalEntity, OrgRole, Solution)
+from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow,
+                    BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
+                    DataEntity, ExternalEntity, OrgRole, ProcessTrigger, Solution)
 from services import audit, bfc, components, lifecycle
 
 RETIRED = "STEP_RETIRED_WITH_DEPENDENTS"
 RESTORED = "STEP_RESTORED_WITH_DEPENDENTS"
 
 # A-SR-1 / SR-4: exactly these, and a future FK-declared table blocks until it is added here.
+# BfcNodeFlow left with D-38 (0045: retired, SELECT-only); BfcNodeTrigger joined with D-49.
 OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow,
-                 BfcNodeFlow, ApplicationBfcNode)          # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)
+                 ApplicationBfcNode, BfcNodeTrigger)       # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)
+# Tables an older retire event may list that a restore must skip: their rows can never be live again.
+RETIRED_TABLES = frozenset({"bfc_node_flow"})
 OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution)          # BrSolution: S5-1 (Ben, 2026-10-09)
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, BfcNodeFlow, ApplicationBfcNode),
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, ApplicationBfcNode, BfcNodeTrigger),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -59,12 +62,8 @@ def _owned(db: Session, step: BfcNode) -> list:
     br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.bfc_node_id == sid,
                                                       BusinessRequirement.is_active)).first()
     found = {BusinessRequirement: [br] if br else []}
-    for model in (BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow, ApplicationBfcNode):
+    for model in (BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow, ApplicationBfcNode, BfcNodeTrigger):
         found[model] = list(db.scalars(select(model).where(model.bfc_node_id == sid, model.is_active)))
-    # One OR query returns a self-loop once.
-    found[BfcNodeFlow] = list(db.scalars(select(BfcNodeFlow).where(
-        (BfcNodeFlow.from_bfc_node_id == sid) | (BfcNodeFlow.to_bfc_node_id == sid),
-        BfcNodeFlow.is_active)))
     for model in OWNED_BY_BR:
         found[model] = [] if br is None else list(db.scalars(select(model).where(
             model.br_id == br.br_id, model.is_active)))
@@ -101,10 +100,8 @@ def describe(db: Session, row) -> str:
     if isinstance(row, BfcNodeExternalFlow):
         ext = db.get(ExternalEntity, row.external_entity_id)
         return f"{ext.ext_number} {ext.ext_name} ({row.direction})"
-    if isinstance(row, BfcNodeFlow):
-        label = f" [{row.condition_label}]" if row.condition_label else ""
-        return (f"{_node_ref(db, row.from_bfc_node_id, 'start')} → "
-                f"{_node_ref(db, row.to_bfc_node_id, 'end')}{label}")
+    if isinstance(row, BfcNodeTrigger):
+        return f"Trigger: {db.get(ProcessTrigger, row.process_trigger_id).trigger_name}"
     return lifecycle.label(row)
 
 
@@ -199,6 +196,8 @@ def _retired_with_dependents(db: Session, step: BfcNode) -> dict | None:
 def restore_plain(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
     """PATCH /bfc-nodes/{id}/restore. Refused for a step whose latest retire took its
     dependents with it, so the undo key is never thrown away (spec §4, SR-1)."""
+    # sara 7c L1: a performer coming back live needs its chart's DFD on (DR7-P2).
+    components.require_on(db, node.project_id, components.needed_for_rows([node], node.bfc_set_code))
     if _retired_with_dependents(db, node) is not None:
         raise HTTPException(409, "This step was retired with its requirement and flows. "
                                  "Use Restore with its requirement and flows.", headers=USE_DEPENDENTS)
@@ -216,8 +215,8 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
     if event is None:
         raise HTTPException(409, "This step was retired on its own. Use Restore.", headers=USE_PLAIN)
     at = datetime.fromisoformat(event["deleted_at"])
-    rows = [r for r in (_load(db, (t, i)) for t, i in event["rows"])
-            if r is not None and not r.is_active and r.deleted_at == at]
+    rows = [r for r in (_load(db, (t, i)) for t, i in event["rows"] if t not in RETIRED_TABLES)
+            if r is not None and not r.is_active and r.deleted_at == at]          # §9.6: arrows stay retired
     keys = {_key(r) for r in rows}
     if _key(step) not in keys:                                 # SR-1, belt and braces
         raise HTTPException(409, "This step was retired on its own. Use Restore.", headers=USE_PLAIN)
@@ -226,21 +225,13 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
         for parent in lifecycle.inactive_parents(db, r):
             if _key(parent) not in keys:
                 first.setdefault(_key(parent), parent)
-    # An arrow's far end must still be a process step: one demoted while this step was retired
-    # would fail the guard FK at the flush with a message naming nothing (sara M1, step-retire).
-    for r in rows:
-        if isinstance(r, BfcNodeFlow):
-            for end in (r.from_bfc_node_id, r.to_bfc_node_id):
-                far = db.get(BfcNode, end) if end not in (None, step.bfc_node_id) else None
-                if far is not None and not far.is_process and _key(far) not in keys:
-                    first.setdefault(_key(far), far)
     if first:
         names = [lifecycle.label(p) + ("" if getattr(p, "is_process", True) or not p.is_active
                                        else " (make it a process step again)")
                  for _, p in sorted(first.items())]
         raise HTTPException(409, "Restore these first: " + "; ".join(names), headers=RESTORE_FIRST)
     # DR7-P2: rows coming back live must belong to components that are on (D-37).
-    components.require_on(db, step.project_id, components.needed_for_rows(rows))
+    components.require_on(db, step.project_id, components.needed_for_rows(rows, step.bfc_set_code))
     action_id = str(uuid.uuid4())
     by_model: dict[type, list] = {}
     for r in rows:

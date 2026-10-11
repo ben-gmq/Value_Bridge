@@ -11,8 +11,14 @@ const asText = { responseType: 'text',
 const del = (url, rowVersion) => d(http.delete(url, { params: { row_version: rowVersion } }));
 
 export const bfcApi = {
-  tree: (projectId, includeRetired = false) =>
-    d(http.get(`${P(projectId)}/bfc-tree`, { params: { include_retired: includeRetired } })),
+  tree: (projectId, includeRetired = false, bfcSet = 'TO_BE') =>
+    d(http.get(`${P(projectId)}/bfc-tree`, { params: { include_retired: includeRetired, bfc_set: bfcSet } })),
+  // D-46: one performer per process, sent by code (or an AI's name), never by id.
+  setPerformer: (id, body) => d(http.put(`${V}/bfc-nodes/${id}/performer`, body)),
+  // D-49: the triggers that start a step.
+  triggers: (id) => d(http.get(`${V}/bfc-nodes/${id}/triggers`)),
+  linkTrigger: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/triggers`, body)),
+  unlinkTrigger: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/triggers/${linkId}`, rowVersion),
   create: (projectId, body) => d(http.post(`${P(projectId)}/bfc-nodes`, body)),
   get: (id) => d(http.get(`${V}/bfc-nodes/${id}`)),
   update: (id, body) => d(http.patch(`${V}/bfc-nodes/${id}`, body)),
@@ -123,27 +129,29 @@ export const orgApi = {
   restoreRole: (id) => d(http.patch(`${V}/org-roles/${id}/restore`)),
 };
 
-// Slice 2 — process flow edges (§9, S2-2: the ends are create-only).
-export const flowApi = {
-  list: (projectId, nodeId) => d(http.get(`${P(projectId)}/process-flows`, { params: nodeId ? { bfc_node_id: nodeId } : {} })),
-  create: (projectId, body) => d(http.post(`${P(projectId)}/process-flows`, body)),
-  update: (id, body) => d(http.patch(`${V}/process-flows/${id}`, body)),
-  remove: (id, rowVersion) => del(`${V}/process-flows/${id}`, rowVersion),
-  completeness: (projectId) => d(http.get(`${P(projectId)}/flow-completeness`)),
-  graph: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow`, { params: { variant } })),
-  // Slice 3c — the same graph as Mermaid text (R2-S7).
-  mermaid: (nodeId, variant = 'AS_IS') => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow/export`,
-    { params: { format: 'mermaid', variant }, ...asText })),
-  // A suggested chain in chart order: nothing is stored until keep (docs/draft_arrows_spec.md §9).
-  suggest: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/process-flow/suggest`)),
-  keep: (nodeId, confirmHash) => d(http.post(`${V}/bfc-nodes/${nodeId}/process-flow/suggest/keep`,
-    { confirm_hash: confirmHash })),
+// 7c — the two charts (D-47), the trigger catalogue (D-49) and completeness (D-38).
+export const chartApi = {
+  counts: (projectId) => d(http.get(`${P(projectId)}/bfc-sets`)),
+  copy: (projectId, toSet, fromSet, confirmHash = null) =>
+    d(http.post(`${P(projectId)}/bfc-sets/${toSet}/copy-from/${fromSet}`, { confirm_hash: confirmHash })),
+  completeness: (projectId, bfcSet = 'TO_BE') =>
+    d(http.get(`${P(projectId)}/process-completeness`, { params: { bfc_set: bfcSet } })),
 };
 
-// Slice 3a — the DFD of one parent node (D-31).
+export const triggerApi = {
+  list: (projectId, includeRetired = false) =>
+    d(http.get(`${P(projectId)}/process-triggers`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/process-triggers`, body)),
+  update: (id, body) => d(http.patch(`${V}/process-triggers/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/process-triggers/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/process-triggers/${id}/restore`)),
+};
+
+// The DFD of one parent node — the one process diagram (D-38): lanes are performers, order is derived.
 export const dfdApi = {
   graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),
-  mermaid: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd/export`, { params: { format: 'mermaid' }, ...asText })),
+  mermaid: (nodeId, order = false) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd/export`,
+    { params: { format: 'mermaid', order }, ...asText })),
 };
 
 // Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.

@@ -26,6 +26,8 @@ class BusinessRequirement(AuditMixin, Base):
     output_expectation: Mapped[str | None] = mapped_column(Text)
     status_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status_category: Mapped[str] = mapped_column(String(40), Computed("'BR_STATUS'", persisted=True))
+    # S7-2: a BR hangs off a to-be process only (fk_br_node_to_be).
+    node_bfc_set: Mapped[str] = mapped_column(String(10), Computed("'TO_BE'", persisted=True))
 
     status_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
                             primaryjoin="foreign(BusinessRequirement.status_code_id) == CodeMaster.code_id")
@@ -46,7 +48,10 @@ class BusinessRequirement(AuditMixin, Base):
         ForeignKeyConstraint(["status_code_id", "status_category"],
                              ["code_master.code_id", "code_master.category"],
                              name="fk_br_status_code", onupdate="NO ACTION"),
-        # D-2: one live BR per node.
+        ForeignKeyConstraint(["bfc_node_id", "project_id", "node_bfc_set"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id", "bfc_node.bfc_set_code"],
+                             name="fk_br_node_to_be", onupdate="NO ACTION"),
+        # D-2 / S7-2: one live BR per to-be process.
         Index("uq_br_one_per_node", "bfc_node_id", unique=True, postgresql_where=text("is_active")),
         Index("ix_br_node", "bfc_node_id", "project_id"),
         Index("ix_br_status", "status_code_id"),

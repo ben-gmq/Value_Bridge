@@ -102,10 +102,12 @@ ROUTE_COMPONENTS = (
     ("/rate-card", "EFFORT"),
     ("/complexity", "EFFORT"),
     ("/interface", "APPLICATION"),
-    ("/external-flows", "TO_BE_DFD"),
-    ("/process-flow", "TO_BE_DFD"),
     ("/bfc-nodes/{id}/applications", "AS_IS"),
+    ("/copy-from/", "AS_IS"),
 )
+# 7c (DR7-D1): these depend on the node's chart, so they must declare the DFD resolver.
+ROUTE_RESOLVERS = (("/external-flows", "<node_dfd_component>"), ("/performer", "<node_dfd_component>"),
+                   ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"))
 
 
 def test_every_component_write_declares_its_component():
@@ -118,4 +120,7 @@ def test_every_component_write_declares_its_component():
         for fragment, code in ROUTE_COMPONENTS:
             if fragment in r.path and code not in declared:
                 bad.append(f"{sorted(r.methods)} {r.path}: needs {code}, declares {sorted(declared)}")
+        for fragment, resolver in ROUTE_RESOLVERS:
+            if fragment in r.path and resolver not in declared:
+                bad.append(f"{sorted(r.methods)} {r.path}: needs {resolver}, declares {sorted(declared)}")
     assert bad == []

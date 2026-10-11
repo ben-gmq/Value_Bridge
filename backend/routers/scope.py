@@ -80,22 +80,30 @@ def _retire_and_restore(prefix: str, model, out, on_restore=None, component=None
 
 
 # ---- the function chart (§7.2) ------------------------------------------------------------
-_node_r, _node_w = _og(BfcNode, "VIEW"), _og(BfcNode, "EDIT")
-_node_dfd_w = _og(BfcNode, "EDIT", "TO_BE_DFD")
+def node_set_component(node: BfcNode) -> str | None:
+    """Resolver: a node of the as-is chart needs AS_IS on (D-47); the to-be chart is always on."""
+    return "AS_IS" if node.bfc_set_code == "AS_IS" else None
+
+
+node_dfd_component = components.node_dfd_component      # one resolver (sara 7c L4)
+
+
+_node_r, _node_w = _og(BfcNode, "VIEW"), _og(BfcNode, "EDIT", node_set_component)
+_node_dfd_w = _og(BfcNode, "EDIT", node_dfd_component)
 _node_asis_w = _og(BfcNode, "EDIT", ("APPLICATION", "AS_IS"))
 
 
 @router.get("/projects/{project_id}/bfc-tree", response_model=list[TreeNodeOut], **_read.route)
-def bfc_tree(project_id: int, include_retired: bool = False, db: Session = Depends(get_db)):
+def bfc_tree(project_id: int, include_retired: bool = False, bfc_set: str = "TO_BE", db: Session = Depends(get_db)):
     return [{**BfcNodeOut.model_validate(r["node"]).model_dump(), "br_number": r["br_number"]}
-            for r in bfc.tree(db, project_id, include_retired)]
+            for r in bfc.tree(db, project_id, include_retired, bfc_set)]
 
 
 @router.post("/projects/{project_id}/bfc-nodes", response_model=BfcNodeOut, status_code=201, **_edit.route)
 def create_node(project_id: int, body: BfcNodeIn, user: AppUser = Depends(current_user),
                 db: Session = Depends(get_db)):
     return bfc.create_node(db, _uid(user), project_id, body.parent_bfc_node_id, body.node_name,
-                           body.is_process, body.purpose_desc)
+                           body.is_process, body.purpose_desc, body.bfc_set)
 
 
 @router.get("/bfc-nodes/{id}", response_model=BfcNodeOut, **_node_r.route)
@@ -123,7 +131,8 @@ def mark_process(id: int, body: ProcessIn, node: BfcNode = Depends(_node_w.dep),
     return {"node": node, "business_requirement": br}
 
 
-_retire_and_restore("bfc-nodes", BfcNode, BfcNodeOut, on_restore=step_retire.restore_plain)
+_retire_and_restore("bfc-nodes", BfcNode, BfcNodeOut, on_restore=step_retire.restore_plain,
+                    component=node_set_component)
 
 
 # retire a step with its requirement and flows (docs/step_retire_spec.md §9, design §1a S3-SR)

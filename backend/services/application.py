@@ -209,6 +209,9 @@ def link_step(db: Session, actor_id: int, node: BfcNode, application_id: int,
     _live(node, app)
     if not node.is_process:
         raise HTTPException(422, "Applications support process steps only")
+    if node.bfc_set_code != "AS_IS":                     # Q-23: to-be systems come from solutions (D-22, D-8)
+        raise HTTPException(422, "Supporting systems are recorded on as-is steps. A to-be step's systems "
+                                 "come from its requirement's solutions")
     row = db.scalars(select(ApplicationBfcNode).where(
         ApplicationBfcNode.application_id == app.application_id,
         ApplicationBfcNode.bfc_node_id == node.bfc_node_id).with_for_update(of=ApplicationBfcNode)).one_or_none()
@@ -323,3 +326,16 @@ def consistency_lines(db: Session, project_id: int | None) -> dict[str, list]:
         "as_is_allocated": list(db.scalars(as_is)),
         "as_is_support_by_to_be": list(db.scalars(to_be)),       # informational (S6b-5)
     }
+
+
+def support_on_to_be(db: Session, project_id: int | None) -> list[dict]:
+    """INFORMATIONAL (Q-23): supporting-system links that sit on to-be steps — made before 7c, when
+    there was one chart. The to-be → as-is copy carries them to the as-is chart; then remove these."""
+    q = (select(ApplicationBfcNode.application_bfc_node_id, Application.application_code, BfcNode.hier_code)
+         .join(Application, Application.application_id == ApplicationBfcNode.application_id)
+         .join(BfcNode, BfcNode.bfc_node_id == ApplicationBfcNode.bfc_node_id)
+         .where(ApplicationBfcNode.is_active, BfcNode.bfc_set_code == "TO_BE"))
+    if project_id is not None:
+        q = q.where(ApplicationBfcNode.project_id == project_id)
+    return [{"application_bfc_node_id": i, "application_code": a, "hier_code": h}
+            for i, a, h in db.execute(q.order_by(BfcNode.hier_code, Application.application_code))]

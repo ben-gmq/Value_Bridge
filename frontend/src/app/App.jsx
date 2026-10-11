@@ -14,7 +14,6 @@ import ProgramHome from '../features/programs/ProgramHome';
 import AdminPage from '../features/admin/AdminPage';
 import SectionPlaceholder from '../features/common/SectionPlaceholder';
 import ProcessesPage from '../features/processes/ProcessesPage';
-import FlowPage from '../features/processes/FlowPage';
 import DfdPage from '../features/processes/DfdPage';
 import RequirementsPage from '../features/requirements/RequirementsPage';
 import RequirementPage from '../features/requirements/RequirementPage';
@@ -45,7 +44,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 // Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
 // process flow arrives later as a view of it (Ben, 2026-09-29, S1-9).
 const PAGES = [
-  ['processes', ProcessesPage], ['processes/:nodeId/flow', FlowPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
+  ['processes', ProcessesPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
@@ -60,7 +59,7 @@ const NEEDS = {
   'br-fr/frs': ['FUNCTION_REQUIREMENT'], 'br-fr/frs/:frId': ['FUNCTION_REQUIREMENT'],
   'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
   'settings/applications': ['APPLICATION'], 'settings/applications/:appId': ['APPLICATION'],
-  'processes/:nodeId/flow': ['TO_BE_DFD'], 'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'],
+  'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'],
 };
 
 function Gated({ path, Screen }) {

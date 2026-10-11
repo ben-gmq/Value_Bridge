@@ -12,20 +12,19 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import SessionLocal
-from models import (AuditEvent, BfcNode, BfcNodeFlow, BfcNodeOrgRole, Base)
+from models import (AuditEvent, BfcNode, BfcNodeOrgRole, BfcNodeTrigger, Base)
 from models.base import AuditMixin
-from services import lifecycle, step_retire
+from services import audit, lifecycle, step_retire
 from tests.conftest import OWNER_URL
-from tests.test_dfd_api import ext_flow, io, party
-from tests.test_process_flow_api import edge
+from tests.test_dfd_api import ext_flow, io, party, starts, trigger
 from tests.test_scope_api import API, _org_role, ed, entity, node, tree  # noqa: F401 — ed is a fixture
 
 OWNED_TABLES = ("bfc_node", "business_requirement", "br_data_entity", "br_org_role",
-                "bfc_node_data_entity", "bfc_node_org_role", "bfc_node_external_flow", "bfc_node_flow")
+                "bfc_node_data_entity", "bfc_node_org_role", "bfc_node_external_flow", "bfc_node_trigger")
 PKS = {"bfc_node": "bfc_node_id", "business_requirement": "br_id",
        "br_data_entity": "br_data_entity_id", "br_org_role": "br_org_role_id",
        "bfc_node_data_entity": "bfc_node_data_entity_id", "bfc_node_org_role": "bfc_node_org_role_id",
-       "bfc_node_external_flow": "bfc_node_external_flow_id", "bfc_node_flow": "bfc_node_flow_id"}
+       "bfc_node_external_flow": "bfc_node_external_flow_id", "bfc_node_trigger": "bfc_node_trigger_id"}
 
 
 # ---- helpers ------------------------------------------------------------------------------
@@ -112,8 +111,9 @@ def summary_events(step_id: int, kind=step_retire.RETIRED) -> list[AuditEvent]:
 @pytest.fixture
 def full(client, ed):
     """Criterion 1's step: a BR with 2 data links and 1 role; 3 step I/O rows (two licensing the
-    BR's CRUD); 1 step role; 1 external flow licensed by an I/O row; 2 arrows, one a self-loop.
-    Plus a second live step it hands on to, under the same parent."""
+    BR's CRUD); 1 step role; 1 external flow licensed by an I/O row; 1 trigger link (D-49 — it
+    replaced the 2 arrows of before 7c). Plus a second live step that reads the sales order it writes, so the
+    DFD derives s → s2, under the same parent."""
     a = node(client, ed, "Sales")
     p = node(client, ed, "Order to cash", a["bfc_node_id"])
     s = node(client, ed, "Check credit", p["bfc_node_id"], is_process=True)
@@ -127,7 +127,9 @@ def full(client, ed):
     cfo, clerk = _org_role(client, ed, "CFO"), _org_role(client, ed, "CLERK")
     bror = br_role(client, ed, br, cfo)
     bnor = step_role(client, ed, s, clerk)
-    arrows = [edge(client, ed, s, s2), edge(client, ed, s, s, "CONDITIONAL", "Recheck")]
+    month = trigger(client, ed, "Month-end close")
+    link = starts(client, ed, s, month)
+    io(client, ed, s2, order, "I")                                       # derived order s → s2
     step_io = client.get(f"{API}/bfc-nodes/{s['bfc_node_id']}/data-entities", headers=ed["h"]).json()
     owned = ({("business_requirement", br["br_id"])}
              | {("br_data_entity", r["br_data_entity_id"]) for r in brde}
@@ -135,9 +137,9 @@ def full(client, ed):
              | {("bfc_node_data_entity", r["bfc_node_data_entity_id"]) for r in step_io}
              | {("bfc_node_org_role", bnor["bfc_node_org_role_id"])}
              | {("bfc_node_external_flow", xf["bfc_node_external_flow_id"])}
-             | {("bfc_node_flow", e["bfc_node_flow_id"]) for e in arrows})
-    assert len(step_io) == 3 and len(owned) == 11
-    return {"parent": p, "s": s, "s2": s2, "br": br, "owned": owned, "arrows": arrows,
+             | {("bfc_node_trigger", link["bfc_node_trigger_id"])})
+    assert len(step_io) == 3 and len(owned) == 10
+    return {"parent": p, "s": s, "s2": s2, "br": br, "owned": owned, "link": link, "trigger": month,
             "bnor": bnor, "cfo": cfo, "limit": limit, "orders": order}
 
 
@@ -147,9 +149,10 @@ def test_preview_lists_exactly_the_owned_rows_and_retire_takes_them_with_one_sta
     sid = full["s"]["bfc_node_id"]
     pv = preview(client, ed, sid).json()
     got = [(o["table"], o["id"]) for o in pv["owned"]]
-    assert len(got) == len(set(got)) and set(got) == full["owned"]      # the self-loop counts once
+    assert len(got) == len(set(got)) and set(got) == full["owned"]
     assert pv["blockers"] == [] and len(pv["confirm_hash"]) == 64
     assert next(o["label"] for o in pv["owned"] if o["table"] == "business_requirement") == full["br"]["br_number"]
+    assert next(o["label"] for o in pv["owned"] if o["table"] == "bfc_node_trigger") == "Trigger: Month-end close"
 
     r = retire(client, ed, sid, pv["confirm_hash"])
     assert r.status_code == 204, r.text                                 # the tier order held the licence FKs
@@ -166,8 +169,8 @@ def test_preview_lists_exactly_the_owned_rows_and_retire_takes_them_with_one_sta
         per_row = list(s.scalars(select(AuditEvent).where(
             AuditEvent.event_type == "RECORD_DELETED",
             AuditEvent.detail["action_id"].astext == summary.detail["action_id"])))
-    assert {(e.target_table, e.target_id) for e in per_row} == everything and len(per_row) == 12
-    assert {tuple(x) for x in summary.detail["rows"]} == everything and len(summary.detail["rows"]) == 12
+    assert {(e.target_table, e.target_id) for e in per_row} == everything and len(per_row) == 11
+    assert {tuple(x) for x in summary.detail["rows"]} == everything and len(summary.detail["rows"]) == 11
     assert datetime.fromisoformat(summary.detail["deleted_at"]) == stamps.pop()
     assert summary.detail["confirm_hash"] == pv["confirm_hash"]
 
@@ -176,15 +179,16 @@ def test_preview_lists_exactly_the_owned_rows_and_retire_takes_them_with_one_sta
 
 def test_after_retire_the_completeness_checks_are_clean_and_the_chart_hides_the_step(client, ed, full):
     sid = full["s"]["bfc_node_id"]
-    url = f"{API}/projects/{ed['p']}/flow-completeness"
+    url = f"{API}/projects/{ed['p']}/process-completeness"
     before = client.get(url, headers=ed["h"]).json()
     assert before["step_without_br"] == [] and before["live_link_on_retired_step"] == []
     assert retire(client, ed, sid).status_code == 204
     after = client.get(url, headers=ed["h"]).json()
     assert after["step_without_br"] == [] and after["live_link_on_retired_step"] == []
     assert sid not in {n["bfc_node_id"] for n in tree(client, ed)}
-    g = client.get(f"{API}/bfc-nodes/{full['parent']['bfc_node_id']}/process-flow", headers=ed["h"]).json()
-    assert [n["node_name"] for n in g["nodes"]] == ["Confirm order"] and g["edges"] == []
+    g = client.get(f"{API}/bfc-nodes/{full['parent']['bfc_node_id']}/dfd", headers=ed["h"]).json()
+    assert [n["node_name"] for n in g["processes"]] == ["Confirm order"] and g["order"] == []
+    assert g["triggers"] == [] and not [f for f in g["flows"] if f["bfc_node_id"] == sid]
 
 
 def test_step_without_br_is_a_warning_and_a_live_link_on_a_retired_step_is_named(client, ed, full, db):
@@ -192,7 +196,7 @@ def test_step_without_br_is_a_warning_and_a_live_link_on_a_retired_step_is_named
     link on a retired step can only be forged below the service; the check names it."""
     s2 = full["s2"]
     retire_br(client, ed, s2["bfc_node_id"])
-    url = f"{API}/projects/{ed['p']}/flow-completeness"
+    url = f"{API}/projects/{ed['p']}/process-completeness"
     got = client.get(url, headers=ed["h"]).json()
     assert [x["node_name"] for x in got["step_without_br"]] == ["Confirm order"]
     assert retire(client, ed, full["s"]["bfc_node_id"]).status_code == 204
@@ -279,50 +283,47 @@ def test_restore_brings_back_exactly_the_listed_rows(client, ed, full, db):
 
     by_hand = db.get(BfcNodeOrgRole, full["bnor"]["bfc_node_org_role_id"])
     lifecycle.relink(db, by_hand.created_by, by_hand)          # restored by hand in between
-    again = db.get(BfcNodeFlow, full["arrows"][0]["bfc_node_flow_id"])
+    again = db.get(BfcNodeTrigger, full["link"]["bfc_node_trigger_id"])
     lifecycle.relink(db, again.created_by, again)
     db.flush()
     lifecycle.soft_delete(again, again.created_by, at=datetime.now(UTC) + timedelta(seconds=1))
     db.commit()                                                 # …and one re-retired since
 
     r = restore(client, ed, sid)
-    assert r.status_code == 200 and r.json() == {"restored": 10}, r.text
+    assert r.status_code == 200 and r.json() == {"restored": 9}, r.text
     assert not live("br_org_role", solo["br_org_role_id"])
-    assert not live("bfc_node_flow", again.bfc_node_flow_id)
+    assert not live("bfc_node_trigger", again.bfc_node_trigger_id)
     assert live("bfc_node_org_role", by_hand.bfc_node_org_role_id)
-    for table, pk in full["owned"] - {("bfc_node_flow", again.bfc_node_flow_id)}:
+    for table, pk in full["owned"] - {("bfc_node_trigger", again.bfc_node_trigger_id)}:
         assert live(table, pk), (table, pk)
     assert live("bfc_node", sid)
     (done,) = summary_events(sid, step_retire.RESTORED)
-    assert len(done.detail["rows"]) == 10
+    assert len(done.detail["rows"]) == 9
     assert done.detail["retire_action_id"] == summary_events(sid)[0].detail["action_id"]
 
 
-# ---- criterion 6: all or nothing, and no arrow is lost ----------------------------------------------
+# ---- criterion 6: all or nothing, and nothing between two related steps is lost --------------------
 
 @pytest.mark.parametrize("retire_order,restore_order", [
     ("xy", "xy"), ("xy", "yx"), ("yx", "xy"), ("yx", "yx")])
-def test_two_related_steps_restore_in_either_order_and_the_arrow_survives(client, ed, full,
-                                                                        retire_order, restore_order):
+def test_two_related_steps_restore_in_either_order_and_the_derived_order_survives(client, ed, full,
+                                                                                 retire_order, restore_order):
+    """Before 7c an arrow joined them and a restore could wait for the far end (RESTORE_FIRST). Order
+    is derived from data now (D-38): either step restores on its own, and s → s2 comes back with both."""
     x, y = full["s"]["bfc_node_id"], full["s2"]["bfc_node_id"]
     ids = {"x": x, "y": y}
-    arrow = full["arrows"][0]["bfc_node_flow_id"]                  # x → y
     for k in retire_order:
         assert retire(client, ed, ids[k]).status_code == 204
+    g = client.get(f"{API}/bfc-nodes/{full['parent']['bfc_node_id']}/dfd", headers=ed["h"]).json()
+    assert g["processes"] == [] and g["order"] == []
     first, second = (ids[k] for k in restore_order)
-    r = restore(client, ed, first)
-    if r.status_code == 409:                                        # its arrow's far step is retired
-        detail = r.json()["detail"]
-        assert "Restore these first" in detail and ("Confirm order" in detail or "Check credit" in detail)
-        assert r.headers["x-vb-error"] == "RESTORE_FIRST"
-        assert not live("bfc_node", first)                         # refused as a whole
-        assert restore(client, ed, second).status_code == 200
-        assert restore(client, ed, first).status_code == 200
-    else:
-        assert r.status_code == 200, r.text
-        assert restore(client, ed, second).status_code == 200
-    assert live("bfc_node_flow", arrow)
-    got = client.get(f"{API}/projects/{ed['p']}/flow-completeness", headers=ed["h"]).json()
+    assert restore(client, ed, first).status_code == 200
+    assert restore(client, ed, second).status_code == 200
+    assert live("bfc_node_trigger", full["link"]["bfc_node_trigger_id"])
+    g = client.get(f"{API}/bfc-nodes/{full['parent']['bfc_node_id']}/dfd", headers=ed["h"]).json()
+    assert [(o["from_bfc_node_id"], o["to_bfc_node_id"]) for o in g["order"]] == [(x, y)]
+    assert [t["trigger_name"] for t in g["triggers"]] == ["Month-end close"]
+    got = client.get(f"{API}/projects/{ed['p']}/process-completeness", headers=ed["h"]).json()
     assert got["live_link_on_retired_step"] == [] and got["step_without_br"] == []
 
 
@@ -362,20 +363,20 @@ def test_a_failure_on_the_last_row_of_retire_or_restore_leaves_everything_as_it_
     actor = world["users"]["editor"]
     h = preview(client, ed, sid).json()["confirm_hash"]
     snap = rows_of(ed["p"])
-    calls = _fail_on_call(monkeypatch, "retire_row", 12)
+    calls = _fail_on_call(monkeypatch, "retire_row", 11)
     with SessionLocal() as s:
         with pytest.raises(RuntimeError):
             step_retire.retire(s, actor, s.get(BfcNode, sid), h)
-    assert len(calls) == 12 and rows_of(ed["p"]) == snap          # the step was the last row
+    assert len(calls) == 11 and rows_of(ed["p"]) == snap          # the step was the last row
     monkeypatch.undo()
 
     assert retire(client, ed, sid).status_code == 204
     snap = rows_of(ed["p"])
-    calls = _fail_on_call(monkeypatch, "restore_row", 12)
+    calls = _fail_on_call(monkeypatch, "restore_row", 11)
     with SessionLocal() as s:
         with pytest.raises(RuntimeError):
             step_retire.restore(s, actor, s.get(BfcNode, sid))
-    assert len(calls) == 12 and rows_of(ed["p"]) == snap          # tier 1 came last, after the flushes
+    assert len(calls) == 11 and rows_of(ed["p"]) == snap          # tier 1 came last, after the flushes
     monkeypatch.undo()
     assert restore(client, ed, sid).status_code == 200
 
@@ -486,27 +487,65 @@ def test_the_screens_sequence_preview_retire_then_restore(client, ed, full):
         counts[o["table"]] = counts.get(o["table"], 0) + 1
     assert counts == {"business_requirement": 1, "br_data_entity": 2, "br_org_role": 1,
                       "bfc_node_data_entity": 3, "bfc_node_org_role": 1,
-                      "bfc_node_external_flow": 1, "bfc_node_flow": 2}
+                      "bfc_node_external_flow": 1, "bfc_node_trigger": 1}
     assert retire(client, ed, sid, pv["confirm_hash"]).status_code == 204
     assert retire(client, ed, sid, pv["confirm_hash"]).status_code in (409,)   # already retired
     assert plain_restore(client, ed, sid).headers["x-vb-error"] == "USE_RESTORE_WITH_DEPENDENTS"
-    assert restore(client, ed, sid).json() == {"restored": 12}
+    assert restore(client, ed, sid).json() == {"restored": 11}
     assert restore(client, ed, sid).status_code == 409                          # not retired
 
 
-def test_restore_names_an_arrow_end_that_was_demoted_meanwhile(client, ed):
-    """An arrow's far step demoted while this step was retired is named, not a bare FK error (sara M1)."""
-    l1 = node(client, ed, "Sales")
-    parent = node(client, ed, "Order capture", l1["bfc_node_id"])
-    a = node(client, ed, "Receive order", parent["bfc_node_id"], is_process=True)
-    b = node(client, ed, "Check credit", parent["bfc_node_id"], is_process=True)
-    edge(client, ed, a, b, "SEQUENCE", None)
-    assert retire(client, ed, a["bfc_node_id"]).status_code == 204
-    retire_br(client, ed, b["bfc_node_id"])
-    cur = client.get(f"{API}/bfc-nodes/{b['bfc_node_id']}", headers=ed["h"]).json()
-    r = client.patch(f"{API}/bfc-nodes/{b['bfc_node_id']}/process", headers=ed["h"],
-                     json={"is_process": False, "row_version": cur["row_version"]})
-    assert r.status_code == 200, r.text
-    r = restore(client, ed, a["bfc_node_id"])
+def test_restore_names_a_trigger_retired_meanwhile(client, ed, full):
+    """A trigger is free to retire once the step that named it is retired (R2-D2); the restore then
+    names it, refused as a whole, instead of a bare FK error."""
+    sid, month = full["s"]["bfc_node_id"], full["trigger"]
+    r = client.delete(f"{API}/process-triggers/{month['process_trigger_id']}", headers=ed["h"],
+                      params={"row_version": month["row_version"]})
+    assert r.status_code == 409                                   # a live step names it
+    assert retire(client, ed, sid).status_code == 204
+    r = client.delete(f"{API}/process-triggers/{month['process_trigger_id']}", headers=ed["h"],
+                      params={"row_version": month["row_version"]})
+    assert r.status_code == 204, r.text
+    snap = rows_of(ed["p"])
+    r = restore(client, ed, sid)
     assert r.status_code == 409 and r.headers.get("X-VB-Error") == "RESTORE_FIRST"
-    assert "Check credit" in r.json()["detail"] and "process step again" in r.json()["detail"]
+    assert "Month-end close" in r.json()["detail"]
+    assert rows_of(ed["p"]) == snap
+    assert client.patch(f"{API}/process-triggers/{month['process_trigger_id']}/restore",
+                        headers=ed["h"]).status_code == 200
+    assert restore(client, ed, sid).status_code == 200
+    assert live("bfc_node_trigger", full["link"]["bfc_node_trigger_id"])
+
+
+def test_triggers_retire_with_their_step_and_arrows_no_longer_do():
+    """§9.6: bfc_node_flow left the owned set with D-38; bfc_node_trigger joined it with D-49."""
+    assert BfcNodeTrigger in step_retire.OWNED_BY_STEP
+    assert "bfc_node_flow" not in {m.__table__.name for m in step_retire.OWNED_BY_STEP}
+    assert "bfc_node_flow" in step_retire.RETIRED_TABLES
+    assert any(BfcNodeTrigger in tier for tier in step_retire.TIERS)
+
+
+def test_a_restore_skips_the_arrows_an_older_retire_event_lists(client, ed, full, world):
+    """A step retired before 0045 lists its arrows in the summary event. The arrows stay retired
+    (SELECT-only for the app); the rest of the listed rows come back."""
+    sid = full["s"]["bfc_node_id"]
+    assert retire(client, ed, sid).status_code == 204
+    (ev,) = summary_events(sid)
+    eng = create_engine(OWNER_URL)
+    with eng.begin() as c:                                        # an arrow retired with the step, pre-7c
+        fid = c.execute(text(
+            "INSERT INTO bfc_node_flow (project_id, from_bfc_node_id, to_bfc_node_id, flow_type, created_by, "
+            "is_active, deleted_at) VALUES (:p, :a, :b, 'SEQUENCE', :u, false, :at) RETURNING bfc_node_flow_id"),
+            {"p": ed["p"], "a": sid, "b": full["s2"]["bfc_node_id"], "u": world["users"]["editor"],
+             "at": datetime.fromisoformat(ev.detail["deleted_at"])}).scalar()
+    eng.dispose()
+    with SessionLocal() as s:                                     # the event as an old retire wrote it
+        audit.record(s, step_retire.RETIRED, actor_id=world["users"]["editor"], project_id=ed["p"],
+                     target_table="bfc_node", target_id=sid,
+                     detail={**ev.detail, "rows": [*ev.detail["rows"], ["bfc_node_flow", fid]]})
+        s.commit()
+    r = restore(client, ed, sid)
+    assert r.status_code == 200 and r.json() == {"restored": 11}, r.text
+    with SessionLocal() as s:
+        assert s.scalar(text("SELECT is_active FROM bfc_node_flow WHERE bfc_node_flow_id = :i"), {"i": fid}) is False
+    assert all(live(t, pk) for t, pk in full["owned"]) and live("bfc_node", sid)

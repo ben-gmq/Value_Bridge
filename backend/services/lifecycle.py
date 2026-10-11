@@ -16,7 +16,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from models import (Application, Base, BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity,
-                    FunctionRequirement, OrgRole, OrgUnit, Solution)
+                    FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -24,14 +24,15 @@ from services import audit, errors
 EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_master"})
 # Guard columns carry the target's is_active / is_process; the FK they sit in duplicates the
 # plain (id, project_id) FK beside it, so they are ignored when matching rows.
-GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour"})   # + 6b-2 (schema §7)
+GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour",   # + 6b-2 (schema §7)
+                                  "bfc_set_code"})                                 # + 7c (§9.1): one Link per parent
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
-              Solution, FunctionRequirement, Application)
+              Solution, FunctionRequirement, Application, ProcessTrigger)
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
-    "bfc_node": ("BFC node", lambda r: f"{r.hier_code} {r.node_name}"),
+    "bfc_node": ("BFC node", lambda r: f"{'As-is ' if r.bfc_set_code == 'AS_IS' else ''}{r.hier_code} {r.node_name}"),
     "business_requirement": ("Business requirement", lambda r: r.br_number),
     "data_entity": ("Data entity", lambda r: f"{r.de_number} {r.de_name}"),
     "data_field": ("Data field", lambda r: r.field_name),
@@ -56,6 +57,8 @@ LABELS = {
     # Both ends, so a solution's 409 names the BRs and a step's preview names the solutions (DR1-P1).
     "br_solution": ("Requirement ↔ solution",
                     lambda r: f"{r.br_row.br_number} ↔ {r.solution_row.solution_number}"),
+    "process_trigger": ("Trigger", lambda r: r.trigger_name),
+    "bfc_node_trigger": ("Step trigger", lambda r: f"{r.trigger_row.trigger_name} ↔ {r.node_row.hier_code}"),
     "bfc_node_flow": ("Flow edge",
                       lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),
 }

@@ -303,4 +303,8 @@ place.
   reason, and a key re-point (type/complexity) is unguarded. Revoke table UPDATE and grant column-level UPDATE
   (`standard_days, change_rationale, row_version, updated_by, is_active`), as 0019 does; add the key columns back
   with A-16. Needs a migration on `main`.
+- sara L10 · `sara`, Slice 7c pre-commit review, 2026-10-11 · LOW · **Legacy supporting-system rows on to-be
+  steps are not shown on the step:** `as_is_support_on_to_be` lists them, but the panel renders only on as-is
+  steps, so the consultant cannot unlink them there. Show a read-only list with Unlink on a to-be step while any
+  exist. Related: restoring such a step with dependents needs `AS_IS` on (`ROW_COMPONENTS[ApplicationBfcNode]`).
 

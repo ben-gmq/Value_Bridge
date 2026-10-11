@@ -35,6 +35,7 @@ class BfcNodeIn(BaseModel):
     node_name: str = Name()
     is_process: bool = False
     purpose_desc: str | None = Field(default=None, max_length=4000)
+    bfc_set: Literal["TO_BE", "AS_IS"] = "TO_BE"     # a root's chart (D-47); a child takes its parent's
 
 
 class BfcNodePatch(_Patch):
@@ -85,8 +86,15 @@ class BfcNodeOut(Orm):
     is_process: bool
     purpose_desc: str | None
     data_processing_desc: str | None
+    bfc_set_code: str = "TO_BE"                      # D-47
+    performer_kind: str | None = None                # D-46: ORG_UNIT / ORG_ROLE / APPLICATION / AI
+    performer_org_unit_id: int | None = None
+    performer_org_role_id: int | None = None
+    performer_application_id: int | None = None
+    performer_label: str | None = None
     is_active: bool
     row_version: int
+    warnings: list[str] = []
 
 
 class TreeNodeOut(BfcNodeOut):

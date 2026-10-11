@@ -29,8 +29,7 @@ BANNED_FIRST_TOKENS = ("click", "call", "href", "%%{init", "style", "classDef", 
 _TYPE_CODE = re.compile(r"[A-Z_]+")
 
 UNASSIGNED_LANE = "Unassigned"
-OUTSIDE_LANE = "Outside this flow"
-EVENT_LABEL = '(" ")'                # e{flow_id}((" ")) — the spec's `(("")` fails Mermaid 11's parser
+OUTSIDE_LANE = "Outside this diagram"
 
 
 def check_format(fmt: str) -> None:
@@ -81,80 +80,44 @@ def _ref(n: dict) -> str:
     return f"{n['hier_code']} {n['node_name']}"
 
 
-# ---- the process flow (§7.2a export_process_flow, criterion 19) ------------------------------
+# ---- the DFD (§9.8: the one process diagram — lanes are performers, D-38/D-46/D-49) -----------
 
-def export_process_flow(g: dict) -> str:
-    """flowchart LR; one subgraph per lane (l1…, unassigned last), steps and their start/end
-    events inside their lane, handoff targets in an `outside` subgraph, stores and parties at
-    the top level. SEQUENCE/PARALLEL `-->`, HANDOFF `-.->`, a condition as `|"label"|`. A step's
-    data (store or party) is a dotted association `-.-`, written from the source side."""
+def _lane_label(lane: dict) -> str:
+    if lane["kind"] == "UNASSIGNED":
+        return UNASSIGNED_LANE
+    name = lane["name"] or lane["code"] or ""
+    return f"{name} · {lane['unit_name']}" if lane.get("unit_name") else name
+
+
+def export_dfd(g: dict, with_order: bool = False) -> str:
+    """flowchart LR; one subgraph per performer lane (unassigned last) holding its processes as
+    stadiums; stores as cylinders, parties as squares and triggers as circles at the top level; one
+    edge per flow in its direction (I = into the step), labelled; boundary stubs as dotted links to
+    an `outside` box. The derived order is drawn only when asked, dashed (§9.8)."""
     lines = ["flowchart LR"]
-    lane_order = [lane["org_role_id"] for lane in g["lanes"]]
-    lane_label = {lane["org_role_id"]: lane["org_role_name"] + (f" · {lane['org_unit_name']}"
-                                                                if lane["org_unit_name"] else "")
-                  for lane in g["lanes"]}
-    lane_of = {n["bfc_node_id"]: n["lane_org_role_id"] for n in g["nodes"]}
-    events: dict[object, list[str]] = {}
-    for e in g["edges"]:
-        if e["from_bfc_node_id"] is None or e["to_bfc_node_id"] is None:
-            anchor = e["to_bfc_node_id"] if e["from_bfc_node_id"] is None else e["from_bfc_node_id"]
-            events.setdefault(lane_of.get(anchor), []).append(f"e{e['bfc_node_flow_id']}")
-
-    bands = [(rid, lane_label[rid]) for rid in lane_order]
-    if any(n["lane_org_role_id"] is None for n in g["nodes"]):
-        bands.append((None, UNASSIGNED_LANE))
-    for i, (rid, label) in enumerate(bands, 1):
-        lines.append(f"    subgraph l{i}[{escape_mermaid(label)}]")
-        lines += [f"        s{n['bfc_node_id']}[{escape_mermaid(_ref(n))}]"
-                  for n in g["nodes"] if n["lane_org_role_id"] == rid]
-        # an event is an unlabelled circle; Mermaid refuses an empty "" label, so one space
-        lines += [f'        {ev}({EVENT_LABEL})' for ev in events.get(rid, [])]
-        lines.append("    end")
-    if g["outside"]:
-        lines.append(f"    subgraph outside[{escape_mermaid(OUTSIDE_LANE)}]")
-        lines += [f"        s{n['bfc_node_id']}[{escape_mermaid(_ref(n))}]" for n in g["outside"]]
+    for i, lane in enumerate(g["lanes"], 1):
+        lines.append(f"    subgraph l{i}[{escape_mermaid(_lane_label(lane))}]")
+        lines += [f"        s{p['bfc_node_id']}([{escape_mermaid(_ref(p))}])"
+                  for p in g["processes"] if p["lane_key"] == lane["lane_key"]]
         lines.append("    end")
     lines += [f"    d{s['data_entity_id']}[({escape_mermaid(s['de_number'] + ' ' + s['de_name'])})]"
               for s in g["stores"]]
     lines += [f"    x{x['external_entity_id']}[{escape_mermaid(x['ext_number'] + ' ' + x['ext_name'])}]"
               for x in g["externals"]]
-
-    for e in g["edges"]:
-        fid = e["bfc_node_flow_id"]
-        src = f"e{fid}" if e["from_bfc_node_id"] is None else f"s{e['from_bfc_node_id']}"
-        dst = f"e{fid}" if e["to_bfc_node_id"] is None else f"s{e['to_bfc_node_id']}"
-        arrow = "-.->" if e["flow_type"] == "HANDOFF" else "-->"
-        label = f"|{escape_mermaid(e['condition_label'])}|" if e["condition_label"] else ""
-        lines.append(f"    {src} {arrow}{label} {dst}")
-    for s in g["stores"]:
-        d = f"d{s['data_entity_id']}"
-        lines += [f"    {d} -.- s{step}" for step in s["reads"]]
-        lines += [f"    s{step} -.- {d}" for step in s["writes"]]
-    for x in g["externals"]:
-        pid = f"x{x['external_entity_id']}"
-        for f in x["flows"]:
-            lines.append(f"    {pid} -.- s{f['bfc_node_id']}" if f["direction"] == "I"
-                         else f"    s{f['bfc_node_id']} -.- {pid}")
-    return _join(lines)
-
-
-# ---- the DFD (§7.2a generate_dfd, D-31) -------------------------------------------------------
-
-def export_dfd(g: dict) -> str:
-    """flowchart LR; processes as stadiums, stores as cylinders, parties as squares; one edge per
-    flow in its direction (I = into the step), labelled when the flow has a label."""
-    lines = ["flowchart LR"]
-    lines += [f"    s{p['bfc_node_id']}([{escape_mermaid(_ref(p))}])" for p in g["processes"]]
-    lines += [f"    d{s['data_entity_id']}[({escape_mermaid(s['de_number'] + ' ' + s['de_name'])})]"
-              for s in g["stores"]]
-    lines += [f"    x{x['external_entity_id']}[{escape_mermaid(x['ext_number'] + ' ' + x['ext_name'])}]"
-              for x in g["externals"]]
+    lines += [f"    t{t['process_trigger_id']}(({escape_mermaid(t['trigger_name'])}))" for t in g["triggers"]]
     for f in g["flows"]:
-        other = f"d{f['data_entity_id']}" if f["kind"] == "STORE" else f"x{f['external_entity_id']}"
         step = f"s{f['bfc_node_id']}"
+        other = {"STORE": f"d{f['data_entity_id']}", "EXTERNAL": f"x{f['external_entity_id']}",
+                 "TRIGGER": f"t{f['process_trigger_id']}"}[f["kind"]]
         src, dst = (other, step) if f["direction"] == "I" else (step, other)
-        label = f"|{escape_mermaid(f['label'])}|" if f["label"] else ""
+        label = f"|{escape_mermaid(f['label'])}|" if f["label"] and f["kind"] != "TRIGGER" else ""
         lines.append(f"    {src} -->{label} {dst}")
+    stubs = sorted({(d, r["data_entity_id"]) for d in ("in", "out") for r in g["boundary"][d]})
+    if stubs:
+        lines.append(f"    outside[{escape_mermaid(OUTSIDE_LANE)}]")
+        lines += [f"    outside -.-> d{de}" if d == "in" else f"    d{de} -.-> outside" for d, de in stubs]
+    if with_order:
+        lines += [f"    s{o['from_bfc_node_id']} -.-> s{o['to_bfc_node_id']}" for o in g["order"]]
     return _join(lines)
 
 
