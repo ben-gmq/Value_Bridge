@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link,
   Menu, MenuItem, Snackbar, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
@@ -14,8 +14,8 @@ import { errorText } from '../../api/client';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { ImportWizard } from '../../components/ImportWizard';
-import { Page, WrapperBox } from '../../components/Page';
-import { MONO } from '../../theme/theme';
+import { Card, Code, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { entityLabel, firstLine } from './fieldRules';
 
@@ -111,8 +111,8 @@ export default function DataEntitiesPage() {
     { field: 'de_number', headerName: t('data.number'), width: 120,
       renderCell: ({ row, value, tabIndex }) => (
         <Link component={RouterLink} to={links.entity(projectId, row.data_entity_id)} tabIndex={tabIndex}
-          onClick={(e) => e.stopPropagation()}
-          sx={{ fontFamily: MONO, fontSize: 13, color: 'brand.link' }}>{value}</Link>) },
+          onClick={(e) => e.stopPropagation()} underline="hover" sx={{ color: 'brand.tealText' }}>
+          <Code tone="teal">{value}</Code></Link>) },
     { field: 'de_name', headerName: t('data.name'), flex: 1, minWidth: 220,
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
@@ -121,8 +121,8 @@ export default function DataEntitiesPage() {
           {/* 4a-R10: a half-built model is never invisible */}
           {row.is_active !== false && row.live_field_count === 0 && (
             <Tooltip title={t('data.noFieldsTip')}>
-              <Chip size="small" variant="outlined" label={t('data.noFieldsChip')}
-                sx={{ color: 'status.caution', borderColor: 'status.caution' }} />
+              <Box component="span" tabIndex={0} sx={{ display: 'inline-flex', flexShrink: 0 }}>
+                <Tag tone="caution">{t('data.noFieldsChip')}</Tag></Box>
             </Tooltip>)}
         </Stack>) },
     { field: 'description', headerName: t('data.description'), flex: 2, minWidth: 240,
@@ -130,7 +130,7 @@ export default function DataEntitiesPage() {
     ...(showRetired ? [{ field: 'is_active', headerName: '', width: 190, sortable: false,
       renderCell: ({ row, tabIndex }) => row.is_active === false && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
-          <Chip size="small" variant="outlined" label={t('data.retiredChip')} />
+          <Tag tone="neutral">{t('data.retiredChip')}</Tag>
           {canEdit && <Button size="small" tabIndex={tabIndex} disabled={restore.isPending}
             onClick={(e) => { e.stopPropagation(); setError(''); restore.mutate(row); }}>{t('data.restore')}</Button>}
         </Stack>) }] : []),
@@ -150,20 +150,23 @@ export default function DataEntitiesPage() {
           <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('data.add')}</Button>)}
       </>)}>
       {(error || loadError) && <Alert severity="error" sx={ERR_SX}>{error || loadError}</Alert>}
-      <WrapperBox>
+      <Card bodySx={{ px: 1.5, gap: 1 }}>
+        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, px: 1 }}>
+          {!q.error && (
+            <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('data.count', { n: activeCount })}</Typography>)}
+          <FormControlLabel sx={{ ml: 'auto', mr: 0 }} label={t('data.showRetired')}
+            slotProps={{ typography: { sx: { fontSize: 13 } } }}
+            control={<Switch id="de-show-retired" size="small" checked={showRetired}
+              onChange={(e) => setShowRetired(e.target.checked)} />} />
+        </Stack>
         {!q.error && (
-          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('data.count', { n: activeCount })}</Typography>)}
-        <FormControlLabel sx={{ ml: 'auto' }} label={t('data.showRetired')}
-          control={<Switch id="de-show-retired" size="small" checked={showRetired}
-            onChange={(e) => setShowRetired(e.target.checked)} />} />
-      </WrapperBox>
-      {!q.error && (
-        <DataGrid autoHeight rows={rows} getRowId={(r) => r.data_entity_id} columns={columns} loading={q.isLoading}
-          disableRowSelectionOnClick hideFooterSelectedRowCount
-          onRowClick={({ row }) => navigate(links.entity(projectId, row.data_entity_id))}
-          localeText={{ noRowsLabel: t('data.empty') }}
-          sx={{ bgcolor: 'background.paper', borderRadius: 3, '& .MuiDataGrid-row': { cursor: 'pointer' } }} />
-      )}
+          <DataGrid autoHeight rows={rows} getRowId={(r) => r.data_entity_id} columns={columns} loading={q.isLoading}
+            disableRowSelectionOnClick hideFooterSelectedRowCount
+            onRowClick={({ row }) => navigate(links.entity(projectId, row.data_entity_id))}
+            localeText={{ noRowsLabel: t('data.empty') }}
+            sx={{ border: 0, borderRadius: 0, bgcolor: 'transparent', '& .MuiDataGrid-row': { cursor: 'pointer' } }} />
+        )}
+      </Card>
       {adding && <AddEntityDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(de) => { qc.invalidateQueries({ queryKey: keys.entities(projectId) });
           setNotice(t('data.created', { number: de.de_number })); }} />}

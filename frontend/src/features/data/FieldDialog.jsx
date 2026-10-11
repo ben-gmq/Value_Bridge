@@ -8,6 +8,7 @@ import { errorText, isStale } from '../../api/client';
 import { keys } from '../../app/links';
 import { useCodes } from '../../app/useCodes';
 import { ConflictDialog } from '../../components/ConflictDialog';
+import { SectionLabel } from '../../components/kit';
 import { t } from '../../i18n/t';
 import { entityLabel, groupsTo, intBad, nextPkOrdinal, normName, toInt } from './fieldRules';
 
@@ -205,7 +206,7 @@ export function FieldDialog({ projectId, entity, field, fields, onClose, onSaved
                 slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 2 } }} sx={{ width: 180 }} />
             )}
           </Stack>
-          <Typography variant="h6" component="h3" sx={{ pt: 1 }}>{t('data.field.fk')}</Typography>
+          <SectionLabel sx={{ pt: 1 }}>{t('data.field.fk')}</SectionLabel>
           {entities.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>
             {errorText(entities.error, t('data.loadFailed'))}</Alert>}
           <FormControl size="small">
