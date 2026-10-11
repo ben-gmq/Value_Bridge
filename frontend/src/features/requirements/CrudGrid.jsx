@@ -66,8 +66,8 @@ export function CrudGrid({ projectId, br, disabled }) {
             <TableRow sx={{ bgcolor: 'background.subtle' }}>
               <TableCell>{t('requirements.entity')}</TableCell>
               {CRUD.map((c) => (
-                <TableCell key={c} align="center" sx={{ width: 44, fontFamily: MONO }}>{t(`requirements.crud.${c}`)}</TableCell>))}
-              <TableCell sx={{ width: 90 }}>{t('requirements.derived')}</TableCell>
+                <TableCell key={c} align="center" sx={{ width: 36, px: 0.25, fontFamily: MONO }}>{t(`requirements.crud.${c}`)}</TableCell>))}
+              <TableCell sx={{ width: 76, pl: 1 }}>{t('requirements.derived')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -82,7 +82,7 @@ export function CrudGrid({ projectId, br, disabled }) {
               const dirs = ['I', 'O'].filter((d) => mine.some((l) => l.direction === d));
               return (
                 <TableRow key={deId}>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  <TableCell sx={{ minWidth: 120, wordBreak: 'break-word' }}>
                     <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
                       {de ? <><Code tone="teal" sx={{ fontSize: 12, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
                     </Link>
@@ -90,7 +90,7 @@ export function CrudGrid({ projectId, br, disabled }) {
                   {CRUD.map((c) => {
                     const link = mine.find((l) => l.crud_code === c);
                     return (
-                      <TableCell key={c} align="center" padding="checkbox">
+                      <TableCell key={c} align="center" padding="none" sx={{ px: 0.25 }}>
                         <Checkbox size="small" checked={Boolean(link)} disabled={disabled || toggle.isPending}
                           sx={{ '&.Mui-checked': { color: 'brand.ftcViolet' } }}
                           slotProps={{ input: { 'aria-label': t('requirements.crudFor', { crud: t(`requirements.crudName.${c}`), entity: entityLabel(de) }) } }}
@@ -98,7 +98,7 @@ export function CrudGrid({ projectId, br, disabled }) {
                       </TableCell>
                     );
                   })}
-                  <TableCell>
+                  <TableCell sx={{ pl: 1, whiteSpace: 'nowrap' }}>
                     {dirs.length > 0 && (
                       <MonoChip tone={dirs.includes('O') ? 'purple' : 'neutral'}>{dirs.map(dirLabel).join(' · ')}</MonoChip>)}
                   </TableCell>
