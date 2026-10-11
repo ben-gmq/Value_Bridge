@@ -60,6 +60,8 @@ class Project(AuditMixin, Base):
         BigInteger, ForeignKey("code_master.code_id", use_alter=True, name="fk_project_status"),
         nullable=False,
     )
+    # D-39: KEYS_ONLY or FULL. Read only through services.components.depth().
+    data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False, server_default="FULL")
 
     client = relationship("Client")
     program = relationship("Program", viewonly=True,
@@ -78,7 +80,60 @@ class Project(AuditMixin, Base):
                              name="fk_project_program_live", onupdate="NO ACTION"),
         CheckConstraint("end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
                         name="ck_project_dates"),
+        CheckConstraint("data_model_depth IN ('KEYS_ONLY', 'FULL')", name="ck_project_depth"),
     )
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class ProjectComponent(AuditMixin, Base):
+    """A component this project uses (D-37). Live row = on, retired row = off; switching back on
+    restores the same row. Changed only through services.components.set_components (audited)."""
+
+    __tablename__ = "project_component"
+
+    project_component_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    component_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    component_category: Mapped[str] = mapped_column(
+        String(40), Computed("'PROJECT_COMPONENT'", persisted=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "component_code_id", name="uq_project_component"),
+        ForeignKeyConstraint(["component_code_id", "component_category"],
+                             ["code_master.code_id", "code_master.category"],
+                             name="fk_pc_component", onupdate="NO ACTION"),
+        Index("ix_pc_component", "component_code_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class ProjectTemplateComponent(AuditMixin, Base):
+    """One component of one project template (OR-3). Global and seeded; copied once at
+    create_project, never linked afterwards."""
+
+    __tablename__ = "project_template_component"
+
+    project_template_component_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    template_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    template_category: Mapped[str] = mapped_column(
+        String(40), Computed("'PROJECT_TEMPLATE'", persisted=True), nullable=False)
+    component_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    component_category: Mapped[str] = mapped_column(
+        String(40), Computed("'PROJECT_COMPONENT'", persisted=True), nullable=False)
+    # Seeded rows have no author, as on code_master (PLAYBOOK_DEVIATIONS 7d).
+    created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+
+    __table_args__ = (
+        UniqueConstraint("template_code_id", "component_code_id", name="uq_ptc_grain"),
+        ForeignKeyConstraint(["template_code_id", "template_category"],
+                             ["code_master.code_id", "code_master.category"],
+                             name="fk_ptc_template", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["component_code_id", "component_category"],
+                             ["code_master.code_id", "code_master.category"],
+                             name="fk_ptc_component", onupdate="NO ACTION"),
+        Index("ix_ptc_component", "component_code_id"),
+    )

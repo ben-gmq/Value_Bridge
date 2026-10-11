@@ -87,6 +87,18 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                              ("BENEFIT", "Benefit"), ("RISK", "Risk"), ("QUALITY", "Quality"),
                              ("ORG_CHANGE", "Organizational change"), ("DATA", "Data"),
                              ("VENDOR", "Vendor")]),
+    # D-37: the components a project may use. System category: the code branches on it (S5-4).
+    ("PROJECT_COMPONENT", True, [("SOLUTION", "Solutions"),
+                                 ("FUNCTION_REQUIREMENT", "Function requirements"),
+                                 ("APPLICATION", "Applications & interfaces"),
+                                 ("EFFORT", "Effort & rate card"), ("ISSUE", "Issues"),
+                                 ("TO_BE_DFD", "To-be DFD"), ("AS_IS", "As-is BFC + DFD"),
+                                 ("WBS", "WBS"), ("BENEFIT", "Benefits"), ("RISK", "Risks"),
+                                 ("CHANGE_REQUEST", "Change requests")]),
+    # OR-3: starting points for a new project's component set (contents: seed_project_templates).
+    ("PROJECT_TEMPLATE", False, [("REQUIREMENTS_ONLY", "Requirements only"),
+                                 ("DATA_AND_PROCESS", "Data & process"),
+                                 ("FULL_DELIVERY", "Full delivery")]),
     ("PHASE_STATUS", False, [("PLANNED", "Planned"), ("IN_DELIVERY", "In delivery"),
                              ("COMPLETE", "Complete"), ("CANCELLED", "Cancelled")]),
 ]

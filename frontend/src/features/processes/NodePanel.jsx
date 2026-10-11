@@ -10,6 +10,7 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { MONO } from '../../theme/theme';
+import { useComponents } from '../../app/useComponents';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEditForm, useFormSave } from './chartKit';
 import { FlowGaps, StepSequence } from './FlowSections';
@@ -31,6 +32,7 @@ const restoreFirstList = (err) => {
 };
 
 export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice, onGone }) {
+  const { isOn } = useComponents(projectId);
   const qc = useQueryClient();
   const canEdit = useCanEdit();
   const nodeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
@@ -236,22 +238,22 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             <Divider sx={{ my: 3 }} />
             <StepData projectId={projectId} node={node} disabled={!editable} />
             <Divider sx={{ my: 3 }} />
-            <StepSequence projectId={projectId} node={node} disabled={!editable} />
-            <Divider sx={{ my: 3 }} />
+            {isOn('TO_BE_DFD') && <><StepSequence projectId={projectId} node={node} disabled={!editable} />
+              <Divider sx={{ my: 3 }} /></>}
             <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
               list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
               unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
             <Divider sx={{ my: 3 }} />
-            <StepFlows projectId={projectId} node={node} disabled={!editable} />
-            <Divider sx={{ my: 3 }} />
-            {/* As-is support (D-8, S6b-1): retires and restores with the step. */}
-            <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
+            {isOn('TO_BE_DFD') && <><StepFlows projectId={projectId} node={node} disabled={!editable} />
+              <Divider sx={{ my: 3 }} /></>}
+            {/* As-is support (D-8, S6b-1): retires and restores with the step. Hidden when off (D-37). */}
+            {isOn('APPLICATION', 'AS_IS') && <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
               empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
               rowId="application_bfc_node_id" disabled={!editable}
               api={{ list: () => bfcApi.apps(nodeId),
                 link: (applicationId, note) => bfcApi.linkApp(nodeId, { application_id: applicationId, note }),
                 edit: (row, note) => bfcApi.editAppLink(nodeId, row.application_bfc_node_id, { row_version: row.row_version, note }),
-                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} />
+                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} />}
           </>
         )}
         {!node.is_process && (

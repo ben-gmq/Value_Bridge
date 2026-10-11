@@ -67,5 +67,7 @@
   "settings.org.roleRestored": "Role restored",
   "settings.codeRetired": "{code} (no longer offered)",
   "settings.rateCard": "Rate card",
-  "settings.rateCardWhat": "Standard man-days per FR type and complexity, used to price function requirements"
+  "settings.rateCardWhat": "Standard man-days per FR type and complexity, used to price function requirements",
+  "settings.components": "Components",
+  "settings.componentsWhat": "Which parts of the model this project uses, and how fully data entities are defined"
 }

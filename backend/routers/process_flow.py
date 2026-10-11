@@ -19,9 +19,10 @@ from services import diagram_layout, process_flow, render
 router = GuardedRouter(tags=["process-flow"])
 _read = project_ctx("REVIEWER")
 _edit = project_ctx("EDITOR")
-_flow_w = object_guard(BfcNodeFlow, "EDITOR")
+_edit_dfd = project_ctx("EDITOR", "TO_BE_DFD")              # D-37: flow arrows are DFD scope
+_flow_w = object_guard(BfcNodeFlow, "EDITOR", component="TO_BE_DFD")
 _node_r = object_guard(BfcNode, "REVIEWER")
-_node_w = object_guard(BfcNode, "EDITOR")
+_node_w = object_guard(BfcNode, "EDITOR", component="TO_BE_DFD")
 
 
 @router.get("/projects/{project_id}/process-flows", response_model=list[ProcessFlowOut], **_read.route)
@@ -30,7 +31,7 @@ def list_flows(project_id: int, bfc_node_id: int | None = None, db: Session = De
 
 
 @router.post("/projects/{project_id}/process-flows", response_model=ProcessFlowOut, status_code=201,
-             **_edit.route)
+             **_edit_dfd.route)
 def link_flow(project_id: int, body: ProcessFlowIn, user: AppUser = Depends(current_user),
               db: Session = Depends(get_db)):
     return process_flow.link_process_flow(db, user.app_user_id, project_id, body.from_bfc_node_id,

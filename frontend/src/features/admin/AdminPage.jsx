@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Snackbar, Stack, Tab, Tabs,
-  TextField } from '@mui/material';
+import { Alert, Box, Button, Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Select, Snackbar,
+  Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { api } from '../../api/vb';
+import { keys } from '../../app/links';
 import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Page, WrapperBox } from '../../components/Page';
@@ -128,14 +129,74 @@ function Programs({ notify }) {
   );
 }
 
+// Everything a chosen component needs, transitively (OR-2). The server refuses a list that is not
+// closed, so the form sends the closure and says what it added — nothing is added silently.
+function closure(codes, catalogue) {
+  const needs = Object.fromEntries(catalogue.map((c) => [c.code, c.requires]));
+  const out = new Set();
+  const todo = [...codes];
+  while (todo.length) {
+    const c = todo.pop();
+    if (!out.has(c)) { out.add(c); todo.push(...(needs[c] ?? [])); }
+  }
+  return out;
+}
+
+// D-37 / OR-3: a template pre-fills the components; any combination may follow.
+function ComponentPicker({ f, setF, catalogue, templates }) {
+  const chosen = new Set(f.component_codes);
+  const added = [...closure(chosen, catalogue)].filter((c) => !chosen.has(c));
+  const label = (code) => catalogue.find((c) => c.code === code)?.label ?? code;
+  const toggle = (code) => setF({ ...f, component_codes: chosen.has(code)
+    ? f.component_codes.filter((c) => c !== code) : [...f.component_codes, code] });
+  return (
+    <Box sx={{ width: '100%' }}>
+      <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 1 }}>
+        <FormControl size="small" sx={{ minWidth: 240 }}>
+          <InputLabel id="p-tpl-label">{t('components.template')}</InputLabel>
+          <Select labelId="p-tpl-label" id="p-tpl" label={t('components.template')} value={f.template_code}
+            onChange={(e) => { const code = e.target.value;
+              const tpl = templates.find((x) => x.code === code);
+              setF({ ...f, template_code: code, component_codes: tpl ? [...tpl.components] : f.component_codes }); }}>
+            <MenuItem value="">{t('components.templateNone')}</MenuItem>
+            {templates.map((x) => <MenuItem key={x.code} value={x.code}>{x.label}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 280 }}>
+          <InputLabel id="p-depth-label">{t('components.depthTitle')}</InputLabel>
+          <Select labelId="p-depth-label" id="p-depth" label={t('components.depthTitle')} value={f.data_model_depth}
+            onChange={(e) => setF({ ...f, data_model_depth: e.target.value })}>
+            {['FULL', 'KEYS_ONLY'].map((v) => <MenuItem key={v} value={v}>{t(`components.depth.${v}`)}</MenuItem>)}
+          </Select>
+        </FormControl>
+      </Stack>
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('components.pick')}</Typography>
+      <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap' }}>
+        {catalogue.map((c) => (
+          <FormControlLabel key={c.code} label={c.label}
+            control={<Checkbox size="small" checked={chosen.has(c.code) || added.includes(c.code)}
+              disabled={added.includes(c.code)} onChange={() => toggle(c.code)} />} />
+        ))}
+      </Stack>
+      {added.length > 0 && <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        {t('components.added', { list: added.map(label).join(', ') })}</Typography>}
+    </Box>
+  );
+}
+
 function Projects({ notify }) {
   const clients = useQuery({ queryKey: ['clients'], queryFn: api.clients });
   const programs = useQuery({ queryKey: ['programs'], queryFn: api.programs });
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
-  const empty = { client_id: '', project_code: '', project_name: '', program_id: '' };
+  const catalogue = useQuery({ queryKey: keys.componentCatalogue(), queryFn: api.componentCatalogue });
+  const templates = useQuery({ queryKey: keys.projectTemplates(), queryFn: api.projectTemplates });
+  const empty = { client_id: '', project_code: '', project_name: '', program_id: '', template_code: '',
+    component_codes: [], data_model_depth: 'FULL' };
   const [f, setF] = useState(empty);
-  const { m, error } = useSave(() => api.createProject({ ...f, program_id: f.program_id || null }), ['projects'],
-    () => { setF(empty); notify(t('admin.projectCreated')); });
+  const { m, error } = useSave(() => api.createProject({ ...f, program_id: f.program_id || null,
+    template_code: f.template_code || null,
+    component_codes: [...closure(f.component_codes, catalogue.data ?? [])] }), ['projects'],
+  () => { setF(empty); notify(t('admin.projectCreated')); });
   const progs = (programs.data ?? []).filter((g) => g.client_id === f.client_id);
   const programCode = (id) => (programs.data ?? []).find((g) => g.program_id === id)?.program_code ?? '';
   return (
@@ -154,6 +215,7 @@ function Projects({ notify }) {
             {progs.map((g) => <MenuItem key={g.program_id} value={g.program_id}>{g.program_name}</MenuItem>)}
           </Select>
         </FormControl>
+        <ComponentPicker f={f} setF={setF} catalogue={catalogue.data ?? []} templates={templates.data ?? []} />
         <Button variant="contained" disabled={m.isPending} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
       </WrapperBox>
       <DataGrid {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}

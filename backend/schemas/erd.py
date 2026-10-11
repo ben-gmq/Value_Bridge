@@ -29,7 +29,7 @@ class ErdEntity(BaseModel):
     description: str | None
     field_count: int
     fields: list[ErdField]               # PK by pk_ordinal, then FK, then attributes (by seq_no)
-    warnings: list[Literal["NO_KEY"]]
+    warnings: list[Literal["NO_KEY", "KEYS_ONLY"]]
 
 
 class ErdViaField(BaseModel):
@@ -55,6 +55,7 @@ class ErdRelationship(BaseModel):
 
 class ErdGraphOut(BaseModel):
     scope_key: str                       # 'project' or the subject-area node id, as the layout routes take it
+    data_model_depth: str = "FULL"       # D-39: KEYS_ONLY suppresses the KEYS_ONLY warning
     entities: list[ErdEntity]
     relationships: list[ErdRelationship]
     outside_refs: list[ErdRelationship]  # stubs: the parent is outside the area (or retired)

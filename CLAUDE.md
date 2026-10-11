@@ -18,7 +18,9 @@ cite it, don't restate it.** Changes to data design or business logic go to Ben 
   and its own database; never stop a server by pattern (`pkill -f vite`) — stop your own by PID.
 - **First time on a machine:** `cd backend && VB_EMAIL_DOMAINS=fortience.com ./scripts/bootstrap_local_db.sh`
   (creates roles `vb_owner`/`vb_app`, databases `vb_db`/`vb_test_db`, writes a gitignored `.env`),
-  then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master`.
+  then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates`.
+  **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
+  `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`) ·

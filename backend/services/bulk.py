@@ -41,7 +41,7 @@ from sqlalchemy.types import Text
 
 from config import get_settings
 from models import DataEntity, DataField, ImportBatch, ImportRow
-from services import audit, code_master, errors, xlsx
+from services import audit, code_master, components, errors, xlsx
 from services import data_entity as de_service
 
 OPERATIONAL_SQLSTATES = frozenset({"40001", "40P01", "55P03", "57014"})    # 4a-R7
@@ -165,6 +165,7 @@ class Target:
     current: Callable[[Session, int, list[int]], dict[int, dict]]
     validate: Callable[[Ctx, list[Staged]], None]
     apply: Callable[[Ctx, list[Staged]], None]
+    component: str | None = None                # D-37: checked at validate and commit (§5.2)
 
     @property
     def codes(self) -> tuple[str, ...]:
@@ -1074,6 +1075,7 @@ def check_file(db: Session, project_id: int, target: Target, body: bytes) -> dic
 
 def validate(db: Session, actor_id: int, project_id: int, target: Target, body: bytes,
              file_name: str) -> ImportBatch:
+    components.require_on(db, project_id, target.component)          # D-37 (§5.2, sara L3)
     sha = hashlib.sha256(body).hexdigest()
     sheet = _read(body, target)
     ctx = Ctx(db, project_id, actor_id)
@@ -1241,6 +1243,7 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
         target = BY_CODE.get(batch.target_entity)
         if target is None:
             raise HTTPException(404, "Not found")
+        components.require_on(db, project_id, target.component)      # D-37 (§5.2, sara L3)
         result = _commit(db, actor_id, batch, target, status, acknowledged_inserts, source_ip)
         db.commit()                            # the one commit; a failure here is audited too
     except HTTPException as e:                 # refused before anything was applied: unchanged

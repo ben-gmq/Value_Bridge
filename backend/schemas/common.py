@@ -1,5 +1,6 @@
 """Pydantic schemas. *In = request, *Out = response. No response model carries password_hash."""
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -103,6 +104,11 @@ class ProjectIn(BaseModel):
     program_id: int | None = None
     start_date: date | None = None
     end_date: date | None = None
+    # D-37: the components, closed under their dependencies (422 otherwise). The template is
+    # provenance only, recorded in the audit; the UI pre-fills the list from it.
+    component_codes: list[str] = Field(max_length=20)
+    template_code: str | None = Field(default=None, max_length=40)
+    data_model_depth: Literal["KEYS_ONLY", "FULL"] = "FULL"          # D-39
 
 
 class ProjectPatch(BaseModel):
@@ -127,7 +133,50 @@ class ProjectOut(Orm):
     project_name: str
     start_date: date | None
     end_date: date | None
+    data_model_depth: str
     row_version: int
+
+
+class ComponentOut(BaseModel):
+    code: str
+    label: str
+    enabled: bool
+    requires: list[str]
+    available: bool
+
+
+class TemplateOut(BaseModel):
+    code: str
+    label: str
+    components: list[str]
+
+
+class ComponentsIn(BaseModel):
+    component_codes: list[str] = Field(max_length=20)
+    confirm_hash: str | None = None      # omit for the preview (OR-2: shown the list first)
+
+
+class ComponentBlockerOut(BaseModel):
+    component: str
+    reason: str
+    message: str
+    by: list[str] = []
+    count: int | None = None
+    sample: list[str] = []
+
+
+class ComponentsChangeOut(BaseModel):
+    turn_on: list[str]
+    added_by_dependency: list[str]
+    turn_off: list[str]
+    blockers: list[ComponentBlockerOut]
+    confirm_hash: str
+    applied: bool
+
+
+class DepthIn(BaseModel):
+    row_version: int
+    data_model_depth: Literal["KEYS_ONLY", "FULL"]
 
 
 class ProgramMoveIn(BaseModel):

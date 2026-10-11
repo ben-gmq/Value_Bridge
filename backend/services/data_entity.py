@@ -4,8 +4,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import BfcNode, BfcNodeDataEntity, BrDataEntity, BusinessRequirement, DataEntity, DataField
-from services import diagram_layout, numbering
+from models import BfcNode, BfcNodeDataEntity, BrDataEntity, BusinessRequirement, DataEntity, DataField, Project
+from services import components, diagram_layout, numbering
 from services.code_master import validate_required_code
 from services import lifecycle
 from services.process_flow import steps_under
@@ -258,6 +258,7 @@ def generate_erd(db: Session, project_id: int, subject_area_node_id: int | None 
                 "ref_data_field_id": f.ref_data_field_id, "fk_group_no": f.fk_group_no,
                 "ref_de_name": parent.de_name if parent else None, "description": f.description}
 
+    full = components.depth(db.get(Project, project_id)) == "FULL"      # D-39: FULL expects attributes
     out_entities, relationships, outside_refs = [], [], []
     for de in entities:
         own = sorted(by_de.get(de.data_entity_id, []), key=_field_order)
@@ -265,7 +266,9 @@ def generate_erd(db: Session, project_id: int, subject_area_node_id: int | None 
         out_entities.append({"data_entity_id": de.data_entity_id, "de_number": de.de_number,
                              "de_name": de.de_name, "description": de.description,
                              "field_count": len(own), "fields": [_field(f) for f in own],
-                             "warnings": [] if pk_set else ["NO_KEY"]})
+                             "warnings": ([] if pk_set else ["NO_KEY"])
+                             + (["KEYS_ONLY"] if full and own and all(f.is_primary_key or f.is_foreign_key
+                                                                    for f in own) else [])})
         groups: dict[tuple[int, int], list[DataField]] = {}
         for f in own:
             if f.is_foreign_key:
@@ -290,5 +293,6 @@ def generate_erd(db: Session, project_id: int, subject_area_node_id: int | None 
             (relationships if parent.is_active and parent_id in in_scope else outside_refs).append(rel)
     return {"scope_key": diagram_layout.PROJECT_SCOPE if subject_area_node_id is None
             else str(subject_area_node_id),
+            "data_model_depth": "FULL" if full else "KEYS_ONLY",
             "entities": out_entities, "relationships": relationships, "outside_refs": outside_refs,
             "layout": diagram_layout.positions(db, project_id, "ERD", subject_area_node_id)}

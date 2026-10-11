@@ -1,6 +1,6 @@
 // Every UI string lives in en*.json, so a Japanese UI is a translation, not a refactor (§14.8).
 // One file per screen area, so parallel work never edits the same file; keys are prefixed by
-// area (processes.*, requirements.*, data.*, settings.*, solutions.*, frs.*, applications.*, interfaces.*, effort.*) and must not collide.
+// area (processes.*, requirements.*, data.*, settings.*, solutions.*, frs.*, applications.*, interfaces.*, effort.*, components.*) and must not collide.
 import en from './en.json';
 import processes from './en.processes.json';
 import requirements from './en.requirements.json';
@@ -11,8 +11,9 @@ import frs from './en.frs.json';
 import applications from './en.applications.json';
 import interfaces from './en.interfaces.json';
 import effortStrings from './en.effort.json';
+import components from './en.components.json';
 
-const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings };
+const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components };
 
 export function t(key, vars = {}) {
   const s = ALL[key] ?? key;

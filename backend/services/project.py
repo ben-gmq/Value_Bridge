@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import AppUser, Client, CodeMaster, Program, Project, UserAccessGrant
-from services import access, audit, effort, numbering
+from services import access, audit, components, effort, numbering
 from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
 
@@ -52,8 +52,12 @@ def list_visible_projects(db: Session, user: AppUser) -> list[Project]:
 
 
 def create_project(db: Session, actor: AppUser, client_id: int, project_code: str,
-                   project_name: str, program_id: int | None, start_date, end_date) -> Project:
-    """Platform admin only (route guard). Creating a project grants nobody anything (D-32)."""
+                   project_name: str, program_id: int | None, start_date, end_date, *,
+                   component_codes, template_code: str | None = None,
+                   data_model_depth: str = "FULL") -> Project:
+    """Platform admin only (route guard). Creating a project grants nobody anything (D-32).
+    Its components (D-37) are inserted in the same transaction; the list must be closed under
+    their dependencies, and the template is provenance only."""
     client = db.get(Client, client_id)
     if client is None or not client.is_active:
         raise HTTPException(422, "Choose an active client")
@@ -64,18 +68,24 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
         if prog.client_id != client_id:
             raise HTTPException(422, "A program's projects belong to its client")
     _check_dates(start_date, end_date)
+    if data_model_depth not in components.DEPTHS:
+        raise HTTPException(400, f"data_model_depth: '{data_model_depth}' is not one of KEYS_ONLY, FULL")
+    if template_code is not None:
+        components.template_components(db, template_code)          # 400 if unknown
     status = validate_required_code(db, None, "PROJECT_STATUS", "PLANNING", "status")
     p = Project(client_id=client_id, program_id=program_id,
                 project_code=project_code.strip().upper(), project_name=project_name.strip(),
                 start_date=start_date, end_date=end_date, status_code_id=status.code_id,
-                created_by=actor.app_user_id)
+                data_model_depth=data_model_depth, created_by=actor.app_user_id)
     db.add(p)
     db.flush()
     numbering.seed_all(db, p.project_id)            # all ten series, same transaction (R2-D14)
     cells = effort.seed_rate_card(db, p.project_id, actor.app_user_id)   # same transaction (§7.10, S6c-1)
+    on = components.initial_rows(db, p.project_id, component_codes, actor.app_user_id)   # D-37
     # A later slice copies CONTROL_RULE house defaults here (§7.13).
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
-                 detail={"program_id": program_id, **cells})
+                 detail={"program_id": program_id, **cells, "template_code": template_code,
+                         "components": on, "data_model_depth": data_model_depth})
     db.commit()
     return p
 

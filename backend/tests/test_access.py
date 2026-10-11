@@ -1,5 +1,5 @@
 """Visibility and the one-grant rule (§7.8, §7.10, D-32, Q10, Q16, R2-S2/S4). Gate 2."""
-from tests.conftest import login
+from tests.conftest import ALL_COMPONENTS, login
 
 
 def grant(client, headers, project_id, user_id, role):
@@ -38,7 +38,7 @@ def test_program_grant_sees_every_project_in_program(client, world):
     # a project added to the program later is visible on the next request (D-32)
     r = client.post("/api/v1/projects", headers=w["admin"], json={
         "client_id": w["client_id"], "project_code": "HR", "project_name": "HR",
-        "program_id": w["program_id"]})
+        "program_id": w["program_id"], "component_codes": ALL_COMPONENTS})
     assert r.status_code == 201
     assert visible(client, rev) == ["FIN", "HR", "SALES"]
 
@@ -166,7 +166,8 @@ def test_non_admin_cannot_create_projects_or_move(client, world):
     grant(client, w["admin"], w["p_solo"], w["users"]["owner"], "OWNER")
     owner = login(client, "owner@example.test")
     r = client.post("/api/v1/projects", headers=owner, json={
-        "client_id": w["client_id"], "project_code": "X", "project_name": "X"})
+        "client_id": w["client_id"], "project_code": "X", "project_name": "X",
+        "component_codes": ALL_COMPONENTS})
     assert r.status_code == 403
     r = client.post(f"/api/v1/programs/{w['program_id']}/projects", headers=owner,
                     json={"project_id": w["p_solo"]})

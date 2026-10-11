@@ -23,6 +23,9 @@ from database import SessionLocal  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parents[1]
 OWNER_URL = os.environ["MIGRATION_DATABASE_URL"]
+# Every component on: a test project behaves as a pre-7a project did (D-37 backfill, Q-9).
+ALL_COMPONENTS = ["SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD",
+                  "AS_IS", "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST"]
 DATA_TABLES = ("audit_event", "user_access_grant", "project_sequence", "project", "program",
                "client", "app_user")
 
@@ -34,10 +37,16 @@ def schema():
     os.environ["VB_ALEMBIC_URL"] = OWNER_URL
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
-    from seeds.seed_code_master import seed
-    with SessionLocal() as db:
-        seed(db)
+    _seed_library()
     yield
+
+
+def _seed_library():
+    from seeds.seed_code_master import seed
+    from seeds.seed_project_templates import seed as seed_templates
+    with SessionLocal() as s:
+        seed(s)
+        seed_templates(s)
 
 
 @pytest.fixture(autouse=True)
@@ -52,9 +61,7 @@ def clean():
         # FR type, Slice 6b-2; it is not needed at all.)
         c.execute(text(f"TRUNCATE {', '.join(DATA_TABLES)} RESTART IDENTITY CASCADE"))
     eng.dispose()
-    from seeds.seed_code_master import seed
-    with SessionLocal() as s:
-        seed(s)
+    _seed_library()
 
 
 @pytest.fixture
@@ -104,7 +111,7 @@ def world(client):
     def project(code, program_id=None, client_id=c["client_id"]):
         r = client.post("/api/v1/projects", headers=admin, json={
             "client_id": client_id, "project_code": code, "project_name": code.title(),
-            "program_id": program_id})
+            "program_id": program_id, "component_codes": ALL_COMPONENTS})
         assert r.status_code == 201, r.text
         return r.json()["project_id"]
 

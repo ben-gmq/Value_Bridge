@@ -370,6 +370,7 @@ Ben, 2026-10-11: *"I will accept your recommendations, so build it first."*
 | S7-4 | **Applications need no other component; only the interface routes need FRs and Applications** | OR-2's "applications need FRs" | apple Q-4 |
 | S7-5 | **No layout rows are deleted.** Old `PROCESS_FLOW` positions stay as history, the type CHECK is unchanged, and the service refuses new ones | apple Q-31 (delete) | Lilly, to keep law 1 without exception |
 | S7-6 | **Grants are soft-revoked after being copied into `project_member` (0038)**; nothing is deleted, so it proceeds without a pause (Ben: build without stopping unless critical) | — | apple §8.5 |
+| S7-7 | **Until 7c retires them, the process-flow arrows (`bfc_node_flow`) are gated under To-be DFD**, with external flows. A requirements-only project does not sequence steps; under D-38 sequence becomes derived in 7c anyway | slice7_schema §5.2 table | sara L10 (Lilly, under S7-1) |
 
 ### Slice 1 schema review — 2026-09-29
 

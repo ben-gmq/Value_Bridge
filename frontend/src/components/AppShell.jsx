@@ -8,15 +8,17 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { useAuth } from '../app/AuthContext';
+import { useComponents } from '../app/useComponents';
 import { api } from '../api/vb';
 import { t } from '../i18n/t';
 
 // §14.3: the seven-item navigation of the v9 boards. Sections not built yet land on a
 // "coming in slice N" page, so the shell is final from day one.
+// The third column: components any one of which shows the item (D-37); none = always shown.
 export const NAV = [
-  ['nav.dashboard', ''], ['nav.processes', 'processes'], ['nav.dfd', 'dfd'],
-  ['nav.requirements', 'requirements'], ['nav.brfr', 'br-fr'], ['nav.interfaces', 'interfaces'],
-  ['nav.data', 'data'],
+  ['nav.dashboard', ''], ['nav.processes', 'processes'], ['nav.dfd', 'dfd', ['TO_BE_DFD', 'AS_IS']],
+  ['nav.requirements', 'requirements'], ['nav.brfr', 'br-fr', ['SOLUTION', 'FUNCTION_REQUIREMENT']],
+  ['nav.interfaces', 'interfaces', ['APPLICATION']], ['nav.data', 'data'],
 ];
 
 const onFtc = (theme) => ({
@@ -76,6 +78,7 @@ function Header() {
   const name = me?.user?.display_name ?? '';
   const initials = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const base = projectId ? `/p/${projectId}` : null;
+  const { anyOn } = useComponents(projectId);
   const section = base ? pathname.slice(base.length + 1).split('/')[0] : null;
   const inSettings = section === 'settings' || section === 'access';   // Settings holds access too
 
@@ -92,7 +95,7 @@ function Header() {
       <ScopeSelector />
       <Box component="nav" aria-label="Main" sx={{ display: 'flex', gap: 0.25, minWidth: 0, overflowX: 'auto',
         scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
-        {base && NAV.map(([key, path]) => {
+        {base && NAV.filter(([, , need]) => !need || anyOn(...need)).map(([key, path]) => {
           const active = section === path;
           return (
             <Box key={key} component={RouterLink} to={path ? `${base}/${path}` : base}
