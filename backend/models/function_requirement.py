@@ -8,6 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import AuditMixin, Base
+from models.bfc import _live
 
 
 class FunctionRequirement(AuditMixin, Base):
@@ -78,6 +79,117 @@ class FunctionRequirement(AuditMixin, Base):
         Index("ix_fr_type", "fr_type_code_id"),
         Index("ix_fr_complexity", "complexity_code_id"),
         Index("ix_fr_fulfilment", "fulfilment_status_code_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class FrInterface(AuditMixin, Base):
+    """1:0..1 interface detail of an INTERFACE-behaviour FR (D-27, A-55). No endpoints known → no
+    row → listed as incomplete. The guard FK through fr_type_behaviour makes "detail only on an
+    interface FR" declarative and blocks retyping away while the detail is live (§5.4.8)."""
+
+    __tablename__ = "fr_interface"
+
+    fr_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    fr_type_behaviour: Mapped[str | None] = mapped_column(
+        String(20), Computed("CASE WHEN is_active THEN 'INTERFACE' END", persisted=True))
+    source_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    pattern_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    pattern_category: Mapped[str] = mapped_column(String(40), Computed("'INTERFACE_PATTERN'", persisted=True))
+    method_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    method_category: Mapped[str] = mapped_column(String(40), Computed("'INTERFACE_METHOD'", persisted=True))
+    frequency_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    frequency_category: Mapped[str] = mapped_column(String(40), Computed("'INTERFACE_FREQUENCY'", persisted=True))
+    volume_note: Mapped[str | None] = mapped_column(Text)
+
+    fr_row = relationship("FunctionRequirement", viewonly=True,
+                          primaryjoin="foreign(FrInterface.fr_id) == FunctionRequirement.fr_id")
+    source_row = relationship("Application", viewonly=True,
+                              primaryjoin="foreign(FrInterface.source_application_id) == Application.application_id")
+    target_row = relationship("Application", viewonly=True,
+                              primaryjoin="foreign(FrInterface.target_application_id) == Application.application_id")
+    pattern_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                    primaryjoin="foreign(FrInterface.pattern_code_id) == CodeMaster.code_id")
+    method_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                   primaryjoin="foreign(FrInterface.method_code_id) == CodeMaster.code_id")
+    frequency_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                      primaryjoin="foreign(FrInterface.frequency_code_id) == CodeMaster.code_id")
+
+    @property
+    def pattern_code(self) -> str | None:
+        return self.pattern_code_row.code if self.pattern_code_row is not None else None
+
+    @property
+    def method_code(self) -> str | None:
+        return self.method_code_row.code if self.method_code_row is not None else None
+
+    @property
+    def frequency_code(self) -> str | None:
+        return self.frequency_code_row.code if self.frequency_code_row is not None else None
+
+    __table_args__ = (
+        UniqueConstraint("fr_id", "project_id", name="uq_fri_project"),
+        UniqueConstraint("fr_id", "project_id", "is_active", name="uq_fri_live_target"),
+        ForeignKeyConstraint(["fr_id", "project_id"], ["function_requirement.fr_id", "function_requirement.project_id"],
+                             name="fk_fri_fr"),
+        ForeignKeyConstraint(["fr_id", "project_id", "fr_type_behaviour"],
+                             ["function_requirement.fr_id", "function_requirement.project_id",
+                              "function_requirement.fr_type_behaviour"], name="fk_fri_fr_behaviour", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["source_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_fri_source"),
+        ForeignKeyConstraint(["target_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_fri_target"),
+        ForeignKeyConstraint(["pattern_code_id", "pattern_category"], ["code_master.code_id", "code_master.category"],
+                             name="fk_fri_pattern_code", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["method_code_id", "method_category"], ["code_master.code_id", "code_master.category"],
+                             name="fk_fri_method_code", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["frequency_code_id", "frequency_category"], ["code_master.code_id", "code_master.category"],
+                             name="fk_fri_frequency_code", onupdate="NO ACTION"),
+        CheckConstraint("source_application_id <> target_application_id", name="ck_fri_endpoints_distinct"),
+        Index("ix_fri_pair", "project_id", "source_application_id", "target_application_id"),
+        Index("ix_fri_target", "target_application_id", "project_id"),
+        Index("ix_fri_pattern", "pattern_code_id"),
+        Index("ix_fri_method", "method_code_id"),
+        Index("ix_fri_frequency", "frequency_code_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class FrInterfaceDataEntity(AuditMixin, Base):
+    """One data entity an interface carries, with a vendor-facing note (S6b2-4). The live guard
+    refuses retiring the detail while it still lists live carried entities (§5.3)."""
+
+    __tablename__ = "fr_interface_data_entity"
+
+    fr_interface_data_entity_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    fr_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    interface_is_active: Mapped[bool | None] = _live(True)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    entity_row = relationship("DataEntity", viewonly=True,
+                              primaryjoin="foreign(FrInterfaceDataEntity.data_entity_id) == DataEntity.data_entity_id")
+    interface_row = relationship("FrInterface", viewonly=True,
+                                 primaryjoin="foreign(FrInterfaceDataEntity.fr_id) == FrInterface.fr_id")
+
+    __table_args__ = (
+        UniqueConstraint("fr_id", "data_entity_id", name="uq_fide_grain"),
+        ForeignKeyConstraint(["fr_id", "project_id"], ["fr_interface.fr_id", "fr_interface.project_id"],
+                             name="fk_fide_interface"),
+        ForeignKeyConstraint(["fr_id", "project_id", "interface_is_active"],
+                             ["fr_interface.fr_id", "fr_interface.project_id", "fr_interface.is_active"],
+                             name="fk_fide_interface_live", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"], ["data_entity.data_entity_id", "data_entity.project_id"],
+                             name="fk_fide_de"),
+        Index("ix_fide_de", "data_entity_id", "project_id"),
+        Index("ix_fide_project", "project_id"),
     )
 
     def owning_project_id(self) -> int:

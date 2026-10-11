@@ -54,3 +54,10 @@ def presence_columns() -> list[sa.Column]:
         sa.Column("created_by", sa.BigInteger, sa.ForeignKey("app_user.app_user_id"), nullable=False),
         sa.Column("updated_by", sa.BigInteger, sa.ForeignKey("app_user.app_user_id")),
     ]
+
+
+def live_tag(name: str, value: str, length: int = 20) -> sa.Column:
+    """§5.4.8 guard: the text `value` while the row is live, NULL once retired — the string form of
+    live_guard, for a guard FK onto a text key (fr_interface.fr_type_behaviour → 'INTERFACE')."""
+    return sa.Column(name, sa.String(length),
+                     sa.Computed(f"CASE WHEN is_active THEN '{value}' END", persisted=True))
