@@ -372,6 +372,15 @@ Ben, 2026-10-11: *"I will accept your recommendations, so build it first."*
 | S7-6 | **Grants are soft-revoked after being copied into `project_member` (0038)**; nothing is deleted, so it proceeds without a pause (Ben: build without stopping unless critical) | — | apple §8.5 |
 | S7-7 | **Until 7c retires them, the process-flow arrows (`bfc_node_flow`) are gated under To-be DFD**, with external flows. A requirements-only project does not sequence steps; under D-38 sequence becomes derived in 7c anyway | slice7_schema §5.2 table | sara L10 (Lilly, under S7-1) |
 
+### D-51 — the mockups are the visual reference, 2026-10-11
+
+**Status: DECIDED by Ben, 2026-10-11** (*"yes please work on front end"*, after he found the built screens far
+from the mockups). Overrides §14.2 and §14.3 where they disagree.
+
+| # | Decision | Effect | Overrides |
+|---|---|---|---|
+| D-51 | **The ten screen mockups in `docs/mockups/` (React + MUI, screenshots in `docs/mockups/screenshots/`) are the visual reference for every screen.** The "v9 canvas boards" §14.2–14.3 cite are not in the repo and are superseded | **Dark is the default, light the alternate** (one `colorSchemes` theme, as before). Dark neutrals are the mockups' purple-tinted `SURFACE` set; radii card 24 · diagram 18 · field 14 · pill buttons. **The shell is the mockups' left rail** (engagement selector, nav grouped Scope / Control / Admin with icons, user at the foot) **plus a header** with breadcrumbs and the working-set version chip ("Working · after v1.2", from the real baseline list). Screens follow their mockup's layout (side panels, tiles, tags, level badges, RACI toggles); screens with no mockup use the same kit. **Nothing is faked:** a mockup element whose data or feature is not built yet (issues, history, search, trigger/frequency/priority on a BR) is left out until its wave, not drawn empty or with invented values | §14.2 "light is the default", §14.3 top bar; §14.3 "no further mockups are needed" stays true for screens without one |
+
 ### Slice 8 schema rulings — the baseline freeze (wave 1d), 2026-10-11
 
 Schema `docs/slice8_schema.md` (apple). Ben, 2026-10-11: *"For every decision that I need to make, I will
@@ -6630,6 +6639,8 @@ frontend/src/
 
 ### 14.2 Theme
 
+> **D-51 (2026-10-11):** superseded where it disagrees — the mockups in `docs/mockups/` are the visual reference; dark is the default; the shell is the left rail plus header. See §1a D-51.
+
 - **`BRAND` = the Fortience deck palette**, not the scaffold's neutral slate default:
   indigo `#2B245C` (header, footer, page titles), cyan `#04AED6` (accent rule, focus
   highlights), violet `#7848DC` (avatar, selection accents). Primary actions stay navy
@@ -6646,6 +6657,8 @@ frontend/src/
   elkjs, and the token-based wrapper `Box` (open item 3 of the 2026-09-25 handoff).
 
 ### 14.3 Shell, navigation and scope
+
+> **D-51 (2026-10-11):** superseded where it disagrees — the mockups in `docs/mockups/` are the visual reference; dark is the default; the shell is the left rail plus header. See §1a D-51.
 
 - Top bar as on the v9 boards: **Dashboard · Processes · DFD · Requirements · BR–FR map ·
   Interfaces · Data**, plus Settings. The FTC footer is on every screen.

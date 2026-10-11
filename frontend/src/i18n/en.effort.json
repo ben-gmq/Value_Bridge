@@ -1,5 +1,4 @@
 {
-  "effort.tab": "Effort",
   "effort.title": "Effort summary",
   "effort.subtitle": "Man-days of the rated function requirements — derived from the rate card, never typed",
   "effort.total": "Total (vendor sizing)",
@@ -39,5 +38,16 @@
   "effort.fr.rate": "Rate",
   "effort.fr.rerate": "Re-rate at today's rate",
   "effort.fr.rated": "Rated: {days} man-days",
-  "effort.fr.changed": "Changing the type re-priced this FR from {from} to {to} man-days."
+  "effort.fr.changed": "Changing the type re-priced this FR from {from} to {to} man-days.",
+  "effort.tiles.unrated": "Not rated",
+  "effort.tiles.offRate": "Not at the current rate",
+  "effort.tiles.rejected": "Under rejected solutions",
+  "effort.card.gridTitle": "Man-days by FR type and complexity",
+  "effort.card.tileUnconfirmed": "FTC defaults not yet confirmed",
+  "effort.card.tileOffRate": "Rated FRs not at the current rate",
+  "effort.fr.unit": "man-days",
+  "effort.fr.lockNote": "Fixed when rated. A later rate-card change does not move scope already agreed — re-rate to take a new rate.",
+  "effort.fr.cardFor": "Rate card · {type}",
+  "effort.fr.cardHint": "The highlighted row is this FR's complexity.",
+  "effort.fr.pickHint": "Press Rate to apply it — the FR takes the rate card's current days."
 }

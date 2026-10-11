@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Breadcrumbs, Button, Card, CardContent, Chip, Grid, Link, Snackbar, Stack, TextField,
-  Typography } from '@mui/material';
+import { Alert, Box, Button, Snackbar, TextField } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
 import { frApi, solutionApi } from '../../api/scope';
-import { keys, links } from '../../app/links';
+import { keys } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
+import { Card, SectionLabel, Segmented, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
-import { FrWarnings, solutionOptions } from './frKit';
+import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
+import { CodeTitle, FrWarnings, SaveState, TwoCol, solutionOptions } from './frKit';
+import { FrTraceCard } from './FrTraceCard';
 import { InterfaceCard } from './InterfaceCard';
-import { FrEffort } from '../effort/FrEffort';
+import { FrEffort, FrEffortSide } from '../effort/FrEffort';
 
 const pickFr = (f) => ({ fr_name: f.fr_name ?? '', fr_type_code: f.fr_type_code,
   fulfilment_status_code: f.fulfilment_status_code, solution_id: f.solution_id ?? '',
@@ -84,14 +86,8 @@ export default function FrPage() {
     onError: actionFail,
   });
 
-  const crumbs = (
-    <Breadcrumbs sx={{ mb: 1.5 }}>
-      <Link component={RouterLink} to={links.frs(projectId)} underline="hover" color="inherit">{t('frs.back')}</Link>
-      <Typography sx={{ color: 'text.primary' }}>{fr?.fr_number ?? '…'}</Typography>
-    </Breadcrumbs>
-  );
-  if (q.error) return <Box>{crumbs}<Alert severity="error">{errorText(q.error)}</Alert></Box>;
-  if (!fr || !form.values) return <Box>{crumbs}<Typography sx={{ color: 'text.secondary' }}>{t('frs.loading')}</Typography></Box>;
+  if (q.error) return <Page title={t('frs.back')} error={errorText(q.error)} />;
+  if (!fr || !form.values) return <Page title={t('frs.loading')} />;
 
   const v = form.values;
   const live = fr.is_active;
@@ -118,77 +114,73 @@ export default function FrPage() {
       options={options} {...extra} />
   ) : <TextField fullWidth size="small" disabled label={labels[name]} value={shown(name)} />);
 
-  return (
-    <Box>
-      {crumbs}
-      <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" component="h1" sx={(th) => ({ fontWeight: 700, color: th.vars.palette.brand.title })}>
-            <Mono sx={(th) => ({ color: th.vars.palette.brand.link, mr: 1.5 })}>{fr.fr_number}</Mono>{fr.fr_name}
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.5, flexWrap: 'wrap' }}>
-            <Typography sx={{ color: 'text.secondary' }}>{t('frs.detailSubtitle')}</Typography>
-            {sol && (
-              <Link component={RouterLink} to={links.solution(projectId, sol.solution_id)} underline="hover">
-                <Mono>{sol.solution_number}</Mono> {sol.solution_name}</Link>)}
-          </Stack>
+  const actions = (
+    <>
+      {canEdit && (live ? (
+        <Button variant="outlined" color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('frs.retire')}</Button>
+      ) : (
+        <Button variant="outlined" disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('frs.restore')}</Button>
+      ))}
+      {editable && (
+        <>
+          <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('frs.discard')}</Button>
+          <Button variant="contained" disabled={!form.dirty || busy || !v.fr_name.trim()}
+            onClick={() => { save.setError(''); save.m.mutate(); }}>{t('frs.save')}</Button>
+        </>)}
+    </>
+  );
+
+  const main = (
+    <>
+      <Card title={t('frs.cardTitle')} action={<SaveState version={form.version} dirty={form.dirty} retired={!live} />}>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'repeat(2, minmax(0,1fr))' } }}>
+          {select('solution_id', solOpts, { allowEmpty: true, emptyLabel: t('frs.noSolution') })}
+          {select('fulfilment_status_code', statuses.map((c) => ({ value: c.code, label: c.label })))}
+          <Box sx={{ gridColumn: '1 / -1' }}>{text('fr_name', 1, 200)}</Box>
         </Box>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          {!live && <Chip variant="outlined" label={t('frs.retiredChip')} />}
-          {canEdit && (live ? (
-            <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('frs.retire')}</Button>
-          ) : (
-            <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('frs.restore')}</Button>
-          ))}
-          {editable && (
-            <>
-              <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('frs.discard')}</Button>
-              <Button variant="contained" disabled={!form.dirty || busy || !v.fr_name.trim()}
-                onClick={() => { save.setError(''); save.m.mutate(); }}>{t('frs.save')}</Button>
-            </>)}
-        </Stack>
-      </Stack>
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+            <SectionLabel>{labels.fr_type_code}</SectionLabel>
+            {editable ? (
+              <Segmented label={labels.fr_type_code} value={v.fr_type_code} onChange={(c) => form.set('fr_type_code', c)}
+                options={types.map((c) => ({ value: c.code, label: c.label }))} />
+            ) : <Box><Tag tone="navy">{typeLabel(v.fr_type_code)}</Tag></Box>}
+          </Box>
+          <FrEffort key={`${fr.row_version}-${fr.complexity_code}`} projectId={projectId} fr={fr}
+            onRated={(row) => { qc.setQueryData(keys.fr(frId), row); form.rebase(row); refreshAll();   // keeps typed edits (sara M-1)
+              setNotice(row.effort_days != null ? t('effort.fr.rated', { days: row.effort_days }) : t('frs.saved')); }} />
+        </Box>
+        {text('description', 3)}
+        {text('acceptance_note', 3)}
+      </Card>
+      {/* D-27: only an FR whose type behaves as an interface carries interface detail (never a code test) */}
+      {fr.fr_type_behaviour === 'INTERFACE' && <InterfaceCard projectId={projectId} fr={fr} onNotice={setNotice} />}
+    </>
+  );
+
+  const side = (
+    <>
+      <FrEffortSide projectId={projectId} fr={fr} />
+      <FrTraceCard projectId={projectId} solutionId={fr.solution_id} solution={sol} />
+    </>
+  );
+
+  return (
+    <Page title={<CodeTitle code={fr.fr_number} name={fr.fr_name} />} subtitle={t('frs.detailSubtitle')}
+      crumb={fr.fr_number} actions={actions}>
       {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
       {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
       <FrWarnings warnings={warnings} onClose={() => setWarnings([])} />
       {effortChange && (
         <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setEffortChange(null)}>
           {t('effort.fr.changed', { from: effortChange.previous_days ?? t('effort.fr.notRated'), to: effortChange.new_days })}</Alert>)}
-
-      <Card>
-        <CardContent>
-          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
-            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('frs.version', { v: form.version })}</Typography>
-          </Stack>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 6 }}>{text('fr_name', 1, 200)}</Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>{select('fr_type_code', types.map((c) => ({ value: c.code, label: c.label })))}</Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              {select('fulfilment_status_code', statuses.map((c) => ({ value: c.code, label: c.label })))}</Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              {select('solution_id', solOpts, { allowEmpty: true, emptyLabel: t('frs.noSolution') })}</Grid>
-            <Grid size={{ xs: 12, md: 6 }} />
-            <Grid size={12}>{text('description', 3)}</Grid>
-            <Grid size={12}>{text('acceptance_note')}</Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <FrEffort key={`${fr.row_version}-${fr.complexity_code}`} projectId={projectId} fr={fr}
-            onRated={(row) => { qc.setQueryData(keys.fr(frId), row); form.rebase(row); refreshAll();   // keeps typed edits (sara M-1)
-              setNotice(row.effort_days != null ? t('effort.fr.rated', { days: row.effort_days }) : t('frs.saved')); }} />
-        </CardContent>
-      </Card>
-      {/* D-27: only an FR whose type behaves as an interface carries interface detail (never a code test) */}
-      {fr.fr_type_behaviour === 'INTERFACE' && <InterfaceCard projectId={projectId} fr={fr} onNotice={setNotice} />}
+      <TwoCol main={main} side={side} />
 
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('frs.retireTitle')}
         body={t('frs.retireBody', { number: fr.fr_number })} confirmLabel={t('frs.retire')}
         busy={retire.isPending} onClose={() => setConfirmRetire(false)} onConfirm={() => retire.mutate()} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
-    </Box>
+    </Page>
   );
 }

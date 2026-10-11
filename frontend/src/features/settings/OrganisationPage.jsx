@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, Card, CardContent, Chip, Grid, Snackbar, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Snackbar, Stack, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { RichTreeView } from '@mui/x-tree-view/RichTreeView';
 import { errorText } from '../../api/client';
@@ -10,6 +10,7 @@ import { keys } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Card } from '../../components/kit';
 import { Page, WrapperBox } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { RecordDialog, SettingsCrumbs, ShowRetired } from './settingsKit';
@@ -190,54 +191,37 @@ export default function OrganisationPage() {
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('settings.org.maxLevel')}</Typography>
           )}
         </WrapperBox>
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 5 }}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography sx={{ fontWeight: 700, mb: 1 }}>{t('settings.org.units')}</Typography>
-                {!unitsQ.isLoading && tree.length === 0 && (
-                  <Typography sx={{ color: 'text.secondary' }}>{t('settings.org.noUnits')}</Typography>
-                )}
-                <RichTreeView items={tree} getItemId={(u) => String(u.org_unit_id)}
-                  getItemLabel={(u) => `${u.org_unit_code} · ${u.org_unit_name} — ${levelLabel(u.level_code)}`
-                    + (u.is_active ? '' : ` (${t('settings.retiredChip')})`)}
-                  getItemChildren={(u) => u.children}
-                  selectedItems={selectedId} onSelectedItemsChange={(_, id) => setSelectedId(id)}
-                  expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => setExpanded(ids)}
-                  expansionTrigger="iconContainer" />
-              </CardContent>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+          <Card title={t('settings.org.units')}>
+            {!unitsQ.isLoading && tree.length === 0 && (
+              <Typography sx={{ color: 'text.secondary' }}>{t('settings.org.noUnits')}</Typography>
+            )}
+            <RichTreeView items={tree} getItemId={(u) => String(u.org_unit_id)}
+              getItemLabel={(u) => `${u.org_unit_code} · ${u.org_unit_name} — ${levelLabel(u.level_code)}`
+                + (u.is_active ? '' : ` (${t('settings.retiredChip')})`)}
+              getItemChildren={(u) => u.children}
+              selectedItems={selectedId} onSelectedItemsChange={(_, id) => setSelectedId(id)}
+              expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => setExpanded(ids)}
+              expansionTrigger="iconContainer" />
+          </Card>
+          {selected ? (
+            <Card title={t('settings.org.rolesIn', { unit: `${selected.org_unit_code} ${selected.org_unit_name}` })}
+              action={canEdit && <Button variant="contained" size="small" disabled={!selected.is_active}
+                onClick={() => open(() => setRoleDialog({ row: null }))}>{t('settings.org.addRole')}</Button>}
+              bodySx={{ gap: 1.5 }}>
+              <Typography sx={{ fontSize: 13, color: 'brand.muted', mt: -1 }}>{levelLabel(selected.level_code)}</Typography>
+              {selected.description && (
+                <Typography sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary' }}>{selected.description}</Typography>
+              )}
+              <DataGrid autoHeight rows={roles} getRowId={(r) => r.org_role_id} columns={roleColumns}
+                loading={rolesQ.isLoading} disableRowSelectionOnClick hideFooterSelectedRowCount
+                localeText={{ noRowsLabel: t('settings.org.noRoles') }}
+                sx={{ bgcolor: 'background.paper', borderRadius: '14px' }} />
             </Card>
-          </Grid>
-          <Grid size={{ xs: 12, md: 7 }}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                {selected ? (
-                  <>
-                    <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1 }}>
-                      <Box>
-                        <Typography sx={{ fontWeight: 700 }}>
-                          {t('settings.org.rolesIn', { unit: `${selected.org_unit_code} ${selected.org_unit_name}` })}
-                        </Typography>
-                        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{levelLabel(selected.level_code)}</Typography>
-                      </Box>
-                      {canEdit && <Button variant="contained" size="small" disabled={!selected.is_active}
-                        onClick={() => open(() => setRoleDialog({ row: null }))}>{t('settings.org.addRole')}</Button>}
-                    </Stack>
-                    {selected.description && (
-                      <Typography sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary', mb: 1.5 }}>{selected.description}</Typography>
-                    )}
-                    <DataGrid autoHeight rows={roles} getRowId={(r) => r.org_role_id} columns={roleColumns}
-                      loading={rolesQ.isLoading} disableRowSelectionOnClick hideFooterSelectedRowCount
-                      localeText={{ noRowsLabel: t('settings.org.noRoles') }}
-                      sx={{ bgcolor: 'background.paper', borderRadius: 3 }} />
-                  </>
-                ) : (
-                  <Typography sx={{ color: 'text.secondary' }}>{t('settings.org.pickUnit')}</Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+          ) : (
+            <Card><Typography sx={{ color: 'text.secondary' }}>{t('settings.org.pickUnit')}</Typography></Card>
+          )}
+        </Box>
       </Page>
 
       {unitDialog && (

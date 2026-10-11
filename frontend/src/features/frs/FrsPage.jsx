@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Snackbar,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Snackbar,
   Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import { DataGrid } from '@mui/x-data-grid';
@@ -10,11 +10,12 @@ import { frApi, solutionApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, Code, PurpleTile, Tag, Tile } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono, ShowRetired, SimpleSelect } from '../processes/chartKit';
-import { BrFrTabs } from './BrFrTabs';
-import { FrWarnings, solutionOptions } from './frKit';
+import { MONO } from '../../theme/theme';
+import { ShowRetired, SimpleSelect } from '../processes/chartKit';
+import { FrWarnings, GRID_SX, TileRow, Toolbar, solutionOptions } from './frKit';
 
 const EMPTY = { fr_name: '', fr_type_code: '', solution_id: '', description: '' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
@@ -77,34 +78,41 @@ export default function FrsPage() {
   const [warnings, setWarnings] = useState([]);
   const rows = q.data ?? [];
   const activeCount = rows.filter((r) => r.is_active).length;
+  const unlinkedCount = rows.filter((r) => r.is_active && !r.solution_id).length;
+  const unratedCount = rows.filter((r) => r.is_active && r.effort_days == null).length;
 
   const columns = [
     { field: 'fr_number', headerName: t('frs.number'), width: 120,
       renderCell: ({ row, value, tabIndex }) => (
         <Link component={RouterLink} to={links.fr(projectId, row.fr_id)} tabIndex={tabIndex} underline="hover"
-          onClick={(e) => e.stopPropagation()} sx={{ color: row.is_active ? 'brand.link' : 'text.disabled' }}>
-          <Mono>{value}</Mono></Link>) },
+          onClick={(e) => e.stopPropagation()}>
+          <Code tone={row.is_active ? 'navy' : 'muted'}>{value}</Code></Link>) },
     { field: 'fr_name', headerName: t('frs.name'), flex: 1, minWidth: 220,
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
           <Box component="span" sx={{ color: row.is_active ? 'inherit' : 'text.secondary',
             overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</Box>
-          {!row.is_active && <Chip size="small" variant="outlined" label={t('frs.retiredChip')} />}
+          {!row.is_active && <Tag tone="neutral">{t('frs.retiredChip')}</Tag>}
         </Stack>) },
     { field: 'fr_type_code', headerName: t('frs.type'), width: 140,
-      renderCell: ({ value }) => <Chip size="small" variant="outlined" label={typeLabel(value)} /> },
+      renderCell: ({ value }) => <Tag tone="navy">{typeLabel(value)}</Tag> },
     { field: 'solution_id', headerName: t('frs.solution'), flex: 1, minWidth: 200,
       valueGetter: (v) => (v ? `${solById.get(v)?.solution_number ?? ''} ${solById.get(v)?.solution_name ?? ''}` : ''),
-      renderCell: ({ row, value }) => (row.solution_id ? (
+      renderCell: ({ row }) => (row.solution_id ? (
         <Link component={RouterLink} to={links.solution(projectId, row.solution_id)} underline="hover"
-          onClick={(e) => e.stopPropagation()}>{value}</Link>
+          onClick={(e) => e.stopPropagation()} color="inherit" sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'baseline', minWidth: 0 }}>
+          <Code>{solById.get(row.solution_id)?.solution_number ?? ''}</Code>
+          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{solById.get(row.solution_id)?.solution_name ?? ''}</Box></Link>
       ) : (
         <Tooltip title={t('frs.unlinkedTip')}>
-          <Chip size="small" variant="outlined" label={t('frs.unlinkedChip')}
-            sx={{ color: 'status.caution', borderColor: 'status.caution' }} />
+          <Box component="span"><Tag tone="caution">{t('frs.unlinkedChip')}</Tag></Box>
         </Tooltip>)) },
     { field: 'fulfilment_status_code', headerName: t('frs.status'), width: 170,
-      renderCell: ({ value }) => <Chip size="small" label={statusLabel(value)} /> },
+      renderCell: ({ value }) => <Tag tone="neutral">{statusLabel(value)}</Tag> },
+    { field: 'effort_days', headerName: t('frs.trace.effort'), width: 100, type: 'number',
+      valueGetter: (v) => (v == null ? null : Number(v)),
+      renderCell: ({ value }) => (value == null ? <Box component="span" sx={{ color: 'text.disabled' }}>—</Box>
+        : <Box component="span" sx={{ fontFamily: MONO }}>{t('frs.trace.days', { d: value })}</Box>) },
     { field: 'description', headerName: t('frs.description'), flex: 1, minWidth: 180, valueGetter: (v) => firstLine(v) },
   ];
 
@@ -112,23 +120,30 @@ export default function FrsPage() {
     <Page title={t('frs.title')} subtitle={t('frs.subtitle')} error={q.error && errorText(q.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('frs.add')}</Button>)}>
-      <BrFrTabs current="frs" />
       <FrWarnings warnings={warnings} onClose={() => setWarnings([])} />
-      <WrapperBox>
+      {!q.error && q.data && (
+        <TileRow>
+          <PurpleTile label={t('frs.tiles.shown')} value={activeCount} />
+          <Tile label={t('frs.tiles.unlinked')} value={unlinkedCount} tone={unlinkedCount ? 'caution' : undefined} note={t('frs.unlinkedTip')} />
+          <Tile label={t('frs.tiles.unrated')} value={unratedCount} tone={unratedCount ? 'caution' : undefined} note={t('frs.tiles.unratedNote')} />
+        </TileRow>)}
+      <Card>
+        <Toolbar>
+          {!q.error && (
+            <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('frs.count', { n: activeCount })}</Typography>)}
+          <Box sx={{ flex: 1 }} />
+          <FormControlLabel label={t('frs.unlinkedOnly')}
+            control={<Switch id="fr-unlinked-only" checked={unlinked} onChange={(e) => setUnlinked(e.target.checked)} />} />
+          <ShowRetired id="fr-show-retired" checked={showRetired} onChange={setShowRetired} />
+        </Toolbar>
         {!q.error && (
-          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('frs.count', { n: activeCount })}</Typography>)}
-        <Box sx={{ flex: 1 }} />
-        <FormControlLabel label={t('frs.unlinkedOnly')}
-          control={<Switch id="fr-unlinked-only" checked={unlinked} onChange={(e) => setUnlinked(e.target.checked)} />} />
-        <ShowRetired id="fr-show-retired" checked={showRetired} onChange={setShowRetired} />
-      </WrapperBox>
-      {!q.error && (
-        <DataGrid autoHeight rows={rows} getRowId={(r) => r.fr_id} columns={columns} loading={q.isLoading}
-          disableRowSelectionOnClick hideFooterSelectedRowCount
-          onRowClick={({ row }) => navigate(links.fr(projectId, row.fr_id))}
-          localeText={{ noRowsLabel: t('frs.empty') }}
-          initialState={{ sorting: { sortModel: [{ field: 'fr_number', sort: 'asc' }] } }}
-          sx={{ bgcolor: 'background.paper', borderRadius: 3, '& .MuiDataGrid-row': { cursor: 'pointer' } }} />)}
+          <DataGrid autoHeight rows={rows} getRowId={(r) => r.fr_id} columns={columns} loading={q.isLoading}
+            disableRowSelectionOnClick hideFooterSelectedRowCount
+            onRowClick={({ row }) => navigate(links.fr(projectId, row.fr_id))}
+            localeText={{ noRowsLabel: t('frs.empty') }}
+            initialState={{ sorting: { sortModel: [{ field: 'fr_number', sort: 'asc' }] } }}
+            sx={GRID_SX} />)}
+      </Card>
       {adding && <AddFrDialog projectId={projectId} solutions={solsQ.data} onClose={() => setAdding(false)}
         onDone={(fr) => { qc.invalidateQueries({ queryKey: keys.frs(projectId) });
           qc.invalidateQueries({ queryKey: keys.frTrace() });

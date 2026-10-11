@@ -262,5 +262,12 @@
   "baselines.dlg.chart.TO_BE": "to-be",
   "baselines.dlg.chart.AS_IS": "as-is",
   "baselines.chart.TO_BE": "To-be",
-  "baselines.chart.AS_IS": "As-is"
+  "baselines.chart.AS_IS": "As-is",
+  "baselines.netSince": "Net change since",
+  "baselines.col.object": "Object",
+  "baselines.col.name": "Name",
+  "baselines.before": "Before freezing {label}",
+  "baselines.check": "Consistency check",
+  "baselines.checkReady": "No consistency errors or blocking gaps",
+  "baselines.checkCounts": "{n} items in {m} areas are frozen in one step."
 }

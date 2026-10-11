@@ -1,9 +1,11 @@
 import { forwardRef, useMemo, useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, Grid, IconButton, InputAdornment, Snackbar, Stack, Tab, Tabs, TextField, Tooltip,
+import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent,
+  DialogTitle, FormControlLabel, IconButton, InputAdornment, Snackbar, Stack, TextField, Tooltip,
   Typography } from '@mui/material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import SwapVertRounded from '@mui/icons-material/SwapVertRounded';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import SearchIcon from '@mui/icons-material/Search';
@@ -17,8 +19,10 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
 import { Page } from '../../components/Page';
+import { Card, Code, LevelBadge, Segmented, Tag } from '../../components/kit';
+import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
-import { FIRST_PROCESS_LEVEL, LevelBadge, Mono, ShowRetired, blankToNull } from './chartKit';
+import { FIRST_PROCESS_LEVEL, ShowRetired, blankToNull } from './chartKit';
 import { NodePanel } from './NodePanel';
 import { CopyChartButton } from './StepDfd';
 
@@ -49,31 +53,58 @@ function filterRows(rows, text) {
   return rows.filter((r) => keep.has(r.bfc_node_id));
 }
 
+// How many functions sit below each node (in what is loaded) — the muted count at the row's right.
+function countBelow(rows) {
+  const byId = new Map(rows.map((r) => [r.bfc_node_id, r]));
+  const n = new Map();
+  for (const r of rows) {
+    for (let p = byId.get(r.parent_bfc_node_id); p; p = byId.get(p.parent_bfc_node_id)) {
+      n.set(p.bfc_node_id, (n.get(p.bfc_node_id) ?? 0) + 1);
+    }
+  }
+  return n;
+}
+
 function NodeLabel({ node }) {
   const { projectId } = useParams();
+  const [params] = useSearchParams();
+  const selected = params.get('node') === String(node.bfc_node_id);
   const flowable = node.is_active && !node.is_process && node.level_no >= FIRST_PROCESS_LEVEL - 1;
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, py: 0.25 }}>
-      <LevelBadge level={node.level_no} process={node.is_process} />
-      <Mono sx={{ color: 'text.secondary', flex: 'none' }}>{node.hier_code}</Mono>
-      <Box component="span" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, minHeight: 28 }}>
+      <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} />
+      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none' }}>{node.hier_code}</Code>
+      <Box component="span" sx={{ fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
         color: node.is_active ? 'text.primary' : 'text.disabled' }}>{node.node_name}</Box>
-      {node.is_process && (
-        <Chip size="small" variant="outlined" color="primary" sx={{ height: 20, flex: 'none' }}
-          label={node.br_number ?? t('processes.processChip')} />
-      )}
-      {!node.is_active && <Chip size="small" variant="outlined" sx={{ height: 20, flex: 'none' }} label={t('processes.retiredChip')} />}
+      {node.is_process && <Tag tone="purple" sx={{ height: 20, flex: 'none', fontSize: 11.5 }}>
+        {node.br_number ?? t('processes.processChip')}</Tag>}
+      {!node.is_active && <Tag tone="neutral" sx={{ height: 20, flex: 'none', fontSize: 11.5 }}>{t('processes.retiredChip')}</Tag>}
       {flowable && (
         <Tooltip title={t('processes.openFlow')}>
           <IconButton size="small" component={RouterLink} to={links.dfd(projectId, node.bfc_node_id)}
             aria-label={t('processes.openFlowFor', { name: node.node_name })} sx={{ flex: 'none', p: 0.25 }}
             onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-            <FlowIcon fontSize="small" /></IconButton>
+            <FlowIcon sx={{ fontSize: 17 }} /></IconButton>
         </Tooltip>
       )}
+      <Box sx={{ flexGrow: 1 }} />
+      {node.below > 0 && <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 12, flex: 'none',
+        color: th.vars.palette.brand.muted })}>{node.below}</Box>}
     </Stack>
   );
 }
+
+// The tree rows as the mockup draws them: 36px rounded rows, the selection in purple tint with a violet hairline.
+const treeSx = (th) => ({
+  display: 'flex', flexDirection: 'column', gap: '2px',
+  '& .MuiTreeItem-content': { minHeight: 36, borderRadius: '14px', py: 0.25, pr: 1.25 },
+  '& .MuiTreeItem-content:hover': { bgcolor: th.vars.palette.brand.selected },
+  '& .MuiTreeItem-content[data-selected], & .MuiTreeItem-content[data-selected]:hover, & .MuiTreeItem-content[data-selected][data-focused]': {
+    bgcolor: th.vars.palette.brand.purpleTint, outline: `1px solid ${th.vars.palette.brand.ftcViolet}` },
+  '& .MuiTreeItem-iconContainer': { color: th.vars.palette.brand.muted },
+  '& .MuiTreeItem-groupTransition': { display: 'flex', flexDirection: 'column', gap: '2px' },
+});
 
 const NodeItem = forwardRef(function NodeItem(props, ref) {
   const node = useTreeItemModel(props.itemId);
@@ -144,7 +175,10 @@ export default function ProcessesPage() {
   const brsQ = useQuery({ queryKey: [...keys.brs(projectId), { retired: true }], queryFn: () => brApi.list(projectId, true) });
   const rows = useMemo(() => treeQ.data ?? [], [treeQ.data]);
   const rowById = useMemo(() => new Map(rows.map((r) => [String(r.bfc_node_id), r])), [rows]);
-  const items = useMemo(() => buildTree(filterRows(rows, filter)), [rows, filter]);
+  const items = useMemo(() => {
+    const below = countBelow(rows);
+    return buildTree(filterRows(rows, filter).map((r) => ({ ...r, below: below.get(r.bfc_node_id) ?? 0 })));
+  }, [rows, filter]);
   const selected = selectedId ? rowById.get(selectedId) ?? null : null;
   const filtering = filter.trim() !== '';
   const expandedItems = filtering || expanded === null ? rows.map((r) => String(r.bfc_node_id)) : expanded;
@@ -181,35 +215,41 @@ export default function ProcessesPage() {
   const parent = selected?.parent_bfc_node_id != null ? rowById.get(String(selected.parent_bfc_node_id)) : null;
   const canAddChild = Boolean(selected?.is_active && !selected.is_process);
 
+  const hierarchyAction = (
+    <Stack direction="row" spacing={0.5} aria-hidden>
+      {[1, 2, 3, 4, 5].map((l) => <LevelBadge key={l} level={l} label={t('processes.levelN', { n: l })} />)}
+    </Stack>
+  );
+
   return (
     <Page title={t('processes.title')} subtitle={t(bfcSet === 'AS_IS' ? 'processes.subtitleAsIs' : 'processes.subtitle')}
+      crumb={selected ? `${selected.hier_code} ${selected.node_name}` : undefined}
       error={error || (treeQ.error && errorText(treeQ.error)) || (brsQ.error && errorText(brsQ.error))}
-      actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}>
+      actions={<>
+        {isOn('AS_IS') && (
+          <Segmented label={t('processes.chart.label')} value={bfcSet} onChange={chooseSet}
+            options={['TO_BE', 'AS_IS'].map((v) => ({ value: v, label: t(`processes.chart.${v}`) }))} />
+        )}
+        {canEdit && <Button variant="contained" startIcon={<AddRounded />}
+          onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}
+      </>}>
       {params.get('pick') === 'dfd' && (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => { const next = new URLSearchParams(params); next.delete('pick'); setParams(next); }}>
           {t('processes.pickDfd')}</Alert>
       )}
-      {isOn('AS_IS') && (
-        <Tabs value={bfcSet} onChange={(_, v) => chooseSet(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-          aria-label={t('processes.chart.label')}>
-          <Tab value="TO_BE" label={t('processes.chart.TO_BE')} />
-          <Tab value="AS_IS" label={t('processes.chart.AS_IS')} />
-        </Tabs>
-      )}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                <Typography component="h2" variant="h6">{t('processes.hierarchy')}</Typography>
-                <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
-              </Stack>
-              <TextField fullWidth id="bfc-filter" placeholder={t('processes.filter')} value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
-                  input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-              {canEdit && <Stack direction="row" spacing={1} sx={{ my: 1.5, alignItems: 'center', flexWrap: 'wrap' }} useFlexGap>
-                <Button size="small" variant="outlined" disabled={!canAddChild}
+      <Box sx={{ display: 'grid', gap: 2, alignItems: 'stretch',
+        gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(300px,400px) minmax(0,1fr)' } }}>
+        <Card title={t('processes.hierarchy')} action={hierarchyAction} bodySx={{ gap: 1.25, px: 1.5 }}>
+          <Box sx={{ px: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
+                input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+            <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+              <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
+              <Box sx={{ flexGrow: 1 }} />
+              {canEdit && <>
+                <Button size="small" variant="outlined" startIcon={<AddRounded />} disabled={!canAddChild}
                   onClick={() => { setError(''); setAdding({ parent: selected }); }}>{t('processes.addChild')}</Button>
                 <Tooltip title={t('processes.moveUp')}>
                   <span>
@@ -224,46 +264,49 @@ export default function ProcessesPage() {
                       onClick={() => reorder.mutate(pos + 1)}><ArrowDownwardIcon fontSize="small" /></IconButton>
                   </span>
                 </Tooltip>
-                {selected?.is_process && (
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>
-                )}
-              </Stack>}
-              {!treeQ.isLoading && rows.length === 0 && (
-                <Box sx={{ py: 2 }}>
-                  <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
-                    {t(bfcSet === 'AS_IS' ? 'processes.emptyAsIs' : 'processes.empty')}</Typography>
-                  {canEdit && !showRetired && isOn('AS_IS') && (
-                    <CopyChartButton projectId={projectId} toSet={bfcSet} fromSet={bfcSet === 'AS_IS' ? 'TO_BE' : 'AS_IS'}
-                      onCopied={() => { qc.invalidateQueries({ queryKey: keys.tree(projectId) });
-                        qc.invalidateQueries({ queryKey: keys.brs(projectId) }); setNotice(t('processes.chart.copied')); }} />)}
-                </Box>
-              )}
-              {filtering && rows.length > 0 && items.length === 0 && (
-                <Typography sx={{ color: 'text.secondary', py: 2 }}>{t('processes.noMatch')}</Typography>
-              )}
-              <RichTreeView items={items} getItemId={(n) => String(n.bfc_node_id)} getItemLabel={(n) => `${n.hier_code} ${n.node_name}`}
-                getItemChildren={(n) => n.children} slots={{ item: NodeItem }}
-                selectedItems={selectedId} onSelectedItemsChange={(_, id) => select(id)}
-                expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => { if (!filtering) setExpanded(ids); }}
-                expansionTrigger="iconContainer" />
-              {canEdit && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 2 }}>{t('processes.reorderHelp')}</Typography>}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, md: 7 }}>
-          {selected ? (
-            <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id}
-              parent={parent} br={br} showRetired={showRetired} onNotice={setNotice} onGone={() => select(null)} />
-          ) : (
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography sx={{ color: 'text.secondary' }}>
-                  {selectedId && !treeQ.isLoading ? t('processes.notInTree') : t('processes.pickNode')}</Typography>
-              </CardContent>
-            </Card>
+              </>}
+            </Stack>
+            {canEdit && selected?.is_process && (
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>
+            )}
+          </Box>
+          {!treeQ.isLoading && rows.length === 0 && (
+            <Box sx={{ px: 1, py: 2 }}>
+              <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
+                {t(bfcSet === 'AS_IS' ? 'processes.emptyAsIs' : 'processes.empty')}</Typography>
+              {canEdit && !showRetired && isOn('AS_IS') && (
+                <CopyChartButton projectId={projectId} toSet={bfcSet} fromSet={bfcSet === 'AS_IS' ? 'TO_BE' : 'AS_IS'}
+                  onCopied={() => { qc.invalidateQueries({ queryKey: keys.tree(projectId) });
+                    qc.invalidateQueries({ queryKey: keys.brs(projectId) }); setNotice(t('processes.chart.copied')); }} />)}
+            </Box>
           )}
-        </Grid>
-      </Grid>
+          {filtering && rows.length > 0 && items.length === 0 && (
+            <Typography sx={{ color: 'text.secondary', px: 1, py: 2 }}>{t('processes.noMatch')}</Typography>
+          )}
+          <Box sx={{ minWidth: 0, overflowX: 'auto' }}>
+            <RichTreeView items={items} getItemId={(n) => String(n.bfc_node_id)} getItemLabel={(n) => `${n.hier_code} ${n.node_name}`}
+              getItemChildren={(n) => n.children} slots={{ item: NodeItem }}
+              selectedItems={selectedId} onSelectedItemsChange={(_, id) => select(id)}
+              expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => { if (!filtering) setExpanded(ids); }}
+              expansionTrigger="iconContainer" sx={treeSx} />
+          </Box>
+          {canEdit && (
+            <Box sx={(th) => ({ mt: 'auto', mx: 1, pt: 1, display: 'flex', alignItems: 'flex-start', gap: 1,
+              color: th.vars.palette.brand.muted, fontSize: 12.5 })}>
+              <SwapVertRounded sx={{ fontSize: 16, mt: '1px' }} />{t('processes.reorderHelp')}
+            </Box>
+          )}
+        </Card>
+        {selected ? (
+          <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id}
+            parent={parent} br={br} showRetired={showRetired} onNotice={setNotice} onGone={() => select(null)} />
+        ) : (
+          <Card>
+            <Typography sx={{ color: 'text.secondary' }}>
+              {selectedId && !treeQ.isLoading ? t('processes.notInTree') : t('processes.pickNode')}</Typography>
+          </Card>
+        )}
+      </Box>
       {adding && (
         <AddNodeDialog projectId={projectId} parent={adding.parent} bfcSet={bfcSet} onClose={() => setAdding(null)}
           onDone={(row) => {

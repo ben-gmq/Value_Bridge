@@ -15,7 +15,7 @@ export function detailText(err) {
 }
 
 // A gap names its step and, because both charts share codes, which chart it is on (UAT 8).
-function itemText(x) {
+export function itemText(x) {
   if (typeof x !== 'object' || x === null) return fmtValue(x);
   if (x.hier_code) return x.bfc_set_code ? `${x.hier_code} (${t(`baselines.dlg.chart.${x.bfc_set_code}`)})` : x.hier_code;
   return fmtValue(x.label ?? x.component ?? x.de_number ?? x.br_number ?? '');

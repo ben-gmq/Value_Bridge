@@ -1,10 +1,9 @@
+import { usePageCrumb } from '../../components/AppShell';
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
-  FormControlLabel, InputLabel, Link, MenuItem, Select, Stack, Switch, TextField, Typography } from '@mui/material';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
+  FormControlLabel, InputLabel, MenuItem, Select, Stack, Switch, TextField, Typography } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
-import { links } from '../../app/links';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { t } from '../../i18n/t';
 
@@ -14,15 +13,11 @@ import { t } from '../../i18n/t';
 // names its blocker and is shown as text.
 export { isStale };
 
+// D-51: the header breadcrumb names the sub-page ("Admin › Settings › Client organisation").
+// eslint-disable-next-line no-unused-vars
 export function SettingsCrumbs({ projectId, current }) {
-  return (
-    <Breadcrumbs sx={{ mb: 1.5 }}>
-      <Link component={RouterLink} to={links.settings(projectId)} underline="hover" color="inherit">
-        {t('settings.title')}
-      </Link>
-      <Typography sx={{ color: 'text.primary' }}>{current}</Typography>
-    </Breadcrumbs>
-  );
+  usePageCrumb(current);
+  return null;
 }
 
 export function ShowRetired({ checked, onChange, id }) {

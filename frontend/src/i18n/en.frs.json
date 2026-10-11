@@ -1,6 +1,4 @@
 {
-  "frs.tabSolutions": "Solutions",
-  "frs.tabFrs": "Function requirements",
   "frs.title": "Function requirements",
   "frs.subtitle": "The system functions to be built — each under the Solution that needs it",
   "frs.count": "{n} function requirements",
@@ -45,5 +43,22 @@
   "frs.panelNoneSolution": "No function requirements under this solution.",
   "frs.panelNoneBr": "No function requirements reach this requirement yet. They arrive through linked solutions.",
   "frs.via": "via {solution}",
-  "frs.goRegister": "Open the FR register"
+  "frs.goRegister": "Open the FR register",
+  "frs.cardTitle": "Function requirement",
+  "frs.kit.saved": "Saved · v{v}",
+  "frs.kit.unsaved": "Unsaved changes",
+  "frs.kit.retired": "Retired",
+  "frs.tiles.shown": "Function requirements",
+  "frs.tiles.unlinked": "Not under a solution",
+  "frs.tiles.unrated": "Not rated",
+  "frs.tiles.unratedNote": "No complexity yet — their effort is unknown, not zero.",
+  "frs.trace.title": "Traceability",
+  "frs.trace.bfc": "Function",
+  "frs.trace.br": "BR",
+  "frs.trace.system": "System",
+  "frs.trace.complexity": "Complexity",
+  "frs.trace.effort": "Effort",
+  "frs.trace.days": "{d} d",
+  "frs.trace.total": "Solution total",
+  "frs.trace.unrated": "{n} not rated — not in the total"
 }

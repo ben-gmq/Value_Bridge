@@ -25,5 +25,13 @@
   "components.template": "Start from",
   "components.templateNone": "Choose components yourself",
   "components.pick": "Components",
-  "components.added": "Added because a chosen part needs it: {list}"
+  "components.added": "Added because a chosen part needs it: {list}",
+  "components.import.progress": "Import progress",
+  "components.import.rows": "Rows in file",
+  "components.import.new": "New",
+  "components.import.update": "Update",
+  "components.import.unchanged": "Unchanged",
+  "components.import.errors": "Errors",
+  "components.import.warnings": "Warnings",
+  "components.import.allOrNone": "All rows or none"
 }

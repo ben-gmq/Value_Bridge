@@ -22,9 +22,12 @@ place.
 
 ## Open
 
-### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN
+### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
 - **type:** BUG · **found:** 2026-09-30 by `ui-verifier` (Slice 2a UAT, process chart) · **depends-on:** —
+- **FIXED 2026-10-11, slice 9 (D-51):** the top bar is gone; the shell is the left rail, which becomes a
+  drawer behind a menu button below 900px. ui-verifier S9 check 14: at 400px the drawer opens and the BR page
+  has no page-level sideways scroll; at 945px the chart stacks (Evidence/2026-10-11/slice-9/).
 - At 390px wide the page renders 477px wide: the top bar's user menu is cut off at the right
   and the footer text overflows. At ~930px the nav shows "BR–FR map" as "BR" and hides
   Interfaces and Data. The step panel content itself fits. Not caused by Slice 2; likely
@@ -316,3 +319,11 @@ place.
   VIEWER). Cache `verify` per baseline (it cannot change) and page or stream the diff with D-50's screen.
 - sara 8 M4 (rest) · `sara`, slice 8 pre-commit, 2026-10-11 · LOW · **The first-freeze race (two v1.0s at
   once) is held by `uq_baseline_first` + 23505 → 409 but not tested**; the prior-header race is.
+- UAT 9 · `ui-verifier`/`a91…` report, slice 9, 2026-10-11 · LOW · **The project dashboard reads its counts from the
+  freeze preview** (`baselines/next`), which runs the consistency check and hashes the live set. Cached 60s and shared
+  with Baselines, but heavy on a large project → give the dashboard a light counts route.
+- UAT 9 · slice 9, 2026-10-11 · LOW · **The BR page carries its own copies of the RACI panel and the solution links**
+  (`features/requirements/BrRaci.jsx`, `BrSolutionTags.jsx`) beside the shared `chartKit.RaciPanel` and
+  `SolutionLinkPanel`; a fix to one does not reach the other. Fold back into the shared components.
+- UAT 9 · slice 9, 2026-10-11 · LOW · **DFD at fit-zoom is still dense on a big branch** (text ~9px, crossing lines);
+  the data band now packs into rows. Revisit with the layout work of D-50's diagram highlighting.

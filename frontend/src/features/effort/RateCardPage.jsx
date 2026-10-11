@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Breadcrumbs, Button, Checkbox, Chip, FormControlLabel, Link, Snackbar, Stack, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Checkbox, FormControlLabel, Snackbar, Stack, Table, TableBody,
+  TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
 import { effortApi } from '../../api/scope';
-import { keys, links } from '../../app/links';
+import { keys } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
+import { Card, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
+import { MONO } from '../../theme/theme';
+import { TableFrame, TileRow } from '../frs/frKit';
 
 const HIGH = 60;
 const key = (c) => `${c.fr_type_code}|${c.complexity_code}`;
@@ -50,23 +53,25 @@ export default function RateCardPage() {
     },
   });
 
-  const crumbs = (
-    <Breadcrumbs sx={{ mb: 1.5 }}>
-      <Link component={RouterLink} to={links.settings(projectId)} underline="hover" color="inherit">{t('settings.title')}</Link>
-      <Typography sx={{ color: 'text.primary' }}>{t('effort.card.title')}</Typography>
-    </Breadcrumbs>
-  );
+  const allCells = data?.cells ?? [];
+  const unconfirmedCount = allCells.filter((c) => c.unconfirmed_default).length;
+  const offRateCount = allCells.reduce((m, c) => m + c.not_at_current_rate, 0);
 
   return (
-    <Box>
-      {crumbs}
-      <Page title={t('effort.card.title')} subtitle={t('effort.card.subtitle')} error={q.error && errorText(q.error)}
-        actions={canEdit && !edits && data && (
-          <Button variant="outlined" onClick={() => { setError(''); setEdits({}); }}>{t('effort.card.edit')}</Button>)}>
-        <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 2 }}>{t('effort.card.legend')}</Typography>
-        {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
-        {data && (
-          <TableContainer sx={{ bgcolor: 'background.paper', borderRadius: 3, border: 1, borderColor: 'divider' }}>
+    <Page title={t('effort.card.title')} subtitle={t('effort.card.subtitle')} crumb={t('effort.card.title')}
+      error={q.error && errorText(q.error)}
+      actions={canEdit && !edits && data && (
+        <Button variant="outlined" onClick={() => { setError(''); setEdits({}); }}>{t('effort.card.edit')}</Button>)}>
+      {data && (
+        <TileRow min={220}>
+          <Tile label={t('effort.card.tileUnconfirmed')} value={unconfirmedCount} tone={unconfirmedCount ? 'caution' : undefined} />
+          <Tile label={t('effort.card.tileOffRate')} value={offRateCount} tone={offRateCount ? 'caution' : undefined}
+            note={t('effort.card.legend')} />
+        </TileRow>)}
+      {error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
+      {data && (
+        <Card title={t('effort.card.gridTitle')}>
+          <TableFrame>
             <Table size="small" aria-label={t('effort.card.title')}>
               <TableHead>
                 <TableRow>
@@ -77,7 +82,7 @@ export default function RateCardPage() {
               <TableBody>
                 {data.types.map((ty) => (
                   <TableRow key={ty.code}>
-                    <TableCell sx={{ fontWeight: 600 }}>{ty.label}</TableCell>
+                    <TableCell sx={{ verticalAlign: 'top' }}><Tag tone="navy">{ty.label}</Tag></TableCell>
                     {data.complexities.map((cx) => {
                       const c = cells[`${ty.code}|${cx.code}`];
                       return (
@@ -88,12 +93,12 @@ export default function RateCardPage() {
                               value={edits[key(c)] ?? (c.standard_days ?? '')}
                               onChange={(e) => setEdits({ ...edits, [key(c)]: e.target.value })} />
                           ) : (
-                            <Typography sx={{ fontWeight: 600 }}>{c.standard_days ?? <Box component="span" sx={{ color: 'text.disabled' }}>{t('effort.card.noCell')}</Box>}</Typography>
+                            <Typography sx={{ fontFamily: MONO, fontSize: 15, fontWeight: 600 }}>
+                              {c.standard_days ?? <Box component="span" sx={{ color: 'text.disabled', fontFamily: 'inherit' }}>{t('effort.card.noCell')}</Box>}</Typography>
                           )}
                           <Stack spacing={0.5} sx={{ alignItems: 'flex-end', mt: 0.5 }}>
-                            {c.unconfirmed_default && <Chip size="small" variant="outlined" label={t('effort.card.unconfirmed')} />}
-                            {c.high && <Chip size="small" variant="outlined" label={t('effort.card.high')}
-                              sx={{ color: 'status.caution', borderColor: 'status.caution' }} />}
+                            {c.unconfirmed_default && <Tag tone="neutral">{t('effort.card.unconfirmed')}</Tag>}
+                            {c.high && <Tag tone="caution">{t('effort.card.high')}</Tag>}
                             {c.not_at_current_rate > 0 && (
                               <Typography sx={{ fontSize: 12, color: 'status.caution' }}>
                                 {t('effort.card.offRate', { n: c.not_at_current_rate, days: c.not_at_current_rate_days })}</Typography>)}
@@ -105,25 +110,25 @@ export default function RateCardPage() {
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
-        )}
-        {edits && (
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField id="rate-reason" label={t('effort.card.reason')} helperText={t('effort.card.reasonHelp')}
-              required multiline minRows={2} value={reason} onChange={(e) => setReason(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 4000 } }} />
-            {needsConfirm && (
-              <FormControlLabel control={<Checkbox checked={confirmHigh} onChange={(e) => setConfirmHigh(e.target.checked)} />}
-                label={t('effort.card.confirmHigh')} />)}
-            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-              <Button onClick={() => { setEdits(null); setReason(''); setConfirmHigh(false); setError(''); }}>{t('effort.card.cancel')}</Button>
-              <Button variant="contained" disabled={save.isPending || !changed.length || !reason.trim() || (needsConfirm && !confirmHigh)}
-                onClick={() => { setError(''); save.mutate(); }}>{t('effort.card.save')}</Button>
+          </TableFrame>
+          {edits && (
+            <Stack spacing={2}>
+              <TextField id="rate-reason" label={t('effort.card.reason')} helperText={t('effort.card.reasonHelp')}
+                required multiline minRows={2} value={reason} onChange={(e) => setReason(e.target.value)}
+                slotProps={{ htmlInput: { maxLength: 4000 } }} />
+              {needsConfirm && (
+                <FormControlLabel control={<Checkbox checked={confirmHigh} onChange={(e) => setConfirmHigh(e.target.checked)} />}
+                  label={t('effort.card.confirmHigh')} />)}
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                <Button onClick={() => { setEdits(null); setReason(''); setConfirmHigh(false); setError(''); }}>{t('effort.card.cancel')}</Button>
+                <Button variant="contained" disabled={save.isPending || !changed.length || !reason.trim() || (needsConfirm && !confirmHigh)}
+                  onClick={() => { setError(''); save.mutate(); }}>{t('effort.card.save')}</Button>
+              </Stack>
             </Stack>
-          </Stack>
-        )}
-      </Page>
+          )}
+        </Card>
+      )}
       <Snackbar open={Boolean(notice)} autoHideDuration={5000} onClose={() => setNotice('')} message={notice} />
-    </Box>
+    </Page>
   );
 }

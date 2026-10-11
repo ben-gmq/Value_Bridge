@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Link, Stack,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Link, Stack,
   TextField, Tooltip, Typography } from '@mui/material';
+import AddRounded from '@mui/icons-material/AddRounded';
 import EditRounded from '@mui/icons-material/EditRounded';
 import LinkOffRounded from '@mui/icons-material/LinkOffRounded';
 import { errorText, isStale } from '../../api/client';
@@ -12,7 +13,8 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { t } from '../../i18n/t';
-import { Mono, PickDialog, SectionTitle } from '../processes/chartKit';
+import { Code, ListRow, SectionLabel, Tag } from '../../components/kit';
+import { PickDialog } from '../processes/chartKit';
 
 const ERR_SX = { mb: 1, whiteSpace: 'pre-wrap' };
 
@@ -75,42 +77,42 @@ export function AppLinkPanel({ projectId, title, empty, ownerKey, api, rowId, al
   });
 
   return (
-    <Box>
-      <SectionTitle action={canEdit && (
-        <Button size="small" onClick={() => { setError(''); setNote(''); setAdding(true); }}>{t('applications.links.add')}</Button>)}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <SectionLabel action={canEdit && (
+        <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }}
+          onClick={() => { setError(''); setNote(''); setAdding(true); }}>{t('applications.links.add')}</Button>)}>
         {title}
-      </SectionTitle>
+      </SectionLabel>
       {error && <Alert severity="error" sx={ERR_SX} onClose={() => setError('')}>{error}</Alert>}
       {warning && <Alert severity="warning" sx={ERR_SX} onClose={() => setWarning(null)}>
         {t(`applications.warn.${warning.code}`, { items: warning.items.join(', ') })}</Alert>}
       {q.error && <Alert severity="error" sx={ERR_SX}>{errorText(q.error)}</Alert>}
       {!q.isLoading && !q.error && rows.length === 0 && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{empty}</Typography>)}
-      <Stack spacing={1.5}>
-        {rows.map((row) => (
-          <Stack key={row[rowId]} direction="row" sx={{ alignItems: 'flex-start', gap: 1 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                <Link component={RouterLink} to={links.application(projectId, row.application_id)} underline="hover"
-                  sx={{ fontWeight: 600 }}><Mono>{row.application_code}</Mono> {row.application_name}</Link>
-                <Chip size="small" variant="outlined" label={lifecycleLabel(row.lifecycle_code)} />
-              </Stack>
-              {row.note && <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 0.5, whiteSpace: 'pre-wrap' }}>{row.note}</Typography>}
-            </Box>
-            {canEdit && (
-              <>
-                <Tooltip title={t('applications.links.edit')}>
-                  <IconButton size="small" aria-label={t('applications.links.edit')} onClick={() => { setError(''); setEditing(row); }}>
-                    <EditRounded fontSize="small" /></IconButton>
-                </Tooltip>
-                <Tooltip title={t('applications.links.remove')}>
-                  <IconButton size="small" aria-label={t('applications.links.remove')} onClick={() => { setError(''); setRemoving(row); }}>
-                    <LinkOffRounded fontSize="small" /></IconButton>
-                </Tooltip>
-              </>)}
-          </Stack>
-        ))}
-      </Stack>
+      {rows.map((row) => (
+        <ListRow key={row[rowId]} sx={{ alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Link component={RouterLink} to={links.application(projectId, row.application_id)} underline="hover" color="inherit"
+                sx={{ fontWeight: 600, fontSize: 13.5, display: 'inline-flex', gap: 0.75, alignItems: 'baseline' }}>
+                <Code>{row.application_code}</Code>{row.application_name}</Link>
+              <Tag tone="teal">{lifecycleLabel(row.lifecycle_code)}</Tag>
+            </Stack>
+            {row.note && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5, whiteSpace: 'pre-wrap' }}>{row.note}</Typography>}
+          </Box>
+          {canEdit && (
+            <Box sx={{ display: 'inline-flex', flexShrink: 0 }}>
+              <Tooltip title={t('applications.links.edit')}>
+                <IconButton size="small" aria-label={t('applications.links.edit')} onClick={() => { setError(''); setEditing(row); }}>
+                  <EditRounded sx={{ fontSize: 16 }} /></IconButton>
+              </Tooltip>
+              <Tooltip title={t('applications.links.remove')}>
+                <IconButton size="small" aria-label={t('applications.links.remove')} onClick={() => { setError(''); setRemoving(row); }}>
+                  <LinkOffRounded sx={{ fontSize: 16 }} /></IconButton>
+              </Tooltip>
+            </Box>)}
+        </ListRow>
+      ))}
 
       {adding && (
         <PickDialog open title={t('applications.links.addTitle')} optionLabel={t('applications.links.pick')}

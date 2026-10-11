@@ -1,11 +1,12 @@
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardActionArea, CardContent, Stack, Typography } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
+import { Code, SectionLabel, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
-import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
+import { CARD_GRID, EngagementCard } from '../projects/homeKit';
 
 // D-32: a program is a roll-up, never a data layer. Every figure here is one per-project
 // result; drill-downs open the project's own screens (§14.3).
@@ -15,19 +16,22 @@ export default function ProgramHome() {
   const projects = useQuery({ queryKey: ['program-projects', programId], queryFn: () => api.programProjects(programId) });
   return (
     <Page title={prog.data?.program_name ?? t('program.fallbackTitle')} subtitle={t('program.subtitle')}
+      eyebrow={prog.data?.program_code && <Code tone="muted">{prog.data.program_code}</Code>}
       error={(prog.error || projects.error) && errorText(prog.error || projects.error)}>
-      <Stack direction="row" useFlexGap spacing={2} sx={{ flexWrap: 'wrap' }}>
-        {(projects.data ?? []).map((p) => (
-          <Card key={p.project_id} sx={{ width: 320 }}>
-            <CardActionArea component={RouterLink} to={`/p/${p.project_id}`}>
-              <CardContent>
-                <Typography sx={{ fontFamily: MONO, fontSize: 12.5, color: 'text.secondary' }}>{p.project_code}</Typography>
-                <Typography sx={{ fontWeight: 700 }}>{p.project_name}</Typography>
-                <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>{t('program.rollupSoon')}</Typography>
-              </CardContent>
-            </CardActionArea>
-          </Card>
-        ))}
+      <Stack spacing={3}>
+        {projects.data && (
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 200px), 1fr))' }}>
+            <Tile label={t('home.projects')} value={projects.data.length} />
+          </Box>
+        )}
+        <Box>
+          <SectionLabel sx={{ mb: 1.5 }}>{t('home.projects')}</SectionLabel>
+          <Box sx={CARD_GRID}>
+            {(projects.data ?? []).map((p) => (
+              <EngagementCard key={p.project_id} to={`/p/${p.project_id}`} code={p.project_code} name={p.project_name}
+                note={t('program.rollupSoon')} />))}
+          </Box>
+        </Box>
       </Stack>
     </Page>
   );

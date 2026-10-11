@@ -1,53 +1,48 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Card, CardContent, CircularProgress, Collapse, FormControlLabel, IconButton, Stack, Switch,
-  Table, TableBody, TableCell, TableHead, TableRow, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Collapse, FormControlLabel, IconButton, Stack, Switch,
+  Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { baselineApi } from '../../api/scope';
 import { keys } from '../../app/links';
+import { Card, Code, PurpleTile, Segmented, Tile, codeTone } from '../../components/kit';
+import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
-import { CHANGE_KINDS, ChangeTag, areaLabel, entityLabel, fieldLabel, fmtDays, fmtValue } from './baselineKit';
+import { CHANGE_KINDS, ChangeTag, areaLabel, entityLabel, fieldLabel, fmtDays, fmtValue, splitLabel } from './baselineKit';
 import { detailText } from './FreezeDialog';
-
-function Tile({ label, value, note, strong }) {
-  return (
-    <Card sx={(th) => ({ flex: '1 1 150px', minWidth: 0, ...(strong ? { bgcolor: th.vars.palette.brand.ftc, color: th.vars.palette.brand.onFtc } : {}) })}>
-      <CardContent>
-        <Typography sx={{ fontSize: 12.5, fontWeight: 600, opacity: 0.85 }}>{label}</Typography>
-        <Typography sx={{ fontSize: 28, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
-        {note && <Typography sx={{ fontSize: 12.5, opacity: 0.85 }}>{note}</Typography>}
-      </CardContent>
-    </Card>
-  );
-}
 
 function ChangeRow({ r, days }) {
   const [open, setOpen] = useState(false);
   const canOpen = r.fields.length > 0 && r.change !== 'ADDED' && r.change !== 'REMOVED';
+  const { code, name } = splitLabel(r.label);
   return (
     <>
       <TableRow hover>
-        <TableCell sx={{ width: 36, pr: 0 }}>
+        <TableCell sx={{ width: 36, pl: 1.5, pr: 0 }}>
           {canOpen && (
             <IconButton size="small" onClick={() => setOpen(!open)} aria-label={t('baselines.col.what')} aria-expanded={open}>
               {open ? <KeyboardArrowDownIcon fontSize="small" /> : <KeyboardArrowRightIcon fontSize="small" />}
             </IconButton>)}
         </TableCell>
         <TableCell><ChangeTag kind={r.change} /></TableCell>
-        <TableCell sx={{ minWidth: 220, wordBreak: 'break-word' }}>
-          <Typography sx={{ fontWeight: 600, fontSize: 'inherit' }}>{r.label}</Typography>
-          <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{entityLabel(r.entity)}</Typography>
+        <TableCell>{code ? <Code tone={codeTone(code)} sx={{ fontSize: 12.5 }}>{code}</Code> : null}</TableCell>
+        <TableCell sx={{ minWidth: 200, wordBreak: 'break-word' }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 'inherit' }}>{name}</Typography>
+          <Typography sx={{ fontSize: 12, color: 'brand.muted' }}>{entityLabel(r.entity)}</Typography>
         </TableCell>
         <TableCell sx={{ color: 'text.secondary', minWidth: 140 }}>
           {r.fields.map((f) => fieldLabel(f).replace('-', '\u2011')).join(', ')}
           {r.moved && r.change === 'CHANGED' && ` · ${t('baselines.alsoMoved')}`}
         </TableCell>
-        {days && <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.delta !== undefined ? fmtDays(r.delta) : ''}</TableCell>}
+        {days && (
+          <TableCell align="right" sx={(th) => ({ pr: 2.5, fontFamily: MONO, whiteSpace: 'nowrap',
+            color: r.delta > 0 ? th.vars.palette.brand.purpleText : r.delta < 0 ? th.vars.palette.brand.tealText : th.vars.palette.brand.muted })}>
+            {r.delta !== undefined ? fmtDays(r.delta) : ''}</TableCell>)}
       </TableRow>
       {canOpen && (
         <TableRow>
-          <TableCell colSpan={days ? 5 : 4} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
+          <TableCell colSpan={days ? 6 : 5} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
             <Collapse in={open} unmountOnExit>
               <Table size="small" sx={{ my: 1 }}>
                 <TableHead><TableRow><TableCell /><TableCell>{t('baselines.col.before')}</TableCell><TableCell>{t('baselines.col.after')}</TableCell></TableRow></TableHead>
@@ -93,61 +88,65 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
   const notUsed = d ? [...new Set(Object.values(d.entities).filter((e) => e.component_on && !e.component_on.a && e.rows.length).map((e) => e.area))] : [];
   const showDays = pricing?.available;
   const total = rows.length;
+  const tiles = [
+    { k: 'ADDED', days: pricing?.totals.added_days },
+    { k: 'REMOVED', days: pricing?.totals.removed_days },
+    { k: 'CHANGED', days: pricing?.totals.changed_days },
+  ];
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} sx={{ minWidth: 0 }}>
       {q.isLoading && <CircularProgress size={24} />}
       {q.error && <Alert severity="error">{detailText(q.error)}</Alert>}
       {d && (
         <>
-          <Stack direction="row" useFlexGap sx={{ gap: 2, flexWrap: 'wrap' }}>
+          {/* Mockup 09: the purple net change and the three counts in one row; Moved is in the filter. */}
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: showDays
+            ? { xs: 'repeat(2, minmax(0, 1fr))', lg: 'minmax(0, 1.35fr) repeat(3, minmax(0, 1fr))' }
+            : { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' } }}>
             {showDays && (
-              <Tile strong label={t('baselines.net')} value={fmtDays(pricing.totals.net_days)}
-                note={`${t('baselines.days', { n: '' }).trim()} · ${t('baselines.netOf', { base: pricing.totals.base_days, label: fromLabel })}`} />)}
-            {CHANGE_KINDS.map((k) => (
-              <Tile key={k} label={t(`baselines.change.${k}`)} value={d.summary[k]}
-                note={showDays && k === 'ADDED' ? t('baselines.days', { n: fmtDays(pricing.totals.added_days) })
-                  : showDays && k === 'REMOVED' ? t('baselines.days', { n: fmtDays(pricing.totals.removed_days) }) : null} />))}
-          </Stack>
+              <PurpleTile label={t('baselines.netSince')} labelSuffix={fromLabel} value={fmtDays(pricing.totals.net_days)}
+                unit={t('baselines.days', { n: '' }).trim()} note={t('baselines.netOf', { base: pricing.totals.base_days, label: fromLabel })} />)}
+            {tiles.map(({ k, days }) => (
+              <Tile key={k} label={t(`baselines.change.${k}`)}
+                value={showDays ? fmtDays(days) : d.summary[k]}
+                note={showDays ? t('baselines.objects', { n: d.summary[k] }) : null} />))}
+          </Box>
           {pricing && !pricing.available && <Alert severity="info">{t('baselines.pricingOff', { labels: pricing.in.join(', ') })}</Alert>}
           {showDays && pricing.totals.effort_exposed_days > 0 && <Alert severity="info">{t('baselines.exposed', { n: pricing.totals.effort_exposed_days })}</Alert>}
           {showDays && pricing.totals.unrated_fr_count > 0 && <Alert severity="warning">{t('baselines.unrated', { n: pricing.totals.unrated_fr_count })}</Alert>}
           {showDays && pricing.totals.unlinked_days !== 0 && <Alert severity="info">{t('baselines.unlinked', { n: fmtDays(pricing.totals.unlinked_days) })}</Alert>}
           {mismatched.map(([e]) => <Alert key={e} severity="warning">{t('baselines.schemaMismatch', { entity: entityLabel(e) })}</Alert>)}
           {notUsed.length > 0 && <Alert severity="info">{notUsed.map(areaLabel).join(', ')} — {t('baselines.notUsed', { label: fromLabel })}</Alert>}
-          <Card>
-            <CardContent sx={{ px: 0 }}>
-              <Stack direction="row" useFlexGap sx={{ px: 2, gap: 1, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <Typography component="h2" sx={{ fontWeight: 700 }}>{t('baselines.changes', { from: fromLabel, to: toLabel })}</Typography>
-                <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <FormControlLabel control={<Switch size="small" checked={priced} onChange={(e) => setPriced(e.target.checked)} />}
-                    label={<Typography sx={{ fontSize: 13 }}>{t('baselines.priced')}</Typography>} />
-                  <ToggleButtonGroup exclusive size="small" value={kind} onChange={(_, v) => v && setKind(v)} aria-label={t('baselines.col.change')}
-                    sx={{ flexWrap: 'wrap' }}>
-                    <ToggleButton value="ALL">{t('baselines.all', { n: total })}</ToggleButton>
-                    {CHANGE_KINDS.map((k) => <ToggleButton key={k} value={k}>{`${t(`baselines.change.${k}`)} ${d.summary[k]}`}</ToggleButton>)}
-                  </ToggleButtonGroup>
-                </Stack>
-              </Stack>
-              {shown.length === 0 ? (
-                <Typography sx={{ px: 2, pt: 2, color: 'text.secondary' }}>{t('baselines.noChanges')}</Typography>
-              ) : (
-                <Box sx={{ overflowX: 'auto', mt: 1 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell />
-                        <TableCell>{t('baselines.col.change')}</TableCell>
-                        <TableCell>{t('baselines.col.item')}</TableCell><TableCell>{t('baselines.col.what')}</TableCell>
-                        {showDays && <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{t('baselines.daysShort')}</TableCell>}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {shown.map((r) => <Fragment key={`${r.entity}-${r.source_id}`}><ChangeRow r={r} days={showDays} /></Fragment>)}
-                    </TableBody>
-                  </Table>
-                </Box>
-              )}
-            </CardContent>
+          <Card title={t('baselines.changes', { from: fromLabel, to: toLabel })} bodySx={{ px: 0, gap: 1 }}
+            action={(
+              <Stack direction="row" useFlexGap sx={{ gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                <FormControlLabel sx={{ mr: 0 }} control={<Switch size="small" checked={priced} onChange={(e) => setPriced(e.target.checked)} />}
+                  label={<Typography sx={{ fontSize: 13 }}>{t('baselines.priced')}</Typography>} />
+                <Segmented size="sm" label={t('baselines.col.change')} value={kind} onChange={setKind}
+                  options={[{ value: 'ALL', label: t('baselines.all', { n: total }) },
+                    ...CHANGE_KINDS.map((k) => ({ value: k, label: `${t(`baselines.change.${k}`)} ${d.summary[k]}` }))]} />
+              </Stack>)}>
+            {shown.length === 0 ? (
+              <Typography sx={{ px: 2.5, color: 'text.secondary' }}>{t('baselines.noChanges')}</Typography>
+            ) : (
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ pl: 1.5 }} />
+                      <TableCell sx={{ width: 120 }}>{t('baselines.col.change')}</TableCell>
+                      <TableCell sx={{ width: 130 }}>{t('baselines.col.object')}</TableCell>
+                      <TableCell>{t('baselines.col.name')}</TableCell>
+                      <TableCell>{t('baselines.col.what')}</TableCell>
+                      {showDays && <TableCell align="right" sx={{ pr: 2.5, whiteSpace: 'nowrap' }}>{t('baselines.daysShort')}</TableCell>}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {shown.map((r) => <Fragment key={`${r.entity}-${r.source_id}`}><ChangeRow r={r} days={showDays} /></Fragment>)}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
           </Card>
         </>
       )}

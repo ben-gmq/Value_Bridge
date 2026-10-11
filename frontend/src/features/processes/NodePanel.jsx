@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Card, CardContent, Chip, Divider, FormControlLabel, Grid, Stack, Switch,
-  TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Divider, FormControlLabel, Stack, Switch, TextField, Typography } from '@mui/material';
+import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined';
 import { errorKind, errorText, isStale } from '../../api/client';
 import { bfcApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
+import { Card, SectionLabel, Status, Tag } from '../../components/kit';
 import { MONO } from '../../theme/theme';
 import { useComponents } from '../../app/useComponents';
 import { t } from '../../i18n/t';
-import { FIRST_PROCESS_LEVEL, Mono, RaciPanel, SectionTitle, blankToNull, useEditForm, useFormSave } from './chartKit';
+import { FIRST_PROCESS_LEVEL, RaciPanel, blankToNull, useEditForm, useFormSave } from './chartKit';
 import { CompletenessPanel, PerformerPanel, TriggerPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
@@ -123,8 +124,8 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     },
   });
 
-  if (nodeQ.error) return <Alert severity="error">{errorText(nodeQ.error)}</Alert>;
-  if (!node || !form.values) return <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
+  if (nodeQ.error) return <Card><Alert severity="error">{errorText(nodeQ.error)}</Alert></Card>;
+  if (!node || !form.values) return <Card><Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography></Card>;
 
   const live = node.is_active;
   const editable = live && canEdit;      // a read-only user sees the panel, not its controls (sara LOW-3)
@@ -139,24 +140,24 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     data_processing_desc: t('processes.dataProcessing') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], v[k]]));
 
-  return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-          <Typography component="h2" variant="h6">
-            {t('processes.panelTitle', { n: node.level_no, name: node.node_name })}
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            {node.is_process && <Chip size="small" color="primary" label={t('processes.processChip')} />}
-            {!live && <Chip size="small" variant="outlined" label={t('processes.retiredChip')} />}
-          </Stack>
-        </Stack>
+  const headerAction = (
+    <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+      {node.is_process && <Tag tone="purple">{t('processes.processChip')}</Tag>}
+      {!live && <Tag tone="neutral">{t('processes.retiredChip')}</Tag>}
+      {form.dirty
+        ? <Status tone="caution" size="sm">{t('processes.unsaved')}</Status>
+        : <Status tone="ok" size="sm">{t('processes.savedVersion', { v: node.row_version })}</Status>}
+    </Stack>
+  );
+  const twoCol = { display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1fr) minmax(0,1.15fr)' } };
 
-        {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
-        {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
-        {note?.hint && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
+  return (
+    <Card title={t('processes.panelTitle', { n: node.level_no, name: node.node_name })} action={headerAction}>
+        {actionError && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
+        {save.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
+        {note?.hint && <Alert severity="info" onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
         {note?.first && (
-          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setRestoreNote(null)}>
+          <Alert severity="warning" onClose={() => setRestoreNote(null)}>
             <Typography sx={{ fontSize: 13, mb: 0.5 }}>{t('processes.restoreFirstTitle')}</Typography>
             <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
               {note.first.map((name, i) => <Typography component="li" key={i} sx={{ fontSize: 13 }}>{name}</Typography>)}
@@ -165,59 +166,58 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
         )}
 
         {node.is_process && br && (
-          <Box sx={(th) => ({ mb: 2, p: 2, borderRadius: 2, bgcolor: th.vars.palette.brand.selected,
-            display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' })}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'text.secondary' }}>
-                {t('processes.brBanner')}</Typography>
-              <Typography sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <Mono sx={{ mr: 1 }}>{br.br_number}</Mono>
-                {!br.is_active && <Chip component="span" size="small" variant="outlined" sx={{ mr: 1 }} label={t('processes.retiredChip')} />}
-                {firstLine(br.br_statement) || <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>{t('processes.brNoStatement')}</Box>}
+          <Box sx={(th) => ({ px: 2, py: 1.5, borderRadius: '18px', bgcolor: th.vars.palette.brand.ftc,
+            display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })}>
+            <AutoAwesomeOutlined aria-hidden sx={(th) => ({ fontSize: 20, color: th.vars.palette.brand.purpleLight })} />
+            <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
+              <Typography sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                color: th.vars.palette.brand.onFtcTile })}>{t('processes.brBanner')}</Typography>
+              <Typography sx={(th) => ({ fontSize: 14.5, fontWeight: 600, color: th.vars.palette.brand.onFtc,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+                <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 13.5, mr: 1,
+                  color: th.vars.palette.brand.purpleLight })}>{br.br_number}</Box>
+                {!br.is_active && <Tag tone="neutral" sx={{ mr: 1, height: 20 }}>{t('processes.retiredChip')}</Tag>}
+                {firstLine(br.br_statement) || <Box component="span" sx={(th) => ({ color: th.vars.palette.brand.onFtcTile, fontWeight: 400 })}>
+                  {t('processes.brNoStatement')}</Box>}
               </Typography>
             </Box>
-            <Button variant="contained" component={RouterLink} to={links.requirement(projectId, br.br_id)}>
+            <Button variant="contained" size="small" component={RouterLink} to={links.requirement(projectId, br.br_id)}
+              sx={(th) => ({ bgcolor: th.vars.palette.brand.onFtc, color: th.vars.palette.brand.ftc,
+                '&:hover': { bgcolor: th.vars.palette.brand.onFtcTile } })}>
               {t('processes.openRequirement')}</Button>
           </Box>
         )}
 
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField fullWidth id="node-parent" label={t('processes.parent')} disabled
-              value={parent ? `${parent.hier_code} ${parent.node_name}` : t('processes.noParent')} />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField fullWidth id="node-code" label={t('processes.code')} disabled value={node.hier_code}
-              helperText={t('processes.codeHelp')} slotProps={{ htmlInput: { style: { fontFamily: MONO } } }} />
-          </Grid>
-          <Grid size={12}>
-            <TextField fullWidth id="node-name" label={t('processes.name')} required disabled={!editable}
-              value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 200 } }} />
-          </Grid>
-          <Grid size={12}>
-            <TextField fullWidth multiline minRows={2} id="node-purpose" label={t('processes.purpose')} disabled={!editable}
-              value={v.purpose_desc} onChange={(e) => form.set('purpose_desc', e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 4000 } }} />
-          </Grid>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'minmax(0,1fr) minmax(0,1fr)' } }}>
+          <TextField fullWidth id="node-parent" label={node.level_no > 1 ? t('processes.parentLevel', { n: node.level_no - 1 }) : t('processes.parent')} disabled
+            value={parent ? `${parent.hier_code} ${parent.node_name}` : t('processes.noParent')} />
+          <TextField fullWidth id="node-code" label={t('processes.code')} disabled value={node.hier_code}
+            helperText={t('processes.codeHelp')}
+            sx={(th) => ({ '& .MuiInputBase-input.Mui-disabled': { fontFamily: MONO,
+              WebkitTextFillColor: th.vars.palette.brand.purpleText, color: th.vars.palette.brand.purpleText } })} />
+          <TextField fullWidth id="node-name" label={t('processes.name')} required disabled={!editable}
+            value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)}
+            sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 200 } }} />
+          <TextField fullWidth multiline minRows={2} id="node-purpose" label={t('processes.purpose')} disabled={!editable}
+            value={v.purpose_desc} onChange={(e) => form.set('purpose_desc', e.target.value)}
+            sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 4000 } }} />
           {node.is_process && (
-            <Grid size={12}>
-              <TextField fullWidth multiline minRows={2} id="node-dpd" label={t('processes.dataProcessing')} disabled={!editable}
-                value={v.data_processing_desc} onChange={(e) => form.set('data_processing_desc', e.target.value)}
-                slotProps={{ htmlInput: { maxLength: 4000 } }} />
-            </Grid>
+            <TextField fullWidth multiline minRows={2} id="node-dpd" label={t('processes.dataProcessing')} disabled={!editable}
+              value={v.data_processing_desc} onChange={(e) => form.set('data_processing_desc', e.target.value)}
+              sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 4000 } }} />
           )}
-        </Grid>
+        </Box>
 
-        <Stack direction="row" sx={{ mt: 2, alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <FormControlLabel label={t('processes.isProcess')}
+        <Box sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', px: 1.5, py: 0.75,
+          borderRadius: '14px', bgcolor: th.vars.palette.background.subtle })}>
+          <FormControlLabel label={t('processes.isProcess')} sx={{ mr: 1 }}
             control={<Switch id="node-is-process" checked={node.is_process} disabled={!canSwitch || busy}
               onChange={(e) => { setActionError(''); mark.mutate(e.target.checked); }} />} />
-          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', flex: 1, minWidth: 200 }}>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', flex: '1 1 200px' }}>
             {canSwitch ? t('processes.processHelp') : t('processes.processLevels')}</Typography>
-        </Stack>
+        </Box>
 
-        <Stack direction="row" spacing={1} sx={{ mt: 2, justifyContent: 'flex-end', flexWrap: 'wrap' }} useFlexGap>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', flexWrap: 'wrap' }} useFlexGap>
           {!canEdit ? null : live ? (
             <Button color="warning" disabled={busy}
               onClick={() => { setActionError(''); if (node.is_process) setRetiringStep(true); else setConfirmRetire(true); }}>
@@ -228,7 +228,7 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
           )}
           <Box sx={{ flex: 1 }} />
           {canEdit && (<>
-          <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>
+          <Button variant="outlined" color="warning" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>
           <Button variant="contained" disabled={!live || !form.dirty || busy || !v.node_name.trim()}
             onClick={() => { save.setError(''); save.m.mutate(); }}>{t('processes.save')}</Button>
           </>)}
@@ -236,45 +236,48 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
 
         {node.is_process && (
           <>
-            <Divider sx={{ my: 3 }} />
-            <StepData projectId={projectId} node={node} disabled={!editable} />
-            <Divider sx={{ my: 3 }} />
-            {dfdOn && <><PerformerPanel projectId={projectId} node={node} disabled={!editable} />
-              <Divider sx={{ my: 3 }} />
-              <TriggerPanel projectId={projectId} node={node} disabled={!editable} />
-              <Divider sx={{ my: 3 }} /></>}
-            <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
-              list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
-              unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
-            <Divider sx={{ my: 3 }} />
-            {dfdOn && <><StepFlows projectId={projectId} node={node} disabled={!editable} />
-              <Divider sx={{ my: 3 }} /></>}
+            <Divider />
+            <Box sx={twoCol}>
+              <StepData projectId={projectId} node={node} disabled={!editable} />
+              <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
+                list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
+                unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
+            </Box>
+            {dfdOn && <>
+              <Divider />
+              <Box sx={twoCol}>
+                <PerformerPanel projectId={projectId} node={node} disabled={!editable} />
+                <TriggerPanel projectId={projectId} node={node} disabled={!editable} />
+              </Box>
+              <Divider />
+              <StepFlows projectId={projectId} node={node} disabled={!editable} />
+            </>}
             {/* Supporting systems of an as-is step (Q-23): a to-be step's come from its solutions. */}
-            {asIs && isOn('APPLICATION', 'AS_IS') && <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
+            {asIs && isOn('APPLICATION', 'AS_IS') && <><Divider /><AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
               empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
               rowId="application_bfc_node_id" disabled={!editable}
               api={{ list: () => bfcApi.apps(nodeId),
                 link: (applicationId, note) => bfcApi.linkApp(nodeId, { application_id: applicationId, note }),
                 edit: (row, note) => bfcApi.editAppLink(nodeId, row.application_bfc_node_id, { row_version: row.row_version, note }),
-                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} />}
+                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} /></>}
           </>
         )}
         {!node.is_process && (
-          <Box sx={{ mt: 3 }}>
-            <SectionTitle>{t('processes.stepFacts')}</SectionTitle>
-            <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.stepFactsHelp')}</Typography>
-            {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && (
-              <>
-                <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 2, flexWrap: 'wrap' }}>
-                  {dfdOn && <Button variant="outlined" component={RouterLink} to={links.dfd(projectId, nodeId)}>
-                    {t('processes.openDfd')}</Button>}
-                </Stack>
-                {dfdOn && <Box sx={{ mt: 3 }}><CompletenessPanel projectId={projectId} node={node} /></Box>}
-              </>
-            )}
-          </Box>
+          <>
+            <Divider />
+            <Box>
+              <SectionLabel sx={{ mb: 1 }}>{t('processes.stepFacts')}</SectionLabel>
+              <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.stepFactsHelp')}</Typography>
+              {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && dfdOn && (
+                <>
+                  <Button variant="outlined" sx={{ mt: 2 }} component={RouterLink} to={links.dfd(projectId, nodeId)}>
+                    {t('processes.openDfd')}</Button>
+                  <Box sx={{ mt: 3 }}><CompletenessPanel projectId={projectId} node={node} /></Box>
+                </>
+              )}
+            </Box>
+          </>
         )}
-      </CardContent>
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('processes.retireTitle')}
         body={t('processes.retireBody', { name: `${node.hier_code} ${node.node_name}` })}
