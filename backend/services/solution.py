@@ -128,7 +128,7 @@ def link(db: Session, actor_id: int, br: BusinessRequirement, solution_id: int,
     else:                                                     # re-link restores (S1-7)
         lifecycle.relink(db, actor_id, row, detail={"previous_coverage_note": row.coverage_note})  # DR1-D2
         row.coverage_note = coverage_note
-    # D-34 hook: once function_requirement exists, clear suggested_br_id here (Q-7).
+    # D-34 hook: once function_requirement.suggested_br_id exists (S6a-1, FR import), clear it here.
     db.commit()
     db.refresh(row)
     return row

@@ -13,6 +13,7 @@ import { ConflictDialog } from '../../components/ConflictDialog';
 import { t } from '../../i18n/t';
 import { Mono, SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { SolutionLinkPanel } from './SolutionLinkPanel';
+import { FrTracePanel } from '../frs/FrTracePanel';
 
 const pickSolution = (s) => ({ solution_name: s.solution_name ?? '', category_code: s.category_code,
   status_code: s.status_code, description: s.description ?? '', benefit_note: s.benefit_note ?? '',
@@ -151,6 +152,8 @@ export default function SolutionPage() {
           </Grid>
           <Divider sx={{ my: 3 }} />
           <SolutionLinkPanel projectId={projectId} side="solution" solution={sol} disabled={!live} />
+          <Divider sx={{ my: 3 }} />
+          <FrTracePanel projectId={projectId} side="solution" id={sol.solution_id} />
         </CardContent>
       </Card>
 

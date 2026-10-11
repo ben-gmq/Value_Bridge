@@ -13,7 +13,7 @@ from auth.dependencies import current_user
 from database import get_db
 from models import (AppUser, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
                     BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
-                    ExternalEntity, OrgRole, OrgUnit, BrSolution, Solution)
+                    ExternalEntity, OrgRole, OrgUnit, BrSolution, FunctionRequirement, Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
@@ -25,11 +25,12 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            ProcessIn, ProcessOut, RaciIn, ReorderIn, RestoreCountOut,
                            RetireConfirmIn, RetirePreviewOut, StepIoIn, StepIoOut,
                            StepRaciOut, TreeNodeOut)
+from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
-from services import solution as sol_service
+from services import function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
 _read = project_ctx("REVIEWER")
@@ -315,6 +316,57 @@ def edit_br_solution(id: int, link_id: int, body: BrSolutionPatch,
 def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
                        user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     sol_service.unlink(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id), row_version)
+
+
+# ---- function requirements (§7.5, D-27/D-28, docs/slice6a_spec.md) -------------------------
+_fr_r, _fr_w = _og(FunctionRequirement, "REVIEWER"), _og(FunctionRequirement, "EDITOR")
+
+
+def _fr_out(fr: FunctionRequirement, warnings: list[str] | None = None) -> FrOut:
+    return FrOut.model_validate(fr).model_copy(update={"warnings": warnings or []})
+
+
+@router.get("/projects/{project_id}/function-requirements", response_model=list[FrOut], **_read.route)
+def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = False,
+             db: Session = Depends(get_db)):
+    return fr_service.list_frs(db, project_id, include_retired, unlinked)
+
+
+@router.post("/projects/{project_id}/function-requirements", response_model=FrOut, status_code=201,
+             **_edit.route)
+def create_fr(project_id: int, body: FrIn, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    fr, warnings = fr_service.create_fr(db, _uid(user), project_id, body.fr_name, body.fr_type_code,
+                                        body.solution_id, body.model_dump(include={"description", "acceptance_note"}))
+    return _fr_out(fr, warnings)
+
+
+@router.get("/function-requirements/{id}", response_model=FrOut, **_fr_r.route)
+def read_fr(id: int, fr: FunctionRequirement = Depends(_fr_r.dep)):
+    return fr
+
+
+@router.patch("/function-requirements/{id}", response_model=FrOut, **_fr_w.route)
+def update_fr(id: int, body: FrPatch, fr: FunctionRequirement = Depends(_fr_w.dep),
+              user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    sent = body.model_dump(exclude_unset=True)
+    fields = {k: sent[k] for k in fr_service.EDITABLE if k in sent}
+    extra = {"solution_id": sent["solution_id"]} if "solution_id" in sent else {}
+    fr, warnings = fr_service.update_fr(db, _uid(user), fr, body.row_version, fields,
+                                        sent.get("fr_type_code"), sent.get("fulfilment_status_code"), **extra)
+    return _fr_out(fr, warnings)
+
+
+_retire_and_restore("function-requirements", FunctionRequirement, FrOut)
+
+
+@router.get("/solutions/{id}/function-requirements", response_model=list[FrOut], **_sol_r.route)
+def list_solution_frs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session = Depends(get_db)):
+    return fr_service.frs_of_solution(db, sol)
+
+
+@router.get("/business-requirements/{id}/function-requirements", response_model=list[BrFrOut], **_br_r.route)
+def list_br_frs(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    return fr_service.frs_of_br(db, br)
 
 
 # ---- data entities and fields (§7.4) ------------------------------------------------------

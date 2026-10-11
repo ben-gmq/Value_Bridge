@@ -284,8 +284,8 @@ place.
 - sara L-1 · `sara`, Slice 5 pre-commit review, 2026-10-09 · LOW · **The link panel flags a
   rejected solution by matching the code `REJECTED`** in the browser (S5-2). Before the coverage
   report counts answers server-side, give `SOLUTION_STATUS` a `behaviour_code` (e.g.
-  `NOT_AN_ANSWER`) and branch on that, as law 5 does for FR type and RACI.
+  `NOT_AN_ANSWER`) and branch on that, as law 5 does for FR type and RACI. **Also the server copy in `services/function_requirement.py::_warnings`** (S6a-5).
 - sara L-2 · same review · LOW · **`create_solution` needs `SOLUTION_STATUS/PROPOSED`**, a
   non-system category: a project override that retires it makes every create a 500 (as
   `BR_STATUS/DRAFT` already does for steps). Ben to rule: seed it `is_system=True`, or have
-  `code_master.maintain` refuse to retire a code a service uses as a default.
+  `code_master.maintain` refuse to retire a code a service uses as a default. **Also `FR_FULFILMENT_STATUS/SPECIFIED`** (`create_fr`, Slice 6a design review, 2026-10-09).

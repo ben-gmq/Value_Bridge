@@ -87,6 +87,7 @@ export function SolutionLinkPanel({ projectId, side, br, solution, disabled }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.solutionLinks() });
     qc.invalidateQueries({ queryKey: keys.solutions(projectId) });   // the register's counts
+    qc.invalidateQueries({ queryKey: keys.frTrace() });             // BR → FR is derived through links
   };
   const brIdOf = (row) => (onBr ? br.br_id : row.br_id);
   const unlink = useMutation({

@@ -64,6 +64,19 @@ export const solutionApi = {
   retire: (id, rowVersion) => del(`${V}/solutions/${id}`, rowVersion),
   restore: (id) => d(http.patch(`${V}/solutions/${id}/restore`)),
   brs: (id) => d(http.get(`${V}/solutions/${id}/business-requirements`)),
+  frs: (id) => d(http.get(`${V}/solutions/${id}/function-requirements`)),
+};
+
+// Slice 6a (docs/slice6a_spec.md). BR → FR is derived through solutions, never stored (D-7).
+export const frApi = {
+  list: (projectId, { includeRetired = false, unlinked = false } = {}) =>
+    d(http.get(`${P(projectId)}/function-requirements`, { params: { include_retired: includeRetired, unlinked } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/function-requirements`, body)),
+  get: (id) => d(http.get(`${V}/function-requirements/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/function-requirements/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/function-requirements/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/function-requirements/${id}/restore`)),
+  ofBr: (brId) => d(http.get(`${V}/business-requirements/${brId}/function-requirements`)),
 };
 
 export const dataApi = {

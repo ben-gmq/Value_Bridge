@@ -374,6 +374,18 @@ Schema `docs/slice5_schema.md` (apple), spec `docs/slice5_spec.md`; design revie
 | S5-4 | **`SOLUTION_CATEGORY` is a system category** (Ben): projects cannot rename or retire the five, because reports and `create_fr` branch on TECHNOLOGY / DATA | §8 | Q-5 |
 | S5-5 | **Physical choices adopted on apple's recommendation:** solution names unique among live solutions per project (`lower(btrim())`); `br_solution` has the S1-5 surrogate PK with `(br_id, solution_id)` as a full UNIQUE; new solutions start PROPOSED; the D-34 hook waits for FRs | §5.3 BR_SOLUTION (PK wording), §6.2 | Q-1, Q-2, Q-4, Q-7 |
 
+### Slice 6a function requirements — 2026-10-09
+
+Schema `docs/slice6a_schema.md` (apple), spec `docs/slice6a_spec.md`; design review round 1 of 2 (5 findings, 1 HIGH — fixed).
+
+| # | Ruling | Changes | Source |
+|---|---|---|---|
+| S6a-1 | **`suggested_br_id` (D-34) arrives with the FR import** (Ben). That slice adds the column, excludes its FK from `FK_LIVENESS`, clears it on BR retire and on `BR_SOLUTION` link, and keeps it out of the baseline shadow and hash; a 6a tripwire test guards the last two | §5.3 FUNCTION_REQUIREMENT, §7.5 (deferred) | Q-2, DR6a-P1 |
+| S6a-2 | **FR names are not unique** (Ben); a live duplicate under the same Solution warns | §5.3 | Q-1, DR6a-P2 |
+| S6a-3 | **Complexity is not settable until the rate card (6c)** (Ben); `complexity_code_id` and `effort_days` ship NULL under the D-13 CHECK | §4.8 | Q-6 |
+| S6a-4 | **The FR register is a second tab under BR–FR map** (Ben) | §14.3 | — |
+| S6a-5 | **Adopted on recommendation:** an FR under a REJECTED Solution warns, never blocks; the first status is SPECIFIED, any status settable by an EDITOR; `v_br_function_requirement` is a DB view carrying `project_id`, `security_invoker` | §7.5 | Q-3, Q-7 |
+
 ### Slice 3 step retire — 2026-09-30
 
 | # | Decision | Supersedes | Spec |
