@@ -224,8 +224,19 @@ function buildLayout(g, showOrder) {
     ...g.stores.map((s) => ({ id: storeNode(s.data_entity_id), type: 'store', data: { store: s, crossArea: g.cross_area.includes(s.data_entity_id) },
       size: STORE, object: { object_type: 'ENTITY', object_id: s.data_entity_id }, x: at(storeNode(s.data_entity_id)) })),
   ];
-  for (const d of data) {
-    nodes.push({ id: d.id, type: d.type, data: { ...d.data, object: d.object }, size: d.size, position: { x: Math.max(LABEL_W, d.x), y: dataTop } });
+  // Pack the band into rows: each box keeps its wanted column but drops to the first row where it fits, so
+  // eight stores under two steps stack instead of stretching the diagram out of readable zoom (UAT 9).
+  const rowEnds = [];
+  const ROW_GAP = 24;
+  const rowH = Math.max(STORE.h, PARTY.h, TRIG) + ROW_GAP;
+  for (const d of [...data].sort((a, b) => a.x - b.x)) {
+    const x = Math.max(LABEL_W, d.x);
+    let row = rowEnds.findIndex((end) => end + 16 <= x);
+    if (row < 0) { row = rowEnds.length; rowEnds.push(-Infinity); }
+    const left = Math.max(x, rowEnds[row] + 16);
+    rowEnds[row] = left + d.size.w;
+    nodes.push({ id: d.id, type: d.type, data: { ...d.data, object: d.object }, size: d.size,
+      position: { x: left, y: dataTop + row * rowH } });
   }
   const saved = new Map(g.layout.map((p) => [`${p.object_type}:${p.object_id}`, p]));
   const clear = pushClear(nodes.map((n) => {
@@ -441,9 +452,12 @@ function Inspector({ g, sel, onSelect, projectId, canEdit }) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.dfdGapsAlert', { n: gapSteps.length })}</Typography>
           {gapSteps.map((p) => (
-            <ListRow key={p.bfc_node_id} onClick={() => onSelect(stepNode(p.bfc_node_id))} sx={{ py: 1 }}>
-              <Code tone="muted" sx={{ fontSize: 12 }}>{p.hier_code}</Code>
-              <Typography sx={{ fontSize: 13.5, flexGrow: 1, minWidth: 0, wordBreak: 'break-word' }}>{p.node_name}</Typography>
+            <ListRow key={p.bfc_node_id} onClick={() => onSelect(stepNode(p.bfc_node_id))}
+              sx={{ py: 1, flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'baseline', minWidth: 0 }}>
+                <Code tone="muted" sx={{ fontSize: 12 }}>{p.hier_code}</Code>
+                <Typography sx={{ fontSize: 13.5, minWidth: 0 }}>{p.node_name}</Typography>
+              </Box>
               <Status tone="caution" size="sm">{gapText(gaps.get(p.bfc_node_id))}</Status>
             </ListRow>))}
         </Box>)}
