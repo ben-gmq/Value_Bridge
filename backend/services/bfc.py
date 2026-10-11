@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
+from models import ApplicationBfcNode, (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
                     BusinessRequirement, ExternalEntity)
 from services import audit, business_requirement, step_io
 from services import lifecycle
@@ -155,7 +155,7 @@ def _step_blockers(db: Session, node: BfcNode) -> list[str]:
     if br:
         out.append(f"business requirement {br.br_number}")
     for model, what in ((BfcNodeDataEntity, "step data"), (BfcNodeOrgRole, "step roles"),
-                        (BfcNodeExternalFlow, "external flows")):
+                        (BfcNodeExternalFlow, "external flows"), (ApplicationBfcNode, "as-is applications")):
         n = db.scalar(select(func.count()).select_from(model).where(
             model.bfc_node_id == node.bfc_node_id, model.is_active))
         if n:

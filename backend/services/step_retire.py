@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import (AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow,
+from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow,
                     BfcNodeOrgRole, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
                     DataEntity, ExternalEntity, OrgRole, Solution)
 from services import audit, bfc, lifecycle
@@ -25,14 +25,14 @@ RESTORED = "STEP_RESTORED_WITH_DEPENDENTS"
 
 # A-SR-1 / SR-4: exactly these, and a future FK-declared table blocks until it is added here.
 OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow,
-                 BfcNodeFlow)
+                 BfcNodeFlow, ApplicationBfcNode)          # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)
 OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution)          # BrSolution: S5-1 (Ben, 2026-10-09)
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, BfcNodeFlow),
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, BfcNodeFlow, ApplicationBfcNode),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -59,7 +59,7 @@ def _owned(db: Session, step: BfcNode) -> list:
     br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.bfc_node_id == sid,
                                                       BusinessRequirement.is_active)).first()
     found = {BusinessRequirement: [br] if br else []}
-    for model in (BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow):
+    for model in (BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow, ApplicationBfcNode):
         found[model] = list(db.scalars(select(model).where(model.bfc_node_id == sid, model.is_active)))
     # One OR query returns a self-loop once.
     found[BfcNodeFlow] = list(db.scalars(select(BfcNodeFlow).where(
@@ -92,6 +92,9 @@ def describe(db: Session, row) -> str:
         return f"{de.de_number} {de.de_name} ({tag})"
     if isinstance(row, (BrOrgRole, BfcNodeOrgRole)):
         return f"{db.get(OrgRole, row.org_role_id).org_role_code} ({row.raci_code})"
+    if isinstance(row, ApplicationBfcNode):
+        app = row.application_row
+        return f"{app.application_code} {app.application_name}"
     if isinstance(row, BrSolution):
         sol = db.get(Solution, row.solution_id)
         return f"{sol.solution_number} {sol.solution_name}"
