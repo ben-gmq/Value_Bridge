@@ -1150,3 +1150,22 @@ asserts UPDATE too; L4 deviation 7f; L5 `_og(min_level)` and the "level" wording
 L10 Unrestrict is amber and VIEWER → USER is confirmed; L11 member-removal copy depends on restriction and the
 stale REVIEWER comments are reworded. **Note for the project-retire / `purge_project` slice:** a live
 `project_member` blocks retiring its project (`fk_pm_live_project`) — remove members first.
+
+### `sara` pre-commit review of 7c — dispositions (2026-10-11)
+
+No CRITICAL or HIGH. **M1** fixed: copy-set checks `needed_for_rows` for every row it makes live, under a
+per-project advisory lock (L2), and re-checks the target is empty. **M2** fixed: live triggers block switching
+both DFD components off, and `rows_in_off_component` reports them. **M3** fixed: `set_performer` prefers the live
+row of a code. **M4** fixed: a test plants a step retired with its RESPONSIBLE link and an arrow before 0041/0045,
+upgrades, and restores it with its lane and without its arrow. LOW: L1 plain restore checks the performer's
+component; L3 `rule_applies` simplified (the per-chart filtering of the project-wide must-be-empty lists is left:
+they are proofs that must be empty either way); L4 one `node_dfd_component`; L5 the catalogue's any-of check is
+in `services/trigger.py` for all four writes, with a test; L6 trigger restore checks the name; L7 as-is nodes
+are labelled "As-is …" in refusals; L8 "copy from as-is" shows only while `AS_IS` is on; L9 `keys.stepTriggers`;
+L11 `set_performer` locks the node and the target FOR SHARE. **L10 carried to VB-005:** legacy supporting-system
+rows on to-be steps are listed by the `as_is_support_on_to_be` line but not shown on the step for removal.
+
+**UAT 7c (ui-verifier):** 7 of 10 checks passed outright. Fixed: the gaps panel now refreshes after a step is
+created; a Chip inside a `<p>` (DOM nesting warning); the DFD gap alert counts steps once; page headers wrap at
+phone width; the copy preview no longer says "0 requirements" for an as-is target. The drag-and-keep check was
+blocked by the tool (single-step drag) — `useLayoutSave` is unchanged since 2b, where it was verified.

@@ -2,7 +2,7 @@ import { forwardRef, useMemo, useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, Grid, IconButton, InputAdornment, Snackbar, Stack, TextField, Tooltip,
+  DialogTitle, FormControlLabel, Grid, IconButton, InputAdornment, Snackbar, Stack, Tab, Tabs, TextField, Tooltip,
   Typography } from '@mui/material';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -15,10 +15,12 @@ import { errorText, isStale } from '../../api/client';
 import { bfcApi, brApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
+import { useComponents } from '../../app/useComponents';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, LevelBadge, Mono, ShowRetired, blankToNull } from './chartKit';
 import { NodePanel } from './NodePanel';
+import { CopyChartButton } from './StepDfd';
 
 // Business function chart (§7.2, mockup 01). The tree arrives flat, ordered by hier_code; it is
 // built here from parent_bfc_node_id. Codes, levels and positions are derived by the server.
@@ -63,7 +65,7 @@ function NodeLabel({ node }) {
       {!node.is_active && <Chip size="small" variant="outlined" sx={{ height: 20, flex: 'none' }} label={t('processes.retiredChip')} />}
       {flowable && (
         <Tooltip title={t('processes.openFlow')}>
-          <IconButton size="small" component={RouterLink} to={links.flow(projectId, node.bfc_node_id)}
+          <IconButton size="small" component={RouterLink} to={links.dfd(projectId, node.bfc_node_id)}
             aria-label={t('processes.openFlowFor', { name: node.node_name })} sx={{ flex: 'none', p: 0.25 }}
             onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
             <FlowIcon fontSize="small" /></IconButton>
@@ -78,7 +80,7 @@ const NodeItem = forwardRef(function NodeItem(props, ref) {
   return <TreeItem {...props} ref={ref} label={node ? <NodeLabel node={node} /> : props.label} />;
 });
 
-function AddNodeDialog({ projectId, parent, onDone, onClose }) {
+function AddNodeDialog({ projectId, parent, bfcSet, onDone, onClose }) {
   const level = parent ? parent.level_no + 1 : 1;
   const [name, setName] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -86,7 +88,7 @@ function AddNodeDialog({ projectId, parent, onDone, onClose }) {
   const [error, setError] = useState('');
   const m = useMutation({
     mutationFn: () => bfcApi.create(projectId, { parent_bfc_node_id: parent?.bfc_node_id ?? null,
-      node_name: name.trim(), purpose_desc: blankToNull(purpose), is_process: isProcess }),
+      node_name: name.trim(), purpose_desc: blankToNull(purpose), is_process: isProcess, bfc_set: bfcSet }),
     onSuccess: (row) => { onDone(row); onClose(); },
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
   });
@@ -126,6 +128,10 @@ export default function ProcessesPage() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('node');
+  const { isOn } = useComponents(projectId);
+  // D-47: the to-be chart always; the as-is chart only while its component is on.
+  const bfcSet = params.get('set') === 'AS_IS' && isOn('AS_IS') ? 'AS_IS' : 'TO_BE';
+  const chooseSet = (v) => { const next = new URLSearchParams(); if (v === 'AS_IS') next.set('set', 'AS_IS'); setParams(next); };
   const [showRetired, setShowRetired] = useState(false);
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState(null);          // null → everything expanded
@@ -133,8 +139,8 @@ export default function ProcessesPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: showRetired }],
-    queryFn: () => bfcApi.tree(projectId, showRetired) });
+  const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: showRetired, set: bfcSet }],
+    queryFn: () => bfcApi.tree(projectId, showRetired, bfcSet) });
   const brsQ = useQuery({ queryKey: [...keys.brs(projectId), { retired: true }], queryFn: () => brApi.list(projectId, true) });
   const rows = useMemo(() => treeQ.data ?? [], [treeQ.data]);
   const rowById = useMemo(() => new Map(rows.map((r) => [String(r.bfc_node_id), r])), [rows]);
@@ -176,12 +182,19 @@ export default function ProcessesPage() {
   const canAddChild = Boolean(selected?.is_active && !selected.is_process);
 
   return (
-    <Page title={t('processes.title')} subtitle={t('processes.subtitle')}
+    <Page title={t('processes.title')} subtitle={t(bfcSet === 'AS_IS' ? 'processes.subtitleAsIs' : 'processes.subtitle')}
       error={error || (treeQ.error && errorText(treeQ.error)) || (brsQ.error && errorText(brsQ.error))}
       actions={canEdit && <Button variant="contained" onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}>
       {params.get('pick') === 'dfd' && (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => { const next = new URLSearchParams(params); next.delete('pick'); setParams(next); }}>
           {t('processes.pickDfd')}</Alert>
+      )}
+      {isOn('AS_IS') && (
+        <Tabs value={bfcSet} onChange={(_, v) => chooseSet(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+          aria-label={t('processes.chart.label')}>
+          <Tab value="TO_BE" label={t('processes.chart.TO_BE')} />
+          <Tab value="AS_IS" label={t('processes.chart.AS_IS')} />
+        </Tabs>
       )}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
@@ -216,7 +229,14 @@ export default function ProcessesPage() {
                 )}
               </Stack>}
               {!treeQ.isLoading && rows.length === 0 && (
-                <Typography sx={{ color: 'text.secondary', py: 2 }}>{t('processes.empty')}</Typography>
+                <Box sx={{ py: 2 }}>
+                  <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
+                    {t(bfcSet === 'AS_IS' ? 'processes.emptyAsIs' : 'processes.empty')}</Typography>
+                  {canEdit && !showRetired && isOn('AS_IS') && (
+                    <CopyChartButton projectId={projectId} toSet={bfcSet} fromSet={bfcSet === 'AS_IS' ? 'TO_BE' : 'AS_IS'}
+                      onCopied={() => { qc.invalidateQueries({ queryKey: keys.tree(projectId) });
+                        qc.invalidateQueries({ queryKey: keys.brs(projectId) }); setNotice(t('processes.chart.copied')); }} />)}
+                </Box>
               )}
               {filtering && rows.length > 0 && items.length === 0 && (
                 <Typography sx={{ color: 'text.secondary', py: 2 }}>{t('processes.noMatch')}</Typography>
@@ -245,10 +265,11 @@ export default function ProcessesPage() {
         </Grid>
       </Grid>
       {adding && (
-        <AddNodeDialog projectId={projectId} parent={adding.parent} onClose={() => setAdding(null)}
+        <AddNodeDialog projectId={projectId} parent={adding.parent} bfcSet={bfcSet} onClose={() => setAdding(null)}
           onDone={(row) => {
             qc.invalidateQueries({ queryKey: keys.tree(projectId) });
             qc.invalidateQueries({ queryKey: keys.brs(projectId) });
+            qc.invalidateQueries({ queryKey: keys.flows(projectId) });     // UAT 7c: the gaps panel and the DFDs
             if (expanded && adding.parent) setExpanded([...expanded, String(adding.parent.bfc_node_id)]);
             select(String(row.bfc_node_id));
             setNotice(t('processes.created', { code: row.hier_code }));

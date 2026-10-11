@@ -12,10 +12,14 @@ from services import application, components, consistency_data, function_require
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
-INFORMATIONAL = frozenset({"purge_overdue", "as_is_support_by_to_be", "rows_in_off_component"})   # + 6b-1 S6b-5: shown, never refusing
+INFORMATIONAL = frozenset({"purge_overdue", "as_is_support_by_to_be", "rows_in_off_component",
+                           "as_is_support_on_to_be"})                    # + 7c Q-23   # + 6b-1 S6b-5: shown, never refusing
 # Warning lines: shown, and a freeze warns about them, but they never refuse it (4a-R10; Ben,
 # 2026-10-09: a baseline with fieldless entities warns and is still allowed).
 WARNINGS = frozenset({"entities_without_fields", "entities_keys_only"})   # + D-39
+# D-38 / S7-3: amber while editing, a REFUSAL at freeze — a process of a chart whose DFD is on with no
+# input-or-trigger, or no output data entity (slice7_schema §9.7).
+FREEZE_BLOCKING_WARNINGS = frozenset({"process_missing_input", "process_missing_output"})
 
 
 def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
@@ -34,4 +38,14 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
         "interface_under_inactive": interface.interface_under_inactive(db, project_id),
         "rows_in_off_component": (components.rows_in_off_component(db, project_id)       # D-37, DR7-P2
                                   if project_id is not None else []),
+        **_process_io(db, project_id),
+        "as_is_support_on_to_be": application.support_on_to_be(db, project_id),
     }
+
+
+def _process_io(db: Session, project_id: int | None) -> dict[str, list]:
+    if project_id is None:
+        return {"process_missing_input": [], "process_missing_output": []}
+    from services import process_flow
+    gaps = process_flow.missing_io(db, project_id)
+    return {"process_missing_input": gaps["missing_input"], "process_missing_output": gaps["missing_output"]}

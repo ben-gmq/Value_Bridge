@@ -1,9 +1,11 @@
-"""Slice 3c: Mermaid text export of the three diagrams (design §7.2a export_process_flow,
-§7.12b R2-S7; slice 3 spec §7 3c, criteria 19, 20, 20a, 22, and A-S3-5).
+"""Slice 3c, reworked by slice 7c: Mermaid text export of the DFD and the ERD (design §7.12b R2-S7;
+slice 3 spec §7 3c, criteria 19, 20, 20a, 22, and A-S3-5; slice7_schema §9.8). The process-flow
+exporter left with the arrows (D-38, 0045).
 
 Grade 2 — the text is pasted into a client's deck tool, so every label must stay inert. The
-hostile names travel through the real API into all three exporters; the one name the API
-cannot store (300 characters) is fed to the exporters as a graph dict.
+hostile names travel through the real API into both exporters — as a step, a performer lane (a
+position and an AI label), a store, a party, a flow label, a trigger, a field and a relationship;
+the one name the API cannot store (300 characters) is fed to the exporters as a graph dict.
 
 A-S3-5: "the output renders" is proven structurally — every line of every export matches one
 of the shapes listed in SHAPES below, and every label is a quoted string with no raw quote in
@@ -14,9 +16,8 @@ import pytest
 from fastapi import HTTPException
 
 from services import render
-from tests.test_dfd_api import ext_flow, io, party
+from tests.test_dfd_api import ext_flow, io, party, performer, starts, trigger
 from tests.test_erd_api import field, fk, pk
-from tests.test_process_flow_api import edge
 from tests.test_scope_api import API, ed, entity, node  # noqa: F401 — ed is a fixture
 
 BANNED = ("click", "call", "href", "%%{init", "style", "classDef", "linkStyle", "class")
@@ -24,31 +25,26 @@ HOSTILE = [
     'x"] --> Y[click',
     '%%{init: {"securityLevel": "loose"}}%%',
     'tick `click` tock',
-    'wrap\u2028click s1 call',
+    'wrap click s1 call',
     '#' * 200,                                   # the longest name the API stores
 ]
 
 L = r'"[^"\n]*"'                                 # a label: quoted, no raw quote inside
 SHAPES = {
-    "flow": [
-        r"flowchart LR",
-        rf"    subgraph (l\d+|outside)\[{L}\]",
-        rf"        s\d+\[{L}\]",
-        r'        e\d+\(\(" "\)\)',
-        r"    end",
-        rf"    d\d+\[\({L}\)\]",
-        rf"    x\d+\[{L}\]",
-        rf"    [se]\d+ (-->|-\.->)(\|{L}\|)? [se]\d+",
-        r"    [dx]\d+ -\.- s\d+",
-        r"    s\d+ -\.- [dx]\d+",
-    ],
     "dfd": [
         r"flowchart LR",
-        rf"    s\d+\(\[{L}\]\)",
-        rf"    d\d+\[\({L}\)\]",
-        rf"    x\d+\[{L}\]",
-        rf"    [dx]\d+ -->(\|{L}\|)? s\d+",
+        rf"    subgraph l\d+\[{L}\]",           # one lane per performer (D-46)
+        rf"        s\d+\(\[{L}\]\)",              # a process, inside its lane
+        r"    end",
+        rf"    d\d+\[\({L}\)\]",                 # a store
+        rf"    x\d+\[{L}\]",                     # a party
+        rf"    t\d+\(\({L}\)\)",                 # a trigger, a circle (D-49)
+        rf"    [dxt]\d+ -->(\|{L}\|)? s\d+",
         rf"    s\d+ -->(\|{L}\|)? [dx]\d+",
+        rf"    outside\[{L}\]",                  # the boundary box
+        r"    outside -\.-> d\d+",
+        r"    d\d+ -\.-> outside",
+        r"    s\d+ -\.-> s\d+",                  # the derived order, only with order=true
     ],
     "erd": [
         r"erDiagram",
@@ -62,8 +58,7 @@ SHAPES = {
 
 
 def export(client, ed, kind, target, headers=None, **params):
-    path = {"flow": f"bfc-nodes/{target}/process-flow/export", "dfd": f"bfc-nodes/{target}/dfd/export",
-            "erd": f"projects/{target}/erd/export"}[kind]
+    path = {"dfd": f"bfc-nodes/{target}/dfd/export", "erd": f"projects/{target}/erd/export"}[kind]
     return client.get(f"{API}/{path}", headers=headers or ed["h"], params={"format": "mermaid", **params})
 
 
@@ -83,7 +78,7 @@ def assert_inert(text, kind):
         assert not any(first.startswith(b) for b in BANNED), line
         assert any(re.fullmatch(p, line) for p in SHAPES[kind]), f"unknown shape: {line!r}"
     assert "%%" not in text and "`" not in text
-    assert "\u2028" not in text and "\u2029" not in text and "\r" not in text
+    assert " " not in text and " " not in text and "\r" not in text
     assert text.endswith("\n") and text.count("\n") == len(lines)
 
 
@@ -98,16 +93,17 @@ def role_named(client, ed, code, name):
     return r.json()
 
 
-def responsible(client, ed, step, org_role):
-    r = client.post(f"{API}/bfc-nodes/{step['bfc_node_id']}/org-roles", headers=ed["h"],
-                    json={"org_role_id": org_role["org_role_id"], "raci_code": "R"})
-    assert r.status_code == 201, r.text
+def graph_dict(**kw):
+    """A minimal DFD dict, the shape generate_dfd returns, for the exporter-only tests."""
+    return {"lanes": [], "processes": [], "stores": [], "externals": [], "triggers": [], "flows": [],
+            "order": [], "boundary": {"in": [], "out": []}, **kw}
 
 
 @pytest.fixture
-def flow(client, ed):
-    """Sales › Order capture: two named-lane steps, one unassigned step, start and end events,
-    a conditional branch, and a handoff to a step in another branch (outside the frame)."""
+def diagram(client, ed):
+    """Sales › Order capture: two steps in named lanes (positions), one unassigned; the order
+    s1 → s2 → s3 derived from their data; a trigger and a party into s1; a reader of the sales
+    order in another branch (a boundary stub)."""
     l1 = node(client, ed, "Sales")
     parent = node(client, ed, "Order capture", l1["bfc_node_id"])
     other = node(client, ed, "Billing", l1["bfc_node_id"])
@@ -115,106 +111,116 @@ def flow(client, ed):
          for k, n in (("s1", "Receive order"), ("s2", "Check credit"), ("s3", "Reject order"))}
     s["far"] = node(client, ed, "Raise invoice", other["bfc_node_id"], is_process=True)
     clerk, credit = role_named(client, ed, "CLERK", "Sales clerk"), role_named(client, ed, "CREDIT", "Credit desk")
-    responsible(client, ed, s["s1"], clerk)
-    responsible(client, ed, s["s2"], credit)
-    e = {"start": edge(client, ed, None, s["s1"]),
-         "seq": edge(client, ed, s["s1"], s["s2"]),
-         "ng": edge(client, ed, s["s2"], s["s3"], "CONDITIONAL", "Credit NG"),
-         "ok": edge(client, ed, s["s2"], s["far"], "HANDOFF"),
-         "end": edge(client, ed, s["s3"], None)}
-    return {"l1": l1, "parent": parent, "steps": s, "edges": e, "lanes": (clerk, credit)}
+    performer(client, ed, s["s1"], "ORG_ROLE", "CLERK")
+    performer(client, ed, s["s2"], "ORG_ROLE", "CREDIT")
+    order, check = entity(client, ed, "Sales order"), entity(client, ed, "Credit check")
+    io(client, ed, s["s1"], order, "O")
+    io(client, ed, s["s2"], order, "I")
+    io(client, ed, s["s2"], check, "O")
+    io(client, ed, s["s3"], check, "I")
+    io(client, ed, s["far"], order, "I")
+    calls = trigger(client, ed, "Customer calls", "EVENT")
+    starts(client, ed, s["s1"], calls)
+    cust = party(client, ed, "Customer")
+    ext_flow(client, ed, s["s1"], cust, "I", label="phones in")
+    return {"l1": l1, "parent": parent, "steps": s, "lanes": (clerk, credit), "order": order,
+            "check": check, "trigger": calls, "party": cust}
 
 
-# ---- criterion 19 (design 88): lanes and condition labels --------------------------------------
+# ---- criterion 19, reworked (§9.8): lanes are performers, triggers are circles ------------------
 
-def test_one_subgraph_per_lane_and_the_condition_on_the_conditional_edge(client, ed, flow):
-    s, e = flow["steps"], flow["edges"]
-    text = text_of(client, ed, "flow", flow["parent"]["bfc_node_id"], headers=ed["rv"])
-    assert_inert(text, "flow")
+def test_one_subgraph_per_performer_lane_with_its_processes(client, ed, diagram):
+    s = diagram["steps"]
+    text = text_of(client, ed, "dfd", diagram["parent"]["bfc_node_id"], headers=ed["rv"])
+    assert_inert(text, "dfd")
     lines = text.splitlines()
     assert lines[0] == "flowchart LR"
     assert [x for x in lines if x.startswith("    subgraph")] == [
         '    subgraph l1["Sales clerk · Finance"]', '    subgraph l2["Credit desk · Finance"]',
-        '    subgraph l3["Unassigned"]', '    subgraph outside["Outside this flow"]']
-    assert lines.count("    end") == 4
-    assert f'    s{s["s2"]["bfc_node_id"]} -->|"Credit NG"| s{s["s3"]["bfc_node_id"]}' in lines
-    assert f'    s{s["s1"]["bfc_node_id"]} --> s{s["s2"]["bfc_node_id"]}' in lines
-    assert f'    s{s["s2"]["bfc_node_id"]} -.-> s{s["far"]["bfc_node_id"]}' in lines     # HANDOFF dashed
-    # each step sits inside its own lane's block
-    block = text.split('subgraph l2["Credit desk · Finance"]', 1)[1].split("    end", 1)[0]
-    assert f's{s["s2"]["bfc_node_id"]}["01.01.02 Check credit"]' in block
-    assert e["ng"]["condition_label"] == "Credit NG"
+        '    subgraph l3["Unassigned"]']
+    assert lines.count("    end") == 3
+    for lane, key, name in (("l1", "s1", "01.01.01 Receive order"), ("l2", "s2", "01.01.02 Check credit"),
+                            ("l3", "s3", "01.01.03 Reject order")):
+        block = text.split(f"    subgraph {lane}[", 1)[1].split("    end", 1)[0]
+        assert f'        s{s[key]["bfc_node_id"]}(["{name}"])' in block.splitlines()
+    assert f's{s["far"]["bfc_node_id"]}' not in text                    # another branch: only a stub
 
 
-def test_start_and_end_events_and_outside_nodes_have_generated_ids(client, ed, flow):
-    s, e = flow["steps"], flow["edges"]
-    text = text_of(client, ed, "flow", flow["parent"]["bfc_node_id"])
-    lines = text.splitlines()
-    start, end = f"e{e['start']['bfc_node_flow_id']}", f"e{e['end']['bfc_node_flow_id']}"
-    assert f'        {start}((" "))' in lines and f'        {end}((" "))' in lines
-    assert f"    {start} --> s{s['s1']['bfc_node_id']}" in lines
-    assert f"    s{s['s3']['bfc_node_id']} --> {end}" in lines
-    # the start event is drawn in its step's lane (as on the canvas), the end in the unassigned one
-    assert start in text.split('subgraph l1[', 1)[1].split("    end", 1)[0]
-    assert end in text.split('subgraph l3[', 1)[1].split("    end", 1)[0]
-    outside = text.split('subgraph outside[', 1)[1].split("    end", 1)[0]
-    assert f's{s["far"]["bfc_node_id"]}["01.02.01 Raise invoice"]' in outside
+def test_flows_triggers_parties_and_boundary_stubs(client, ed, diagram):
+    s, order, check = diagram["steps"], diagram["order"], diagram["check"]
+    t, x = diagram["trigger"]["process_trigger_id"], diagram["party"]["external_entity_id"]
+    lines = text_of(client, ed, "dfd", diagram["parent"]["bfc_node_id"]).splitlines()
+    d, c = f"d{order['data_entity_id']}", f"d{check['data_entity_id']}"
+    s1, s2, s3 = (f"s{s[k]['bfc_node_id']}" for k in ("s1", "s2", "s3"))
+    for want in (f'    {d}[("{order["de_number"]} Sales order")]', f'    {c}[("{check["de_number"]} Credit check")]',
+                 f'    x{x}["{diagram["party"]["ext_number"]} Customer"]', f'    t{t}(("Customer calls"))',
+                 f'    {s1} -->|"Sales order"| {d}', f'    {d} -->|"Sales order"| {s2}',
+                 f'    {s2} -->|"Credit check"| {c}', f'    {c} -->|"Credit check"| {s3}',
+                 f"    t{t} --> {s1}",                                    # a trigger edge carries no label
+                 f'    x{x} -->|"phones in"| {s1}',
+                 '    outside["Outside this diagram"]', f"    {d} -.-> outside"):
+        assert want in lines, want
+    assert not [ln for ln in lines if re.fullmatch(r"    s\d+ -\.-> s\d+", ln)]       # order only when asked
 
 
-def test_the_flow_draws_its_stores_and_parties_as_dotted_associations(client, ed, flow):
-    s1 = flow["steps"]["s1"]
-    order, cust = entity(client, ed, "Sales order"), party(client, ed, "Customer")
-    ext_flow(client, ed, s1, cust, "I", order)                     # also the (s1, order, I) I/O row
-    io(client, ed, flow["steps"]["s2"], order, "O")
-    text = text_of(client, ed, "flow", flow["parent"]["bfc_node_id"])
-    assert_inert(text, "flow")
-    d, x = f"d{order['data_entity_id']}", f"x{cust['external_entity_id']}"
-    lines = text.splitlines()
-    assert f'    {d}[("{order["de_number"]} Sales order")]' in lines
-    assert f'    {x}["{cust["ext_number"]} Customer"]' in lines
-    assert f"    {d} -.- s{s1['bfc_node_id']}" in lines
-    assert f"    s{flow['steps']['s2']['bfc_node_id']} -.- {d}" in lines
-    assert f"    {x} -.- s{s1['bfc_node_id']}" in lines
+def test_the_derived_order_is_drawn_dashed_only_when_asked(client, ed, diagram):
+    s = diagram["steps"]
+    text = text_of(client, ed, "dfd", diagram["parent"]["bfc_node_id"], order="true")
+    assert_inert(text, "dfd")
+    s1, s2, s3 = (s[k]["bfc_node_id"] for k in ("s1", "s2", "s3"))
+    assert [ln for ln in text.splitlines() if re.fullmatch(r"    s\d+ -\.-> s\d+", ln)] == \
+        [f"    s{s1} -.-> s{s2}", f"    s{s2} -.-> s{s3}"]
 
 
-# ---- criterion 20 (design 137): hostile names in all three exporters ---------------------------
+# ---- criterion 20 (design 137): hostile names in both exporters ---------------------------------
 
 @pytest.fixture
 def hostile(client, ed):
-    """Every hostile name as a step, a lane, a condition, a DE, a field, a party and a flow label."""
+    """Every hostile name as a step, a lane (an AI label or a position), a store, a party, a flow
+    label, a trigger, a field and a relationship."""
     l1 = node(client, ed, "Sales")
     parent = node(client, ed, "Order capture", l1["bfc_node_id"])
-    steps, des, parties = [], [], []
+    steps, des = [], []
     for i, name in enumerate(HOSTILE):
         st = node(client, ed, name, parent["bfc_node_id"], is_process=True)
-        responsible(client, ed, st, role_named(client, ed, f"H{i}", name))
+        if i % 2:
+            role_named(client, ed, f"H{i}", name)
+            performer(client, ed, st, "ORG_ROLE", f"H{i}")
+        else:
+            performer(client, ed, st, "AI", label=name)
         de, who = entity(client, ed, name), party(client, ed, name)
         io(client, ed, st, de, "O")
+        if des:
+            io(client, ed, st, des[-1], "I")                       # derived order: each reads the last
         ext_flow(client, ed, st, who, "I", label=name)             # no DE: labelled with flow_label
-        steps.append(st), des.append(de), parties.append(who)
-    for i, st in enumerate(steps[1:]):
-        edge(client, ed, steps[i], st, "CONDITIONAL", HOSTILE[i])
+        starts(client, ed, st, trigger(client, ed, name, "EVENT"))
+        steps.append(st), des.append(de)
     keyed = entity(client, ed, "Keyed")
     pk(client, ed, keyed, "keyed_id", data_type_code="STRING")
     for i, name in enumerate(HOSTILE):
         field(client, ed, keyed, name)
         fk(client, ed, des[i], name, keyed)                        # the FK name is the edge label (sara L6)
-    # A hand-off to a hostile step in another branch: the `outside` node of the flow (sara L6).
+    # A hostile reader in another branch: a boundary stub (sara L6).
     other = node(client, ed, "Fulfilment", l1["bfc_node_id"])
     far = node(client, ed, HOSTILE[0], other["bfc_node_id"], is_process=True)
-    edge(client, ed, steps[-1], far, "HANDOFF", None)
+    io(client, ed, far, des[-1], "I")
     return {"parent": parent}
 
 
-@pytest.mark.parametrize("kind", ["flow", "dfd", "erd"])
-def test_hostile_names_export_as_inert_quoted_labels(client, ed, hostile, kind):
+@pytest.mark.parametrize("kind,params", [("dfd", {}), ("dfd", {"order": "true"}), ("erd", {})])
+def test_hostile_names_export_as_inert_quoted_labels(client, ed, hostile, kind, params):
     target = ed["p"] if kind == "erd" else hostile["parent"]["bfc_node_id"]
-    text = text_of(client, ed, kind, target)
+    text = text_of(client, ed, kind, target, **params)
     assert_inert(text, kind)
     assert "#35;#35;#35;" in text                                   # the '#' run survives, escaped
     assert "x#quot;#93; --#gt; Y#91;click" in text                 # the break-out attempt is text
     assert "init: #123;#quot;securityLevel#quot;: #quot;loose#quot;#125;" in text
     assert "tick #96;click#96; tock" in text and "wrap click s1 call" in text
+    if kind == "dfd":
+        lanes = [ln for ln in text.splitlines() if ln.startswith("    subgraph")]
+        assert len(lanes) == len(HOSTILE)
+        assert '    subgraph l' in lanes[0] and "x#quot;#93; --#gt; Y#91;click" in "".join(lanes)
+        assert "#96;click#96;" in "".join(ln for ln in text.splitlines() if re.match(r"    t\d+\(\(", ln))
 
 
 def test_a_300_character_name_is_capped_at_200_before_escaping():
@@ -228,14 +234,19 @@ def test_a_300_character_name_is_capped_at_200_before_escaping():
     assert_inert(text, "erd")
     # 200 raw characters per label, never more: the alias spends 8 on "DE-0001 ", the field none
     assert text.count("#35;") == 192 + 200
-    dfd = render.export_dfd({"processes": [{"bfc_node_id": 1, "hier_code": "01", "node_name": long}],
-                             "stores": [], "externals": [], "flows": []})
+    dfd = render.export_dfd(graph_dict(
+        lanes=[{"lane_key": "AI:x", "kind": "AI", "code": None, "name": long}],
+        processes=[{"bfc_node_id": 1, "hier_code": "01", "node_name": long, "lane_key": "AI:x"}],
+        triggers=[{"process_trigger_id": 4, "trigger_name": long}],
+        flows=[{"kind": "TRIGGER", "bfc_node_id": 1, "direction": "I", "process_trigger_id": 4,
+                "data_entity_id": None, "external_entity_id": None, "label": long}]))
     assert_inert(dfd, "dfd")
+    assert dfd.count("#35;") == 200 + (200 - 3) + 200                # lane, "01 " + name, trigger
 
 
 def test_escape_order_and_every_breaking_character():
     assert render.escape_mermaid(None) == '""' and render.escape_mermaid("") == '""'
-    assert render.escape_mermaid("a\r\nb\tc\vd\fe\x85f\u2028g\u2029h") == '"a  b c d e f g h"'
+    assert render.escape_mermaid("a\r\nb\tc\vd\fe\x85f g h") == '"a  b c d e f g h"'
     assert render.escape_mermaid("50%% off %%%") == '"50 off %"'
     assert render.escape_mermaid('#"<>`[](){}|;') == \
         '"#35;#quot;#lt;#gt;#96;#91;#93;#40;#41;#123;#125;#124;#59;"'
@@ -256,19 +267,41 @@ def test_a_renderer_that_skips_the_escape_is_stopped_by_the_guard(monkeypatch):
     """The guard is the last step of every exporter, so a renderer bug never reaches a deck."""
     monkeypatch.setattr(render, "escape_mermaid", lambda t: f'"{t}"')
     bad = "a\nclick s1 href x"
-    graphs = {
-        render.export_dfd: {"processes": [{"bfc_node_id": 1, "hier_code": "01", "node_name": bad}],
-                            "stores": [], "externals": [], "flows": []},
-        render.export_process_flow: {"lanes": [], "outside": [], "stores": [], "externals": [], "edges": [],
-                                     "nodes": [{"bfc_node_id": 1, "hier_code": "01", "node_name": bad,
-                                                "lane_org_role_id": None}]},
-        render.export_erd: {"entities": [{"data_entity_id": 1, "de_number": "DE-0001", "de_name": bad,
-                                          "fields": []}], "relationships": [], "outside_refs": []},
-    }
-    for fn, g in graphs.items():
+    lane = [{"lane_key": "UNASSIGNED", "kind": "UNASSIGNED", "code": None, "name": None}]
+    graphs = [
+        (render.export_dfd, graph_dict(lanes=lane, processes=[{"bfc_node_id": 1, "hier_code": "01",
+                                                                "node_name": bad, "lane_key": "UNASSIGNED"}])),
+        (render.export_dfd, graph_dict(lanes=[{"lane_key": "AI:b", "kind": "AI", "code": None, "name": bad}])),
+        (render.export_dfd, graph_dict(triggers=[{"process_trigger_id": 1, "trigger_name": bad}])),
+        (render.export_erd, {"entities": [{"data_entity_id": 1, "de_number": "DE-0001", "de_name": bad,
+                                           "fields": []}], "relationships": [], "outside_refs": []}),
+    ]
+    for fn, g in graphs:
         with pytest.raises(HTTPException) as err:
             fn(g)
         assert err.value.status_code == 500
+
+
+def test_every_dfd_label_goes_through_the_one_escape(monkeypatch):
+    """§7.12b: no second label path — each lane, process, store, party, trigger, flow and the
+    boundary box is passed to escape_mermaid exactly once."""
+    seen = []
+    real = render.escape_mermaid
+    monkeypatch.setattr(render, "escape_mermaid", lambda t: seen.append(t) or real(t))
+    g = graph_dict(
+        lanes=[{"lane_key": "AI:bot", "kind": "AI", "code": None, "name": "bot"}],
+        processes=[{"bfc_node_id": 1, "hier_code": "01", "node_name": "step", "lane_key": "AI:bot"}],
+        stores=[{"data_entity_id": 2, "de_number": "DE-0002", "de_name": "store"}],
+        externals=[{"external_entity_id": 3, "ext_number": "EXT-0003", "ext_name": "party"}],
+        triggers=[{"process_trigger_id": 4, "trigger_name": "trig"}],
+        flows=[{"kind": "STORE", "bfc_node_id": 1, "direction": "O", "data_entity_id": 2,
+                "external_entity_id": None, "process_trigger_id": None, "label": "store"},
+               {"kind": "EXTERNAL", "bfc_node_id": 1, "direction": "I", "data_entity_id": None,
+                "external_entity_id": 3, "process_trigger_id": None, "label": "said"}],
+        boundary={"in": [], "out": [{"data_entity_id": 2}]})
+    render.export_dfd(g)
+    assert seen == ["bot", "01 step", "DE-0002 store", "EXT-0003 party", "trig", "store", "said",
+                    render.OUTSIDE_LANE]
 
 
 # ---- criterion 20a + R2-NEW-3: the erDiagram attribute rows ------------------------------------
@@ -327,9 +360,9 @@ def test_an_area_export_draws_outside_parents_as_declared_stubs(client, ed):
 
 # ---- criterion 22: formats and visibility ------------------------------------------------------
 
-@pytest.mark.parametrize("kind", ["flow", "dfd", "erd"])
-def test_json_is_422_naming_the_import_slice_and_an_invisible_target_is_404(client, ed, flow, kind):
-    target = ed["p"] if kind == "erd" else flow["parent"]["bfc_node_id"]
+@pytest.mark.parametrize("kind", ["dfd", "erd"])
+def test_json_is_422_naming_the_import_slice_and_an_invisible_target_is_404(client, ed, diagram, kind):
+    target = ed["p"] if kind == "erd" else diagram["parent"]["bfc_node_id"]
     r = export(client, ed, kind, target, format="json")
     assert r.status_code == 422 and "import slice" in r.json()["detail"]
     assert export(client, ed, kind, target, format="png").status_code == 422
@@ -339,13 +372,13 @@ def test_json_is_422_naming_the_import_slice_and_an_invisible_target_is_404(clie
     assert export(client, ed, kind, target, headers=ed["rv"]).status_code == 200    # a read
 
 
-def test_the_export_is_the_same_scope_rules_as_the_graph(client, ed, flow):
-    s1 = flow["steps"]["s1"]["bfc_node_id"]
-    assert export(client, ed, "flow", s1).status_code == 422                        # a step
-    assert export(client, ed, "dfd", s1).status_code == 422
-    assert export(client, ed, "flow", flow["parent"]["bfc_node_id"], variant="NOPE").status_code == 422
-    assert text_of(client, ed, "flow", flow["parent"]["bfc_node_id"], variant="TO_BE").startswith("flowchart LR")
+def test_the_export_is_the_same_scope_rules_as_the_graph(client, ed, diagram):
+    s1 = diagram["steps"]["s1"]["bfc_node_id"]
+    assert export(client, ed, "dfd", s1).status_code == 422                         # a step
+    assert export(client, ed, "dfd", s1, order="true").status_code == 422
     assert export(client, ed, "erd", ed["p"], subject_area=99999999).status_code == 404
+    assert client.get(f"{API}/bfc-nodes/{diagram['parent']['bfc_node_id']}/process-flow/export",
+                      headers=ed["h"]).status_code == 404                           # the arrows' exporter is gone
 
 
 def test_a_hostile_out_of_area_parent_stays_inert(client, ed):

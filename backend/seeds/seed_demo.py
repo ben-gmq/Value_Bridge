@@ -21,7 +21,7 @@ from sqlalchemy import text
 from auth.security import hash_password
 from database import SessionLocal
 from models import AppUser, BfcNodeOrgRole
-from services import audit, bfc, client_org, data_entity, external_entity, process_flow, raci, step_io
+from services import audit, bfc, bfc_set, client_org, data_entity, external_entity, raci, step_io, trigger
 from services import components
 from services.project import create_client, create_project
 from services.user_admin import check_ftc_address, create_user
@@ -167,18 +167,26 @@ def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
     bfc.link_external_flow(db, a, step["Post payment"], bank.external_entity_id, "I",
                            payment.data_entity_id, None, None)
 
-    # Process flow edges, with a start and an end event and a hand-off across branches.
-    s = {k: v.bfc_node_id for k, v in step.items()}
-    for f, t_, kind, label in [
-        (None, s["Receive order"], "SEQUENCE", None),
-        (s["Receive order"], s["Check credit"], "SEQUENCE", None),
-        (s["Check credit"], s["Confirm order"], "CONDITIONAL", "credit OK"),
-        (s["Confirm order"], s["Pick goods"], "HANDOFF", None),
-        (s["Pick goods"], s["Ship goods"], "SEQUENCE", None),
-        (s["Ship goods"], None, "SEQUENCE", None),
-        (s["Raise invoice"], s["Post payment"], "SEQUENCE", None),
+    # D-46 performers (the lanes), D-49 triggers; order is derived from the step I/O above (D-38).
+    db.expire_all()
+    for sname, kind, code, label in [
+        ("Receive order", "ORG_ROLE", "SALES_ADMIN", None), ("Check credit", "AI", None, "Credit scoring agent"),
+        ("Confirm order", "ORG_ROLE", "SALES_ADMIN", None), ("Pick goods", "ORG_UNIT", "WH", None),
+        ("Ship goods", "ORG_UNIT", "WH", None), ("Raise invoice", "ORG_ROLE", "AR_CLERK", None),
+        ("Post payment", "ORG_ROLE", "AR_CLERK", None),
     ]:
-        process_flow.link_process_flow(db, a, pid, f, t_, kind, label, None, None)
+        node = db.get(type(step[sname]), step[sname].bfc_node_id)
+        bfc.set_performer(db, a, node, node.row_version, kind, code, label)
+    month_end = trigger.create_trigger(db, a, pid, "Month-end close", "TIME", "last working day, 18:00", None)
+    calls = trigger.create_trigger(db, a, pid, "Customer calls", "EVENT", None, None)
+    trigger.link(db, a, db.get(type(step["Raise invoice"]), step["Raise invoice"].bfc_node_id),
+                 month_end.process_trigger_id, None)
+    trigger.link(db, a, db.get(type(step["Receive order"]), step["Receive order"].bfc_node_id),
+                 calls.process_trigger_id, None)
+
+    # D-47: start the as-is chart from the to-be one (preview, then confirm).
+    prev = bfc_set.copy_set(db, a, pid, "AS_IS", "TO_BE", None)
+    bfc_set.copy_set(db, a, pid, "AS_IS", "TO_BE", prev["confirm_hash"])
     return pid
 
 

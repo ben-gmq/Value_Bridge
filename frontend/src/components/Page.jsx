@@ -4,12 +4,12 @@ import { Alert, Box, Stack, Typography } from '@mui/material';
 export function Page({ title, subtitle, actions, error, children }) {
   return (
     <Box>
-      <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 3, gap: 2 }}>
-        <Box>
+      <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
           <Typography variant="h5" component="h1" sx={(th) => ({ fontWeight: 700, color: th.vars.palette.brand.title })}>{title}</Typography>
           {subtitle && <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography>}
         </Box>
-        {actions && <Stack direction="row" spacing={1}>{actions}</Stack>}
+        {actions && <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap' }}>{actions}</Stack>}
       </Stack>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {children}

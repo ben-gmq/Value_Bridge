@@ -43,6 +43,14 @@ class BfcNode(AuditMixin, Base):
     node_name: Mapped[str] = mapped_column(String(200), nullable=False)
     purpose_desc: Mapped[str | None] = mapped_column(Text)
     data_processing_desc: Mapped[str | None] = mapped_column(Text)
+    # D-47: TO_BE (always) or AS_IS (optional set). Immutable; a child is in its parent's set.
+    bfc_set_code: Mapped[str] = mapped_column(String(10), nullable=False, default="TO_BE")   # ORM-side only
+    # D-46: one performer per process — an exclusive arc (ck_bfc_performer_arc). NULL = unassigned.
+    performer_kind: Mapped[str | None] = mapped_column(String(12))
+    performer_org_unit_id: Mapped[int | None] = mapped_column(BigInteger)
+    performer_org_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    performer_application_id: Mapped[int | None] = mapped_column(BigInteger)
+    performer_label: Mapped[str | None] = mapped_column(String(200))
 
     __table_args__ = (
         UniqueConstraint("bfc_node_id", "project_id", name="uq_bfc_node_project"),
@@ -59,17 +67,49 @@ class BfcNode(AuditMixin, Base):
         CheckConstraint("level_no < 5 OR is_process", name="ck_bfc_l5_is_process"),
         CheckConstraint("is_process OR data_processing_desc IS NULL", name="ck_bfc_desc_process_only"),
         CheckConstraint("seq_no <> 0 AND seq_no BETWEEN -99 AND 99", name="ck_bfc_seq"),
-        Index("uq_bfc_hier_code_live", "project_id", "hier_code", unique=True,
+        CheckConstraint("bfc_set_code IN ('TO_BE', 'AS_IS')", name="ck_bfc_set"),
+        UniqueConstraint("bfc_node_id", "project_id", "bfc_set_code", name="uq_bfc_node_set"),
+        ForeignKeyConstraint(["parent_bfc_node_id", "project_id", "bfc_set_code"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id", "bfc_node.bfc_set_code"],
+                             name="fk_bfc_node_parent_set", onupdate="NO ACTION"),
+        CheckConstraint("performer_kind IS NULL OR performer_kind IN ('ORG_UNIT','ORG_ROLE','APPLICATION','AI')",
+                        name="ck_bfc_performer_kind"),
+        CheckConstraint("""
+        num_nonnulls(performer_org_unit_id, performer_org_role_id, performer_application_id)
+            = CASE WHEN performer_kind IN ('ORG_UNIT','ORG_ROLE','APPLICATION') THEN 1 ELSE 0 END
+        AND (performer_kind IS DISTINCT FROM 'ORG_UNIT'    OR performer_org_unit_id   IS NOT NULL)
+        AND (performer_kind IS DISTINCT FROM 'ORG_ROLE'    OR performer_org_role_id   IS NOT NULL)
+        AND (performer_kind IS DISTINCT FROM 'APPLICATION' OR performer_application_id IS NOT NULL)""",
+                        name="ck_bfc_performer_arc"),
+        CheckConstraint("performer_label IS NULL OR (performer_kind IS NOT DISTINCT FROM 'AI' AND btrim(performer_label) <> '')",
+                        name="ck_bfc_performer_label"),
+        CheckConstraint("performer_kind IS DISTINCT FROM 'AI' OR performer_label IS NOT NULL",
+                        name="ck_bfc_performer_ai_label"),
+        CheckConstraint("performer_kind IS NULL OR is_process", name="ck_bfc_performer_process"),
+        ForeignKeyConstraint(["performer_org_unit_id", "project_id"], ["org_unit.org_unit_id", "org_unit.project_id"],
+                             name="fk_bfc_perf_unit", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["performer_org_role_id", "project_id"], ["org_role.org_role_id", "org_role.project_id"],
+                             name="fk_bfc_perf_role", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["performer_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"],
+                             name="fk_bfc_perf_app", onupdate="NO ACTION"),
+        Index("ix_bfc_perf_unit", "performer_org_unit_id", "project_id",
+              postgresql_where=text("performer_org_unit_id IS NOT NULL")),
+        Index("ix_bfc_perf_role", "performer_org_role_id", "project_id",
+              postgresql_where=text("performer_org_role_id IS NOT NULL")),
+        Index("ix_bfc_perf_app", "performer_application_id", "project_id",
+              postgresql_where=text("performer_application_id IS NOT NULL")),
+        Index("uq_bfc_hier_code_live", "project_id", "bfc_set_code", "hier_code", unique=True,
               postgresql_where=text("is_active")),
-        # S1-1: L1 nodes share the NULL parent, so they cannot share a position.
-        Index("uq_bfc_sibling_seq", "project_id", "parent_bfc_node_id", "seq_no", unique=True,
+        # S1-1: L1 nodes share the NULL parent, so they cannot share a position — per set (D-47).
+        Index("uq_bfc_sibling_seq", "project_id", "bfc_set_code", "parent_bfc_node_id", "seq_no", unique=True,
               postgresql_nulls_not_distinct=True, postgresql_where=text("is_active")),
         Index("uq_bfc_process_name", "parent_bfc_node_id", func.lower(func.btrim(node_name)),
               unique=True, postgresql_where=text("is_active AND is_process")),
         Index("ix_bfc_parent_guard", "parent_bfc_node_id", "project_id", "parent_is_process"),
-        Index("ix_bfc_hier_pattern", "project_id", "hier_code", postgresql_where=text("is_active"),
+        Index("ix_bfc_hier_pattern", "project_id", "bfc_set_code", "hier_code", postgresql_where=text("is_active"),
               postgresql_ops={"hier_code": "varchar_pattern_ops"}),
-        Index("ix_bfc_process_live", "project_id", postgresql_where=text("is_process AND is_active")),
+        Index("ix_bfc_process_live", "project_id", "bfc_set_code", postgresql_where=text("is_process AND is_active")),
         Index("ix_bfc_project", "project_id"),
     )
 
@@ -175,9 +215,7 @@ class BfcNodeOrgRole(AuditMixin, Base):
                              name="fk_bnor_raci", onupdate="NO ACTION"),
         Index("uq_bnor_one_accountable", "bfc_node_id", unique=True,
               postgresql_where=text("is_active AND raci_behaviour = 'ACCOUNTABLE'")),
-        # Also the swimlane lookup (A-46).
-        Index("uq_bnor_one_responsible", "bfc_node_id", unique=True,
-              postgresql_where=text("is_active AND raci_behaviour = 'RESPONSIBLE'")),
+        # uq_bnor_one_responsible was dropped by 0046: the lane is the performer (D-46, Q-26).
         Index("ix_bnor_node", "bfc_node_id", "project_id"),
         Index("ix_bnor_role", "org_role_id", "project_id"),
         Index("ix_bnor_raci", "raci_code_id"),
@@ -231,7 +269,8 @@ class BfcNodeExternalFlow(AuditMixin, Base):
 
 
 class BfcNodeFlow(AuditMixin, Base):
-    """One flow edge between process steps (D-20, D-23, S2). A NULL end is a start or end event.
+    """RETIRED by D-38 (migration 0045): history only, SELECT-only for the app role — order is now
+    derived from step I/O. It held one flow edge between process steps (D-20, D-23, S2). A NULL end is a start or end event.
     flow_type is CHECK-listed (S2-1), so the conditional-label rule is a table CHECK. The ends
     are fixed after create (S2-2); a retired twin is restored, never re-inserted (Q2)."""
 
@@ -274,6 +313,64 @@ class BfcNodeFlow(AuditMixin, Base):
         Index("ix_bnf_from", "from_bfc_node_id", "project_id"),
         Index("ix_bnf_to", "to_bfc_node_id", "project_id"),
         Index("ix_bnf_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class ProcessTrigger(AuditMixin, Base):
+    """A named time or event trigger in one project (D-49). Shared by both sets; no number series."""
+
+    __tablename__ = "process_trigger"
+
+    process_trigger_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    trigger_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    trigger_kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    schedule_note: Mapped[str | None] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("process_trigger_id", "project_id", name="uq_ptrg_project"),
+        CheckConstraint("trigger_kind IN ('TIME', 'EVENT')", name="ck_ptrg_kind"),
+        CheckConstraint("schedule_note IS NULL OR trigger_kind = 'TIME'", name="ck_ptrg_schedule_time_only"),
+        CheckConstraint("btrim(trigger_name) <> ''", name="ck_ptrg_name_not_blank"),
+        Index("uq_ptrg_name_live", "project_id", func.lower(func.btrim(trigger_name)), unique=True,
+              postgresql_where=text("is_active")),
+        Index("ix_ptrg_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BfcNodeTrigger(AuditMixin, Base):
+    """This trigger starts this process (D-49). Step-owned (step_retire.OWNED_BY_STEP)."""
+
+    __tablename__ = "bfc_node_trigger"
+
+    bfc_node_trigger_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    bfc_node_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    node_is_process: Mapped[bool | None] = _live(True)
+    process_trigger_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    trigger_row = relationship("ProcessTrigger", viewonly=True, lazy="joined",
+                               primaryjoin="foreign(BfcNodeTrigger.process_trigger_id) == ProcessTrigger.process_trigger_id")
+    node_row = relationship("BfcNode", viewonly=True,
+                            primaryjoin="foreign(BfcNodeTrigger.bfc_node_id) == BfcNode.bfc_node_id")
+
+    __table_args__ = (
+        UniqueConstraint("bfc_node_id", "process_trigger_id", name="uq_bntr_grain"),
+        *_process_node_fk("bntr"),
+        ForeignKeyConstraint(["process_trigger_id", "project_id"],
+                             ["process_trigger.process_trigger_id", "process_trigger.project_id"],
+                             name="fk_bntr_trigger"),
+        Index("ix_bntr_node", "bfc_node_id", "project_id"),
+        Index("ix_bntr_trigger", "process_trigger_id", "project_id"),
+        Index("ix_bntr_project", "project_id"),
     )
 
     def owning_project_id(self) -> int:

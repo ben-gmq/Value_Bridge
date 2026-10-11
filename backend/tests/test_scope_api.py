@@ -201,6 +201,11 @@ def test_one_accountable_per_step_named_in_the_409(client, ed):
     assert r.status_code == 201 and r.json()["raci_behaviour"] == "ACCOUNTABLE"
     r = client.post(url, headers=ed["h"], json={"org_role_id": clerk["org_role_id"], "raci_code": "A"})
     assert r.status_code == 409 and "CFO" in r.json()["detail"]
+    # 7c (D-46, Q-26; 0046): the lane is the performer now, so several Responsible are normal RACI
+    for code in ("CLERK", "AUDIT"):
+        role = clerk if code == "CLERK" else _org_role(client, ed, code)
+        r = client.post(url, headers=ed["h"], json={"org_role_id": role["org_role_id"], "raci_code": "R"})
+        assert r.status_code == 201, r.text
 
 
 # ---- retire / restore (§7.12) --------------------------------------------------------------

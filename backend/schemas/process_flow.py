@@ -1,47 +1,19 @@
-"""Slice 2 request / response shapes for flow edges. project_id comes from the route, never
-the body; the ends are create-only (S2-2)."""
+"""DFD, completeness, performer, trigger and chart-copy shapes (D-38, D-46, D-47, D-49;
+slice7_schema §9). project_id comes from the route, never the body."""
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from schemas.common import Orm
 
-FlowType = Literal["SEQUENCE", "CONDITIONAL", "PARALLEL", "HANDOFF"]
-
-
-class ProcessFlowIn(BaseModel):
-    from_bfc_node_id: int | None = None
-    to_bfc_node_id: int | None = None
-    flow_type: FlowType
-    condition_label: str | None = Field(default=None, max_length=200)
-    seq_no: int | None = Field(default=None, ge=1, le=99)
-    note: str | None = Field(default=None, max_length=2000)
-
-
-class ProcessFlowPatch(BaseModel):
-    row_version: int
-    flow_type: FlowType | None = None
-    condition_label: str | None = Field(default=None, max_length=200)
-    seq_no: int | None = Field(default=None, ge=1, le=99)
-    note: str | None = Field(default=None, max_length=2000)
-
-
-class ProcessFlowOut(Orm):
-    bfc_node_flow_id: int
-    project_id: int
-    from_bfc_node_id: int | None
-    to_bfc_node_id: int | None
-    flow_type: str
-    condition_label: str | None
-    seq_no: int | None
-    note: str | None
-    row_version: int
+SetCode = Literal["TO_BE", "AS_IS"]
 
 
 class StepRef(BaseModel):
     bfc_node_id: int
     hier_code: str
     node_name: str
+    bfc_set_code: str = "TO_BE"
 
 
 class TableRow(BaseModel):
@@ -49,21 +21,20 @@ class TableRow(BaseModel):
     id: int
 
 
-class FlowCompletenessOut(BaseModel):
-    orphan_steps: list[StepRef]
-    no_start: list[StepRef]
-    no_end: list[StepRef]
-    no_output: list[StepRef]
-    no_lane: list[StepRef]
+class ProcessCompletenessOut(BaseModel):
+    bfc_set_code: str
+    rule_applies: bool                  # the chart's DFD component is on (S7-3)
+    missing_input: list[StepRef]        # freeze-blocking while the rule applies (D-38)
+    missing_output: list[StepRef]       # freeze-blocking while the rule applies (D-38)
+    no_performer: list[StepRef]         # a warning only (D-46)
+    step_without_br: list[StepRef]      # to-be only; a warning (SR-3)
     crud_without_io: list[int]          # br_data_entity ids — must be empty
     ext_without_io: list[int]           # bfc_node_external_flow ids — must be empty
-    edge_count: int
-    step_without_br: list[StepRef]      # a warning (SR-3): the first step of a demote
     live_link_on_retired_step: list[TableRow]   # must be empty (docs/step_retire_spec.md §4)
 
 
 # ---- the graph (D-21) and saved positions (D-30) ----
-ObjectType = Literal["STEP", "ENTITY", "EXTERNAL", "EVENT"]
+ObjectType = Literal["STEP", "ENTITY", "EXTERNAL", "EVENT", "TRIGGER"]   # EVENT: read-only history
 
 
 class LayoutItem(BaseModel):
@@ -76,91 +47,30 @@ class LayoutItem(BaseModel):
     collapsed: bool = False
 
 
-class FlowBox(BaseModel):
-    bfc_node_id: int
-    hier_code: str
-    node_name: str
-    data_processing_desc: str | None
+# ---- the DFD (§9.8) ----
+class DfdLane(BaseModel):
+    lane_key: str                          # ORG_UNIT:12 / ORG_ROLE:7 / APPLICATION:3 / AI:<label> / UNASSIGNED
+    kind: str
+    ref_id: int | None
+    code: str | None
+    name: str | None
+    unit_name: str | None = None
+
+
+class DfdSystem(BaseModel):
+    application_id: int
+    application_code: str
+    application_name: str
+
+
+class DfdProcess(StepRef):
+    lane_key: str
     br_number: str | None
-    lane_org_role_id: int | None
+    systems: list[DfdSystem]
+    rank: int
+    data_processing_desc: str | None
 
 
-class FlowEdge(BaseModel):
-    bfc_node_flow_id: int
-    from_bfc_node_id: int | None
-    to_bfc_node_id: int | None
-    flow_type: str
-    condition_label: str | None
-    seq_no: int | None
-    row_version: int
-    is_external: bool
-
-
-class FlowLane(BaseModel):
-    org_role_id: int
-    org_role_code: str
-    org_role_name: str
-    org_unit_name: str | None
-
-
-class FlowStore(BaseModel):
-    data_entity_id: int
-    de_number: str
-    de_name: str
-    reads: list[int]
-    writes: list[int]
-
-
-class FlowExternalLink(BaseModel):
-    bfc_node_id: int
-    direction: str
-    data_entity_id: int | None
-    flow_label: str | None
-
-
-class FlowExternal(BaseModel):
-    external_entity_id: int
-    ext_number: str
-    ext_name: str
-    flows: list[FlowExternalLink]
-
-
-class ProcessFlowGraphOut(BaseModel):
-    scope: StepRef
-    variant: str
-    nodes: list[FlowBox]
-    edges: list[FlowEdge]
-    outside: list[StepRef]
-    lanes: list[FlowLane]
-    stores: list[FlowStore]
-    externals: list[FlowExternal]
-    layout: list[LayoutItem]
-    can_suggest: bool                      # the suggest rule holds (docs/draft_arrows_spec.md §4)
-
-
-# ---- suggest a flow's arrows: preview, then keep (docs/draft_arrows_spec.md) ----
-class SuggestedArrow(BaseModel):
-    from_bfc_node_id: int | None           # None = a start event
-    to_bfc_node_id: int | None             # None = an end event
-    flow_type: Literal["SEQUENCE"]
-
-
-class SuggestOut(BaseModel):
-    arrows: list[SuggestedArrow]
-    confirm_hash: str
-
-
-class KeepIn(BaseModel):
-    """The body only confirms; the server derives the arrows again (VB law 6)."""
-    confirm_hash: str = Field(min_length=64, max_length=64)
-
-
-class KeepOut(BaseModel):
-    created: list[int]                     # bfc_node_flow ids
-    restored: list[int]
-
-
-# ---- the DFD (D-31, slice 3a) ----
 class DfdStore(BaseModel):
     data_entity_id: int
     de_number: str
@@ -173,22 +83,138 @@ class DfdExternal(BaseModel):
     ext_name: str
 
 
+class DfdTrigger(BaseModel):
+    process_trigger_id: int
+    trigger_name: str
+    trigger_kind: str
+    schedule_note: str | None
+
+
 class DfdFlow(BaseModel):
-    kind: Literal["STORE", "EXTERNAL"]
+    kind: Literal["STORE", "EXTERNAL", "TRIGGER"]
     bfc_node_id: int
     direction: Literal["I", "O"]           # the step's point of view: I = into the step
     data_entity_id: int | None
     external_entity_id: int | None
-    bfc_node_data_entity_id: int | None    # the source row, one of the two
-    bfc_node_external_flow_id: int | None
-    label: str | None                      # DE name, else flow_label, else none
+    process_trigger_id: int | None
+    label: str | None                      # DE name, else flow_label, else the trigger's name
+
+
+class DfdOrder(BaseModel):
+    from_bfc_node_id: int
+    to_bfc_node_id: int
+    data_entity_ids: list[int]
+
+
+class DfdBoundaryRef(StepRef):
+    data_entity_id: int
+
+
+class DfdBoundary(BaseModel):
+    in_: list[DfdBoundaryRef] = Field(alias="in")
+    out: list[DfdBoundaryRef]
+
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}
+
+
+class DfdCompleteness(BaseModel):
+    missing_input: list[StepRef]
+    missing_output: list[StepRef]
+    no_performer: list[StepRef]
 
 
 class DfdGraphOut(BaseModel):
     scope: StepRef
-    processes: list[StepRef]
+    lanes: list[DfdLane]
+    processes: list[DfdProcess]
     stores: list[DfdStore]
     externals: list[DfdExternal]
+    triggers: list[DfdTrigger]
     flows: list[DfdFlow]
-    cross_area: list[int]                  # data_entity_ids (A-S3-2, project-wide)
+    order: list[DfdOrder]                  # derived from data, never stored (D-38)
+    boundary: DfdBoundary
+    completeness: DfdCompleteness
+    cross_area: list[int]                  # data_entity_ids, within the chart
     layout: list[LayoutItem]
+
+
+# ---- the performer (D-46) and triggers (D-49) ----
+PerformerKind = Literal["ORG_UNIT", "ORG_ROLE", "APPLICATION", "AI"]
+
+
+class PerformerIn(BaseModel):
+    row_version: int
+    performer_kind: PerformerKind | None = None    # None clears it
+    code: str | None = Field(default=None, max_length=40)       # org unit / org role / application code
+    performer_label: str | None = Field(default=None, max_length=200)   # names an AI performer
+
+
+class PerformerOut(BaseModel):
+    kind: str
+    code: str | None
+    name: str | None
+    ref_id: int | None
+
+
+TriggerKind = Literal["TIME", "EVENT"]
+
+
+class TriggerIn(BaseModel):
+    trigger_name: str = Field(min_length=1, max_length=200)
+    trigger_kind: TriggerKind
+    schedule_note: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+
+
+class TriggerPatch(BaseModel):
+    row_version: int
+    trigger_name: str | None = Field(default=None, min_length=1, max_length=200)
+    trigger_kind: TriggerKind | None = None
+    schedule_note: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+
+
+class TriggerOut(Orm):
+    process_trigger_id: int
+    project_id: int
+    trigger_name: str
+    trigger_kind: str
+    schedule_note: str | None
+    description: str | None
+    is_active: bool
+    row_version: int
+
+
+class StepTriggerIn(BaseModel):
+    process_trigger_id: int
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class StepTriggerOut(Orm):
+    bfc_node_trigger_id: int
+    bfc_node_id: int
+    process_trigger_id: int
+    note: str | None
+    row_version: int
+    trigger_row: TriggerOut
+
+
+class SetCopyIn(BaseModel):
+    confirm_hash: str | None = None        # omit for the preview
+
+
+class SetCopyOut(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+    nodes: int
+    processes: int
+    step_data: int
+    external_flows: int
+    triggers: int
+    step_roles: int
+    supporting_systems: int
+    new_requirements: int
+    confirm_hash: str
+    applied: bool
+
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}

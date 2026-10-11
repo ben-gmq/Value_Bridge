@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from models.base import Base, TimestampMixin
 
 DIAGRAM_TYPES = ("ERD", "PROCESS_FLOW", "DFD")
-OBJECT_COLUMNS = ("bfc_node_id", "data_entity_id", "external_entity_id", "bfc_node_flow_id")
+OBJECT_COLUMNS = ("bfc_node_id", "data_entity_id", "external_entity_id", "bfc_node_flow_id", "process_trigger_id")
 
 
 def _object_fk(col: str, target: str, name: str) -> ForeignKeyConstraint:
@@ -31,6 +31,7 @@ class DiagramLayout(TimestampMixin, Base):
     data_entity_id: Mapped[int | None] = mapped_column(BigInteger)
     external_entity_id: Mapped[int | None] = mapped_column(BigInteger)
     bfc_node_flow_id: Mapped[int | None] = mapped_column(BigInteger)
+    process_trigger_id: Mapped[int | None] = mapped_column(BigInteger)          # D-49 trigger on a DFD
     x: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     y: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     width: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
@@ -46,12 +47,13 @@ class DiagramLayout(TimestampMixin, Base):
         _object_fk("data_entity_id", "data_entity", "fk_dl_de"),
         _object_fk("external_entity_id", "external_entity", "fk_dl_ext"),
         _object_fk("bfc_node_flow_id", "bfc_node_flow", "fk_dl_flow"),
+        _object_fk("process_trigger_id", "process_trigger", "fk_dl_trigger"),
         # A constraint, not an index, so save() can name it in ON CONFLICT (S2-6).
         UniqueConstraint("project_id", "diagram_type", "scope_bfc_node_id", *OBJECT_COLUMNS,
                          name="uq_dl_object", postgresql_nulls_not_distinct=True),
         CheckConstraint("diagram_type IN ('ERD', 'PROCESS_FLOW', 'DFD')", name="ck_dl_type"),
-        CheckConstraint("num_nonnulls(bfc_node_id, data_entity_id, external_entity_id, "
-                        "bfc_node_flow_id) = 1", name="ck_dl_one_object"),
+        CheckConstraint("num_nonnulls(bfc_node_id, data_entity_id, external_entity_id, bfc_node_flow_id, "
+                        "process_trigger_id) = 1", name="ck_dl_one_object"),
         CheckConstraint("diagram_type <> 'ERD' OR data_entity_id IS NOT NULL", name="ck_dl_erd_entity"),
         CheckConstraint("diagram_type = 'PROCESS_FLOW' OR bfc_node_flow_id IS NULL",
                         name="ck_dl_event_flow_only"),
@@ -62,7 +64,7 @@ class DiagramLayout(TimestampMixin, Base):
         *(Index(f"ix_dl_{short}", col, "project_id", postgresql_where=text(f"{col} IS NOT NULL"))
           for short, col in (("scope", "scope_bfc_node_id"), ("node", "bfc_node_id"),
                              ("de", "data_entity_id"), ("ext", "external_entity_id"),
-                             ("flow", "bfc_node_flow_id"))),
+                             ("flow", "bfc_node_flow_id"), ("trigger", "process_trigger_id"))),
     )
 
     def owning_project_id(self) -> int:

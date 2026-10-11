@@ -9,7 +9,9 @@ from models import BfcNode, BfcNodeOrgRole, BrOrgRole, BusinessRequirement, OrgR
 from services.code_master import validate_required_code
 from services import lifecycle
 
-SINGLE = {BfcNodeOrgRole: ("ACCOUNTABLE", "RESPONSIBLE"), BrOrgRole: ("ACCOUNTABLE",)}
+# One Accountable per step or BR. Several Responsible are normal RACI again: the lane is the step's
+# performer now (D-46, Q-26; 0046 dropped uq_bnor_one_responsible).
+SINGLE = {BfcNodeOrgRole: ("ACCOUNTABLE",), BrOrgRole: ("ACCOUNTABLE",)}
 
 
 def _owner(model):

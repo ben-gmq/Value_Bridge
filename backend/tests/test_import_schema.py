@@ -42,8 +42,8 @@ class W:
         """One live non-process node to anchor flow batches on."""
         if self._anchor is None:
             self._anchor = self.db.execute(text(
-                "INSERT INTO bfc_node (project_id, level_no, seq_no, hier_code, node_name, created_by) "
-                "VALUES (:p, 1, 1, '1', 'Sales', :u) RETURNING bfc_node_id"),
+                "INSERT INTO bfc_node (project_id, level_no, seq_no, hier_code, node_name, created_by, bfc_set_code) "
+                "VALUES (:p, 1, 1, '1', 'Sales', :u, 'TO_BE') RETURNING bfc_node_id"),
                 {"p": self.p, "u": self.u}).scalar_one()
         return self._anchor
 

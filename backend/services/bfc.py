@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import (ApplicationBfcNode, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeFlow, BfcNodeOrgRole,
-                    BusinessRequirement, ExternalEntity)
+from models import (Application, ApplicationBfcNode, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow,
+                    BfcNodeOrgRole, BfcNodeTrigger, BusinessRequirement, ExternalEntity, OrgRole, OrgUnit)
 from services import audit, business_requirement, step_io
 from services import lifecycle
 from services.lifecycle import restore
@@ -16,6 +16,8 @@ from services.lifecycle import restore
 MAX_LEVEL = 5
 MAX_SIBLINGS = 99                  # two-digit hier_code segments (S1-3)
 PROCESS_LEVELS = (3, 4, 5)         # A-47
+SETS = ("TO_BE", "AS_IS")          # D-47: the to-be chart (always) and the optional as-is chart
+PERFORMER_KINDS = ("ORG_UNIT", "ORG_ROLE", "APPLICATION", "AI")           # D-46
 
 
 def normalise_name(s: str) -> str:
@@ -23,17 +25,18 @@ def normalise_name(s: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", s)).strip().casefold()
 
 
-def _children(db: Session, project_id: int, parent_id: int | None) -> list[BfcNode]:
+def _children(db: Session, project_id: int, parent_id: int | None, bfc_set: str = "TO_BE") -> list[BfcNode]:
+    """Live children; roots (parent None) are per set, so the two charts' L1 rows never mix (D-47)."""
     parent = (BfcNode.parent_bfc_node_id == parent_id) if parent_id is not None \
-        else BfcNode.parent_bfc_node_id.is_(None)
+        else BfcNode.parent_bfc_node_id.is_(None) & (BfcNode.bfc_set_code == bfc_set)
     return list(db.scalars(select(BfcNode).where(BfcNode.project_id == project_id, parent,
                                                  BfcNode.is_active).order_by(BfcNode.seq_no)))
 
 
 def assert_name_free(db: Session, project_id: int, parent_id: int | None, name: str,
-                     except_id: int | None = None) -> None:
+                     except_id: int | None = None, bfc_set: str = "TO_BE") -> None:
     want = normalise_name(name)
-    for sib in _children(db, project_id, parent_id):
+    for sib in _children(db, project_id, parent_id, bfc_set):
         if sib.bfc_node_id != except_id and normalise_name(sib.node_name) == want:
             raise HTTPException(409, f"'{name}' already exists under this parent ({sib.hier_code})")
 
@@ -50,18 +53,31 @@ def _live_node(db: Session, project_id: int, node_id: int) -> BfcNode:
     return node
 
 
-def tree(db: Session, project_id: int, include_retired: bool = False) -> list[dict]:
+def check_set(bfc_set: str) -> str:
+    if bfc_set not in SETS:
+        raise HTTPException(400, f"bfc_set: '{bfc_set}' is not one of TO_BE, AS_IS")
+    return bfc_set
+
+
+def tree(db: Session, project_id: int, include_retired: bool = False, bfc_set: str = "TO_BE") -> list[dict]:
     q = select(BfcNode, BusinessRequirement.br_number).outerjoin(
         BusinessRequirement, (BusinessRequirement.bfc_node_id == BfcNode.bfc_node_id)
-        & BusinessRequirement.is_active).where(BfcNode.project_id == project_id)
+        & BusinessRequirement.is_active).where(BfcNode.project_id == project_id,
+                                               BfcNode.bfc_set_code == check_set(bfc_set))
     if not include_retired:
         q = q.where(BfcNode.is_active)
     return [{"node": n, "br_number": br} for n, br in db.execute(q.order_by(BfcNode.hier_code))]
 
 
 def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | None, name: str,
-                is_process: bool = False, purpose_desc: str | None = None) -> BfcNode:
+                is_process: bool = False, purpose_desc: str | None = None, bfc_set: str = "TO_BE") -> BfcNode:
+    """A child takes its parent's set; a root names its set (D-47). Only a to-be process gets a BR
+    (S7-2); creating in the as-is chart needs the AS_IS component on (checked here, body-dependent)."""
     parent = _live_node(db, project_id, parent_id) if parent_id is not None else None
+    bfc_set = parent.bfc_set_code if parent is not None else check_set(bfc_set)
+    if bfc_set == "AS_IS":
+        from services import components
+        components.require_on(db, project_id, "AS_IS")
     level = 1 if parent is None else parent.level_no + 1
     if level > MAX_LEVEL:
         raise HTTPException(422, "The chart is fixed at 5 levels")
@@ -69,8 +85,8 @@ def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | No
         raise HTTPException(422, "A process has no children. Split it into sub-steps first")
     if is_process and level not in PROCESS_LEVELS:
         raise HTTPException(422, "A process sits at level 3, 4 or 5")
-    assert_name_free(db, project_id, parent_id, name)
-    siblings = _children(db, project_id, parent_id)
+    assert_name_free(db, project_id, parent_id, name, bfc_set=bfc_set)
+    siblings = _children(db, project_id, parent_id, bfc_set)
     seq_no = (siblings[-1].seq_no if siblings else 0) + 1
     if seq_no > MAX_SIBLINGS:
         raise HTTPException(422, f"A node holds at most {MAX_SIBLINGS} children")
@@ -78,11 +94,11 @@ def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | No
                    seq_no=seq_no, hier_code=_code(parent, seq_no), node_name=name,
                    # A-54 default, mirroring ck_bfc_l5_is_process; never a process TEST (law 4)
                    is_process=is_process or level == MAX_LEVEL,
-                   purpose_desc=purpose_desc, created_by=actor_id)
+                   purpose_desc=purpose_desc, bfc_set_code=bfc_set, created_by=actor_id)
     db.add(node)
     db.flush()
-    if node.is_process:
-        business_requirement.create_br(db, actor_id, node)            # D-2, same transaction
+    if node.is_process and node.bfc_set_code == "TO_BE":
+        business_requirement.create_br(db, actor_id, node)            # D-2 / S7-2, same transaction
     db.commit()
     return node
 
@@ -91,7 +107,7 @@ def update_node(db: Session, actor_id: int, node: BfcNode, row_version: int, fie
     lifecycle.check_live(node, row_version)
     if "node_name" in fields:
         assert_name_free(db, node.project_id, node.parent_bfc_node_id, fields["node_name"],
-                         except_id=node.bfc_node_id)
+                         except_id=node.bfc_node_id, bfc_set=node.bfc_set_code)
         node.node_name = fields["node_name"]
     if "purpose_desc" in fields:
         node.purpose_desc = fields["purpose_desc"]
@@ -117,7 +133,7 @@ def _subtree(db: Session, root: BfcNode) -> list[BfcNode]:
 def reorder(db: Session, actor_id: int, node: BfcNode, row_version: int, new_seq_no: int) -> BfcNode:
     """S1-2: two phases for seq_no AND hier_code; every shifted sibling's subtree is re-coded."""
     lifecycle.check_live(node, row_version)
-    siblings = _children(db, node.project_id, node.parent_bfc_node_id)
+    siblings = _children(db, node.project_id, node.parent_bfc_node_id, node.bfc_set_code)
     if not 1 <= new_seq_no <= len(siblings):
         raise HTTPException(422, f"Position must be between 1 and {len(siblings)}")
     order = [s for s in siblings if s is not node]
@@ -155,16 +171,14 @@ def _step_blockers(db: Session, node: BfcNode) -> list[str]:
     if br:
         out.append(f"business requirement {br.br_number}")
     for model, what in ((BfcNodeDataEntity, "step data"), (BfcNodeOrgRole, "step roles"),
-                        (BfcNodeExternalFlow, "external flows"), (ApplicationBfcNode, "as-is applications")):
+                        (BfcNodeExternalFlow, "external flows"), (ApplicationBfcNode, "as-is applications"),
+                        (BfcNodeTrigger, "triggers")):
         n = db.scalar(select(func.count()).select_from(model).where(
             model.bfc_node_id == node.bfc_node_id, model.is_active))
         if n:
             out.append(f"{n} {what}")
-    edges = db.scalar(select(func.count()).select_from(BfcNodeFlow).where(
-        (BfcNodeFlow.from_bfc_node_id == node.bfc_node_id)
-        | (BfcNodeFlow.to_bfc_node_id == node.bfc_node_id), BfcNodeFlow.is_active))
-    if edges:
-        out.append(f"{edges} flow edges")
+    if node.performer_kind:                                       # D-46: a column, ck_bfc_performer_process
+        out.append("the performer")
     if node.data_processing_desc:
         out.append("the data processing description")
     return out
@@ -183,7 +197,7 @@ def mark_process(db: Session, actor_id: int, node: BfcNode, row_version: int,
             raise HTTPException(409, "This node has sub-steps; the lowest one is the process")
         node.is_process, node.updated_by = True, actor_id
         db.flush()
-        br = business_requirement.create_br(db, actor_id, node)
+        br = business_requirement.create_br(db, actor_id, node) if node.bfc_set_code == "TO_BE" else None
         db.commit()
         return br
     if node.level_no == MAX_LEVEL:
@@ -199,8 +213,9 @@ def mark_process(db: Session, actor_id: int, node: BfcNode, row_version: int,
 def _free_slot(db: Session, n: BfcNode) -> None:
     """§7.12: the name must be free, and a node whose code a live node now holds is renumbered
     to the end of its parent (R2-D10)."""
-    assert_name_free(db, n.project_id, n.parent_bfc_node_id, n.node_name, except_id=n.bfc_node_id)
-    siblings = _children(db, n.project_id, n.parent_bfc_node_id)
+    assert_name_free(db, n.project_id, n.parent_bfc_node_id, n.node_name, except_id=n.bfc_node_id,
+                     bfc_set=n.bfc_set_code)
+    siblings = _children(db, n.project_id, n.parent_bfc_node_id, n.bfc_set_code)
     if any(s.seq_no == n.seq_no for s in siblings):
         n.seq_no = (siblings[-1].seq_no if siblings else 0) + 1
         if n.seq_no > MAX_SIBLINGS:
@@ -269,3 +284,74 @@ def list_external_flows(db: Session, node: BfcNode) -> list[BfcNodeExternalFlow]
 
 def unlink_external_flow(db: Session, actor_id: int, row: BfcNodeExternalFlow, row_version: int) -> None:
     lifecycle.unlink(db, actor_id, row, row_version)
+
+
+# ---- the performer (D-46, slice7_schema §9.4) --------------------------------------------------
+
+_PERFORMER_TARGET = {"ORG_UNIT": (OrgUnit, "org_unit_code", "performer_org_unit_id", "org_unit_id"),
+                     "ORG_ROLE": (OrgRole, "org_role_code", "performer_org_role_id", "org_role_id"),
+                     "APPLICATION": (Application, "application_code", "performer_application_id",
+                                     "application_id")}
+
+
+def describe_performer(db: Session, node: BfcNode) -> dict | None:
+    if node.performer_kind is None:
+        return None
+    if node.performer_kind == "AI":
+        return {"kind": "AI", "code": None, "name": node.performer_label, "ref_id": None}
+    model, code_col, col, pk = _PERFORMER_TARGET[node.performer_kind]
+    row = db.get(model, getattr(node, col))
+    return {"kind": node.performer_kind, "code": getattr(row, code_col), "ref_id": getattr(row, pk),
+            "name": getattr(row, {"ORG_UNIT": "org_unit_name", "ORG_ROLE": "org_role_name",
+                                  "APPLICATION": "application_name"}[node.performer_kind])}
+
+
+def set_performer(db: Session, actor_id: int, node: BfcNode, row_version: int, kind: str | None,
+                  code: str | None, label: str | None) -> tuple[BfcNode, list[str]]:
+    """One performer per process: a department, a position, an IT system (sent by code, never id)
+    or AI (named by its label). None clears it. A to-be application on an as-is process warns
+    (mirrors S6b-4). Audited PERFORMER_SET."""
+    lifecycle.lock_for_share(db, node)                      # sara 7c L11: serialised with a step retire
+    lifecycle.check_live(node, row_version)
+    if not node.is_process:
+        raise HTTPException(422, "Only a process step has a performer")
+    before = describe_performer(db, node)
+    unit = role = app = None
+    warnings: list[str] = []
+    if kind is None:
+        pass
+    elif kind == "AI":
+        if not (label or "").strip():
+            raise HTTPException(422, "Name the AI that performs this step")
+    elif kind in _PERFORMER_TARGET:
+        model, code_col, _col, _pk = _PERFORMER_TARGET[kind]
+        if not code:
+            raise HTTPException(422, "Choose who performs this step")
+        # sara 7c M3: codes are unique among LIVE rows only — prefer the live one.
+        target = db.scalars(select(model).where(model.project_id == node.project_id,
+                                                func.upper(getattr(model, code_col)) == code.strip().upper())
+                            .order_by(model.is_active.desc())).first()
+        if target is None:
+            raise HTTPException(422, f"No {kind.replace('_', ' ').lower()} '{code}' in this project")
+        lifecycle.lock_for_share(db, target)                # sara 7c L11: serialised with its retire
+        if not target.is_active:
+            raise HTTPException(409, f"'{code}' is retired. Restore it first")
+        if kind == "ORG_UNIT":
+            unit = target.org_unit_id
+        elif kind == "ORG_ROLE":
+            role = target.org_role_id
+        else:
+            app = target.application_id
+            if node.bfc_set_code == "AS_IS" and target.lifecycle_code == "TO_BE":
+                warnings.append("TO_BE_APPLICATION_PERFORMS_AS_IS")
+    else:
+        raise HTTPException(400, f"performer_kind: '{kind}' is not one of {', '.join(PERFORMER_KINDS)}")
+    node.performer_kind = kind
+    node.performer_org_unit_id, node.performer_org_role_id, node.performer_application_id = unit, role, app
+    node.performer_label = label.strip() if kind == "AI" else None
+    node.updated_by = actor_id
+    db.flush()
+    audit.record(db, "PERFORMER_SET", actor_id=actor_id, project_id=node.project_id, target_table="bfc_node",
+                 target_id=node.bfc_node_id, detail={"from": before, "to": describe_performer(db, node)})
+    db.commit()
+    return node, warnings

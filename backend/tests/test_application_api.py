@@ -1,7 +1,8 @@
 """Applications: catalogue, to-be allocation, as-is support (docs/slice6b1_spec.md §8). Grade 2: a
 wrong allocation or as-is link misstates the landscape and the migration backlog in a client
 deliverable. The riskiest concerns — a link across projects or onto a retired end, and the AS_IS rule
-slipping between its two write paths — are proven directly.
+slipping between its two write paths — are proven directly. Since slice 7c (Q-23, D-47) as-is support
+sits on as-is process steps only: a to-be step's systems come from its requirement's solutions.
 
 Deliberately uncovered (spec §8): a lifecycle change racing an allocation for real (the lock order is
 reasoned; `as_is_allocated` is the proof), and phone width."""
@@ -9,9 +10,19 @@ from sqlalchemy import select, text
 
 from models import AuditEvent
 from services import consistency
-from tests.test_scope_api import API, ed  # noqa: F401 — ed is a fixture
+from tests.test_dfd_api import as_is_root
+from tests.test_scope_api import API, ed, node  # noqa: F401 — ed is a fixture
 from tests.test_solution_api import sol, two_brs
 from tests.test_step_retire import restore, retire
+
+
+def as_is_steps(client, ed):
+    """Two process steps of the as-is chart (D-47): the root names the chart, children take it."""
+    desk = node(client, ed, "Order desk", as_is_root(client, ed)["bfc_node_id"])
+    a = node(client, ed, "Key in order", desk["bfc_node_id"], is_process=True)
+    b = node(client, ed, "Print order", desk["bfc_node_id"], is_process=True)
+    assert (a["bfc_set_code"], b["bfc_set_code"]) == ("AS_IS", "AS_IS")
+    return a, b
 
 
 def app(client, ed, code="SAP-ECC", name="SAP ECC", lifecycle="BOTH", headers=None, project=None, expect=201, **kw):
@@ -169,7 +180,7 @@ def test_cross_project_and_retired_ends(client, ed, world):
     assert retire_app(client, ed, gone, headers=admin).status_code == 204
     missing = allocate(client, ed, s, {"application_id": 10 ** 9})
     assert missing.status_code == 404
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     for foreign in (live, gone):
         r = allocate(client, ed, s, foreign)
         p = support(client, ed, step_a["bfc_node_id"], foreign)
@@ -184,7 +195,7 @@ def test_cross_project_and_retired_ends(client, ed, world):
 # ---- as-is support on a step ---------------------------------------------------------------
 
 def test_as_is_support_on_a_step_and_the_to_be_warning(client, ed):
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     legacy = app(client, ed, code="LEGACY", name="Legacy", lifecycle="AS_IS")
     future = app(client, ed, code="NEW-CRM", name="New CRM", lifecycle="TO_BE")
     r = support(client, ed, step_a["bfc_node_id"], legacy, "Order entry screens")
@@ -195,15 +206,35 @@ def test_as_is_support_on_a_step_and_the_to_be_warning(client, ed):
     assert [x["application_code"] for x in listed] == ["LEGACY", "NEW-CRM"]
 
 
+def test_a_to_be_step_takes_no_as_is_support_and_the_line_names_old_links(client, ed, db):
+    """Q-23: refused on a to-be step (422); a link made before 7c, when there was one chart, is
+    named by the INFORMATIONAL line as_is_support_on_to_be until it is moved and removed."""
+    _, _, to_be = two_brs(client, ed)
+    a = app(client, ed, code="LEGACY", name="Legacy", lifecycle="AS_IS")
+    r = support(client, ed, to_be["bfc_node_id"], a)
+    assert r.status_code == 422 and "as-is steps" in r.json()["detail"]
+    assert consistency.consistency_check(ed["p"], db)["as_is_support_on_to_be"] == []
+    db.execute(text("INSERT INTO application_bfc_node (project_id, application_id, bfc_node_id, created_by) "
+                    "SELECT project_id, :a, bfc_node_id, created_by FROM bfc_node WHERE bfc_node_id = :n"),
+               {"a": a["application_id"], "n": to_be["bfc_node_id"]})
+    db.commit()                                                     # a pre-7c link
+    out = consistency.consistency_check(ed["p"], db)["as_is_support_on_to_be"]
+    assert [(x["application_code"], x["hier_code"]) for x in out] == [("LEGACY", to_be["hier_code"])]
+    assert "as_is_support_on_to_be" in consistency.INFORMATIONAL
+    as_is, _ = as_is_steps(client, ed)
+    assert support(client, ed, as_is["bfc_node_id"], a).status_code == 201
+    assert len(consistency.consistency_check(ed["p"], db)["as_is_support_on_to_be"]) == 1   # only the old one
+
+
 def test_a_summary_node_cannot_carry_as_is_support(client, ed):
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     a = app(client, ed)
     assert support(client, ed, step_a["parent_bfc_node_id"], a).status_code == 422
 
 
 def test_moving_to_to_be_with_as_is_links_warns_and_the_line_lists_them(client, ed, db):
     """S6b-5, DR6b-P1: never silent."""
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     a = app(client, ed, lifecycle="BOTH")
     support(client, ed, step_a["bfc_node_id"], a)
     assert consistency.consistency_check(ed["p"], db)["as_is_support_by_to_be"] == []
@@ -216,7 +247,7 @@ def test_moving_to_to_be_with_as_is_links_warns_and_the_line_lists_them(client, 
 
 def test_as_is_links_retire_and_restore_with_their_step(client, ed):
     """S6b-1: owned by the step, named in the preview."""
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     a = app(client, ed, code="LEGACY", name="Legacy", lifecycle="AS_IS")
     support(client, ed, step_a["bfc_node_id"], a, "kept")
     pv = client.get(f"{API}/bfc-nodes/{step_a['bfc_node_id']}/retire-preview", headers=ed["h"]).json()
@@ -229,7 +260,7 @@ def test_as_is_links_retire_and_restore_with_their_step(client, ed):
 
 
 def test_step_restore_is_refused_while_its_application_is_retired(client, ed):
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     a = app(client, ed, lifecycle="AS_IS")
     support(client, ed, step_a["bfc_node_id"], a)
     assert retire(client, ed, step_a["bfc_node_id"]).status_code == 204
@@ -239,7 +270,7 @@ def test_step_restore_is_refused_while_its_application_is_retired(client, ed):
 
 
 def test_demotion_and_retire_blockers_name_the_links(client, ed):
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     s = sol(client, ed, "Order portal", "TECHNOLOGY")
     a = app(client, ed, lifecycle="BOTH")
     support(client, ed, step_a["bfc_node_id"], a)
@@ -259,7 +290,7 @@ def test_demotion_and_retire_blockers_name_the_links(client, ed):
 # ---- consistency_check --------------------------------------------------------------------
 
 def test_the_must_be_empty_lines_find_planted_orphans(client, ed, db):
-    _, _, step_a = two_brs(client, ed)
+    step_a, _ = as_is_steps(client, ed)
     s = sol(client, ed, "Order portal", "TECHNOLOGY")
     a = app(client, ed, lifecycle="TO_BE")
     allocate(client, ed, s, a)
@@ -285,9 +316,9 @@ def test_link_ids_are_addressed_only_under_their_owner_and_reviewers_cannot_link
     assert client.patch(wrong, headers=ed["h"], json={"row_version": row["row_version"], "note": "x"}).status_code == 404
     assert client.delete(wrong, headers=ed["h"], params={"row_version": row["row_version"]}).status_code == 404
     assert client.get(f"{API}/solutions/{s1['solution_id']}/applications", headers=ed["h"]).json()[0]["note"] == "kept"
-    _, br2, step_a = two_brs(client, ed)
+    step_a, step_b = as_is_steps(client, ed)
     link = support(client, ed, step_a["bfc_node_id"], a).json()
-    other = f"{API}/bfc-nodes/{br2['bfc_node_id']}/applications/{link['application_bfc_node_id']}"
+    other = f"{API}/bfc-nodes/{step_b['bfc_node_id']}/applications/{link['application_bfc_node_id']}"
     assert client.delete(other, headers=ed["h"], params={"row_version": link["row_version"]}).status_code == 404
     assert allocate(client, ed, s2, a, headers=ed["rv"]).status_code == 403
     assert support(client, ed, step_a["bfc_node_id"], a, headers=ed["rv"]).status_code == 403

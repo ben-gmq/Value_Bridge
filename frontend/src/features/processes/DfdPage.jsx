@@ -2,31 +2,39 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Handle, MarkerType, Position, useNodesState, useStore } from '@xyflow/react';
-import { Alert, Box, Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, ToggleButton,
-  ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, FormControlLabel, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow,
+  ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { errorText } from '../../api/client';
 import { dfdApi, layoutApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
-import { LAYERED_RIGHT, LOW_ZOOM, elkLayout, pushClear } from '../../canvas/layout';
+import { LOW_ZOOM, pushClear } from '../../canvas/layout';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CopyMermaidButton } from '../../components/CopyMermaidButton';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { DiagramKindToggle, Mono } from './chartKit';
+import { Mono } from './chartKit';
 
-// The DFD of one parent node (design §7.2a generate_dfd, D-31; slice 3a). A picture of the step
-// I/O without sequence, so there is nothing to edit here: a step's data is edited on the step.
-const STEP = { w: 200, h: 72 };
+// The DFD of one parent node — the one process diagram (D-38, D-46, D-47, D-49; slice7_schema §9.8).
+// Lanes are performers; a process sits in its lane at the column of its derived rank (order comes
+// from the data: B follows A when B reads what A writes). Stores, parties and triggers sit in a band
+// under the lanes. Nothing is edited here except where boxes stand: a step's facts are edited on the step.
+const STEP = { w: 210, h: 84 };
 const STORE = { w: 180, h: 76, rim: 9 };
 const PARTY = { w: 150, h: 72 };
+const TRIG = 56;
+const LABEL_W = 170;
+const COL_W = 290;
+const LANE_PAD = 22;
+const ROW_H = STEP.h + 28;
 const DIAGRAM = 'DFD';
 const stepNode = (id) => `s${id}`;
 const storeNode = (id) => `d${id}`;
 const partyNode = (id) => `x${id}`;
+const trigNode = (id) => `t${id}`;
 
 const useLowZoom = () => useStore((s) => s.transform[2] < LOW_ZOOM);
 
@@ -45,13 +53,53 @@ function Ends() {
 function StepBox({ data }) {
   const low = useLowZoom();
   return (
-    <Box sx={(th) => ({ width: STEP.w, height: STEP.h, px: 1.5, py: 1, borderRadius: 2, border: 1.5,
+    <Box sx={(th) => ({ position: 'relative', width: STEP.w, height: STEP.h, px: 1.5, py: 1, borderRadius: 2, border: 1.5,
       borderColor: th.vars.palette.primary.main, bgcolor: th.vars.palette.background.paper })}>
       <Ends />
       <Box sx={{ visibility: low ? 'hidden' : 'visible', height: '100%', overflow: 'hidden' }}>
         <Typography sx={{ fontSize: 11, color: 'text.secondary' }}><Mono>{data.node.hier_code}</Mono></Typography>
         <Typography sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.25, overflow: 'hidden',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{data.node.node_name}</Typography>
+        {data.node.systems.length > 0 && (
+          <Typography sx={{ fontSize: 11, color: 'text.secondary', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {data.node.systems.map((a) => a.application_code).join(' · ')}</Typography>)}
+      </Box>
+      {data.gap && (
+        <Tooltip title={t('processes.dfdGapHelp')}>
+          <Box component="span" sx={(th) => ({ position: 'absolute', top: -10, right: -8, px: 0.75, borderRadius: 999,
+            fontSize: 10.5, fontWeight: 700, lineHeight: '18px', color: th.vars.palette.warning.main,
+            bgcolor: th.vars.palette.background.paper, border: 1.5, borderColor: th.vars.palette.warning.main })}>
+            {t('processes.dfdGap')}</Box>
+        </Tooltip>)}
+    </Box>
+  );
+}
+
+function TriggerDot({ data }) {
+  const low = useLowZoom();
+  return (
+    <Tooltip title={data.trigger.schedule_note ? `${data.trigger.trigger_name} — ${data.trigger.schedule_note}` : data.trigger.trigger_name}>
+      <Box aria-label={t('processes.dfdTrigger')} sx={(th) => ({ width: TRIG, height: TRIG, borderRadius: '50%', border: 2,
+        borderStyle: data.trigger.trigger_kind === 'TIME' ? 'double' : 'solid', borderColor: th.vars.palette.text.primary,
+        bgcolor: th.vars.palette.background.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 0.5 })}>
+        <Ends />
+        <Typography sx={{ fontSize: 9.5, fontWeight: 700, textAlign: 'center', lineHeight: 1.1, overflow: 'hidden',
+          visibility: low ? 'hidden' : 'visible', maxHeight: TRIG - 12 }}>{data.trigger.trigger_name}</Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+function LaneBand({ data }) {
+  const low = useLowZoom();
+  return (
+    <Box sx={(th) => ({ width: data.width, height: data.height, borderTop: 1, borderBottom: 1,
+      borderColor: th.vars.palette.divider, bgcolor: data.shade ? th.vars.palette.background.subtle : 'transparent' })}>
+      <Box sx={(th) => ({ width: LABEL_W - 16, height: '100%', p: 1, borderRight: 1, borderColor: th.vars.palette.divider,
+        visibility: low ? 'hidden' : 'visible' })}>
+        <Typography sx={{ fontSize: 10.5, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>{data.kind}</Typography>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{data.title}</Typography>
+        {data.subtitle && <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>{data.subtitle}</Typography>}
       </Box>
     </Box>
   );
@@ -104,50 +152,95 @@ function PartySquare({ data }) {
   );
 }
 
-const NODE_TYPES = { step: StepBox, store: StoreCylinder, party: PartySquare };
+const NODE_TYPES = { step: StepBox, store: StoreCylinder, party: PartySquare, trigger: TriggerDot, lane: LaneBand };
 
-/** The far end of a flow: its store or its party. */
-const farNode = (f) => (f.kind === 'STORE' ? storeNode(f.data_entity_id) : partyNode(f.external_entity_id));
-const flowId = (f) => (f.kind === 'STORE' ? `io${f.bfc_node_data_entity_id}` : `xf${f.bfc_node_external_flow_id}`);
+/** The far end of a flow: its store, its party or its trigger. */
+const farNode = (f) => ({ STORE: storeNode(f.data_entity_id), EXTERNAL: partyNode(f.external_entity_id),
+  TRIGGER: trigNode(f.process_trigger_id) }[f.kind]);
+const flowId = (f, i) => `f${i}-${f.kind}-${f.bfc_node_id}-${f.direction}`;
 
-/** Graph → React Flow nodes and edges: ELK first, then saved positions, then push clear (§14.6). */
-async function buildLayout(g, palette) {
-  const cross = new Set(g.cross_area);
-  const items = [
-    ...g.processes.map((n) => ({ id: stepNode(n.bfc_node_id), type: 'step', data: { node: n }, ...STEP,
-      object: { object_type: 'STEP', object_id: n.bfc_node_id } })),
-    ...g.stores.map((s) => ({ id: storeNode(s.data_entity_id), type: 'store',
-      data: { store: s, crossArea: cross.has(s.data_entity_id) }, ...STORE,
-      object: { object_type: 'ENTITY', object_id: s.data_entity_id } })),
-    ...g.externals.map((x) => ({ id: partyNode(x.external_entity_id), type: 'party', data: { party: x }, ...PARTY,
-      object: { object_type: 'EXTERNAL', object_id: x.external_entity_id } })),
+const laneTitle = (lane) => (lane.kind === 'UNASSIGNED' ? t('processes.laneUnassigned')
+  : lane.code ? `${lane.code} ${lane.name ?? ''}`.trim() : lane.name);
+
+/** Graph → React Flow nodes and edges. Lanes are bands; a process stands at (its lane, its rank);
+ * stores, parties and triggers stand in the band below, each under the steps it touches. Saved
+ * positions win (D-30); every other box is pushed clear of them (§14.6). */
+function buildLayout(g, palette, showOrder) {
+  const gap = new Set([...g.completeness.missing_input, ...g.completeness.missing_output].map((r) => r.bfc_node_id));
+  const nodes = [];
+  let top = 0;
+  const bands = [];
+  const xOf = new Map();
+  for (const lane of g.lanes) {
+    const mine = g.processes.filter((p) => p.lane_key === lane.lane_key).sort((a, b) => a.rank - b.rank || a.hier_code.localeCompare(b.hier_code));
+    const rowsAt = new Map();
+    let rowsUsed = 1;
+    for (const p of mine) {
+      const r = rowsAt.get(p.rank) ?? 0;
+      rowsAt.set(p.rank, r + 1);
+      rowsUsed = Math.max(rowsUsed, r + 1);
+      const x = LABEL_W + p.rank * COL_W;
+      xOf.set(p.bfc_node_id, x);
+      nodes.push({ id: stepNode(p.bfc_node_id), type: 'step', data: { node: p, gap: gap.has(p.bfc_node_id),
+        object: { object_type: 'STEP', object_id: p.bfc_node_id } }, size: STEP,
+        position: { x, y: top + LANE_PAD + r * ROW_H } });
+    }
+    const height = rowsUsed * ROW_H + LANE_PAD * 2 - (ROW_H - STEP.h);
+    bands.push({ lane, top, height });
+    top += height;
+  }
+  // The data band: each store, party and trigger under the mean column of the steps it touches.
+  const touches = new Map();
+  for (const f of g.flows) {
+    const k = farNode(f);
+    touches.set(k, [...(touches.get(k) ?? []), xOf.get(f.bfc_node_id) ?? LABEL_W]);
+  }
+  const at = (k) => { const xs = touches.get(k) ?? [LABEL_W]; return xs.reduce((a, b) => a + b, 0) / xs.length; };
+  const dataTop = top + 40;
+  const data = [
+    ...g.triggers.map((x) => ({ id: trigNode(x.process_trigger_id), type: 'trigger', data: { trigger: x }, size: { w: TRIG, h: TRIG },
+      object: { object_type: 'TRIGGER', object_id: x.process_trigger_id }, x: at(trigNode(x.process_trigger_id)) - TRIG - 30 })),
+    ...g.externals.map((x) => ({ id: partyNode(x.external_entity_id), type: 'party', data: { party: x }, size: PARTY,
+      object: { object_type: 'EXTERNAL', object_id: x.external_entity_id }, x: at(partyNode(x.external_entity_id)) })),
+    ...g.stores.map((s) => ({ id: storeNode(s.data_entity_id), type: 'store', data: { store: s, crossArea: g.cross_area.includes(s.data_entity_id) },
+      size: STORE, object: { object_type: 'ENTITY', object_id: s.data_entity_id }, x: at(storeNode(s.data_entity_id)) })),
   ];
-  // Direction is the step's point of view: I flows into the step, O flows out of it.
-  const edges = g.flows.map((f) => {
+  for (const d of data) {
+    nodes.push({ id: d.id, type: d.type, data: { ...d.data, object: d.object }, size: d.size, position: { x: Math.max(LABEL_W, d.x), y: dataTop } });
+  }
+  const saved = new Map(g.layout.map((p) => [`${p.object_type}:${p.object_id}`, p]));
+  const clear = pushClear(nodes.map((n) => {
+    const p = saved.get(`${n.data.object.object_type}:${n.data.object.object_id}`);
+    return { id: n.id, ...(p ? { x: p.x, y: p.y } : n.position), w: n.size.w, h: n.size.h, pinned: Boolean(p) };
+  }), { axis: 'x' });
+  let maxX = 0;
+  for (const n of nodes) { n.position = clear.get(n.id); maxX = Math.max(maxX, n.position.x + n.size.w); delete n.size; }
+  const lanes = bands.map(({ lane, top: y, height }, i) => ({
+    id: `lane-${lane.lane_key}`, type: 'lane', position: { x: 0, y }, draggable: false, selectable: false,
+    connectable: false, focusable: false, zIndex: -1,
+    data: { kind: t(`processes.performer.kind.${lane.kind}`), title: laneTitle(lane), subtitle: lane.unit_name,
+      width: maxX + 80, height, shade: i % 2 === 1 } }));
+
+  const style = { stroke: palette.text.secondary, strokeWidth: 1.5 };
+  const edges = g.flows.map((f, i) => {
     const into = f.direction === 'I';
     return {
-      id: flowId(f), type: 'labelled', data: { flow: f }, interactionWidth: 16,
+      id: flowId(f, i), type: 'labelled', data: { flow: f }, interactionWidth: 16,
       source: into ? farNode(f) : stepNode(f.bfc_node_id), sourceHandle: 's-R',
       target: into ? stepNode(f.bfc_node_id) : farNode(f), targetHandle: 't-L',
-      label: f.label ?? undefined,
-      markerEnd: { type: MarkerType.ArrowClosed, color: palette.text.secondary },
-      style: { stroke: palette.text.secondary, strokeWidth: 1.5 },
+      label: f.kind === 'TRIGGER' ? undefined : f.label ?? undefined,
+      markerEnd: { type: MarkerType.ArrowClosed, color: palette.text.secondary }, style,
       labelBgStyle: { fill: palette.background.paper }, labelStyle: { fill: palette.text.primary, fontSize: 12 },
     };
   });
-  const laid = await elkLayout({ id: 'root', layoutOptions: LAYERED_RIGHT,
-    children: items.map((i) => ({ id: i.id, width: i.w, height: i.h })),
-    edges: edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })) });
-  const auto = new Map(laid.children.map((c) => [c.id, { x: c.x, y: c.y }]));
-  // Saved positions win over auto-layout (D-30); every other box is pushed down clear of them.
-  const saved = new Map(g.layout.map((p) => [`${p.object_type}:${p.object_id}`, p]));
-  const clear = pushClear(items.map((i) => {
-    const p = saved.get(`${i.object.object_type}:${i.object.object_id}`);
-    return { id: i.id, ...(p ? { x: p.x, y: p.y } : auto.get(i.id)), w: i.w, h: i.h, pinned: Boolean(p) };
-  }), { axis: 'y' });
-  const nodes = items.map((i) => ({ id: i.id, type: i.type, position: clear.get(i.id),
-    data: { ...i.data, object: i.object } }));
-  return { nodes, edges };
+  if (showOrder) {
+    // The derived order (D-38), dashed: never stored, drawn on request.
+    g.order.forEach((o, i) => edges.push({ id: `o${i}`, type: 'labelled', source: stepNode(o.from_bfc_node_id), sourceHandle: 's-R',
+      target: stepNode(o.to_bfc_node_id), targetHandle: 't-L', interactionWidth: 8,
+      markerEnd: { type: MarkerType.ArrowClosed, color: palette.primary.main },
+      style: { stroke: palette.primary.main, strokeWidth: 1.25, strokeDasharray: '6 4', opacity: 0.8 } }));
+  }
+  return { nodes: [...lanes, ...nodes], edges };
 }
 
 /** One row per flow (criterion 9): from, to, data, kind. */
@@ -155,21 +248,26 @@ function DfdTable({ g }) {
   const step = new Map(g.processes.map((n) => [stepNode(n.bfc_node_id), `${n.hier_code} ${n.node_name}`]));
   const store = new Map(g.stores.map((s) => [storeNode(s.data_entity_id), `${s.de_number} ${s.de_name}`]));
   const party = new Map(g.externals.map((x) => [partyNode(x.external_entity_id), `${x.ext_number} ${x.ext_name}`]));
-  const name = (id) => step.get(id) ?? store.get(id) ?? party.get(id) ?? id;
+  const trig = new Map(g.triggers.map((x) => [trigNode(x.process_trigger_id), x.trigger_name]));
+  const lane = new Map(g.lanes.map((l) => [l.lane_key, laneTitle(l)]));
+  const laneOf = new Map(g.processes.map((p) => [stepNode(p.bfc_node_id), lane.get(p.lane_key)]));
+  const name = (id) => step.get(id) ?? store.get(id) ?? party.get(id) ?? trig.get(id) ?? id;
   return (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small">
         <TableHead><TableRow>
           <TableCell>{t('processes.flowFrom')}</TableCell><TableCell>{t('processes.flowTo')}</TableCell>
           <TableCell>{t('processes.dfdFlowData')}</TableCell><TableCell>{t('processes.dfdFlowKind')}</TableCell>
+          <TableCell>{t('processes.dfdLane')}</TableCell>
         </TableRow></TableHead>
         <TableBody>
-          {g.flows.map((f) => {
+          {g.flows.map((f, i) => {
             const [from, to] = f.direction === 'I' ? [farNode(f), stepNode(f.bfc_node_id)] : [stepNode(f.bfc_node_id), farNode(f)];
             return (
-              <TableRow key={flowId(f)}>
+              <TableRow key={flowId(f, i)}>
                 <TableCell>{name(from)}</TableCell><TableCell>{name(to)}</TableCell>
-                <TableCell>{f.label ?? ''}</TableCell><TableCell>{t(`processes.dfdKind.${f.kind}`)}</TableCell>
+                <TableCell>{f.kind === 'TRIGGER' ? '' : f.label ?? ''}</TableCell><TableCell>{t(`processes.dfdKind.${f.kind}`)}</TableCell>
+                <TableCell>{laneOf.get(stepNode(f.bfc_node_id)) ?? ''}</TableCell>
               </TableRow>
             );
           })}
@@ -192,16 +290,18 @@ export default function DfdPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges] = useState([]);
   const [view, setView] = useState('diagram');
+  const [showOrder, setShowOrder] = useState(false);
   const [layoutError, setLayoutError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const palette = theme.vars.palette;
   useEffect(() => {
     if (!g) return undefined;
     let live = true;
-    buildLayout(g, palette).then((r) => { if (live) { setNodes(r.nodes); setEdges(r.edges); setLayoutError(''); } })
+    Promise.resolve().then(() => buildLayout(g, palette, showOrder))
+      .then((r) => { if (live) { setNodes(r.nodes); setEdges(r.edges); setLayoutError(''); } })
       .catch((err) => { if (live) setLayoutError(err.message); });
     return () => { live = false; };
-  }, [g, palette, setNodes]);
+  }, [g, palette, setNodes, showOrder]);
 
   // As on the flow: positions save when a move ends, through the one shared hook (§14.6).
   // A read-only user places nothing (the hook ignores their moves).
@@ -228,23 +328,27 @@ export default function DfdPage() {
 
   // A step opens in the chart, where its data in and out is edited (spec 3a: no editing here).
   const onNodeClick = useCallback((_, n) => {
-    if (n.type === 'step') navigate(links.node(projectId, n.data.node.bfc_node_id));
+    if (n.type === 'step') navigate(links.node(projectId, n.data.node.bfc_node_id, n.data.node.bfc_set_code));
   }, [navigate, projectId]);
 
   const title = g ? t('processes.dfdPageTitle', { name: `${g.scope.hier_code} ${g.scope.node_name}` }) : t('processes.dfdTitle');
+  // Steps with a gap, each counted once (UAT 7c: a step missing both is one step).
+  const gaps = g ? new Set([...g.completeness.missing_input, ...g.completeness.missing_output].map((r) => r.bfc_node_id)).size : 0;
   return (
     <Page title={title} subtitle={t('processes.dfdPageHelp')} error={q.error ? errorText(q.error) : ''}
       actions={(
         <>
-          <Button component={RouterLink} to={links.node(projectId, nodeId)}>{t('processes.backToChart')}</Button>
-          <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId)} />
+          <Button component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{t('processes.backToChart')}</Button>
+          <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
           {canEdit && (
             <Button color="warning" disabled={!g || reset.isPending}
               onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}
         </>)}>
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
-      <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 2, flexWrap: 'wrap' }}>
-        <DiagramKindToggle projectId={projectId} nodeId={nodeId} current="dfd" />
+      <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        {g && <Chip label={t(`processes.chart.${g.scope.bfc_set_code}`)} variant="outlined" />}
+        <FormControlLabel label={t('processes.dfdShowOrder')}
+          control={<Switch id="dfd-order" checked={showOrder} onChange={(e) => setShowOrder(e.target.checked)} />} />
         <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}
           aria-label={t('processes.flowView')}>
           <ToggleButton value="diagram">{t('processes.viewDiagram')}</ToggleButton>
@@ -252,6 +356,7 @@ export default function DfdPage() {
         </ToggleButtonGroup>
       </Stack>
       {g && g.processes.length === 0 && <Alert severity="info">{t('processes.dfdNoSteps')}</Alert>}
+      {gaps > 0 && <Alert severity="warning" sx={{ mb: 2 }}>{t('processes.dfdGapsAlert', { n: gaps })}</Alert>}
       {g && g.processes.length > 0 && g.flows.length === 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>{t('processes.dfdNoFlows')}</Alert>)}
       {g && g.processes.length > 0 && view === 'diagram' && (

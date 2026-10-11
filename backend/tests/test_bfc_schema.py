@@ -34,10 +34,10 @@ class W:
         return self.db.execute(text(f"INSERT INTO {table} ({names}) VALUES ({binds}) RETURNING {pk}"),
                                cols).scalar_one()
 
-    def node(self, parent=None, level=1, seq=1, process=False, code=None, name=None):
+    def node(self, parent=None, level=1, seq=1, process=False, code=None, name=None, bfc_set="TO_BE"):
         return self.ins("bfc_node", parent_bfc_node_id=parent, level_no=level, seq_no=seq,
                         is_process=process, hier_code=code or f"{level}.{seq}.{parent}",
-                        node_name=name or f"n{level}{seq}{parent}")
+                        node_name=name or f"n{level}{seq}{parent}", bfc_set_code=bfc_set)
 
     def step(self, seq=1):
         """L1 (at position `seq`) → L2 → L3 process step."""
@@ -192,7 +192,8 @@ def test_external_flow_named_de_needs_step_io_but_unnamed_does_not(db, world):
 
 # ---- RACI keys on behaviour: VB law 5 ------------------------------------------------------
 
-def test_one_accountable_and_one_responsible_per_step(db, world):
+def test_one_accountable_per_step_and_several_responsible_are_normal(db, world):
+    """D-46 / Q-26: the lane is the performer, so 0046 dropped the one-RESPONSIBLE index."""
     w = W(db, world)
     step, r1 = w.step(), w.unit_role()
     r2 = w.ins("org_role", org_unit_id=db.execute(text("SELECT org_unit_id FROM org_role WHERE "
@@ -200,9 +201,67 @@ def test_one_accountable_and_one_responsible_per_step(db, world):
                org_role_code="R2", org_role_name="R2")
     w.raci("bfc_node_org_role", "bfc_node_id", step, r1, "A", "ACCOUNTABLE")
     w.raci("bfc_node_org_role", "bfc_node_id", step, r1, "R", "RESPONSIBLE")
+    w.raci("bfc_node_org_role", "bfc_node_id", step, r2, "R", "RESPONSIBLE")
     db.commit()
     _refused(db, lambda: w.raci("bfc_node_org_role", "bfc_node_id", step, r2, "A", "ACCOUNTABLE"))
-    _refused(db, lambda: w.raci("bfc_node_org_role", "bfc_node_id", step, r2, "R", "RESPONSIBLE"))
+
+
+# ---- the two charts, the performer and triggers (7c, slice7_schema §9) ----------------------------
+
+def test_a_child_is_always_in_its_parents_chart(db, world):
+    w = W(db, world)
+    root = w.node()
+    db.commit()
+    _refused(db, lambda: w.node(parent=root, level=2, bfc_set="AS_IS"))
+    _refused(db, lambda: w.ins("bfc_node", parent_bfc_node_id=None, level_no=1, seq_no=1, is_process=False,
+                               hier_code="x", node_name="x", bfc_set_code="SOMEWHERE"))
+
+
+def test_both_charts_have_their_own_01_and_l1_positions(db, world):
+    w = W(db, world)
+    w.node(code="01")
+    w.node(code="01", bfc_set="AS_IS")
+    db.commit()
+    _refused(db, lambda: w.node(code="01", seq=2, name="dup code"))
+
+
+def test_a_br_on_an_as_is_process_is_refused_by_the_database(db, world):
+    """S7-2: one BR per TO-BE process — as-is processes carry none (fk_br_node_to_be)."""
+    w = W(db, world)
+    a = w.node(code="01", bfc_set="AS_IS")
+    b = w.node(parent=a, level=2, code="01.01", bfc_set="AS_IS")
+    step = w.node(parent=b, level=3, process=True, code="01.01.01", bfc_set="AS_IS")
+    db.commit()
+    _refused(db, lambda: w.br(step))
+
+
+def test_the_performer_is_one_typed_target_or_a_named_ai_on_a_process(db, world):
+    w = W(db, world)
+    step, role = w.step(), w.unit_role()
+    unit = db.execute(text("SELECT org_unit_id FROM org_role WHERE org_role_id = :r"), {"r": role}).scalar_one()
+    db.commit()
+    upd = lambda **kw: db.execute(text("UPDATE bfc_node SET " + ", ".join(f"{k} = :{k}" for k in kw)  # noqa: E731
+                                       + " WHERE bfc_node_id = :n"), {**kw, "n": step})
+    upd(performer_kind="ORG_ROLE", performer_org_role_id=role)
+    db.commit()
+    _refused(db, lambda: upd(performer_kind="ORG_ROLE", performer_org_role_id=role, performer_org_unit_id=unit))
+    _refused(db, lambda: upd(performer_kind="ORG_UNIT", performer_org_role_id=None, performer_org_unit_id=None))
+    _refused(db, lambda: upd(performer_kind="AI", performer_org_role_id=None, performer_label=None))
+    _refused(db, lambda: upd(performer_kind=None, performer_org_role_id=None, performer_label="stray"))
+    upd(performer_kind="AI", performer_org_role_id=None, performer_label="Matching agent")
+    db.commit()
+    parent = db.execute(text("SELECT parent_bfc_node_id FROM bfc_node WHERE bfc_node_id = :n"), {"n": step}).scalar()
+    _refused(db, lambda: db.execute(text("UPDATE bfc_node SET performer_kind = 'AI', performer_label = 'x' "
+                                         "WHERE bfc_node_id = :n"), {"n": parent}))      # not a process
+
+
+def test_trigger_kinds_and_a_schedule_only_on_time(db, world):
+    w = W(db, world)
+    w.ins("process_trigger", trigger_name="Month-end", trigger_kind="TIME", schedule_note="last day")
+    db.commit()
+    _refused(db, lambda: w.ins("process_trigger", trigger_name="Calls", trigger_kind="EVENT", schedule_note="9am"))
+    _refused(db, lambda: w.ins("process_trigger", trigger_name="month-END ", trigger_kind="TIME"))   # live name
+    _refused(db, lambda: w.ins("process_trigger", trigger_name="X", trigger_kind="WEEKLY"))
 
 
 def test_raci_behaviour_must_match_the_code(db, world):
