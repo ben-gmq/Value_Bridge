@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Stack,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Stack,
   TextField, Tooltip, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import { DataGrid } from '@mui/x-data-grid';
@@ -10,10 +10,11 @@ import { solutionApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, Code, PurpleTile, Tag, Tile } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono, ShowRetired, SimpleSelect } from '../processes/chartKit';
-import { BrFrTabs } from '../frs/BrFrTabs';
+import { ShowRetired, SimpleSelect } from '../processes/chartKit';
+import { GRID_SX, TileRow, Toolbar } from '../frs/frKit';
 
 const EMPTY = { solution_name: '', category_code: '', description: '' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
@@ -73,31 +74,31 @@ export default function SolutionsPage() {
   const [notice, setNotice] = useState('');
   const rows = q.data ?? [];
   const activeCount = rows.filter((r) => r.is_active).length;
+  const noBrCount = rows.filter((r) => r.is_active && r.live_br_count === 0).length;
 
   const columns = [
     { field: 'solution_number', headerName: t('solutions.number'), width: 130,
       renderCell: ({ row, value, tabIndex }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Link component={RouterLink} to={links.solution(projectId, row.solution_id)} tabIndex={tabIndex} underline="hover"
-            onClick={(e) => e.stopPropagation()} sx={{ color: row.is_active ? 'brand.link' : 'text.disabled' }}>
-            <Mono>{value}</Mono></Link>
+            onClick={(e) => e.stopPropagation()}>
+            <Code tone={row.is_active ? 'navy' : 'muted'}>{value}</Code></Link>
         </Stack>) },
     { field: 'solution_name', headerName: t('solutions.name'), flex: 1, minWidth: 220,
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
           <Box component="span" sx={{ color: row.is_active ? 'inherit' : 'text.secondary',
             overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</Box>
-          {!row.is_active && <Chip size="small" variant="outlined" label={t('solutions.retiredChip')} />}
+          {!row.is_active && <Tag tone="neutral">{t('solutions.retiredChip')}</Tag>}
         </Stack>) },
     { field: 'category_code', headerName: t('solutions.category'), width: 190,
-      renderCell: ({ value }) => <Chip size="small" variant="outlined" label={categoryLabel(value)} /> },
+      renderCell: ({ value }) => <Tag>{categoryLabel(value)}</Tag> },
     { field: 'status_code', headerName: t('solutions.status'), width: 140,
-      renderCell: ({ value }) => <Chip size="small" label={statusLabel(value)} /> },
+      renderCell: ({ value }) => <Tag tone="neutral">{statusLabel(value)}</Tag> },
     { field: 'live_br_count', headerName: t('solutions.brCount'), width: 190, type: 'number',
       renderCell: ({ row, value }) => (row.is_active && value === 0 ? (
         <Tooltip title={t('solutions.noBrTip')}>
-          <Chip size="small" variant="outlined" label={t('solutions.noBrChip')}
-            sx={{ color: 'status.caution', borderColor: 'status.caution' }} />
+          <Box component="span"><Tag tone="caution">{t('solutions.noBrChip')}</Tag></Box>
         </Tooltip>) : value) },
     { field: 'description', headerName: t('solutions.description'), flex: 1, minWidth: 200,
       valueGetter: (v) => firstLine(v) },
@@ -108,20 +109,27 @@ export default function SolutionsPage() {
       error={q.error && errorText(q.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('solutions.add')}</Button>)}>
-      <BrFrTabs current="solutions" />
-      <WrapperBox>
+      {!q.error && q.data && (
+        <TileRow>
+          <PurpleTile label={t('solutions.tiles.live')} value={activeCount} />
+          <Tile label={t('solutions.tiles.noBr')} value={noBrCount} tone={noBrCount ? 'caution' : undefined}
+            note={t('solutions.noBrTip')} />
+        </TileRow>)}
+      <Card>
+        <Toolbar>
+          {!q.error && (
+            <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('solutions.count', { n: activeCount })}</Typography>)}
+          <Box sx={{ flex: 1 }} />
+          <ShowRetired id="sol-show-retired" checked={showRetired} onChange={setShowRetired} />
+        </Toolbar>
         {!q.error && (
-          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('solutions.count', { n: activeCount })}</Typography>)}
-        <Box sx={{ flex: 1 }} />
-        <ShowRetired id="sol-show-retired" checked={showRetired} onChange={setShowRetired} />
-      </WrapperBox>
-      {!q.error && (
-        <DataGrid autoHeight rows={rows} getRowId={(r) => r.solution_id} columns={columns} loading={q.isLoading}
-          disableRowSelectionOnClick hideFooterSelectedRowCount
-          onRowClick={({ row }) => navigate(links.solution(projectId, row.solution_id))}
-          localeText={{ noRowsLabel: t('solutions.empty') }}
-          initialState={{ sorting: { sortModel: [{ field: 'solution_number', sort: 'asc' }] } }}
-          sx={{ bgcolor: 'background.paper', borderRadius: 3, '& .MuiDataGrid-row': { cursor: 'pointer' } }} />)}
+          <DataGrid autoHeight rows={rows} getRowId={(r) => r.solution_id} columns={columns} loading={q.isLoading}
+            disableRowSelectionOnClick hideFooterSelectedRowCount
+            onRowClick={({ row }) => navigate(links.solution(projectId, row.solution_id))}
+            localeText={{ noRowsLabel: t('solutions.empty') }}
+            initialState={{ sorting: { sortModel: [{ field: 'solution_number', sort: 'asc' }] } }}
+            sx={GRID_SX} />)}
+      </Card>
       {adding && <AddSolutionDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(s) => { qc.invalidateQueries({ queryKey: keys.solutions(projectId) });
           setNotice(t('solutions.created', { number: s.solution_number })); }} />}

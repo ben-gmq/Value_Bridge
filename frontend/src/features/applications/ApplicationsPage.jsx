@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Stack, TextField,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Stack, TextField,
   Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import { DataGrid } from '@mui/x-data-grid';
@@ -10,9 +10,11 @@ import { appApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
-import { Page, WrapperBox } from '../../components/Page';
+import { Card, Code, PurpleTile, Tag, Tile } from '../../components/kit';
+import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { Mono, ShowRetired, SimpleSelect } from '../processes/chartKit';
+import { ShowRetired, SimpleSelect } from '../processes/chartKit';
+import { GRID_SX, TileRow, Toolbar } from '../frs/frKit';
 
 const EMPTY = { application_code: '', application_name: '', lifecycle_code: '', kind_code: '', vendor: '' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
@@ -73,21 +75,22 @@ export default function ApplicationsPage() {
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
   const rows = q.data ?? [];
+  const live = rows.filter((r) => r.is_active);
 
   const columns = [
     { field: 'application_code', headerName: t('applications.code'), width: 150,
       renderCell: ({ row, value, tabIndex }) => (
         <Link component={RouterLink} to={links.application(projectId, row.application_id)} tabIndex={tabIndex}
-          underline="hover" onClick={(e) => e.stopPropagation()}
-          sx={{ color: row.is_active ? 'brand.link' : 'text.disabled' }}><Mono>{value}</Mono></Link>) },
+          underline="hover" onClick={(e) => e.stopPropagation()}>
+          <Code tone={row.is_active ? 'navy' : 'muted'}>{value}</Code></Link>) },
     { field: 'application_name', headerName: t('applications.name'), flex: 1, minWidth: 200,
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Box component="span" sx={{ color: row.is_active ? 'inherit' : 'text.secondary' }}>{value}</Box>
-          {!row.is_active && <Chip size="small" variant="outlined" label={t('applications.retiredChip')} />}
+          {!row.is_active && <Tag tone="neutral">{t('applications.retiredChip')}</Tag>}
         </Stack>) },
     { field: 'lifecycle_code', headerName: t('applications.lifecycle'), width: 130,
-      renderCell: ({ value }) => <Chip size="small" variant="outlined" label={lifecycleLabel(value)} /> },
+      renderCell: ({ value }) => <Tag tone="teal">{lifecycleLabel(value)}</Tag> },
     { field: 'app_kind_code', headerName: t('applications.kind'), width: 130, valueGetter: (v) => (v ? kindLabel(v) : '') },
     { field: 'vendor', headerName: t('applications.vendor'), width: 160 },
     { field: 'live_solution_count', headerName: t('applications.solutions'), width: 110, type: 'number' },
@@ -95,22 +98,32 @@ export default function ApplicationsPage() {
   ];
 
   return (
-    <Page title={t('applications.title')} subtitle={t('applications.subtitle')} error={q.error && errorText(q.error)}
+    <Page title={t('applications.title')} subtitle={t('applications.subtitle')} crumb={t('applications.title')} error={q.error && errorText(q.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('applications.add')}</Button>)}>
-      <WrapperBox>
-        {!q.error && <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
-          {t('applications.count', { n: rows.filter((r) => r.is_active).length })}</Typography>}
-        <Box sx={{ flex: 1 }} />
-        <ShowRetired id="app-show-retired" checked={showRetired} onChange={setShowRetired} />
-      </WrapperBox>
-      {!q.error && (
-        <DataGrid autoHeight rows={rows} getRowId={(r) => r.application_id} columns={columns} loading={q.isLoading}
-          disableRowSelectionOnClick hideFooterSelectedRowCount
-          onRowClick={({ row }) => navigate(links.application(projectId, row.application_id))}
-          localeText={{ noRowsLabel: t('applications.empty') }}
-          initialState={{ sorting: { sortModel: [{ field: 'application_code', sort: 'asc' }] } }}
-          sx={{ bgcolor: 'background.paper', borderRadius: 3, '& .MuiDataGrid-row': { cursor: 'pointer' } }} />)}
+      {!q.error && q.data && (
+        <TileRow>
+          <PurpleTile label={t('applications.tiles.live')} value={live.length} />
+          <Tile label={t('applications.tiles.delivering')} value={live.filter((r) => r.live_solution_count > 0).length}
+            note={t('applications.tiles.deliveringNote')} />
+          <Tile label={t('applications.tiles.supporting')} value={live.filter((r) => r.live_step_count > 0).length}
+            note={t('applications.tiles.supportingNote')} />
+        </TileRow>)}
+      <Card>
+        <Toolbar>
+          {!q.error && <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            {t('applications.count', { n: live.length })}</Typography>}
+          <Box sx={{ flex: 1 }} />
+          <ShowRetired id="app-show-retired" checked={showRetired} onChange={setShowRetired} />
+        </Toolbar>
+        {!q.error && (
+          <DataGrid autoHeight rows={rows} getRowId={(r) => r.application_id} columns={columns} loading={q.isLoading}
+            disableRowSelectionOnClick hideFooterSelectedRowCount
+            onRowClick={({ row }) => navigate(links.application(projectId, row.application_id))}
+            localeText={{ noRowsLabel: t('applications.empty') }}
+            initialState={{ sorting: { sortModel: [{ field: 'application_code', sort: 'asc' }] } }}
+            sx={GRID_SX} />)}
+      </Card>
       {adding && <AddAppDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(a) => { qc.invalidateQueries({ queryKey: keys.applications(projectId) });
           setNotice(t('applications.created', { code: a.application_code })); }} />}

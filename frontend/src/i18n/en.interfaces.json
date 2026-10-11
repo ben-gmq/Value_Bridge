@@ -46,5 +46,8 @@
   "interfaces.card.none": "None",
   "interfaces.card.noCarried": "No data entities yet.",
   "interfaces.card.stale": "Someone else changed this interface. It has been refreshed — check it and try again.",
-  "interfaces.card.removeEntity": "Remove {de}"
+  "interfaces.card.removeEntity": "Remove {de}",
+  "interfaces.tiles.shown": "Interfaces",
+  "interfaces.tiles.incomplete": "Incomplete",
+  "interfaces.tiles.incompleteNote": "Missing a source and target, a method or the data carried"
 }
