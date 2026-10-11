@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Card, CardContent, Chip, Snackbar, Stack, Table, TableBody, TableCell, TableHead,
+import { Alert, Box, Button, Snackbar, Stack, Table, TableBody, TableCell, TableHead,
   TableRow, TextField, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -10,6 +10,7 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Card, Code, KV, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { AgreedChip, StatusChip, entityLabel, fieldLabel, fmtDate, fmtDateTime, fmtValue } from './baselineKit';
@@ -58,7 +59,7 @@ function Rows({ b, entity }) {
   const d = q.data;
   if (q.error) return <Alert severity="error">{detailText(q.error)}</Alert>;
   if (!d) return null;
-  if (d.total === 0) return <Typography sx={{ color: 'text.secondary', p: 2 }}>{t('baselines.view.empty')}</Typography>;
+  if (d.total === 0) return <Typography sx={{ color: 'text.secondary', px: 2.5 }}>{t('baselines.view.empty')}</Typography>;
   // ids are shown through the row's label; a code shows as its label beside it (UAT 8 D3)
   const cols = d.columns.filter((c) => !c.endsWith('_id')
     && !(c.endsWith('_code') && d.columns.includes(`${c.slice(0, -5)}_label`)));
@@ -67,19 +68,19 @@ function Rows({ b, entity }) {
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>{t('baselines.col.item')}</TableCell>
+            <TableCell sx={{ pl: 2.5 }}>{t('baselines.col.item')}</TableCell>
             {cols.map((c) => <TableCell key={c} sx={{ whiteSpace: 'nowrap' }}>{fieldLabel(c)}</TableCell>)}
           </TableRow>
         </TableHead>
         <TableBody>
           {d.rows.map((r) => (
             <TableRow key={r.source_id}>
-              <TableCell sx={{ fontWeight: 600, minWidth: 180, wordBreak: 'break-word' }}>{r.label}</TableCell>
+              <TableCell sx={{ pl: 2.5, fontWeight: 600, minWidth: 180, wordBreak: 'break-word' }}>{r.label}</TableCell>
               {cols.map((c) => <TableCell key={c} sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxWidth: 360 }}>{c === 'bfc_set_code' ? t(`baselines.chart.${r[c]}`) : fmtValue(r[c])}</TableCell>)}
             </TableRow>))}
         </TableBody>
       </Table>
-      {d.total > d.rows.length && <Button sx={{ m: 1 }} onClick={() => setLimit(limit + PAGE)}>{t('baselines.view.more')}</Button>}
+      {d.total > d.rows.length && <Button sx={{ m: 1, ml: 2 }} onClick={() => setLimit(limit + PAGE)}>{t('baselines.view.more')}</Button>}
     </Box>
   );
 }
@@ -98,6 +99,7 @@ export default function BaselinePage() {
   const [entity, setEntity] = useState('bfc_node');
   return (
     <Page title={b ? `${t('baselines.title')} · ${b.version_label}` : t('baselines.title')} error={q.error && detailText(q.error)}
+      crumb={b?.version_label}
       actions={b && (
         <>
           <Button variant="outlined" component={RouterLink} to={links.baselines(projectId, b.baseline_id, 'live')}>
@@ -112,49 +114,38 @@ export default function BaselinePage() {
             {t('baselines.view.banner', { label: b.version_label, date: fmtDate(b.frozen_at) })}
           </Alert>
           {!b.intact && <Alert severity="error">{t('baselines.view.intactBad')}</Alert>}
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
-            <Card>
-              <CardContent>
-                <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
-                  <Typography sx={{ fontWeight: 700 }}>{t('baselines.view.status')}</Typography>
-                  <StatusChip code={b.status_code} label={b.status_label} />{b.is_agreed && <AgreedChip />}
-                </Stack>
-                <Typography sx={{ fontSize: 13.5 }}>{t('baselines.frozenOn', { date: fmtDateTime(b.frozen_at), who: b.frozen_by ?? '' })}</Typography>
-                {b.note && <Typography sx={{ fontSize: 13.5, mt: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{b.note}</Typography>}
-                <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>
-                  {t('baselines.view.depth')}: {t(`baselines.view.depth.${b.data_model_depth}`)}
-                </Typography>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 1 }}>{t('baselines.view.components')}</Typography>
-                <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
-                  {b.components.map((c) => <Chip key={c} size="small" label={catalogue.find((x) => x.code === c)?.label ?? c} />)}
-                </Stack>
-              </CardContent>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' } }}>
+            <Card title={t('baselines.view.status')} action={(
+              <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap' }}>
+                <StatusChip code={b.status_code} label={b.status_label} />{b.is_agreed && <AgreedChip />}
+              </Stack>)} bodySx={{ gap: 1 }}>
+              <KV k={t('baselines.field.version_label')} v={<Code>{b.version_label}</Code>} />
+              <KV k={t('baselines.view.frozen')} v={t('baselines.frozenOn', { date: fmtDateTime(b.frozen_at), who: b.frozen_by ?? '' })} />
+              {b.note && <KV k={t('baselines.view.note')} v={<Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>{b.note}</Box>} />}
+              <KV k={t('baselines.view.depth')} v={t(`baselines.view.depth.${b.data_model_depth}`)} />
+              <KV k={t('baselines.view.components')} v={(
+                <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                  {b.components.map((c) => <Tag key={c} tone="neutral">{catalogue.find((x) => x.code === c)?.label ?? c}</Tag>)}
+                </Stack>)} />
             </Card>
-            <Card>
-              <CardContent>
-                <Typography sx={{ fontWeight: 700, mb: 1 }}>{t('baselines.view.approval')}</Typography>
-                {b.client_approver_name ? (
-                  <>
-                    <Typography sx={{ fontSize: 13.5 }}>{t('baselines.signedBy', { name: b.client_approver_name, date: fmtDate(b.client_approved_on) })}</Typography>
-                    {b.approval_reference && <Typography sx={{ fontSize: 13.5 }}>{t('baselines.view.reference', { ref: b.approval_reference })}</Typography>}
-                    {b.approval_note && <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{b.approval_note}</Typography>}
-                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5 }}>
-                      {t('baselines.view.recordedBy', { who: b.approved_by ?? '', date: fmtDateTime(b.approved_at) })}</Typography>
-                  </>
-                ) : <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('baselines.view.noApproval')}</Typography>}
-              </CardContent>
+            <Card title={t('baselines.view.approval')} bodySx={{ gap: 1 }}>
+              {b.client_approver_name ? (
+                <>
+                  <Typography sx={{ fontSize: 13.5 }}>{t('baselines.signedBy', { name: b.client_approver_name, date: fmtDate(b.client_approved_on) })}</Typography>
+                  {b.approval_reference && <Typography sx={{ fontSize: 13.5 }}>{t('baselines.view.reference', { ref: b.approval_reference })}</Typography>}
+                  {b.approval_note && <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{b.approval_note}</Typography>}
+                  <Typography sx={{ fontSize: 12.5, color: 'brand.muted' }}>
+                    {t('baselines.view.recordedBy', { who: b.approved_by ?? '', date: fmtDateTime(b.approved_at) })}</Typography>
+                </>
+              ) : <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('baselines.view.noApproval')}</Typography>}
             </Card>
           </Box>
-          <Card>
-            <CardContent sx={{ px: 0 }}>
-              <Typography component="h2" sx={{ fontWeight: 700, px: 2, mb: 1 }}>{t('baselines.view.contents')}</Typography>
-              <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', px: 2, mb: 1 }}>
-                {entities.filter(([, n]) => n > 0).map(([e, n]) => (
-                  <Chip key={e} label={`${entityLabel(e)} · ${n}`} onClick={() => setEntity(e)}
-                    color={e === entity ? 'primary' : 'default'} variant={e === entity ? 'filled' : 'outlined'} />))}
-              </Stack>
-              {b.intact && <Rows key={entity} b={b} entity={entity} />}
-            </CardContent>
+          <Card title={t('baselines.view.contents')} bodySx={{ px: 0, gap: 1.5 }}>
+            <Box sx={{ px: 2.5 }}>
+              <Segmented size="sm" label={t('baselines.view.contents')} value={entity} onChange={setEntity}
+                options={entities.filter(([, n]) => n > 0).map(([e, n]) => ({ value: e, label: `${entityLabel(e)} · ${n}` }))} />
+            </Box>
+            {b.intact && <Rows key={entity} b={b} entity={entity} />}
           </Card>
         </Stack>
       )}
