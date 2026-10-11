@@ -18,6 +18,7 @@ export const links = {
   access: (p) => `/p/${p}/access`,
   organisation: (p) => `/p/${p}/settings/organisation`,
   parties: (p) => `/p/${p}/settings/parties`,
+  interfaces: (p) => `/p/${p}/interfaces`,
   applications: (p) => `/p/${p}/settings/applications`,
   application: (p, appId) => `/p/${p}/settings/applications/${appId}`,
 };
@@ -38,6 +39,8 @@ export const keys = {
   application: (id) => ['application', String(id)],
   appLinks: () => ['app-links'],
   appLinksOf: (kind, id) => ['app-links', kind, String(id)],                                                     // allocations and as-is links, every page
+  iface: (frId) => ['fr-interface', String(frId)],
+  interfaces: (p) => ['interfaces', String(p)],
   frTrace: () => ['fr-trace'],                                                       // FR panels on solution and BR pages
   entities: (p) => ['entities', String(p)],
   entity: (id) => ['entity', String(id)],

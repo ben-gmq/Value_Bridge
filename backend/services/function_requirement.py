@@ -13,7 +13,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import BusinessRequirement, FunctionRequirement, Solution
-from services import audit, lifecycle, numbering
+from services import audit, interface, lifecycle, numbering
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -131,6 +131,7 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
               fr_type_code: str | None, status_code: str | None,
               solution_id=_UNSET) -> tuple[FunctionRequirement, list[str]]:
     """`solution_id` is _UNSET when not sent, None to unlink, an id to (re)link."""
+    lifecycle.lock(db, fr)                  # FOR UPDATE: a type change serialises with an interface PUT (sara 6b-2 L1)
     lifecycle.check_live(fr, row_version)
     before = {"previous_solution_number": fr.solution_row.solution_number if fr.solution_row else None,
               "previous_fr_type_code": fr.fr_type_code}
@@ -147,7 +148,10 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
     if moved:
         fr.solution_id = sol.solution_id if sol else None
     if fr_type_code is not None and fr_type_code != fr.fr_type_code:
-        ftype = _type(db, fr.project_id, fr_type_code)     # 6b adds the live-interface-detail 409
+        ftype = _type(db, fr.project_id, fr_type_code)
+        if (fr.fr_type_behaviour == "INTERFACE" and ftype.behaviour_code != "INTERFACE"   # behaviour, not code
+                and interface.live_detail_exists(db, fr.fr_id)):                         # criterion 102
+            raise HTTPException(409, "This FR has interface detail. Remove it first, or keep an interface type")
         fr.fr_type_code_id, fr.fr_type_behaviour = ftype.code_id, ftype.behaviour_code
         retyped = True
     if status_code is not None:

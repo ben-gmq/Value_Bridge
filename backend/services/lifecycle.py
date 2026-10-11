@@ -24,7 +24,7 @@ from services import audit, errors
 EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_master"})
 # Guard columns carry the target's is_active / is_process; the FK they sit in duplicates the
 # plain (id, project_id) FK beside it, so they are ignored when matching rows.
-GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process"})
+GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour"})   # + 6b-2 (schema §7)
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
               Solution, FunctionRequirement, Application)
@@ -45,6 +45,8 @@ LABELS = {
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
     "solution": ("Solution", lambda r: f"{r.solution_number} {r.solution_name}"),
     "function_requirement": ("Function requirement", lambda r: f"{r.fr_number} {r.fr_name}"),
+    "fr_interface": ("Interface detail", lambda r: f"Interface {r.fr_row.fr_number}"),
+    "fr_interface_data_entity": ("Carried data", lambda r: f"{r.interface_row.fr_row.fr_number} carries {r.entity_row.de_number}"),
     "application": ("Application", lambda r: f"{r.application_code} {r.application_name}"),
     # Two-ended, as br_solution (DR1-P1): a refusal on either end names the other.
     "application_solution": ("Application ↔ solution",

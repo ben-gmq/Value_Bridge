@@ -374,6 +374,18 @@ Schema `docs/slice5_schema.md` (apple), spec `docs/slice5_spec.md`; design revie
 | S5-4 | **`SOLUTION_CATEGORY` is a system category** (Ben): projects cannot rename or retire the five, because reports and `create_fr` branch on TECHNOLOGY / DATA | §8 | Q-5 |
 | S5-5 | **Physical choices adopted on apple's recommendation:** solution names unique among live solutions per project (`lower(btrim())`); `br_solution` has the S1-5 surrogate PK with `(br_id, solution_id)` as a full UNIQUE; new solutions start PROPOSED; the D-34 hook waits for FRs | §5.3 BR_SOLUTION (PK wording), §6.2 | Q-1, Q-2, Q-4, Q-7 |
 
+### Slice 6b-2 interfaces — 2026-10-11
+
+Schema `docs/slice6b_schema.md` §4–§7 (apple), spec `docs/slice6b2_spec.md`; design review round 1 of 2 (8 findings, 1 HIGH — all fixed).
+
+| # | Ruling | Changes | Source |
+|---|---|---|---|
+| S6b2-1 | **An interface is complete with source, target, method and ≥1 carried entity** (Ben); pattern and frequency optional | §4.4 `interface_list` (was: endpoints only) | auditor Q1 |
+| S6b2-2 | **A pair-filtered list counts the interfaces it cannot match** (no endpoints yet) (Ben) | §4.4 | DR6b2-P5 |
+| S6b2-3 | **The pair filter is direction-as-stored; BIDIRECTIONAL matches either way** (Ben) | §9 | auditor Q3 |
+| S6b2-4 | **Carried-entity notes appear on the vendor list**, edited on the interface card; a save keeps notes it did not touch (Ben) | §5.3 FR_INTERFACE_DATA_ENTITY, §4.4 | auditor Q4, DR6b2-D1 |
+| — | Every interface PUT bumps the detail's `row_version` (it covers the carried set); per-branch version rules; one transaction | §7.5 `describe_interface` | DR6b2-P1…P3 |
+
 ### Slice 6b-1 applications — 2026-10-11
 
 Schema `docs/slice6b_schema.md` §1–§3 (apple), spec `docs/slice6b1_spec.md`; design review round 1 of 2 (5 findings, 0 HIGH — all fixed).

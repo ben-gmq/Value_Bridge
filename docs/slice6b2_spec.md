@@ -58,8 +58,9 @@ interfaces on the DFD/ERD canvases; FR import.
 `GUARD_TARGET_COLUMNS` change, same commit), 0029 `fr_interface_data_entity`, 0030 `v_interface_list`.
 
 ## 7. Function — where it lives
-- `services/function_requirement.py` gains `describe_interface`, `remove_interface`, the type-change
-  guard; `services/interface_list.py` (new, the view reader); routes in `routers/scope.py`.
+- `services/interface.py` (new): `read_interface`, `describe_interface`, `remove_interface`, the list
+  reader and the consistency line; `services/function_requirement.py` gains the type-change guard;
+  routes in `routers/scope.py`.
 - Frontend: `features/frs/InterfaceCard.jsx` on the FR page; `features/interfaces/InterfacesPage.jsx`
   replaces the Interfaces placeholder; `i18n/en.interfaces.json`.
 
