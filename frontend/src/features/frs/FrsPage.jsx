@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Snackbar,
-  Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar,
+  Stack, TextField, Tooltip, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
 import { DataGrid } from '@mui/x-data-grid';
 import { errorText } from '../../api/client';
@@ -10,7 +10,7 @@ import { frApi, solutionApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
-import { Card, Code, PurpleTile, Tag, Tile } from '../../components/kit';
+import { Card, Code, PurpleTile, Segmented, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { MONO } from '../../theme/theme';
@@ -59,6 +59,10 @@ function AddFrDialog({ projectId, solutions, onClose, onDone }) {
   );
 }
 
+// The register's views (D-52): untraced = no live BR link (the D-28 warning, re-based); no solution = no tag,
+// which is information only now that the solution is optional (slice10b_schema §6.10).
+const FILTERS = ['all', 'untraced', 'unassigned'];
+
 // The FR register (§4.4, D-28), the second tab of the BR–FR map (S6a-4).
 export default function FrsPage() {
   const { projectId } = useParams();
@@ -66,9 +70,10 @@ export default function FrsPage() {
   const qc = useQueryClient();
   const canEdit = useCanEdit();
   const [showRetired, setShowRetired] = useState(false);
-  const [unlinked, setUnlinked] = useState(false);
-  const q = useQuery({ queryKey: [...keys.frs(projectId), { retired: showRetired, unlinked }],
-    queryFn: () => frApi.list(projectId, { includeRetired: showRetired, unlinked }), placeholderData: (prev) => prev });
+  const [filter, setFilter] = useState('all');
+  const q = useQuery({ queryKey: keys.frList(projectId, filter, showRetired),
+    queryFn: () => frApi.list(projectId, { includeRetired: showRetired, unlinked: filter === 'untraced',
+      unassigned: filter === 'unassigned' }), placeholderData: (prev) => prev });
   const solsQ = useQuery({ queryKey: keys.solutions(projectId), queryFn: () => solutionApi.list(projectId) });
   const solById = useMemo(() => new Map((solsQ.data ?? []).map((s) => [s.solution_id, s])), [solsQ.data]);
   const { getLabel: typeLabel } = useCodes(projectId, 'FR_TYPE');
@@ -78,7 +83,8 @@ export default function FrsPage() {
   const [warnings, setWarnings] = useState([]);
   const rows = q.data ?? [];
   const activeCount = rows.filter((r) => r.is_active).length;
-  const unlinkedCount = rows.filter((r) => r.is_active && !r.solution_id).length;
+  const untracedCount = rows.filter((r) => r.is_active && r.br_count === 0).length;
+  const unassignedCount = rows.filter((r) => r.is_active && !r.solution_id).length;
   const unratedCount = rows.filter((r) => r.is_active && r.effort_days == null).length;
 
   const columns = [
@@ -96,6 +102,13 @@ export default function FrsPage() {
         </Stack>) },
     { field: 'fr_type_code', headerName: t('frs.type'), width: 140,
       renderCell: ({ value }) => <Tag tone="navy">{typeLabel(value)}</Tag> },
+    { field: 'br_count', headerName: t('frs.brs'), width: 110, type: 'number',
+      renderCell: ({ row, value }) => (value == null ? null : value > 0
+        ? <Box component="span" sx={{ fontFamily: MONO }}>{value}</Box>
+        : row.is_active && (
+          <Tooltip title={t('frs.untracedTip')}>
+            <Box component="span"><Tag tone="caution">{t('frs.untracedChip')}</Tag></Box>
+          </Tooltip>)) },
     { field: 'solution_id', headerName: t('frs.solution'), flex: 1, minWidth: 200,
       valueGetter: (v) => (v ? `${solById.get(v)?.solution_number ?? ''} ${solById.get(v)?.solution_name ?? ''}` : ''),
       renderCell: ({ row }) => (row.solution_id ? (
@@ -103,10 +116,7 @@ export default function FrsPage() {
           onClick={(e) => e.stopPropagation()} color="inherit" sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'baseline', minWidth: 0 }}>
           <Code>{solById.get(row.solution_id)?.solution_number ?? ''}</Code>
           <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{solById.get(row.solution_id)?.solution_name ?? ''}</Box></Link>
-      ) : (
-        <Tooltip title={t('frs.unlinkedTip')}>
-          <Box component="span"><Tag tone="caution">{t('frs.unlinkedChip')}</Tag></Box>
-        </Tooltip>)) },
+      ) : <Tag tone="neutral">{t('frs.noSolution')}</Tag>) },
     { field: 'fulfilment_status_code', headerName: t('frs.status'), width: 170,
       renderCell: ({ value }) => <Tag tone="neutral">{statusLabel(value)}</Tag> },
     { field: 'effort_days', headerName: t('frs.trace.effort'), width: 100, type: 'number',
@@ -124,7 +134,8 @@ export default function FrsPage() {
       {!q.error && q.data && (
         <TileRow>
           <PurpleTile label={t('frs.tiles.shown')} value={activeCount} />
-          <Tile label={t('frs.tiles.unlinked')} value={unlinkedCount} tone={unlinkedCount ? 'caution' : undefined} note={t('frs.unlinkedTip')} />
+          <Tile label={t('frs.tiles.untraced')} value={untracedCount} tone={untracedCount ? 'caution' : undefined} note={t('frs.tiles.untracedNote')} />
+          <Tile label={t('frs.tiles.unassigned')} value={unassignedCount} note={t('frs.tiles.unassignedNote')} />
           <Tile label={t('frs.tiles.unrated')} value={unratedCount} tone={unratedCount ? 'caution' : undefined} note={t('frs.tiles.unratedNote')} />
         </TileRow>)}
       <Card>
@@ -132,8 +143,8 @@ export default function FrsPage() {
           {!q.error && (
             <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('frs.count', { n: activeCount })}</Typography>)}
           <Box sx={{ flex: 1 }} />
-          <FormControlLabel label={t('frs.unlinkedOnly')}
-            control={<Switch id="fr-unlinked-only" checked={unlinked} onChange={(e) => setUnlinked(e.target.checked)} />} />
+          <Segmented size="sm" label={t('frs.filter.label')} value={filter} onChange={setFilter}
+            options={FILTERS.map((f) => ({ value: f, label: t(`frs.filter.${f}`) }))} />
           <ShowRetired id="fr-show-retired" checked={showRetired} onChange={setShowRetired} />
         </Toolbar>
         {!q.error && (

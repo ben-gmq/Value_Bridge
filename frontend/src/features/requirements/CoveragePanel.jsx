@@ -9,26 +9,18 @@ import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
 
 /**
- * The mockup's purple "Coverage" panel (D-51): the FRs this requirement reaches through its live
- * solutions — v_br_function_requirement, derived, never stored (D-7) — with each FR's effort_days
- * from the FR register (derived server-side; shown, never sent). Read-only: FRs are edited on their page.
+ * The mockup's purple "Coverage" panel (D-51): the FRs this requirement maps to — its stored links (D-52),
+ * edited in the requirement's Function requirements section — with each FR's effort_days from the FR
+ * register (derived server-side; shown, never sent). Read-only. Effort is never summed by BR: an FR
+ * serving three BRs would count three times (slice10b_schema §6.4).
  */
 export function CoveragePanel({ projectId, brId }) {
-  const q = useQuery({ queryKey: [...keys.frTrace(), 'br', String(brId)], queryFn: () => frApi.ofBr(brId) });
+  const q = useQuery({ queryKey: keys.brFrs(brId), queryFn: () => frApi.ofBr(brId) });
   // Same key and call as the FR register's default view, so the two share one cache entry.
-  const frsQ = useQuery({ queryKey: [...keys.frs(projectId), { retired: false, unlinked: false }],
-    queryFn: () => frApi.list(projectId, { includeRetired: false, unlinked: false }) });
+  const frsQ = useQuery({ queryKey: keys.frList(projectId), queryFn: () => frApi.list(projectId) });
   const days = useMemo(() => new Map((frsQ.data ?? []).map((f) => [f.fr_id, f.effort_days])), [frsQ.data]);
-  // One row per FR; an FR reached through two solutions lists both.
-  const frs = useMemo(() => {
-    const by = new Map();
-    for (const r of q.data ?? []) {
-      const e = by.get(r.fr_id) ?? { ...r, via: [] };
-      e.via.push(r.solution_number);
-      by.set(r.fr_id, e);
-    }
-    return [...by.values()];
-  }, [q.data]);
+  // One row per link, so one per FR (the link grain is BR × FR).
+  const frs = useMemo(() => [...new Map((q.data ?? []).map((r) => [r.fr_id, r])).values()], [q.data]);
 
   return (
     <Box component="section" aria-labelledby="br-coverage" sx={(th) => ({ borderRadius: '24px', bgcolor: th.vars.palette.brand.ftc,
@@ -51,7 +43,7 @@ export function CoveragePanel({ projectId, brId }) {
         const d = days.get(r.fr_id);
         return (
           <Box key={r.fr_id} component={RouterLink} to={links.fr(projectId, r.fr_id)}
-            title={t('frs.via', { solution: r.via.join(', ') })}
+            title={r.solution_number ? t('frs.via', { solution: `${r.solution_number} ${r.solution_name ?? ''}` }) : undefined}
             sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, minHeight: 38, py: 0.5, borderRadius: '14px',
               textDecoration: 'none', bgcolor: th.vars.palette.brand.onFtcFill,
               '&:hover': { bgcolor: th.vars.palette.brand.onFtcHover } })}>

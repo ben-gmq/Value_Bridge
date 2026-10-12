@@ -49,5 +49,6 @@
   "effort.fr.lockNote": "Fixed when rated. A later rate-card change does not move scope already agreed — re-rate to take a new rate.",
   "effort.fr.cardFor": "Rate card · {type}",
   "effort.fr.cardHint": "The highlighted row is this FR's complexity.",
-  "effort.fr.pickHint": "Press Rate to apply it — the FR takes the rate card's current days."
+  "effort.fr.pickHint": "Press Rate to apply it — the FR takes the rate card's current days.",
+  "effort.untraced": "Information: {n} FR(s), {days} days, are not linked to any business requirement. They are already inside the totals above — not added again."
 }

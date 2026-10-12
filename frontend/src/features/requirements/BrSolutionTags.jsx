@@ -19,7 +19,7 @@ import { pillBox } from './reqKit';
 const NOTE_MAX = 4000;
 const ERR_SX = { whiteSpace: 'pre-wrap' };
 
-function NoteField({ value, onChange, autoFocus }) {
+export function NoteField({ value, onChange, autoFocus }) {
   return (
     <TextField id="brsol-note" label={t('solutions.links.note')} helperText={t('solutions.links.noteHint')}
       multiline minRows={2} fullWidth autoFocus={autoFocus} value={value} onChange={(e) => onChange(e.target.value)}
@@ -27,7 +27,7 @@ function NoteField({ value, onChange, autoFocus }) {
   );
 }
 
-function EditNoteDialog({ row, save, onClose, onDone, onStale }) {
+export function EditNoteDialog({ row, save, onClose, onDone, onStale }) {
   const [note, setNote] = useState(row.coverage_note ?? '');
   const [error, setError] = useState('');
   const m = useMutation({
@@ -57,7 +57,7 @@ function EditNoteDialog({ row, save, onClose, onDone, onStale }) {
  * the note, unlink after a confirm. The note and the solution's category/status sit in the tag's
  * tooltip; a rejected solution is flagged on the tag itself.
  */
-export function BrSolutionTags({ projectId, br, disabled }) {
+export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
   const qc = useQueryClient();
   const { getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
   const { getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
@@ -77,11 +77,12 @@ export function BrSolutionTags({ projectId, br, disabled }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.solutionLinks() });
     qc.invalidateQueries({ queryKey: keys.solutions(projectId) });   // the register's counts
-    qc.invalidateQueries({ queryKey: keys.frTrace() });             // BR → FR is derived through links
+    qc.invalidateQueries({ queryKey: keys.frTrace() });             // each FR row's "answers this BR" flag
   };
   const unlink = useMutation({
     mutationFn: (row) => brApi.unlinkSolution(br.br_id, row.br_solution_id, row.row_version),
-    onSuccess: () => { setRemoving(null); setError(''); refresh(); },
+    // D-52: the response names any FR whose solution now answers none of its requirements (Q-4).
+    onSuccess: (res) => { setRemoving(null); setError(''); refresh(); onWarnings?.(res?.warnings); },
     onError: (err) => { setRemoving(null); refresh();
       setError(isStale(err) ? t('solutions.links.stale') : errorText(err, t('common.saveFailed'))); },
   });

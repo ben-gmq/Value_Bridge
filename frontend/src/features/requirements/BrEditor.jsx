@@ -16,6 +16,8 @@ import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processe
 import { CrudGrid } from './CrudGrid';
 import { BrRaci } from './BrRaci';
 import { BrSolutionTags } from './BrSolutionTags';
+import { BrFrLinks } from './BrFrLinks';
+import { warningList } from '../frs/frKit';
 import { CoveragePanel } from './CoveragePanel';
 import { BrStatusTag } from './reqKit';
 
@@ -49,6 +51,13 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
   // A refused save (stale version or a validation error) stays marked "not saved" after its dialog
   // closes, until a save succeeds, the edits are discarded or the record is reloaded.
   const [refused, setRefused] = useState(false);
+  // D-52 drift warnings from the FR links or a solution unlink, shown in the FR section. Kept per BR, so
+  // the panel moving to another process never carries them over.
+  const [frWarn, setFrWarn] = useState({ brId: null, list: [] });
+  const frWarnings = String(frWarn.brId) === String(brId) ? frWarn.list : [];
+  const setFrWarnings = (fn) => setFrWarn((prev) => ({ brId,
+    list: fn(String(prev.brId) === String(brId) ? prev.list : []) }));
+  const onLinkWarnings = (ws) => { const l = warningList(ws); if (l.length) setFrWarn({ brId, list: l }); };
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: keys.br(brId) });
@@ -171,9 +180,16 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
         <CrudGrid projectId={projectId} br={br} disabled={!editable} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}>
           <BrRaci projectId={projectId} br={br} disabled={!editable} />
-          {isOn('SOLUTION') && <BrSolutionTags projectId={projectId} br={br} disabled={!editable} />}
+          {isOn('SOLUTION') && <BrSolutionTags projectId={projectId} br={br} disabled={!editable} onWarnings={onLinkWarnings} />}
         </Box>
       </Box>
+      {/* D-52: the BR maps to FRs directly, here; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
+      {isOn('FUNCTION_REQUIREMENT') && (
+        <>
+          <Divider />
+          <BrFrLinks projectId={projectId} br={br} disabled={!editable} solutionsOn={isOn('SOLUTION')}
+            warnings={frWarnings} setWarnings={setFrWarnings} onNotice={onNotice} />
+        </>)}
     </>
   );
   const dialogs = (

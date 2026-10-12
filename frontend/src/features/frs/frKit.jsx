@@ -1,6 +1,6 @@
 import { Alert, Box, Stack } from '@mui/material';
 import { Code, Status } from '../../components/kit';
-import { t } from '../../i18n/t';
+import { t, tOr } from '../../i18n/t';
 
 // Shared pieces of the FR screens (Slice 6a), and the layout pieces the solution, FR, effort,
 // application and interface screens share (Slice 9, D-51). Built only from the kit and theme tokens.
@@ -9,13 +9,20 @@ import { t } from '../../i18n/t';
 export const solutionOptions = (solutions) => (solutions ?? []).filter((s) => s.is_active)
   .map((s) => ({ value: s.solution_id, label: `${s.solution_number} ${s.solution_name}` }));
 
+/** The server's warnings as one shape: [{code, frs}] (D-52 drift, naming FR numbers) or plain codes. */
+export const warningList = (ws) => (Array.isArray(ws) ? ws : [])
+  .map((w) => (typeof w === 'string' ? { code: w, frs: [] } : { code: w?.code, frs: w?.frs ?? [] }))
+  .filter((w) => w.code);
+
 // What the server said about the save — never errors (D-28, DR6a-P2, S6a-5).
 export function FrWarnings({ warnings, onClose }) {
-  if (!warnings?.length) return null;
+  const list = warningList(warnings);
+  if (!list.length) return null;
   return (
     <Stack spacing={1} sx={{ mb: 2 }}>
-      {warnings.map((w) => (
-        <Alert key={w} severity="warning" onClose={onClose}>{t(`frs.warn.${w}`)}</Alert>
+      {list.map((w) => (
+        <Alert key={w.code} severity="warning" onClose={onClose}>
+          {tOr(`frs.warn.${w.code}`, { frs: w.frs.join(', ') }, w.code)}</Alert>
       ))}
     </Stack>
   );
