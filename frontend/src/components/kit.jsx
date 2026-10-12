@@ -152,9 +152,9 @@ export function Tile({ label, value, tone, note, icon }) {
 }
 
 /** A selectable row inside a card list (versions, steps, nodes). */
-export function ListRow({ selected, children, onClick, component, to, sx }) {
+export function ListRow({ selected, children, onClick, component, to, sx, ...rest }) {
   return (
-    <Box component={component} to={to} onClick={onClick} sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25,
+    <Box component={component} to={to} onClick={onClick} {...rest} sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.25,
       borderRadius: R.field, textDecoration: 'none', color: 'inherit', cursor: onClick || to ? 'pointer' : 'default',
       bgcolor: selected ? th.vars.palette.brand.purpleTint : th.vars.palette.background.subtle,
       outline: selected ? `1px solid ${th.vars.palette.brand.ftcViolet}` : 'none',

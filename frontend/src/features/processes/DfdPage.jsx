@@ -468,9 +468,12 @@ function Inspector({ g, sel, onSelect, projectId, canEdit }) {
   );
 }
 
-/** The data flow diagram of one parent node, on the shared canvas. Read-only apart from placing boxes. */
-export default function DfdPage() {
-  const { projectId, nodeId } = useParams();
+/**
+ * The data flow diagram of one parent node, on the shared canvas. Read-only apart from placing boxes.
+ * `frame` lays out the parts — the roll-up route wraps them in a page of their own, the DFD screen
+ * (D-54) puts them beside its list — so there is one diagram, drawn one way (law 8).
+ */
+export function DfdView({ projectId, nodeId, frame, backToChart = true, container = false }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -544,29 +547,30 @@ export default function DfdPage() {
   const title = g ? t('processes.dfdHeading', { name: g.scope.node_name }) : t('processes.dfdTitle');
   const counts = g && t('processes.dfdCounts', { steps: g.processes.length, stores: g.stores.length,
     parties: g.externals.length, triggers: g.triggers.length, flows: g.flows.length });
-  return (
-    <Page title={title} subtitle={t('processes.dfdPageHelp')} error={q.error ? errorText(q.error) : ''} crumb={g?.scope.hier_code}
-      eyebrow={g && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Code tone="purple">{g.scope.hier_code}</Code>
-          <Tag tone="purple" sx={{ height: 22 }}>{t(`processes.chart.${g.scope.bfc_set_code}`)}</Tag>
-        </Box>)}
-      actions={(
-        <>
-          <Segmented size="sm" label={t('processes.flowView')} value={view} onChange={setView}
-            options={[{ value: 'diagram', label: t('processes.viewDiagram') }, { value: 'table', label: t('processes.viewTable') }]} />
-          <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{t('processes.backToChart')}</Button>
-          <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
-          {canEdit && (
-            <Button color="warning" disabled={!g || reset.isPending}
-              onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}
-        </>)}>
+  const eyebrow = g && (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      <Code tone="purple">{g.scope.hier_code}</Code>
+      <Tag tone="purple" sx={{ height: 22 }}>{t(`processes.chart.${g.scope.bfc_set_code}`)}</Tag>
+    </Box>);
+  const actions = (
+    <>
+      <Segmented size="sm" label={t('processes.flowView')} value={view} onChange={setView}
+        options={[{ value: 'diagram', label: t('processes.viewDiagram') }, { value: 'table', label: t('processes.viewTable') }]} />
+      {backToChart && (
+        <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{t('processes.backToChart')}</Button>)}
+      <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
+      {canEdit && (
+        <Button color="warning" disabled={!g || reset.isPending}
+          onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}
+    </>);
+  const content = (
+    <>
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
       {g && g.processes.length === 0 && <Alert severity="info">{t('processes.dfdNoSteps')}</Alert>}
       {g && g.processes.length > 0 && g.flows.length === 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>{t('processes.dfdNoFlows')}</Alert>)}
       {g && g.processes.length > 0 && (
-        <DiagramGrid>
+        <DiagramGrid container={container}>
           <Card bodySx={{ p: 0, gap: 0 }}>
             <CanvasHeader summary={counts} legend={view === 'diagram' && (<>
               <LegendSwatch shape="process" label={t('processes.dfdLegendStep')} />
@@ -592,6 +596,16 @@ export default function DfdPage() {
       <ConfirmDialog open={confirmReset} title={t('processes.resetLayoutTitle')} body={t('processes.resetLayoutBody')}
         confirmLabel={t('processes.resetLayout')} busy={reset.isPending}
         onClose={() => setConfirmReset(false)} onConfirm={() => reset.mutate()} />
-    </Page>
+    </>);
+  return frame({ g, title, eyebrow, actions, content, error: q.error ? errorText(q.error) : '' });
+}
+
+/** The roll-up route (processes/:nodeId/dfd): any non-process node's diagram, opened from the chart. */
+export default function DfdPage() {
+  const { projectId, nodeId } = useParams();
+  return (
+    <DfdView projectId={projectId} nodeId={nodeId} frame={(f) => (
+      <Page title={f.title} subtitle={t('processes.dfdPageHelp')} error={f.error} crumb={f.g?.scope.hier_code}
+        eyebrow={f.eyebrow} actions={f.actions}>{f.content}</Page>)} />
   );
 }
