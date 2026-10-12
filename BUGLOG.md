@@ -327,3 +327,6 @@ place.
   `SolutionLinkPanel`; a fix to one does not reach the other. Fold back into the shared components.
 - UAT 9 · slice 9, 2026-10-11 · LOW · **DFD at fit-zoom is still dense on a big branch** (text ~9px, crossing lines);
   the data band now packs into rows. Revisit with the layout work of D-50's diagram highlighting.
+- UAT 10a · slice 10a, 2026-10-12 · LOW · **"New trigger" button runs past the process panel's right edge** at 1440px
+  in the "Started by" section (`features/processes/StepSections.jsx`); pre-existing, seen in
+  Evidence/2026-10-12/slice-10a/02-br-edited-in-chart-panel-light.png.
