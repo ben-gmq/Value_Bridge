@@ -11,7 +11,8 @@ from models.data_model import DataEntity, DataField  # noqa: F401
 from models.diagram import DiagramLayout  # noqa: F401
 from models.effort import EffortRate  # noqa: F401
 from models.import_staging import ImportBatch, ImportRow  # noqa: F401
-from models.function_requirement import FrInterface, FrInterfaceDataEntity, FunctionRequirement  # noqa: F401
+from models.function_requirement import (BrFunctionRequirement, FrInterface, FrInterfaceDataEntity,  # noqa: F401
+                                         FunctionRequirement)
 from models.identity import AppUser, AuditEvent, ProjectMember, UserAccessGrant  # noqa: F401
 from models.requirement import BrDataEntity, BrOrgRole, BusinessRequirement  # noqa: F401
 from models.shared import CodeMaster, ProjectSequence  # noqa: F401

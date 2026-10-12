@@ -1,6 +1,7 @@
 """Function requirement (§5.3, area 4, D-7/D-27/D-28): one FTC-specified system function in one
 project, optionally under a Solution. Schema: docs/slice6a_schema.md, as amended by S6a-1
-(suggested_br_id waits for the FR import). Frozen into baselines (shadow generated later)."""
+(D-34 suggested_br_id was retired by D-52, never built). Frozen into baselines; BR ↔ FR is the
+br_function_requirement junction (D-52, slice 10b)."""
 from sqlalchemy import (
     BigInteger, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint, Identity, Index, Numeric,
     String, Text, UniqueConstraint, text,
@@ -190,6 +191,41 @@ class FrInterfaceDataEntity(AuditMixin, Base):
                              name="fk_fide_de"),
         Index("ix_fide_de", "data_entity_id", "project_id"),
         Index("ix_fide_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrFunctionRequirement(AuditMixin, Base):
+    """BR × FR, the direct mapping (D-52, docs/slice10b_schema.md §1): one row per pairing of a business
+    requirement with a function requirement that serves it. The solution is not in the grain — it is stored
+    once on the FR (`solution_id`, the tag), so an FR's effort counts to one solution however many BRs it
+    serves. S1-5: surrogate PK beside a FULL unique grain, so a re-link restores the same row (S1-7).
+    Retires and restores with its BR's step (step_retire.OWNED_BY_BR, Q-12)."""
+
+    __tablename__ = "br_function_requirement"
+
+    br_function_requirement_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fr_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    coverage_note: Mapped[str | None] = mapped_column(Text)
+
+    # Read-only: the two-ended label "BR-0042 ↔ FR-0007" a 409 on either end shows (DR1-P1).
+    br_row = relationship("BusinessRequirement", viewonly=True,
+                          primaryjoin="foreign(BrFunctionRequirement.br_id) == BusinessRequirement.br_id")
+    fr_row = relationship("FunctionRequirement", viewonly=True,
+                          primaryjoin="foreign(BrFunctionRequirement.fr_id) == FunctionRequirement.fr_id")
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "fr_id", name="uq_brfr_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brfr_br"),
+        ForeignKeyConstraint(["fr_id", "project_id"],
+                             ["function_requirement.fr_id", "function_requirement.project_id"], name="fk_brfr_fr"),
+        Index("ix_brfr_fr", "fr_id", "project_id"),
+        Index("ix_brfr_project", "project_id"),
     )
 
     def owning_project_id(self) -> int:
