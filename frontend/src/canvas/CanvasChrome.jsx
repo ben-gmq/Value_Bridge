@@ -90,8 +90,19 @@ export function CanvasHeader({ summary, legend, children }) {
   );
 }
 
-/** The two-column body of a diagram screen: the canvas card and a 320px side panel (stacks when narrow). */
-export function DiagramGrid({ children }) {
+/** The two-column body of a diagram screen: the canvas card and a 320px side panel (stacks when narrow).
+ * `container`: stack by the grid's own width, not the window's — for a diagram that shares the page with a list. */
+export function DiagramGrid({ children, container = false }) {
+  if (container) {
+    return (
+      <Box sx={{ containerType: 'inline-size', minWidth: 0 }}>
+        <Box sx={{ display: 'grid', gap: 2, alignItems: 'start', gridTemplateColumns: 'minmax(0,1fr)',
+          '@container (min-width: 940px)': { gridTemplateColumns: 'minmax(0,1fr) 300px' } }}>
+          {children}
+        </Box>
+      </Box>
+    );
+  }
   return (
     <Box sx={{ display: 'grid', gap: 2, alignItems: 'start',
       gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1fr) 320px' } }}>

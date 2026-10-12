@@ -233,10 +233,6 @@ export default function ProcessesPage() {
         {canEdit && <Button variant="contained" startIcon={<AddRounded />}
           onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}
       </>}>
-      {params.get('pick') === 'dfd' && (
-        <Alert severity="info" sx={{ mb: 2 }} onClose={() => { const next = new URLSearchParams(params); next.delete('pick'); setParams(next); }}>
-          {t('processes.pickDfd')}</Alert>
-      )}
       <Box sx={{ display: 'grid', gap: 2, alignItems: 'stretch',
         gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(300px,400px) minmax(0,1fr)' } }}>
         <Card title={t('processes.hierarchy')} action={hierarchyAction} bodySx={{ gap: 1.25, px: 1.5 }}>

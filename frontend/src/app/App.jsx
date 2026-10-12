@@ -15,7 +15,7 @@ import AdminPage from '../features/admin/AdminPage';
 import SectionPlaceholder from '../features/common/SectionPlaceholder';
 import ProcessesPage from '../features/processes/ProcessesPage';
 import DfdPage from '../features/processes/DfdPage';
-import RequirementsPage from '../features/requirements/RequirementsPage';
+import DfdListPage from '../features/processes/DfdListPage';
 import RequirementPage from '../features/requirements/RequirementPage';
 import DataEntitiesPage from '../features/data/DataEntitiesPage';
 import DataEntityPage from '../features/data/DataEntityPage';
@@ -46,7 +46,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 // Slice 1 pages (addresses in app/links.js). "Processes" opens the function chart; the
 // process flow arrives later as a view of it (Ben, 2026-09-29, S1-9).
 const PAGES = [
-  ['processes', ProcessesPage], ['processes/:nodeId/dfd', DfdPage], ['requirements', RequirementsPage],
+  ['processes', ProcessesPage], ['processes/:nodeId/dfd', DfdPage], ['dfd', DfdListPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
@@ -62,7 +62,7 @@ const NEEDS = {
   'br-fr/frs': ['FUNCTION_REQUIREMENT'], 'br-fr/frs/:frId': ['FUNCTION_REQUIREMENT'],
   'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
   'settings/applications': ['APPLICATION'], 'settings/applications/:appId': ['APPLICATION'],
-  'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'],
+  'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
 };
 
 function Gated({ path, Screen }) {
@@ -76,11 +76,10 @@ function Gated({ path, Screen }) {
   return <Screen />;
 }
 
-/** The shell's "DFD" item: a DFD is drawn for one branch of the chart, so it opens the chart
- * with a hint to pick one (Ben, 2026-09-30, sara M2). */
-function PickDfd() {
+/** D-53: business requirements are part of the function chart; the old list address opens the chart. */
+function RequirementsMoved() {
   const { projectId } = useParams();
-  return <Navigate to={`${links.processes(projectId)}?pick=dfd`} replace />;
+  return <Navigate to={links.processes(projectId)} replace />;
 }
 
 function Spinner() {
@@ -115,7 +114,7 @@ export default function App() {
       {PAGES.map(([path, Screen]) => (
         <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Gated path={path} Screen={Screen} /></RequireAuth>} />
       ))}
-      <Route path="/p/:projectId/dfd" element={<RequireAuth><PickDfd /></RequireAuth>} />
+      <Route path="/p/:projectId/requirements" element={<RequireAuth><RequirementsMoved /></RequireAuth>} />
       {SECTIONS.map(([path, section, slice]) => (
         <Route key={path} path={`/p/:projectId/${path}`}
           element={<RequireAuth><SectionPlaceholder section={section} slice={slice} /></RequireAuth>} />
