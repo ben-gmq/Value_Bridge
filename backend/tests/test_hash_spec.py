@@ -7,6 +7,8 @@ The golden digest below is a LITERAL copy of the pre-10b `freeze_set.digest` ove
 change to the new digest that would break old baselines cannot also move the reference it is compared to."""
 import hashlib
 
+import pytest
+
 from sqlalchemy import text
 
 from tests.test_baseline import bid, diff, freeze, owner_exec, scope
@@ -97,4 +99,113 @@ def test_tampering_with_a_spec_1_baseline_still_fails(client, ed, monkeypatch):
     owner_exec("ALTER TABLE baseline_bfc_node DISABLE TRIGGER trg_baseline_bfc_node_immutable;"
                "UPDATE baseline_bfc_node SET node_name = 'Rewritten' WHERE baseline_id = :b;"
                "ALTER TABLE baseline_bfc_node ENABLE TRIGGER trg_baseline_bfc_node_immutable", b=v1)
+    assert client.get(f"{API}/baselines/{v1}", headers=ed["h"]).json()["intact"] is False
+
+
+# ---- the first diff after 10b (§5.3, DR10b-P1/D1/D2) ---------------------------------------------
+
+def _mapped(client, ed):
+    """BR-1 answered by a solution tagged on two FRs: two derived paths, backfilled as links."""
+    w = scope(client, ed)
+    s = sol(client, ed)
+    assert link(client, ed, w["br1"]["br_id"], s["solution_id"]).status_code == 201
+    a = fr(client, ed, name="Order form", solution_id=s["solution_id"])
+    b = fr(client, ed, name="Order report", fr_type="REPORT", solution_id=s["solution_id"])
+    return w, s, a, b
+
+
+def _backfill(client, ed, w, *frs):
+    """What 0051 writes for these paths: one link per (BR, FR), no note."""
+    for f in frs:
+        r = client.post(f"{API}/business-requirements/{w['br1']['br_id']}/function-requirements", headers=ed["h"],
+                        json={"fr_id": f["fr_id"]})
+        assert r.status_code == 201, r.text
+
+
+def links_of(d):
+    return d["entities"]["br_function_requirement"]
+
+
+def test_a_pre_10b_side_derives_its_links_in_every_direction(client, ed, monkeypatch):
+    w, s, a, b = _mapped(client, ed)
+    v1 = freeze_at_spec_1(client, ed, monkeypatch)
+    v1b = freeze_at_spec_1(client, ed, monkeypatch)
+    _backfill(client, ed, w, a, b)
+    v2 = bid(freeze(client, ed))
+    for x, y, derived in ((v1, v1b, ["a", "b"]), (v1, v2, ["a"]), (v2, v1, ["b"]), (v1, "live", ["a"])):
+        d = diff(client, ed, x, y)
+        assert links_of(d)["rows"] == [], (x, y, links_of(d)["rows"])        # zero false link changes
+        assert links_of(d)["derived_sides"] == derived
+        assert sum(d["summary"].values()) == 0, (x, y, d["summary"])
+    # a real new link shows as exactly one ADDED, against a derived side too
+    c = fr(client, ed, name="Credit batch", fr_type="BATCH")
+    _backfill(client, ed, w, c)
+    for x in (v1, v2):
+        rows = links_of(diff(client, ed, x, "live"))["rows"]
+        assert [r["change"] for r in rows] == ["ADDED"], rows
+        assert w["br1"]["br_number"] in rows[0]["label"] and c["fr_number"] in rows[0]["label"]
+
+
+def test_a_note_written_after_a_v1_baseline_reads_changed(client, ed, monkeypatch):
+    w, s, a, b = _mapped(client, ed)
+    v1 = freeze_at_spec_1(client, ed, monkeypatch)
+    _backfill(client, ed, w, a, b)
+    row = next(r for r in client.get(f"{API}/business-requirements/{w['br1']['br_id']}/function-requirements",
+                                     headers=ed["h"]).json() if r["fr_id"] == a["fr_id"])
+    r = client.patch(f"{API}/business-requirements/{w['br1']['br_id']}/function-requirements/"
+                     f"{row['br_function_requirement_id']}", headers=ed["h"],
+                     json={"row_version": row["row_version"], "coverage_note": "only the validation half"})
+    assert r.status_code == 200
+    rows = links_of(diff(client, ed, v1, "live"))["rows"]
+    assert [(r["change"], r["fields"], r["after"]) for r in rows] == [
+        ("CHANGED", ["coverage_note"], {"coverage_note": "only the validation half"})]
+
+
+def test_priced_untraced_reads_the_derived_links(client, ed, monkeypatch):
+    from tests.test_effort_api import rate
+    w, s, a, b = _mapped(client, ed)
+    for f in (a, b):
+        assert rate(client, ed, f, "SIMPLE").status_code == 200
+    v1 = freeze_at_spec_1(client, ed, monkeypatch)
+    _backfill(client, ed, w, a, b)
+    loose = fr(client, ed, name="Loose form")                               # untraced, added
+    assert rate(client, ed, loose, "SIMPLE").status_code == 200
+    cur = client.get(f"{API}/function-requirements/{b['fr_id']}", headers=ed["h"]).json()
+    rows = client.get(f"{API}/business-requirements/{w['br1']['br_id']}/function-requirements", headers=ed["h"]).json()
+    rb = next(r for r in rows if r["fr_id"] == b["fr_id"])
+    client.delete(f"{API}/business-requirements/{w['br1']['br_id']}/function-requirements/"
+                  f"{rb['br_function_requirement_id']}", headers=ed["h"], params={"row_version": rb["row_version"]})
+    cur = client.get(f"{API}/function-requirements/{b['fr_id']}", headers=ed["h"]).json()
+    assert client.delete(f"{API}/function-requirements/{b['fr_id']}", headers=ed["h"],
+                         params={"row_version": cur["row_version"]}).status_code == 204
+    p = diff(client, ed, v1, "live", priced=True)["pricing"]
+    lines = {x["fr_name"]: x for x in p["lines"]}
+    assert lines["Order report"]["change"] == "REMOVED" and lines["Order report"]["untraced"] is False  # traced in v1
+    assert lines["Loose form"]["untraced"] is True
+    assert p["totals"]["untraced_days"] == pytest.approx(lines["Loose form"]["delta_days"])
+    assert p["totals"]["unassigned_days"] == pytest.approx(lines["Loose form"]["delta_days"])
+
+
+def test_tampering_with_a_frozen_link_fails_the_check(client, ed):
+    w, s, a, b = _mapped(client, ed)
+    _backfill(client, ed, w, a)
+    v2 = bid(freeze(client, ed))
+    owner_exec("ALTER TABLE baseline_br_function_requirement DISABLE TRIGGER "
+               "trg_baseline_br_function_requirement_immutable;"
+               "UPDATE baseline_br_function_requirement SET coverage_note = 'slipped in' WHERE baseline_id = :b;"
+               "ALTER TABLE baseline_br_function_requirement ENABLE TRIGGER "
+               "trg_baseline_br_function_requirement_immutable", b=v2)
+    assert client.get(f"{API}/baselines/{v2}", headers=ed["h"]).json()["intact"] is False
+
+
+def test_a_link_row_smuggled_into_a_spec_1_baseline_fails_the_check(client, ed, monkeypatch):
+    w, s, a, b = _mapped(client, ed)
+    v1 = freeze_at_spec_1(client, ed, monkeypatch)
+    _backfill(client, ed, w, a)
+    owner_exec("ALTER TABLE baseline_br_function_requirement DISABLE TRIGGER "
+               "trg_baseline_br_function_requirement_insert_guard;"
+               "INSERT INTO baseline_br_function_requirement (baseline_id, source_id, br_id, fr_id, content_hash) "
+               "SELECT :b, br_function_requirement_id, br_id, fr_id, repeat('0', 64) FROM br_function_requirement;"
+               "ALTER TABLE baseline_br_function_requirement ENABLE TRIGGER "
+               "trg_baseline_br_function_requirement_insert_guard", b=v1)
     assert client.get(f"{API}/baselines/{v1}", headers=ed["h"]).json()["intact"] is False
