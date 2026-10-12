@@ -29,7 +29,7 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 2       # 2: slice 10b (br_function_requirement joins at 2, D-52)
+CURRENT_HASH_SPEC = 2       # 2: br_function_requirement joined the set (slice 10b, D-52)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -104,6 +104,9 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
                                                                                   ("solution_id", SOL))),
     _e(FR, "FR", ("fr_number", "fr_name", "description", "solution_id", "fr_type_code", "fr_type_behaviour",
                   "complexity_code", "effort_days", "acceptance_note"), label=("fr_number", "fr_name")),
+    # D-52 (slice10b §5.2, Q-15): BR ↔ FR, labelled by its ends; joined the set at spec 2.
+    _e("br_function_requirement", "FR", ("br_id", "fr_id", "coverage_note"), refs=(("br_id", BR), ("fr_id", FR)),
+       since=2),
     _e("fr_interface", "APPLICATION", ("source_application_id", "target_application_id", "pattern_code",
                                        "method_code", "frequency_code", "volume_note"),
        refs=(("source_id", FR), ("source_application_id", APP), ("target_application_id", APP))),
