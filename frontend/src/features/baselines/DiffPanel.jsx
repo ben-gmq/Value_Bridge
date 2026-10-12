@@ -90,8 +90,9 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
   // D-52: untraced = no BR link (renamed from unlinked; older responses still say unlinked_days).
   const untracedDays = pricing?.totals.untraced_days ?? pricing?.totals.unlinked_days ?? 0;
   // A side frozen before direct links (hash spec 1): its links are derived from its solutions (§5.3).
-  const derivedSides = (d?.derived_sides ?? []).map((x) => (typeof x === 'string' ? x
-    : x?.version_label ?? x?.label ?? String(x?.baseline_id ?? ''))).filter(Boolean);
+  // The server names the sides "a"/"b" on the link entity; the labels are the response's from/to.
+  const derivedSides = (d?.entities?.br_function_requirement?.derived_sides ?? [])
+    .map((s) => (s === 'a' ? d.from : s === 'b' ? d.to : null)).filter(Boolean);
   const total = rows.length;
   const tiles = [
     { k: 'ADDED', days: pricing?.totals.added_days },
