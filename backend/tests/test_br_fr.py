@@ -244,6 +244,10 @@ def test_warning_detail_is_capped_and_carries_numbers_only():
     d = warning_detail(lines)["entities_without_fields"]
     assert d["count"] == 250 and len(d["numbers"]) == WARNING_DETAIL_CAP and d["numbers"][0] == "DE-0000"
     assert "Secret name" not in str(d)
+    import re
+    mixed = warning_detail({"x": ["free text a client typed", 42, {"fr_number": "FR-0007", "fr_name": "Secret"}]})["x"]
+    assert mixed == {"count": 3, "numbers": ["FR-0007"]}                    # numbers only, never bare text
+    assert all(re.fullmatch(r"[A-Z]+-\d{4}", n) for n in d["numbers"] + mixed["numbers"])
 
 
 # ---- create from the BR -----------------------------------------------------------------------
@@ -348,3 +352,21 @@ def test_a_backfilled_same_stamp_link_restores_and_is_checked_like_the_rest(clie
     assert [x["fr_id"] for x in rows(client, ed, br)] == [f["fr_id"]]
     n = db.execute(text("SELECT count(*) FROM br_function_requirement WHERE is_active")).scalar()
     assert n == 1
+
+
+def test_a_foreign_link_is_404_before_component_off(client, ed, world):
+    """404 → 403 → 409: with SOLUTION off, another BR's link id is still 404, and so is a foreign br_id."""
+    br, other_br, _, _ = two_brs(client, ed)
+    row = lnk(client, ed, br, fr(client, ed))
+    set_components(client, world, ed["p"], ["FUNCTION_REQUIREMENT", "TO_BE_DFD"])
+    r = client.put(f"{API}/business-requirements/{other_br['br_id']}/function-requirements/"
+                   f"{row['br_function_requirement_id']}/solution", headers=ed["h"],
+                   json={"solution_id": 1, "fr_row_version": row["fr_row_version"]})
+    assert r.status_code == 404
+    r = client.post(f"{API}/projects/{ed['p']}/function-requirements", headers=ed["h"],
+                    json={"fr_name": "X", "fr_type_code": "FORM", "solution_id": 1, "br_id": 999999})
+    assert r.status_code == 404
+    r = client.put(f"{API}/business-requirements/{br['br_id']}/function-requirements/"
+                   f"{row['br_function_requirement_id']}/solution", headers=ed["h"],
+                   json={"fr_row_version": row["fr_row_version"]})
+    assert r.status_code == 422                                              # solution_id must be sent (null clears)

@@ -168,17 +168,14 @@ def create_fr(db: Session, actor_id: int, project_id: int, name: str, fr_type_co
     must be a live solution of that BR (422)."""
     name = _name(name)
     ftype = _type(db, project_id, fr_type_code)
-    br = None
-    if br_id is not None:                                  # DR1-S1: scoped first, so another project's BR is 404
-        br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.br_id == br_id,
-                                                          BusinessRequirement.project_id == project_id)).one_or_none()
-        if br is None:
-            raise HTTPException(404, "Not found")
-    sol = _solution(db, project_id, solution_id) if solution_id is not None else None
+    br = scoped_br(db, project_id, br_id) if br_id is not None else None
+    sol = None
     specified = next((c for c in resolve(db, project_id, "FR_FULFILMENT_STATUS") if c.code == "SPECIFIED"), None)
     if specified is None:                                  # L6: detail in the log only
         log.error("FR_FULFILMENT_STATUS/SPECIFIED missing for project %s", project_id)
         raise HTTPException(500, "Something went wrong.")
+    if br is None and solution_id is not None:
+        sol = _solution(db, project_id, solution_id)
     fr = FunctionRequirement(project_id=project_id, fr_number=numbering.next_number(db, project_id, "FR"),
                              fr_name=name, solution_id=sol.solution_id if sol else None,
                              fr_type_code_id=ftype.code_id, fr_type_behaviour=ftype.behaviour_code,
@@ -188,9 +185,13 @@ def create_fr(db: Session, actor_id: int, project_id: int, name: str, fr_type_co
     db.flush()
     drift = []
     if br is not None:
+        # lock order step -> BR -> FR (link_fr), then solution -> pairing (DR10b review L8)
         _, drift = link_fr(db, actor_id, br, fr.fr_id, None, commit=False)
-        if sol is not None:
+        if solution_id is not None:
+            sol = _solution(db, project_id, solution_id)
             _require_answers_br(db, br, sol)
+            fr.solution_id = sol.solution_id
+            db.flush()
     warnings = [*_warnings(db, fr, sol), *drift]
     db.commit()
     db.refresh(fr)
@@ -260,6 +261,15 @@ def fr_under_inactive_solution(db: Session, project_id: int | None) -> list[dict
     return [{"fr_id": i, "fr_number": n, "solution_number": s}
             for i, n, s in db.execute(q.order_by(FunctionRequirement.fr_number)).all()]
 
+
+
+def scoped_br(db: Session, project_id: int, br_id: int) -> BusinessRequirement:
+    """DR1-S1: a BR named in a body, scoped to the project first, so another project's BR is the same 404."""
+    br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.br_id == br_id,
+                                                      BusinessRequirement.project_id == project_id)).one_or_none()
+    if br is None:
+        raise HTTPException(404, "Not found")
+    return br
 
 
 # ---- BR ↔ FR links and the solution tag (D-52; docs/slice10b_schema.md §1.2, §2) -----------------------------

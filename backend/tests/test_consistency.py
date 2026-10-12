@@ -14,12 +14,14 @@ def test_the_report_carries_the_purge_and_the_fieldless_entity_lines(client, ed,
                         "fr_under_inactive_solution", "appsol_under_inactive", "appnode_under_inactive",
                         "as_is_allocated", "as_is_support_by_to_be", "interface_under_inactive",
                         "entities_keys_only", "rows_in_off_component",             # + 7a (D-39, DR7-P2)
-                        "process_missing_input", "process_missing_output", "as_is_support_on_to_be"}   # + 7c
+                        "process_missing_input", "process_missing_output", "as_is_support_on_to_be",   # + 7c
+                        "brfr_under_inactive", "fr_solution_outside_its_brs"}                       # + 10b
     assert [e["de_name"] for e in out["entities_without_fields"]] == ["Lonely"]
     assert consistency_check(None, db)["entities_without_fields"] == []   # per project only
     # The must-be-empty lines (Slices 5 and 6a) are the ones that can refuse a freeze.
     must_be_empty = {"brsol_under_inactive", "fr_under_inactive_solution", "appsol_under_inactive",
-                     "appnode_under_inactive", "as_is_allocated", "interface_under_inactive"}
+                     "appnode_under_inactive", "as_is_allocated", "interface_under_inactive",
+                     "brfr_under_inactive"}                                   # + 10b (refuses the freeze)
     assert set(out) - consistency.INFORMATIONAL - consistency.WARNINGS \
         - consistency.FREEZE_BLOCKING_WARNINGS == must_be_empty
     assert all(out[k] == [] for k in must_be_empty)

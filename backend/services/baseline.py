@@ -191,9 +191,10 @@ _NUMBER_KEYS = ("fr_number", "br_number", "de_number", "solution_number", "appli
 
 
 def _number_of(item) -> str | None:
+    """A business number from a report row, or None — never free text into the append-only audit."""
     if isinstance(item, dict):
         return next((str(item[k]) for k in _NUMBER_KEYS if item.get(k) is not None), None)
-    return str(item) if isinstance(item, (str, int)) else None
+    return None
 
 
 def warning_detail(warnings: dict[str, list]) -> dict[str, dict]:
@@ -422,6 +423,7 @@ def _link_changes(e, A: dict, B: dict, la, lb) -> tuple[list, dict]:
             continue
         row = rb or ra
         changes.append({"source_id": row["source_id"] if row["source_id"] is not None else (ra or {}).get("source_id"),
+                        "pair": list(pair),        # the row's key on screen: a derived row has no source_id
                         "change": kind, "fields": fields, "moved": False,
                         "label": (lb if rb else la).label(e.table, row),
                         "before": {c: _shown(ra, c) for c in fields} if ra and fields else {},

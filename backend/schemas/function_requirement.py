@@ -93,7 +93,7 @@ class BrFrPatch(BaseModel):
 
 class BrFrSolutionIn(BaseModel):
     """`solution_id: null` clears the tag. The FR's row_version, since the tag is the FR's column."""
-    solution_id: int | None = None
+    solution_id: int | None                 # required: send null to clear
     fr_row_version: int
 
 

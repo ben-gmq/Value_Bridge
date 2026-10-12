@@ -143,6 +143,7 @@ def test_a_pre_10b_side_derives_its_links_in_every_direction(client, ed, monkeyp
     for x in (v1, v2):
         rows = links_of(diff(client, ed, x, "live"))["rows"]
         assert [r["change"] for r in rows] == ["ADDED"], rows
+        assert rows[0]["pair"] == [w["br1"]["br_id"], c["fr_id"]]
         assert w["br1"]["br_number"] in rows[0]["label"] and c["fr_number"] in rows[0]["label"]
 
 

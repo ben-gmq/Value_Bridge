@@ -368,6 +368,8 @@ def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = Fa
 @router.post("/projects/{project_id}/function-requirements", response_model=FrOut, status_code=201,
              **_edit_fr.route)
 def create_fr(project_id: int, body: FrIn, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    if body.br_id is not None:
+        fr_service.scoped_br(db, project_id, body.br_id)                 # 404 before 409 COMPONENT_OFF
     if body.solution_id is not None:
         components.require_on(db, project_id, "SOLUTION")
     fr, warnings = fr_service.create_fr(db, _uid(user), project_id, body.fr_name, body.fr_type_code,
@@ -455,9 +457,9 @@ def tag_br_fr(id: int, link_id: int, body: BrFrSolutionIn, br: BusinessRequireme
               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     """The FR's solution tag, from this BR's row: one of THIS BR's live solutions, or none (422 otherwise).
     Setting one needs SOLUTION on too; clearing needs only FUNCTION_REQUIREMENT (Q-11)."""
+    link = _child(db, BrFunctionRequirement, link_id, "br_id", br.br_id)        # 404 before 409
     if body.solution_id is not None:
         components.require_on(db, br.project_id, "SOLUTION")
-    link = _child(db, BrFunctionRequirement, link_id, "br_id", br.br_id)
     row, warnings = fr_service.set_solution_from_br(db, _uid(user), br, link, body.solution_id, body.fr_row_version)
     return {**row, "warnings": warnings}
 
