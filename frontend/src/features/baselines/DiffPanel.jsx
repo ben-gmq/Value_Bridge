@@ -87,6 +87,11 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
   const mismatched = d ? Object.entries(d.entities).filter(([, e]) => e.status === 'SCHEMA_VERSION_MISMATCH') : [];
   const notUsed = d ? [...new Set(Object.values(d.entities).filter((e) => e.component_on && !e.component_on.a && e.rows.length).map((e) => e.area))] : [];
   const showDays = pricing?.available;
+  // D-52: untraced = no BR link (renamed from unlinked; older responses still say unlinked_days).
+  const untracedDays = pricing?.totals.untraced_days ?? pricing?.totals.unlinked_days ?? 0;
+  // A side frozen before direct links (hash spec 1): its links are derived from its solutions (§5.3).
+  const derivedSides = (d?.derived_sides ?? []).map((x) => (typeof x === 'string' ? x
+    : x?.version_label ?? x?.label ?? String(x?.baseline_id ?? ''))).filter(Boolean);
   const total = rows.length;
   const tiles = [
     { k: 'ADDED', days: pricing?.totals.added_days },
@@ -114,7 +119,10 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
           {pricing && !pricing.available && <Alert severity="info">{t('baselines.pricingOff', { labels: pricing.in.join(', ') })}</Alert>}
           {showDays && pricing.totals.effort_exposed_days > 0 && <Alert severity="info">{t('baselines.exposed', { n: pricing.totals.effort_exposed_days })}</Alert>}
           {showDays && pricing.totals.unrated_fr_count > 0 && <Alert severity="warning">{t('baselines.unrated', { n: pricing.totals.unrated_fr_count })}</Alert>}
-          {showDays && pricing.totals.unlinked_days !== 0 && <Alert severity="info">{t('baselines.unlinked', { n: fmtDays(pricing.totals.unlinked_days) })}</Alert>}
+          {showDays && untracedDays !== 0 && <Alert severity="info">{t('baselines.untraced', { n: fmtDays(untracedDays) })}</Alert>}
+          {showDays && (pricing.totals.unassigned_days ?? 0) !== 0 && (
+            <Alert severity="info">{t('baselines.unassigned', { n: fmtDays(pricing.totals.unassigned_days) })}</Alert>)}
+          {derivedSides.length > 0 && <Alert severity="info">{t('baselines.derivedSides', { labels: derivedSides.join(', ') })}</Alert>}
           {mismatched.map(([e]) => <Alert key={e} severity="warning">{t('baselines.schemaMismatch', { entity: entityLabel(e) })}</Alert>)}
           {notUsed.length > 0 && <Alert severity="info">{notUsed.map(areaLabel).join(', ')} — {t('baselines.notUsed', { label: fromLabel })}</Alert>}
           <Card title={t('baselines.changes', { from: fromLabel, to: toLabel })} bodySx={{ px: 0, gap: 1 }}
@@ -142,7 +150,9 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {shown.map((r) => <Fragment key={`${r.entity}-${r.source_id}`}><ChangeRow r={r} days={showDays} /></Fragment>)}
+                    {/* A derived (pre-v2) link row has no source_id: key on its (br, fr) pair, else its position */}
+                    {shown.map((r, i) => (
+                      <Fragment key={`${r.entity}-${r.source_id ?? r.pair?.join('-') ?? `i${i}`}`}><ChangeRow r={r} days={showDays} /></Fragment>))}
                   </TableBody>
                 </Table>
               </Box>
