@@ -15,6 +15,7 @@ class FrIn(BaseModel):
     fr_name: str = Name()
     fr_type_code: str = CodeField
     solution_id: int | None = None
+    br_id: int | None = None          # slice10b Q-20: create and link to this BR in one transaction
     description: str | None = Note
     acceptance_note: str | None = Note
 
@@ -49,17 +50,64 @@ class FrOut(Orm):
     fulfilment_status_code: str
     is_active: bool
     row_version: int
-    warnings: list[str] = []          # D-28 and friends: never errors
+    br_count: int = 0                 # slice10b §6.10: live BR links
+    # D-28 and friends: never errors. Plain codes, or D-52 drift as {"code", "frs": ["FR-0007"]}.
+    warnings: list[str | dict] = []
     effort_change: EffortChange | None = None   # DR6c-P2: set when a type change moved effort_days
 
 
+class DriftWarning(BaseModel):
+    """slice10b §2.2: a warning naming the FRs an action affected — never an error, never a write."""
+    code: str
+    frs: list[str]
+
+
 class BrFrOut(BaseModel):
-    """One row of v_br_function_requirement, with names: an FR serving a BR through a solution."""
+    """One live BR ↔ FR link (D-52, slice10b §6.2): the link, the FR, and the FR's solution tag (may be none)."""
+    br_function_requirement_id: int
+    row_version: int
+    coverage_note: str | None
+    br_id: int
     fr_id: int
     fr_number: str
     fr_name: str
     fr_type_code: str
     fr_type_behaviour: str
-    solution_id: int
-    solution_number: str
-    solution_name: str
+    fr_row_version: int
+    solution_id: int | None
+    solution_number: str | None
+    solution_name: str | None
+    tag_answers_this_br: bool
+    warnings: list[DriftWarning] = []
+
+
+class BrFrIn(BaseModel):
+    fr_id: int
+    coverage_note: str | None = Note
+
+
+class BrFrPatch(BaseModel):
+    row_version: int
+    coverage_note: str | None = Note
+
+
+class BrFrSolutionIn(BaseModel):
+    """`solution_id: null` clears the tag. The FR's row_version, since the tag is the FR's column."""
+    solution_id: int | None = None
+    fr_row_version: int
+
+
+class WarningsOut(BaseModel):
+    warnings: list[DriftWarning] = []
+
+
+class FrBrOut(BaseModel):
+    """One live BR an FR serves (the FR page's traceability)."""
+    br_function_requirement_id: int
+    row_version: int
+    coverage_note: str | None
+    br_id: int
+    br_number: str
+    hier_code: str
+    node_name: str
+    tag_answers_br: bool

@@ -16,7 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow,
-                    BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrOrgRole, BrSolution, BusinessRequirement,
+                    BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrFunctionRequirement, BrOrgRole, BrSolution,
+                    BusinessRequirement,
                     DataEntity, ExternalEntity, OrgRole, ProcessTrigger, Solution)
 from services import audit, bfc, components, lifecycle
 
@@ -29,13 +30,15 @@ OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNode
                  ApplicationBfcNode, BfcNodeTrigger)       # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)
 # Tables an older retire event may list that a restore must skip: their rows can never be live again.
 RETIRED_TABLES = frozenset({"bfc_node_flow"})
-OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution)          # BrSolution: S5-1 (Ben, 2026-10-09)
+OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution,          # BrSolution: S5-1 (Ben, 2026-10-09)
+               BrFunctionRequirement)                         # D-52, slice10b Q-12: the FR itself survives
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BrSolution, BfcNodeOrgRole, ApplicationBfcNode, BfcNodeTrigger),
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BfcNodeOrgRole, ApplicationBfcNode,
+     BfcNodeTrigger),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -97,6 +100,9 @@ def describe(db: Session, row) -> str:
     if isinstance(row, BrSolution):
         sol = db.get(Solution, row.solution_id)
         return f"{sol.solution_number} {sol.solution_name}"
+    if isinstance(row, BrFunctionRequirement):
+        f = row.fr_row
+        return f"{f.fr_number} {f.fr_name}"
     if isinstance(row, BfcNodeExternalFlow):
         ext = db.get(ExternalEntity, row.external_entity_id)
         return f"{ext.ext_number} {ext.ext_name} ({row.direction})"
@@ -134,7 +140,32 @@ def preview(db: Session, step: BfcNode) -> dict:
         raise HTTPException(409, f"{lifecycle.label(step)} is already retired")
     owned, blockers, h = _assess(db, step)
     return {"owned": [_ref(r, describe(db, r)) for r in owned],
-            "blockers": [_ref(b) for b in blockers], "confirm_hash": h}
+            "blockers": [_ref(b) for b in blockers], "confirm_hash": h, "tag_drift": _tag_drift(db, owned)}
+
+
+def _tag_drift(db: Session, owned: list) -> list[str]:
+    """slice10b §2.2 case 4, §4.2: the FRs whose tag answers none of the BRs they will still serve once this
+    step's BR, its pairings and its links are retired. Information beside the preview, outside confirm_hash."""
+    links = [r for r in owned if isinstance(r, BrFunctionRequirement)]
+    if not links:
+        return []
+    br_id = links[0].br_id
+    out = []
+    for link in links:
+        fr = link.fr_row
+        if fr.solution_id is None:
+            continue
+        others = list(db.scalars(select(BrFunctionRequirement.br_id)
+                                 .join(BusinessRequirement, BusinessRequirement.br_id == BrFunctionRequirement.br_id)
+                                 .where(BrFunctionRequirement.fr_id == fr.fr_id, BrFunctionRequirement.is_active,
+                                        BrFunctionRequirement.br_id != br_id, BusinessRequirement.is_active)))
+        if not others:
+            continue
+        answered = db.scalar(select(BrSolution.br_solution_id).where(
+            BrSolution.br_id.in_(others), BrSolution.solution_id == fr.solution_id, BrSolution.is_active).limit(1))
+        if answered is None:
+            out.append(fr.fr_number)
+    return sorted(out)
 
 
 def retire_row(db: Session, actor_id: int, row, at: datetime, action_id: str) -> None:
@@ -193,6 +224,19 @@ def _retired_with_dependents(db: Session, step: BfcNode) -> dict | None:
     return ev.detail
 
 
+def _same_stamp_links(db: Session, rows: list, at: datetime) -> list:
+    """The retired BR ↔ FR links of the event's BR that carry the event's stamp and are not already listed.
+    For a retire made after 10b they are in the event already, so this finds nothing new."""
+    listed = {_key(r) for r in rows}
+    br_ids = [r.br_id for r in rows if isinstance(r, BusinessRequirement)]
+    if not br_ids:
+        return []
+    found = db.scalars(select(BrFunctionRequirement).where(
+        BrFunctionRequirement.br_id.in_(br_ids), ~BrFunctionRequirement.is_active,
+        BrFunctionRequirement.deleted_at == at).order_by(BrFunctionRequirement.br_function_requirement_id))
+    return [r for r in found if _key(r) not in listed]
+
+
 def restore_plain(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
     """PATCH /bfc-nodes/{id}/restore. Refused for a step whose latest retire took its
     dependents with it, so the undo key is never thrown away (spec §4, SR-1)."""
@@ -217,6 +261,9 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
     at = datetime.fromisoformat(event["deleted_at"])
     rows = [r for r in (_load(db, (t, i)) for t, i in event["rows"] if t not in RETIRED_TABLES)
             if r is not None and not r.is_active and r.deleted_at == at]          # §9.6: arrows stay retired
+    # slice10b §3.2 [Q-8]: links backfilled for a pre-10b step retire are not in its event; they carry its stamp.
+    # Merged BEFORE the parent and component checks, so they are held to the same all-or-nothing rule.
+    rows += _same_stamp_links(db, rows, at)
     keys = {_key(r) for r in rows}
     if _key(step) not in keys:                                 # SR-1, belt and braces
         raise HTTPException(409, "This step was retired on its own. Use Restore.", headers=USE_PLAIN)

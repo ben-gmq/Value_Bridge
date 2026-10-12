@@ -98,6 +98,7 @@ def test_spoofed_marker_without_the_dependency_is_caught(monkeypatch):
 ROUTE_COMPONENTS = (
     ("/solutions", "SOLUTION"),
     ("/function-requirements", "FUNCTION_REQUIREMENT"),
+    ("/business-requirements/{id}/function-requirements", "FUNCTION_REQUIREMENT"),   # D-52 link writes (Q-11)
     ("/applications", "APPLICATION"),
     ("/rate-card", "EFFORT"),
     ("/complexity", "EFFORT"),
@@ -124,3 +125,16 @@ def test_every_component_write_declares_its_component():
             if fragment in r.path and resolver not in declared:
                 bad.append(f"{sorted(r.methods)} {r.path}: needs {resolver}, declares {sorted(declared)}")
     assert bad == []
+
+
+def test_br_fr_link_writes_do_not_need_solution():
+    """slice10b Q-11: the link is FR scope, so a project with SOLUTION off can map BR → FR. The tag route
+    checks SOLUTION in the body only when a solution is set."""
+    found = 0
+    for r in _routes():
+        if "/business-requirements/{id}/function-requirements" in r.path and not r.methods <= {"GET", "HEAD"}:
+            declared = r.openapi_extra[GUARD_KEY].get("component")
+            declared = set(declared) if isinstance(declared, list) else {declared} if declared else set()
+            assert declared == {"FUNCTION_REQUIREMENT"}, (r.path, declared)
+            found += 1
+    assert found == 4

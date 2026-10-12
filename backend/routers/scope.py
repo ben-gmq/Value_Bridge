@@ -13,7 +13,8 @@ from auth.dependencies import current_user
 from database import get_db
 from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolution, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
                     BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
-                    ExternalEntity, OrgRole, OrgUnit, BrSolution, FunctionRequirement, Solution)
+                    ExternalEntity, OrgRole, OrgUnit, BrFunctionRequirement, BrSolution, FunctionRequirement,
+                    Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
 from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
@@ -29,7 +30,8 @@ from schemas.application import (AllocationIn, AllocationOut, ApplicationIn, App
                                  ApplicationOut, ApplicationPatch, LinkNotePatch, SupportIn, SupportOut)
 from schemas.effort import ComplexityIn, EffortSummaryOut, RateCardChangeOut, RateCardIn, RateCardOut
 from schemas.interface import InterfaceIn, InterfaceListOut, InterfaceOut
-from schemas.function_requirement import BrFrOut, FrIn, FrOut, FrPatch
+from schemas.function_requirement import (BrFrIn, BrFrOut, BrFrPatch, BrFrSolutionIn, FrBrOut, FrIn, FrOut, FrPatch,
+                                         WarningsOut)
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
@@ -338,10 +340,12 @@ def edit_br_solution(id: int, link_id: int, body: BrSolutionPatch,
     return sol_service.as_br_link(db, row)
 
 
-@router.delete("/business-requirements/{id}/solutions/{link_id}", status_code=204, **_br_sol_w.route)
+@router.delete("/business-requirements/{id}/solutions/{link_id}", response_model=WarningsOut, **_br_sol_w.route)
 def unlink_br_solution(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_sol_w.dep),
                        user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
-    sol_service.unlink(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id), row_version)
+    """200 with the D-52 drift warnings (slice10b §2.2): FRs whose tag now answers none of their BRs."""
+    return {"warnings": sol_service.unlink(db, _uid(user), _child(db, BrSolution, link_id, "br_id", br.br_id),
+                                           row_version)}
 
 
 # ---- function requirements (§7.5, D-27/D-28, docs/slice6a_spec.md) -------------------------
@@ -355,9 +359,10 @@ def _fr_out(fr: FunctionRequirement, warnings: list[str] | None = None) -> FrOut
 
 
 @router.get("/projects/{project_id}/function-requirements", response_model=list[FrOut], **_read.route)
-def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = False,
+def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = False, unassigned: bool = False,
              db: Session = Depends(get_db)):
-    return fr_service.list_frs(db, project_id, include_retired, unlinked)
+    """slice10b §6.10: `unlinked` = no live BR link (untraced); `unassigned` = no solution."""
+    return fr_service.list_frs(db, project_id, include_retired, unlinked, unassigned)
 
 
 @router.post("/projects/{project_id}/function-requirements", response_model=FrOut, status_code=201,
@@ -366,13 +371,14 @@ def create_fr(project_id: int, body: FrIn, user: AppUser = Depends(current_user)
     if body.solution_id is not None:
         components.require_on(db, project_id, "SOLUTION")
     fr, warnings = fr_service.create_fr(db, _uid(user), project_id, body.fr_name, body.fr_type_code,
-                                        body.solution_id, body.model_dump(include={"description", "acceptance_note"}))
+                                        body.solution_id, body.model_dump(include={"description", "acceptance_note"}),
+                                        br_id=body.br_id)
     return _fr_out(fr, warnings)
 
 
 @router.get("/function-requirements/{id}", response_model=FrOut, **_fr_r.route)
-def read_fr(id: int, fr: FunctionRequirement = Depends(_fr_r.dep)):
-    return fr
+def read_fr(id: int, fr: FunctionRequirement = Depends(_fr_r.dep), db: Session = Depends(get_db)):
+    return fr_service.with_br_count(db, fr)
 
 
 @router.patch("/function-requirements/{id}", response_model=FrOut, **_fr_w.route)
@@ -392,7 +398,8 @@ def _restore_fr(db: Session, actor_id: int, fr: FunctionRequirement) -> Function
     """DR7-P2: a rated FR needs EFFORT on, a linked one SOLUTION, before it comes back live."""
     components.require_on(db, fr.project_id, components.needed_for_rows([fr]))
     lifecycle.restore(db, actor_id, fr)
-    return fr
+    # slice10b §2.2 case 5: the tag comes back as it was; say so if it answers none of the FR's BRs
+    return _fr_out(fr_service.with_br_count(db, fr), fr_service.drift_warnings(db, [fr.fr_id], include_no_br=True))
 
 
 _retire_and_restore("function-requirements", FunctionRequirement, FrOut, on_restore=_restore_fr,
@@ -401,12 +408,63 @@ _retire_and_restore("function-requirements", FunctionRequirement, FrOut, on_rest
 
 @router.get("/solutions/{id}/function-requirements", response_model=list[FrOut], **_sol_r.route)
 def list_solution_frs(id: int, sol: Solution = Depends(_sol_r.dep), db: Session = Depends(get_db)):
-    return fr_service.frs_of_solution(db, sol)
+    counts = fr_service.br_counts(db, sol.project_id)
+    return [FrOut.model_validate(f).model_copy(update={"br_count": counts.get(f.fr_id, 0)})
+            for f in fr_service.frs_of_solution(db, sol)]
+
+
+# ---- BR ↔ FR, the direct mapping (D-52, docs/slice10b_schema.md §1.2, §2, §4.1) --------------------------
+# Link writes need FUNCTION_REQUIREMENT only (Q-11): a project with SOLUTION off can still map BR → FR.
+_br_fr_w = _og(BusinessRequirement, "EDIT", "FUNCTION_REQUIREMENT")
 
 
 @router.get("/business-requirements/{id}/function-requirements", response_model=list[BrFrOut], **_br_r.route)
 def list_br_frs(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return fr_service.frs_of_br(db, br)
+
+
+@router.post("/business-requirements/{id}/function-requirements", response_model=BrFrOut, status_code=201,
+             **_br_fr_w.route)
+def link_br_fr(id: int, body: BrFrIn, br: BusinessRequirement = Depends(_br_fr_w.dep),
+               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row, warnings = fr_service.link_fr(db, _uid(user), br, body.fr_id, body.coverage_note)
+    return {**fr_service.br_fr_row(db, row), "warnings": warnings}
+
+
+@router.patch("/business-requirements/{id}/function-requirements/{link_id}", response_model=BrFrOut,
+              **_br_fr_w.route)
+def edit_br_fr(id: int, link_id: int, body: BrFrPatch, br: BusinessRequirement = Depends(_br_fr_w.dep),
+               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = fr_service.edit_link_note(db, _uid(user), _child(db, BrFunctionRequirement, link_id, "br_id", br.br_id),
+                                    body.row_version, body.coverage_note)
+    return fr_service.br_fr_row(db, row)
+
+
+@router.delete("/business-requirements/{id}/function-requirements/{link_id}", response_model=WarningsOut,
+               **_br_fr_w.route)
+def unlink_br_fr(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_fr_w.dep),
+                 user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """200 with the drift warnings (§2.2): the FR's tag now answers none of its BRs, or it has no BR left."""
+    return {"warnings": fr_service.unlink_fr(
+        db, _uid(user), _child(db, BrFunctionRequirement, link_id, "br_id", br.br_id), row_version)}
+
+
+@router.put("/business-requirements/{id}/function-requirements/{link_id}/solution", response_model=BrFrOut,
+            **_br_fr_w.route)
+def tag_br_fr(id: int, link_id: int, body: BrFrSolutionIn, br: BusinessRequirement = Depends(_br_fr_w.dep),
+              user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """The FR's solution tag, from this BR's row: one of THIS BR's live solutions, or none (422 otherwise).
+    Setting one needs SOLUTION on too; clearing needs only FUNCTION_REQUIREMENT (Q-11)."""
+    if body.solution_id is not None:
+        components.require_on(db, br.project_id, "SOLUTION")
+    link = _child(db, BrFunctionRequirement, link_id, "br_id", br.br_id)
+    row, warnings = fr_service.set_solution_from_br(db, _uid(user), br, link, body.solution_id, body.fr_row_version)
+    return {**row, "warnings": warnings}
+
+
+@router.get("/function-requirements/{id}/business-requirements", response_model=list[FrBrOut], **_fr_r.route)
+def list_fr_brs(id: int, fr: FunctionRequirement = Depends(_fr_r.dep), db: Session = Depends(get_db)):
+    return fr_service.brs_of_fr(db, fr)
 
 
 # ---- rate card and effort days (§4.8, §7.13, D-13, docs/slice6c_spec.md) ----------------------
