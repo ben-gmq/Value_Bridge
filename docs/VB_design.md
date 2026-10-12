@@ -395,6 +395,16 @@ sections they name; those sections are rewritten when the slice that builds them
 | D-54 | **The DFD menu is its own screen: a flat list of DFDs on the left, the diagram on the right.** Ben: *"BFC and DFD looks very alike and confusing."* | One DFD per **direct parent of processes** (in a five-level chart, the L4s), listed flat with its code, name and process count, searchable, no tree. Selecting one draws its diagram on the right. Wider roll-up diagrams (an L2 or L3 with all processes below) still open from the function chart. Replaces the redirect into the function chart with a picker | D-51 DFD navigation |
 | D-55 | **An imperfect DFD file still imports, with warnings.** Ben: *"the DFD might not be perfect … we want some warning but still can upload and import."* | **Warn and import:** a process with no input/trigger or no output, an unconnected process, an unknown data entity name (created as a new entity, listed in the preview), an unknown performer (left blank), missing descriptions. The gaps then stay visible as a warnings panel on the diagram (D-38's freeze block is unchanged: an incomplete DFD can be imported, not frozen). **Still blocks** only what would damage data: unreadable file, wrong format version, a file for a different anchor or mode than chosen (R2-P3), a stale `row_version` (R2-D5) | §4.1a `validate_process_flow_json` error/warning split |
 
+### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
+
+Schema `docs/slice10b_schema.md` (apple). Ben, 2026-10-12: *"Accept all 21 items."*
+
+| # | Ruling | Supersedes | Source |
+|---|---|---|---|
+| S10b-1 | **All 21 [Q-n] in `slice10b_schema.md` §10 are accepted as recommended**, Q-14 (hash spec v2, the digest defect) included and landing in this slice | D-7's derived BR→FR, D-34 | apple Q-1…Q-21 |
+| S10b-2 | **Q-13 confirmed by Ben on its merits:** an FR with live BR links cannot be retired (409 naming the BRs), *"as it avoids silent data loss"* | — | Ben |
+| S10b-3 | **Q-4 warnings stay non-blocking, and Ben asked that they be reportable and trackable later.** Pending Ben's choice of how (see the 10b spec) | — | Ben |
+
 ### Slice 8 schema rulings — the baseline freeze (wave 1d), 2026-10-11
 
 Schema `docs/slice8_schema.md` (apple). Ben, 2026-10-11: *"For every decision that I need to make, I will
