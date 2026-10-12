@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Divider, FormControlLabel, Stack, Switch, TextField, Typography } from '@mui/material';
-import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined';
 import { errorKind, errorText, isStale } from '../../api/client';
 import { bfcApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
@@ -18,13 +17,12 @@ import { CompletenessPanel, PerformerPanel, TriggerPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
+import { BrSection } from '../requirements/BrEditor';
 
 const STEP_SINGLE = ['ACCOUNTABLE'];      // services/raci.py SINGLE[BfcNodeOrgRole] — several R are normal (D-46)
 
 const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose_desc ?? '',
   data_processing_desc: n.data_processing_desc ?? '' });
-
-const firstLine = (s) => (s ?? '').split('\n')[0];
 
 // "Restore these first: A; B" → ['A', 'B'] — the names are the server's, shown as text.
 const restoreFirstList = (err) => {
@@ -165,29 +163,6 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
           </Alert>
         )}
 
-        {node.is_process && br && (
-          <Box sx={(th) => ({ px: 2, py: 1.5, borderRadius: '18px', bgcolor: th.vars.palette.brand.ftc,
-            display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' })}>
-            <AutoAwesomeOutlined aria-hidden sx={(th) => ({ fontSize: 20, color: th.vars.palette.brand.purpleLight })} />
-            <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
-              <Typography sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-                color: th.vars.palette.brand.onFtcTile })}>{t('processes.brBanner')}</Typography>
-              <Typography sx={(th) => ({ fontSize: 14.5, fontWeight: 600, color: th.vars.palette.brand.onFtc,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
-                <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 13.5, mr: 1,
-                  color: th.vars.palette.brand.purpleLight })}>{br.br_number}</Box>
-                {!br.is_active && <Tag tone="neutral" sx={{ mr: 1, height: 20 }}>{t('processes.retiredChip')}</Tag>}
-                {firstLine(br.br_statement) || <Box component="span" sx={(th) => ({ color: th.vars.palette.brand.onFtcTile, fontWeight: 400 })}>
-                  {t('processes.brNoStatement')}</Box>}
-              </Typography>
-            </Box>
-            <Button variant="contained" size="small" component={RouterLink} to={links.requirement(projectId, br.br_id)}
-              sx={(th) => ({ bgcolor: th.vars.palette.brand.onFtc, color: th.vars.palette.brand.ftc,
-                '&:hover': { bgcolor: th.vars.palette.brand.onFtcTile } })}>
-              {t('processes.openRequirement')}</Button>
-          </Box>
-        )}
-
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'minmax(0,1fr) minmax(0,1fr)' } }}>
           <TextField fullWidth id="node-parent" label={node.level_no > 1 ? t('processes.parentLevel', { n: node.level_no - 1 }) : t('processes.parent')} disabled
             value={parent ? `${parent.hier_code} ${parent.node_name}` : t('processes.noParent')} />
@@ -234,9 +209,12 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
           </>)}
         </Stack>
 
+        {/* D-53: the process's business requirement is part of the chart — read and edited here. */}
+        {node.is_process && br && <><Divider /><BrSection projectId={projectId} brId={br.br_id} onNotice={onNotice} /></>}
         {node.is_process && (
           <>
             <Divider />
+            <SectionLabel>{t('processes.stepFacts')}</SectionLabel>
             <Box sx={twoCol}>
               <StepData projectId={projectId} node={node} disabled={!editable} />
               <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}

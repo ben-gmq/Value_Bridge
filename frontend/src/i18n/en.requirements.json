@@ -1,14 +1,10 @@
 {
   "requirements.title": "Business requirements",
   "requirements.building": "This screen is being built in Slice 1.",
-  "requirements.subtitle": "One requirement per process step — created with the step, edited here",
-  "requirements.count": "{n} requirements",
   "requirements.statement": "Requirement statement",
   "requirements.status": "Status",
-  "requirements.empty": "No requirements yet. A requirement appears when a function in the chart is marked as a process step.",
-  "requirements.goProcesses": "Go to the business function chart",
   "requirements.backToNode": "Open in the function chart",
-  "requirements.detailSubtitle": "One requirement per process step · created with the step, edited here",
+  "requirements.detailSubtitle": "One requirement per process step · created with the step, edited here or in its panel in the function chart",
   "requirements.requirement": "Requirement",
   "requirements.logic": "Business logic",
   "requirements.output": "Output expectation",
@@ -54,5 +50,7 @@
   "requirements.recordVersion": "Version",
   "requirements.recordStatus": "Baseline status",
   "requirements.recordState": "State",
-  "requirements.recordLock": "If someone else saves first, your save is stopped and you are asked to reload — nothing is overwritten."
+  "requirements.recordLock": "If someone else saves first, your save is stopped and you are asked to reload — nothing is overwritten.",
+  "requirements.panelTitle": "Business requirement",
+  "requirements.openPage": "Open the requirement page"
 }

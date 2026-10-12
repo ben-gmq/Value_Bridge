@@ -5,7 +5,6 @@ import { Box, ButtonBase, Drawer, IconButton, Menu, MenuItem, Tooltip, Typograph
 import { useColorScheme, useTheme } from '@mui/material/styles';
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined';
 import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOutlined';
-import AssignmentOutlined from '@mui/icons-material/AssignmentOutlined';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
@@ -39,7 +38,6 @@ export const NAV = [
     ['nav.dashboard', '', DashboardOutlined],
     ['nav.functions', 'processes', AccountTreeOutlined],
     ['nav.dfdLong', 'dfd', HubOutlined, ['TO_BE_DFD', 'AS_IS']],
-    ['nav.requirementsLong', 'requirements', AssignmentOutlined],
     ['nav.entities', 'data', StorageOutlined],
     ['nav.solutions', 'br-fr', LightbulbOutlined, ['SOLUTION', 'FUNCTION_REQUIREMENT']],
     ['nav.frs', 'br-fr/frs', ViewQuiltOutlined, ['FUNCTION_REQUIREMENT']],
@@ -55,11 +53,19 @@ export const NAV = [
   ] },
 ];
 const ITEMS = NAV.flatMap((g) => g.items.map((i) => ({ group: g.group, key: i[0], path: i[1] })));
+// Pages that belong to an item without a rail entry of their own. D-53: a business requirement is part
+// of the function chart, so its deep link (requirements/:id) sits under Business functions.
+const ALSO = { requirements: 'nav.functions' };
 
 // The current section: the item whose path is the longest prefix of the route under /p/:id.
 function sectionOf(rest) {
-  const hits = ITEMS.filter((i) => i.path && (rest === i.path || rest.startsWith(`${i.path}/`)));
-  if (!hits.length) return rest === '' ? ITEMS[0] : null;
+  const under = (path) => path && (rest === path || rest.startsWith(`${path}/`));
+  const hits = ITEMS.filter((i) => under(i.path));
+  if (!hits.length) {
+    const alias = Object.keys(ALSO).find(under);
+    if (alias) return ITEMS.find((i) => i.key === ALSO[alias]);
+    return rest === '' ? ITEMS[0] : null;
+  }
   return hits.reduce((a, b) => (b.path.length > a.path.length ? b : a));
 }
 

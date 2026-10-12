@@ -3,8 +3,16 @@
 export const links = {
   processes: (p, bfcSet) => (bfcSet === 'AS_IS' ? `/p/${p}/processes?set=AS_IS` : `/p/${p}/processes`),
   node: (p, nodeId, bfcSet) => `/p/${p}/processes?node=${nodeId}${bfcSet === 'AS_IS' ? '&set=AS_IS' : ''}`,
-  dfd: (p, nodeId) => `/p/${p}/processes/${nodeId}/dfd`,
-  requirements: (p) => `/p/${p}/requirements`,
+  dfd: (p, nodeId) => `/p/${p}/processes/${nodeId}/dfd`,         // any node's roll-up diagram, opened from the chart
+  // D-54: the DFD screen — one diagram per direct parent of processes, the selected one in the URL.
+  dfds: (p, nodeId, bfcSet) => {
+    const q = new URLSearchParams();
+    if (nodeId != null) q.set('node', nodeId);
+    if (bfcSet === 'AS_IS') q.set('set', 'AS_IS');
+    const qs = q.toString();
+    return qs ? `/p/${p}/dfd?${qs}` : `/p/${p}/dfd`;
+  },
+  // D-53: no requirement list — a BR lives in its process's panel; this deep link stays (FRs, solutions, the diff).
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   solutions: (p) => `/p/${p}/br-fr`,          // the BR–FR map opens on its Solutions tab (S6a-4)
   solution: (p, solId) => `/p/${p}/br-fr/${solId}`,
