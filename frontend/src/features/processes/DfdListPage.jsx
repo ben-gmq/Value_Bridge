@@ -101,7 +101,7 @@ export default function DfdListPage() {
             </Box>
           </Card>
           {selected && (
-            <DfdView key={selected.bfc_node_id} projectId={projectId} nodeId={String(selected.bfc_node_id)} backToChart={false} container
+            <DfdView key={selected.bfc_node_id} projectId={projectId} nodeId={String(selected.bfc_node_id)} chartLabel={t('processes.dfdList.openInChart')} container
               frame={(f) => (
                 <Box component="section" aria-label={f.title} sx={{ minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>

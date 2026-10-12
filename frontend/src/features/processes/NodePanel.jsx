@@ -17,7 +17,7 @@ import { CompletenessPanel, PerformerPanel, TriggerPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepData, StepFlows, stepKey } from './StepSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
-import { BrSection } from '../requirements/BrEditor';
+import { BrSection, useBrEditor } from '../requirements/BrEditor';
 
 const STEP_SINGLE = ['ACCOUNTABLE'];      // services/raci.py SINGLE[BfcNodeOrgRole] — several R are normal (D-46)
 
@@ -37,8 +37,11 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const nodeQ = useQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
   const node = nodeQ.data;
   const form = useEditForm(node, pickNode);
+  // D-53: the process's requirement is edited in this panel, and one Save covers both (Ben, 2026-10-12).
+  const brEd = useBrEditor({ projectId, brId: br?.br_id, onNotice, embedded: true });
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
+  const [nodeRefused, setNodeRefused] = useState(false);     // stays "not saved" after its dialog closes
   const [retiringStep, setRetiringStep] = useState(false);
   // Which restore fits a retired step is the server's call (SR-1): a step is offered the
   // with-dependents restore until a 409 says it was retired on its own.
@@ -62,13 +65,14 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
       }
       return bfcApi.update(nodeId, body);
     },
-    onSaved: (row) => { form.saved(row); qc.setQueryData(keys.node(nodeId), row); refreshAll(); onNotice(t('processes.saved')); },
+    onSaved: (row) => { form.saved(row); qc.setQueryData(keys.node(nodeId), row); refreshAll(); },
   });
   const reload = async () => {
     try {
       const fresh = await qc.fetchQuery({ queryKey: keys.node(nodeId), queryFn: () => bfcApi.get(nodeId) });
       form.rebase(fresh);
       save.setError('');
+      setNodeRefused(false);
     } catch (err) {
       save.setError(errorText(err, t('common.error')));
     } finally {
@@ -130,7 +134,23 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const asIs = node.bfc_set_code === 'AS_IS';
   const dfdOn = asIs ? isOn('AS_IS') : isOn('TO_BE_DFD');      // the chart's DFD component (D-37, D-47)
   const v = form.values;
-  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending;
+  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending || Boolean(brEd.busy);
+  const showBr = Boolean(node.is_process && br && brEd.br);
+  const nodeSavable = live && form.dirty && v.node_name.trim() !== '';
+  const brSavable = showBr && brEd.canSave;
+  // One Save: only what is dirty, the function first, then its requirement. Each keeps its own
+  // row_version check; a refusal leaves the other saved, keeps the refused edits and shows its own
+  // conflict dialog or error (useFormSave), and its save-state chip turns to "not saved".
+  const saveAll = async () => {
+    save.setError('');
+    const nodeOk = nodeSavable ? await save.m.mutateAsync().then(() => true, () => false) : true;
+    if (nodeSavable) setNodeRefused(!nodeOk);
+    const brOk = brSavable ? await brEd.saveNow() : true;
+    if (nodeOk && brOk) onNotice(t(brSavable ? (nodeSavable ? 'processes.savedBoth' : 'requirements.saved') : 'processes.saved'));
+    else if (nodeSavable && brSavable && (nodeOk || brOk)) onNotice(t(nodeOk ? 'processes.savedNodeOnly' : 'processes.savedBrOnly'));
+  };
+  const discardAll = () => { form.discard(); setNodeRefused(false); if (showBr) brEd.discard(); };
+  const anyDirty = form.dirty || (showBr && brEd.dirty);
   const restoreWithDependents = node.is_process && plainFor !== nodeId;
   const note = !live && restoreNote?.nodeId === nodeId ? restoreNote : null;
   const canSwitch = editable && node.level_no >= FIRST_PROCESS_LEVEL;
@@ -142,7 +162,9 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
       {node.is_process && <Tag tone="purple">{t('processes.processChip')}</Tag>}
       {!live && <Tag tone="neutral">{t('processes.retiredChip')}</Tag>}
-      {form.dirty
+      {form.dirty && nodeRefused
+        ? <Status tone="escalate" size="sm">{t('processes.notSaved')}</Status>
+        : form.dirty
         ? <Status tone="caution" size="sm">{t('processes.unsaved')}</Status>
         : <Status tone="ok" size="sm">{t('processes.savedVersion', { v: node.row_version })}</Status>}
     </Stack>
@@ -150,7 +172,7 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const twoCol = { display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1fr) minmax(0,1.15fr)' } };
 
   return (
-    <Card title={t('processes.panelTitle', { n: node.level_no, name: node.node_name })} action={headerAction}>
+    <Card title={t('processes.panelTitle', { n: node.level_no, name: node.node_name })} action={headerAction} sx={{ overflow: 'visible' }}>
         {actionError && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
         {save.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
         {note?.hint && <Alert severity="info" onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
@@ -201,16 +223,10 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             <Button disabled={busy} onClick={() => { setActionError(''); setRestoreNote(null); restore.mutate(restoreWithDependents); }}>
               {t(restoreWithDependents ? 'processes.restoreWithDependents' : 'processes.restore')}</Button>
           )}
-          <Box sx={{ flex: 1 }} />
-          {canEdit && (<>
-          <Button variant="outlined" color="warning" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>
-          <Button variant="contained" disabled={!live || !form.dirty || busy || !v.node_name.trim()}
-            onClick={() => { save.setError(''); save.m.mutate(); }}>{t('processes.save')}</Button>
-          </>)}
         </Stack>
 
         {/* D-53: the process's business requirement is part of the chart — read and edited here. */}
-        {node.is_process && br && <><Divider /><BrSection projectId={projectId} brId={br.br_id} onNotice={onNotice} /></>}
+        {node.is_process && br && <><Divider /><BrSection projectId={projectId} ed={brEd} /></>}
         {node.is_process && (
           <>
             <Divider />
@@ -256,6 +272,17 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
             </Box>
           </>
         )}
+      {canEdit && (
+        <Box sx={(th) => ({ position: 'sticky', bottom: 0, zIndex: 2, mx: -2.5, mb: -2.5, px: 2.5, py: 1.5,
+          display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end',
+          bgcolor: th.vars.palette.background.paper, borderTop: `1px solid ${th.vars.palette.divider}`,
+          borderBottomLeftRadius: 24, borderBottomRightRadius: 24 })}>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mr: 'auto' }}>
+            {t(showBr ? 'processes.saveCoversBoth' : 'processes.saveCoversNode')}</Typography>
+          <Button variant="outlined" color="warning" disabled={!anyDirty || busy} onClick={discardAll}>{t('processes.discard')}</Button>
+          <Button variant="contained" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAll}>{t('common.save')}</Button>
+        </Box>
+      )}
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('processes.retireTitle')}
         body={t('processes.retireBody', { name: `${node.hier_code} ${node.node_name}` })}

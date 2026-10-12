@@ -33,8 +33,10 @@ const WIDE = '@container (min-width: 700px)';
  * One business requirement, read and edited (mockup 03). D-53: the same editor serves the BR page and
  * the process's panel in the function chart, so the two never drift. Returns the parts; the caller
  * lays them out. `onNotice` receives the success messages.
+ * `embedded`: the process panel owns Save and Discard (one Save for the function and its BR, Ben
+ * 2026-10-12) — `actions` then carries only retire/restore, and the panel calls `saveNow`/`discard`.
  */
-export function useBrEditor({ projectId, brId, onNotice }) {
+export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
   const { isOn } = useComponents(projectId);
   const canEdit = useCanEdit();             // UAT 7b: a viewer sees the requirement, not its controls
   const qc = useQueryClient();
@@ -44,6 +46,9 @@ export function useBrEditor({ projectId, brId, onNotice }) {
   const form = useEditForm(br, pickBr);
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
+  // A refused save (stale version or a validation error) stays marked "not saved" after its dialog
+  // closes, until a save succeeds, the edits are discarded or the record is reloaded.
+  const [refused, setRefused] = useState(false);
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: keys.br(brId) });
@@ -61,13 +66,17 @@ export function useBrEditor({ projectId, brId, onNotice }) {
       }
       return brApi.update(br.br_id, body);
     },
-    onSaved: (row) => { form.saved(row); qc.setQueryData(keys.br(brId), row); refreshAll(); onNotice(t('requirements.saved')); },
+    onSaved: (row) => {
+      form.saved(row); qc.setQueryData(keys.br(brId), row); refreshAll();
+      if (!embedded) onNotice(t('requirements.saved'));           // the panel announces its one Save itself
+    },
   });
   const reload = async () => {
     try {
       const fresh = await qc.fetchQuery({ queryKey: keys.br(brId), queryFn: () => brApi.get(brId) });
       form.rebase(fresh);
       save.setError('');
+      setRefused(false);
     } catch (err) {
       save.setError(errorText(err, t('common.error')));
     } finally {
@@ -88,6 +97,13 @@ export function useBrEditor({ projectId, brId, onNotice }) {
     onSuccess: (row) => { setActionError(''); qc.setQueryData(keys.br(brId), row); refreshAll(); onNotice(t('requirements.restored')); },
     onError: actionFail,
   });
+
+  // Resolves true when saved, false when refused (the refusal itself is shown by useFormSave).
+  const saveNow = () => {
+    save.setError('');
+    return save.m.mutateAsync().then(() => { setRefused(false); return true; }, () => { setRefused(true); return false; });
+  };
+  const discard = () => { form.discard(); setRefused(false); };
 
   if (!br || !form.values) return { br: null, error: brQ.error, getLabel };
 
@@ -113,12 +129,14 @@ export function useBrEditor({ projectId, brId, onNotice }) {
       ) : (
         <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('requirements.restore')}</Button>
       ))}
-      {canEdit && <Button variant="outlined" disabled={!form.dirty || busy} onClick={form.discard}>{t('processes.discard')}</Button>}
-      {canEdit && <Button variant="contained" disabled={!editable || !form.dirty || busy}
-        onClick={() => { save.setError(''); save.m.mutate(); }}>{t('requirements.save')}</Button>}
+      {canEdit && !embedded && <Button variant="outlined" disabled={!form.dirty || busy} onClick={discard}>{t('processes.discard')}</Button>}
+      {canEdit && !embedded && <Button variant="contained" disabled={!editable || !form.dirty || busy}
+        onClick={saveNow}>{t('requirements.save')}</Button>}
     </>
   );
-  const saveState = form.dirty
+  const saveState = refused && form.dirty
+    ? <Status tone="escalate" size="sm">{t('requirements.notSaved')}</Status>
+    : form.dirty
     ? <Status tone="caution" size="sm">{t('requirements.unsaved')}</Status>
     : <Status tone="ok" size="sm">{t('requirements.savedVersion', { v: form.version })}</Status>;
   const alerts = (
@@ -166,13 +184,15 @@ export function useBrEditor({ projectId, brId, onNotice }) {
         busy={retire.isPending} onClose={() => setConfirmRetire(false)} onConfirm={() => retire.mutate()} />
     </>
   );
+
   return { br, error: brQ.error, getLabel, live, actions, saveState, alerts, fields, dialogs,
+    dirty: form.dirty, canSave: editable && form.dirty, busy, saveNow, discard,
     coverage: isOn('FUNCTION_REQUIREMENT') ? <CoveragePanel projectId={projectId} brId={br.br_id} /> : null };
 }
 
-/** The process's business requirement inside its panel in the function chart (D-53). */
-export function BrSection({ projectId, brId, onNotice }) {
-  const ed = useBrEditor({ projectId, brId, onNotice });
+/** The process's business requirement inside its panel in the function chart (D-53). The panel owns the
+ * editor (`useBrEditor({ embedded: true })`) so its one Save covers the function and the requirement. */
+export function BrSection({ projectId, ed }) {
   if (ed.error) return <Alert severity="error">{errorText(ed.error)}</Alert>;
   if (!ed.br) return <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
   const { br } = ed;

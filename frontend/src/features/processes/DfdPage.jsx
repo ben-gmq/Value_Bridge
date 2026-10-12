@@ -473,7 +473,7 @@ function Inspector({ g, sel, onSelect, projectId, canEdit }) {
  * `frame` lays out the parts — the roll-up route wraps them in a page of their own, the DFD screen
  * (D-54) puts them beside its list — so there is one diagram, drawn one way (law 8).
  */
-export function DfdView({ projectId, nodeId, frame, backToChart = true, container = false }) {
+export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.backToChart'), container = false }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -556,8 +556,7 @@ export function DfdView({ projectId, nodeId, frame, backToChart = true, containe
     <>
       <Segmented size="sm" label={t('processes.flowView')} value={view} onChange={setView}
         options={[{ value: 'diagram', label: t('processes.viewDiagram') }, { value: 'table', label: t('processes.viewTable') }]} />
-      {backToChart && (
-        <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{t('processes.backToChart')}</Button>)}
+      <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{chartLabel}</Button>
       <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
       {canEdit && (
         <Button color="warning" disabled={!g || reset.isPending}

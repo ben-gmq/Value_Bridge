@@ -45,7 +45,6 @@
   "processes.retired": "Function retired.",
   "processes.restored": "Function restored.",
   "processes.discard": "Discard changes",
-  "processes.save": "Save function",
   "processes.saved": "Function saved.",
   "processes.staleAction": "Someone else changed this first. It has been reloaded — try again.",
   "processes.staleLink": "Someone else changed this first. It has been reloaded — try again.",
@@ -303,5 +302,12 @@
   "processes.dfdList.noMatch": "No diagram matches the search.",
   "processes.dfdList.empty": "There is no diagram yet: a data flow diagram appears when a function in the to-be chart has process steps below it.",
   "processes.dfdList.emptyAsIs": "There is no diagram yet: a data flow diagram appears when a function in the as-is chart has process steps below it.",
-  "processes.dfdList.goChart": "Go to the business function chart"
+  "processes.dfdList.goChart": "Go to the business function chart",
+  "processes.notSaved": "Not saved",
+  "processes.savedBoth": "Function and requirement saved.",
+  "processes.savedNodeOnly": "Function saved. The requirement was not saved — see its message.",
+  "processes.savedBrOnly": "Requirement saved. The function was not saved — see its message.",
+  "processes.saveCoversBoth": "Save covers the function and its requirement.",
+  "processes.saveCoversNode": "Save covers this function.",
+  "processes.dfdList.openInChart": "Open in the function chart"
 }
