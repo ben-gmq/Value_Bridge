@@ -5,7 +5,8 @@ composites keep a pairing inside one project. vb_app gets SELECT/INSERT/UPDATE f
 and no DELETE (law 1).
 
 Downgrade [Q-21]: refuses while any row exists that 0051's backfill did not insert (its BR_FR_BACKFILLED events
-list every id it wrote), or any row was changed since (row_version > 1). A downgrade never destroys a link a
+list every id it wrote, matched by project and to an event no older than the row, because ids restart after a
+drop and old events stay), or any row was changed since (row_version > 1). A downgrade never destroys a link a
 person made.
 
 Revision ID: 0049
@@ -52,6 +53,8 @@ def downgrade() -> None:
                         OR NOT EXISTS (SELECT 1 FROM audit_event e,
                                               jsonb_array_elements(e.detail -> 'link_ids') AS x(id)
                                        WHERE e.event_type = 'BR_FR_BACKFILLED'
+                                         AND e.project_id = l.project_id
+                                         AND l.created_at <= e.occurred_at   -- ids restart after a drop:
                                          AND x.id::text::bigint = l.br_function_requirement_id)) THEN
             RAISE EXCEPTION 'br_function_requirement holds links made or changed after 0051: downgrade refused';
           END IF;

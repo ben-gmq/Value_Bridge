@@ -121,3 +121,47 @@ def test_downgrades_refuse_once_a_person_made_a_link_or_a_baseline_froze_one(cli
     with pytest.raises(Exception, match="downgrade refused"):
         command.downgrade(cfg, "0049")               # 0050 refuses: frozen links are evidence
     assert q(owner, "SELECT count(*) FROM br_function_requirement")[0][0] == 1
+
+
+def test_a_link_reusing_an_old_backfilled_id_still_refuses_the_downgrade(client, ed, owner):
+    """sara M1: ids restart when the table is dropped and re-created, and old BR_FR_BACKFILLED events stay
+    (append-only). A person's link that lands on an id an older event lists must still refuse 0049's downgrade."""
+    world(client, ed)
+    cfg = _cfg()
+    command.downgrade(cfg, "0048")
+    command.upgrade(cfg, "head")                     # first backfill: ids 1..5
+    command.downgrade(cfg, "0048")
+    with owner.begin() as c:                         # one mapping fewer before the second run
+        c.execute(text("UPDATE br_solution SET is_active = false, deleted_at = now() WHERE br_solution_id = "
+                       "(SELECT max(br_solution_id) FROM br_solution WHERE is_active)"))
+    command.upgrade(cfg, "head")                     # second backfill: fewer ids, restarting at 1
+    n = q(owner, "SELECT count(*) FROM br_function_requirement")[0][0]
+    f = fr(client, ed, name="Made by a person")
+    br = client.get(f"{API}/projects/{ed['p']}/business-requirements", headers=ed["h"]).json()[0]
+    r = client.post(f"{API}/business-requirements/{br['br_id']}/function-requirements", headers=ed["h"],
+                    json={"fr_id": f["fr_id"]})
+    assert r.status_code == 201, r.text
+    assert r.json()["br_function_requirement_id"] <= 5 + 2   # an id the first event listed
+    assert q(owner, "SELECT count(*) FROM audit_event, jsonb_array_elements(detail -> 'link_ids') x(id) "
+                    "WHERE event_type = 'BR_FR_BACKFILLED' AND x.id::text::bigint = :i",
+             i=r.json()["br_function_requirement_id"])[0][0] >= 1
+    with pytest.raises(Exception, match="downgrade refused"):
+        command.downgrade(cfg, "0048")
+    assert q(owner, "SELECT count(*) FROM br_function_requirement")[0][0] == n + 1
+
+
+def test_a_rerun_after_a_person_unlinked_a_backfilled_pair_succeeds(client, ed, owner):
+    """sara M2: a pair unlinked on purpose after 0051 is a decision; re-running 0051 neither fails nor revives it."""
+    w = world(client, ed)
+    cfg = _cfg()
+    command.downgrade(cfg, "0048")
+    command.upgrade(cfg, "head")
+    br = w["brs"][0]
+    row = client.get(f"{API}/business-requirements/{br['br_id']}/function-requirements", headers=ed["h"]).json()[0]
+    r = client.delete(f"{API}/business-requirements/{br['br_id']}/function-requirements/"
+                      f"{row['br_function_requirement_id']}", headers=ed["h"], params={"row_version": row["row_version"]})
+    assert r.status_code == 200, r.text
+    command.downgrade(cfg, "0050")
+    command.upgrade(cfg, "head")
+    assert q(owner, "SELECT is_active FROM br_function_requirement WHERE br_function_requirement_id = :i",
+             i=row["br_function_requirement_id"])[0][0] is False

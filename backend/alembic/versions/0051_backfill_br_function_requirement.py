@@ -3,7 +3,9 @@ direct link (D-52; docs/slice10b_schema.md §3.1, §3.2, §3.4, §6.1, §9). Run
 
 1. Live paths [Q-7]: one link per live BR_SOLUTION → SOLUTION → FR path — exactly the rows the 0024 view
    returns. created_by = the BR_SOLUTION's author, coverage_note NULL. Asserted: after the insert, every pair the
-   old view returned has a live link.
+   old view returned has a link row (live, or unlinked on purpose after an earlier run). OLD_PAIRS adds
+   br.is_active to the 0024 view's joins; the two are equal because brsol_under_inactive forbids a live pairing
+   under a retired BR.
 2. Step-retired paths [Q-8]: a br_solution row retired by a step retire (stamped with the deleted_at of a
    STEP_RETIRED_WITH_DEPENDENTS event that lists it) gives a RETIRED link for each live FR tagged with its
    solution, stamped with the same deleted_at / deleted_by, so undoing that step retire brings the links back.
@@ -60,7 +62,7 @@ def upgrade() -> None:
           SELECT count(*) INTO expected FROM ({OLD_PAIRS}) o;
           SELECT count(*) INTO covered FROM ({OLD_PAIRS}) o
           WHERE EXISTS (SELECT 1 FROM br_function_requirement l
-                        WHERE l.br_id = o.br_id AND l.fr_id = o.fr_id AND l.is_active);
+                        WHERE l.br_id = o.br_id AND l.fr_id = o.fr_id);   -- a dead row is a decision, not a loss
           IF covered <> expected THEN
             RAISE EXCEPTION 'backfill covers % of % derived BR-FR paths', covered, expected;
           END IF;
