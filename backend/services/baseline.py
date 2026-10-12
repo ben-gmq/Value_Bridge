@@ -57,9 +57,12 @@ def _next(prior: Baseline | None, bump: str) -> tuple[int, int]:
     return (prior.major_no + 1, 0) if bump == "MAJOR" else (prior.major_no, prior.minor_no + 1)
 
 
-def counts(db: Session, baseline_id: int) -> dict[str, int]:
-    return {e.table: db.scalar(select(func.count()).select_from(freeze_set.shadow(e.table))
-                               .where(freeze_set.shadow(e.table).c.baseline_id == baseline_id))
+def counts(db: Session, baseline_id: int, version: int | None = None) -> dict[str, int | None]:
+    """Rows per entity. None (not 0) for an entity not in the set at the baseline's hash spec: it was not
+    frozen at that spec, which is different from frozen with no rows (slice10b §5.3)."""
+    return {e.table: (None if version is not None and freeze_set.columns_for(e, version) is None else
+                      db.scalar(select(func.count()).select_from(freeze_set.shadow(e.table))
+                                .where(freeze_set.shadow(e.table).c.baseline_id == baseline_id)))
             for e in FREEZE_SET}
 
 
@@ -238,7 +241,7 @@ def agreed_id(baselines: list[Baseline]) -> int | None:
 def verify(db: Session, b: Baseline) -> bool:
     """DR8-S1, sara M3: the shadows still hold exactly what was frozen — no row added, removed or re-hashed
     (the digest), and no row whose columns no longer match its own hash."""
-    if freeze_set.digest(db, b.project_id, frozenset(), b.baseline_id) != b.content_digest:
+    if freeze_set.digest(db, b.project_id, frozenset(), b.baseline_id, b.hash_spec_version) != b.content_digest:
         return False
     return all(freeze_set.rehash_mismatches(db, e, b.baseline_id, b.hash_spec_version) == 0 for e in FREEZE_SET)
 
@@ -265,7 +268,7 @@ def header(db: Session, b: Baseline) -> dict:
 
 
 def detail(db: Session, b: Baseline) -> dict:
-    return {**header(db, b), "intact": verify(db, b), "components": components_of(db, b.baseline_id), "counts": counts(db, b.baseline_id)}
+    return {**header(db, b), "intact": verify(db, b), "components": components_of(db, b.baseline_id), "counts": counts(db, b.baseline_id, b.hash_spec_version)}
 
 
 # ---- rows of one side ------------------------------------------------------------------------------------
@@ -319,6 +322,9 @@ def rows(db: Session, b: Baseline, table: str, offset: int, limit: int) -> dict:
     if table not in BY_TABLE:
         raise HTTPException(400, "Not a frozen entity")
     t = freeze_set.shadow(table)
+    if freeze_set.columns_for(BY_TABLE[table], b.hash_spec_version) is None:     # not frozen at this spec
+        return {"entity": table, "area": BY_TABLE[table].area, "total": None, "frozen": False,
+                "columns": [], "rows": []}
     total = db.scalar(select(func.count()).select_from(t).where(t.c.baseline_id == b.baseline_id))
     page = [dict(r) for r in db.execute(select(t).where(t.c.baseline_id == b.baseline_id)
                                         .order_by(t.c.source_id).offset(offset).limit(limit)).mappings()]
