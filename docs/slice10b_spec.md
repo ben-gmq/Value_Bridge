@@ -1,6 +1,6 @@
 # Slice 10b: Business requirement ↔ function requirement, direct (D-52)
 
-**Date:** 2026-10-12 · **Author:** Lilly · **Status:** rev 1 — Ben's rulings S10b-1…S10b-3 (2026-10-12); design review round 1 pending
+**Date:** 2026-10-12 · **Author:** Lilly · **Status:** rev 1 — Ben's rulings S10b-1…S10b-3 (2026-10-12); design review round 1 applied (13 findings, 1 HIGH, all accepted)
 **Builds on:** D-52 (§1a "Ben's front-end review — 2026-10-12"), which reverses D-7's derived BR→FR; D-28 (FR without a
 solution); D-37 (components); D-53 (BR edited inside the function chart, Slice 10a); S5-1, S5-3, S6a-1, S6b-3, S8-1.
 Schema: `docs/slice10b_schema.md` (apple), **all 21 [Q-n] accepted as recommended** (S10b-1). This file is the
@@ -111,5 +111,23 @@ downgrade refuses rather than destroy links or frozen rows written after it (Q-2
 7. A tag that drifts outside its FR's BRs is warned about — on the action, on the control panel, and in the
    freeze record with the rows named — and never blocks the freeze or changes silently.
 
-## 10. Design review round 1 of 2
-_Pending (design-auditor)._
+## 10. Design review round 1 of 2 (design-auditor, 2026-10-12)
+
+13 findings (1 HIGH, 6 MEDIUM, 6 LOW). All accepted and sent to the build, which ran in parallel with the review
+(Ben, 2026-10-12: "start doing the spec and also building").
+
+| Id | Rating | Finding | Disposition |
+|---|---|---|---|
+| DR10b-P1 | HIGH | Only side "a" derived its links, so v1→v1 and newer→older diffs showed every link REMOVED | **Fix** — derive each pre-v2 side independently (`derived_sides`), always match the link on `(br_id, fr_id)`; tests v1→v1, v2→v1, v1→v2, v1→live |
+| DR10b-D1 | MED | Derived v1 links not in the side cache, so `priced` / `_exposed` read an empty shadow (false `untraced_days`) | **Fix** — derive once per side into the cache; every reader uses the cache |
+| DR10b-D2 | MED | A coverage note added after a v1 baseline is hidden by pair matching | **Fix** — a derived note is NULL; a non-null note on the other side is CHANGED |
+| DR10b-D3 | MED | `_e()` hard-codes v1 and the docstring states the old rule, so a future entity re-breaks every old baseline; a self-referential digest test proves nothing | **Fix** — `_e(since=)`, a module assert pinning today's 24 v1 entities, docstrings corrected, golden digest from a literal copy of the pre-10b algorithm |
+| DR10b-P2 | MED | Step restore's same-stamp read could revive a link under a retired FR, or restore a row twice | **Fix** — merge and dedupe before the parent and component checks |
+| DR10b-P3 | MED | `create_fr` + `br_id`: tag could bypass the BR rule; no BR lock; cross-project `br_id` → 500 | **Fix** — create, then the same `link_fr` (scoped 404, locks); both ids sent → the BR-row rule (422) |
+| DR10b-S1 | MED | The tag PUT could write through a dead or stale link | **Fix** — lock the link FOR SHARE, require it live and on this FR, else 409; unlink locks FOR UPDATE first |
+| DR10b-S2 | LOW | Drift warnings could miss a concurrent tag write (the schema's claim that `solution.unlink` locks first is not true in code) | **Fix** — both unlinks lock the row first and compute drift after the flush; the register path locks the answering BR_SOLUTION |
+| DR10b-S3 | LOW | `fr_solution_outside_its_brs` would block the freeze unless listed in `WARNINGS` | **Fix** — added to `WARNINGS`; test a freeze with a drifted tag |
+| DR10b-S4 | LOW | `warning_detail` unbounded and carrying client names into the append-only audit, which a purge cannot clean | **Fix** — per warning `{count, numbers}` (first 100), numbers only, no names |
+| DR10b-D4 | LOW | v1 baselines show "0 links" | **Fix** — `null`, "not frozen at this spec" |
+| DR10b-P4 | LOW | 0051 not re-runnable after its downgrade; writes between the count and the insert | **Fix** — SHARE locks before the count, insert `NOT EXISTS`, assert existing + inserted = view; event only where rows were inserted. **Deploy note:** stop the API, upgrade, then start the new code |
+| DR10b-Q | — | Two product questions: (1) a tag move that still answers ≥1 BR but leaves another BR's solution — warn? (2) v1→v1 links derived or omitted? | (1) **No warning** — the move is legal and deliberate; the control-panel lines stay the record. (2) **Derived** (DR10b-P1) — consistent with v1→live. Lilly, under S10b-1 |
