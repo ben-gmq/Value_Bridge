@@ -330,3 +330,12 @@ place.
 - UAT 10a · slice 10a, 2026-10-12 · LOW · **"New trigger" button runs past the process panel's right edge** at 1440px
   in the "Started by" section (`features/processes/StepSections.jsx`); pre-existing, seen in
   Evidence/2026-10-12/slice-10a/02-br-edited-in-chart-panel-light.png.
+- UAT 10d-1 · slice 10d, 2026-10-13 · LOW · **At 400px the header breadcrumb collides with the "Working · no baseline
+  yet" pill** (shell, not the panel). Evidence/2026-10-13/slice-10d/s10d-07c-400.png.
+- UAT 10d-2 · slice 10d, 2026-10-13 · LOW · **The chart toolbar wraps at 1440px**: Move up / Move down / (i) drop under
+  "Add child" (`features/processes/ProcessesPage.jsx`, tree column `clamp(340px, 32%, 440px)`). s10d-01-panel-top.png.
+- UAT 10d-3 · slice 10d, 2026-10-13 · LOW · **At 1440px the page scrolls ~186px before the sticky tree/panel columns
+  pin**, so the tree card's header scrolls partly off; the selected row stays visible. s10d-07a-scrolled-1440.png.
+- test-runner · slice 10d, 2026-10-13 · LOW · **Two Pydantic serializer warnings** (a dict where a model is expected):
+  `warnings` in `test_application_api.py::test_moving_to_to_be_with_as_is_links_warns_and_the_line_lists_them`,
+  `effort_change` in `test_effort_api.py::test_a_type_change_rederives_and_says_so` — loose response-model typing.
