@@ -79,6 +79,22 @@ def test_restricting_previews_loses_and_keeps_then_applies_and_audits(client, wo
     assert sorted(x["display_name"] for x in back["gains"]) == ["Outsider", "Owner", "Reviewer"]
 
 
+def test_the_restrict_preview_flags_a_kept_member_whose_level_drops(client, world):
+    """DR10c-S1 (D-62): restricting an open project keeps a USER copied at VIEW — flagged; an EDIT member and a
+    VIEWER (read-only either way) are not. Unrestricting flags nobody."""
+    w = world
+    for name, level in (("editor", "VIEW"), ("owner", "EDIT"), ("reviewer", "VIEW")):
+        client.post(f"{API}/projects/{w['p_solo']}/members", headers=w["admin"],
+                    json={"user_id": w["users"][name], "access_level": level})
+    prev = preview_restrict(client, w, w["p_solo"]).json()
+    assert {k["display_name"]: k["level_drops"] for k in prev["keeps"]} == {
+        "Editor": True, "Owner": False, "Reviewer": False}
+    client.put(f"{API}/projects/{w['p_solo']}/restriction", headers=w["admin"],
+               json={"is_restricted": True, "confirm_hash": prev["confirm_hash"]})
+    back = preview_restrict(client, w, w["p_solo"], False).json()
+    assert not any(k["level_drops"] for k in back["keeps"])
+
+
 def test_a_stale_restriction_preview_is_refused(client, world):
     w = world
     prev = preview_restrict(client, w, w["p_solo"]).json()
