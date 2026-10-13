@@ -79,8 +79,8 @@ function useTriggerFact(projectId, nodeId, enabled) {
 
 /**
  * "How it runs — saves as you go" (D-63): the four facts a consultant sets after the requirement, as tiles
- * that open the existing editors full width below, one at a time. Performer and trigger are written only
- * where the chart's DFD is on (Q-1 — the performer without the DFD — is Ben's, open: hidden until answered). D-64: a to-be process has one RACI — its
+ * that open the existing editors full width below, one at a time. The performer shows and edits whatever the
+ * DFD setting (S10c-2, Ben 2026-10-14); the trigger only where the chart's DFD is on. D-64: a to-be process has one RACI — its
  * requirement's — and its data is the CRUD grid; an as-is process keeps the step's roles and data.
  */
 export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, dfd, onDraftChange }) {
@@ -108,7 +108,7 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
   const emptyText = t(factsEditable ? 'processes.run.notSetSet' : 'processes.run.notSet');
 
   const tiles = [
-    dfdOn && { key: 'performer', label: t('processes.run.performer'), value: performer.text,
+    { key: 'performer', label: t('processes.run.performer'), value: performer.text,
       empty: !node.performer_kind, emptyText: t(editable ? 'processes.run.notAssignedSet' : 'processes.run.notAssigned'),
       editor: <PerformerPanel projectId={projectId} node={node} disabled={!editable} startEditing onDraftChange={onPerformerDraft} /> },
     // D-69: one STARTED mark on "Started by" (a trigger, a data input or an inbound party all meet it — DR13-D1)
