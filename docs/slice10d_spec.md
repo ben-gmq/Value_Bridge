@@ -110,7 +110,7 @@ verify; the old-baseline diff shows each moved role once. **Grade 3 for the layo
 | DR10d-D4 | MED | "Its retired BR" ambiguous after promote/demote/promote | **Fix** — the BR with the event stamp and in the event's rows; else `unplaced` in the event |
 | DR10d-D5 | LOW | As-is Data tile had no editor | **Fix** — as-is: Accountable → step RaciPanel, Data → StepData |
 | DR10d-S1 | LOW | Pre-10d restore without the chart skip → 500 | **Fix** — skip by the step's chart; 409 before relink; test asserts 200 |
-| DR10d-Q | — | (1) Same-behaviour codes = same role? (2) merge actor? (3) "Retire requirement…" on a to-be process? | (1) **Yes** (rec, to Ben); (2) NULL, 0051 precedent (Lilly); (3) **hide it** — retiring the step retires both (rec, to Ben) |
+| DR10d-Q | — | (1) Same-behaviour codes = same role? (2) merge actor? (3) "Retire requirement…" on a to-be process? | (1) **Yes — Ben, 2026-10-13**; (2) NULL, 0051 precedent (Lilly); (3) **hidden on the panel menu and the BR page — Ben, 2026-10-13** (`OFFER_RETIRE_BR = false`) |
 
 **Deploy checklist (10d):** run the pre-check on the target DB and fix its list → stop the API → `alembic upgrade head`
 → start the new code → send 0052's conflict list to Ben.
