@@ -6836,7 +6836,7 @@ route in `api/scope.js`. Screens link to each other only through these.
   collapsed with counts — delivery (solutions and FRs), external parties, description,
   supporting systems; a ⋯ menu for make process, retire, restore and the BR page. It shows **one
   RACI, the BR's** for a to-be process (D-64). Tree and panel scroll independently, side by side
-  from 900 px and one at a time below it. Static labels are at least 12.5 px, on a 4-step type
+  from 1100 px and one at a time below it. Static labels are at least 12.5 px, on a 4-step type
   scale, with help behind (i).
 - **The DFD has its own screen** (D-54): a flat, searchable list of DFDs — one per direct parent
   of processes, with code, name and process count — and the selected diagram on the right.

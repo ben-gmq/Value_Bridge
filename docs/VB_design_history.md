@@ -45,6 +45,10 @@ sample text, before deciding).
 - **2026-10-13** — split into this history file and a clean current spec; all decisions D-1…D-64 and slice rulings
   through S10d-1 folded into the spec text.
 
+- **2026-10-13 (night)** — slice 10d merged (`bbd0674`). UAT change: the process chart shows tree and panel side by
+  side from **1100 px** (was 900 px in D-63) — at 900 px the panel was ~250 px wide and clipped its buttons
+  (ui-verifier, Evidence/2026-10-13/slice-10d). Spec §14 updated.
+
 ---
 
 ## 3. Decision log (formerly design §1a)
