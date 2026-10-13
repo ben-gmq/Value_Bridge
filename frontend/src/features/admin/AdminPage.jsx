@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Select, Snackbar,
   Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { api } from '../../api/vb';
-import { keys } from '../../app/links';
+import { keys, links } from '../../app/links';
 import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
@@ -15,7 +16,7 @@ function useSave(fn, keys, onOk) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const m = useMutation({ mutationFn: fn,
-    onSuccess: () => { keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] })); setError(''); onOk?.(); },
+    onSuccess: (res) => { keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] })); setError(''); onOk?.(res); },
     onError: (err) => setError(errorText(err, t('common.saveFailed'))) });
   return { m, error, setError };
 }
@@ -104,7 +105,7 @@ function Users({ notify }) {
       <ConfirmDialog open={Boolean(deact)} title={t('admin.deactivateTitle')}
         body={t('admin.deactivateBody', { name: deact?.display_name })} confirmLabel={t('admin.deactivate')}
         busy={deactivate.m.isPending} onClose={() => setDeact(null)} onConfirm={() => deactivate.m.mutate(deact.app_user_id)} />
-      {/* sara 7b L10: VIEWER → USER grants edit on every unrestricted project — confirm it. */}
+      {/* sara 7b L10: VIEWER → USER grants edit on every project open to all staff — confirm it. */}
       <ConfirmDialog open={Boolean(kindChange)} title={t('admin.makeUserTitle')}
         body={t('admin.makeUserBody', { name: kindChange?.display_name })} confirmLabel={t('admin.makeUser')}
         busy={setKind.m.isPending} onClose={() => setKindChange(null)} onConfirm={() => setKind.m.mutate(kindChange)} />
@@ -234,13 +235,16 @@ function Projects({ notify }) {
   const catalogue = useQuery({ queryKey: keys.componentCatalogue(), queryFn: api.componentCatalogue });
   const templates = useQuery({ queryKey: keys.projectTemplates(), queryFn: api.projectTemplates });
   const empty = { client_id: '', project_code: '', project_name: '', program_id: '', template_code: '',
-    component_codes: [], data_model_depth: 'FULL', is_restricted: '' };
+    component_codes: [], data_model_depth: 'FULL', is_restricted: 'yes' };   // D-62: assigned consultants only
   const [f, setF] = useState(empty);
+  const navigate = useNavigate();
   const { m, error } = useSave(() => api.createProject({ ...f, program_id: f.program_id || null,
     is_restricted: f.is_restricted === 'yes',
     template_code: f.template_code || null,
     component_codes: [...closure(f.component_codes, catalogue.data ?? [])] }), ['projects'],
-  () => { setF(empty); notify(t('admin.projectCreated')); });
+  // DR10c-P3: a restricted project starts with no members, so the admin lands on its Access screen to add them.
+  (res) => { setF(empty); notify(t('admin.projectCreated'));
+    if (res?.project_id) navigate(links.access(res.project_id), { state: { created: true } }); });
   const progs = (programs.data ?? []).filter((g) => g.client_id === f.client_id);
   const programCode = (id) => (programs.data ?? []).find((g) => g.program_id === id)?.program_code ?? '';
   return (
@@ -260,13 +264,13 @@ function Projects({ notify }) {
           </Select>
         </FormControl>
         <ComponentPicker f={f} setF={setF} catalogue={catalogue.data ?? []} templates={templates.data ?? []} />
-        {/* §8.10 risk 1: asked every time, no default — forgetting to restrict is not caught later. */}
+        {/* D-62: preselected "Assigned consultants only"; the API still requires the choice explicitly (§8.10 risk 1). */}
         <FormControl size="small" sx={{ minWidth: 260 }}>
           <InputLabel id="p-restricted-label">{t('admin.restricted')}</InputLabel>
           <Select labelId="p-restricted-label" id="p-restricted" label={t('admin.restricted')} value={f.is_restricted}
             onChange={(e) => setF({ ...f, is_restricted: e.target.value })}>
-            <MenuItem value="no">{t('admin.restricted.no')}</MenuItem>
             <MenuItem value="yes">{t('admin.restricted.yes')}</MenuItem>
+            <MenuItem value="no">{t('admin.restricted.no')}</MenuItem>
           </Select>
         </FormControl>
         <Button variant="contained" disabled={m.isPending || !f.is_restricted} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
