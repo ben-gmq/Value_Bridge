@@ -1,6 +1,6 @@
 # Slice 10d: the business-functions screen, ranked (D-63) — one RACI per process (D-64)
 
-**Date:** 2026-10-13 · **Author:** Lilly · **Status:** rev 1 — Ben's rulings D-63, D-64, S10d-1; design review round 1 pending
+**Date:** 2026-10-13 · **Author:** Lilly · **Status:** rev 1 — Ben's rulings D-63, D-64, S10d-1; design review round 1 applied (11 findings, 3 HIGH)
 **Builds on:** the /impeccable critique of 2026-10-13 (23/40, snapshot in `.impeccable/critique/`), D-63, D-64,
 S10d-1 (§1a "Design critique of the business-functions screen"); schema `docs/slice10d_raci_schema.md` (apple, all six
 [Q-n] accepted). D-46, D-49, D-51, D-52, D-53. Built on main `3430b1d` (10b merged). **Comes before 10c**, whose
@@ -95,8 +95,25 @@ verify; the old-baseline diff shows each moved role once. **Grade 3 for the layo
 5. A to-be process has one RACI, on its BR; no Accountable is lost in the merge without being named in the audit.
 6. Every baseline frozen before 10d still verifies.
 
-## 10. Design review round 1 of 2
-_Pending._
+## 10. Design review round 1 of 2 (design-auditor, 2026-10-13)
+
+| Id | Rating | Finding | Disposition |
+|---|---|---|---|
+| DR10d-D1 | HIGH | Retired-history copies could give a retired BR two Accountables, so its step could never be restored (Q-3 broken) | **Fix** — BR-wins applied to the copies too; conflict listed; restore test asserts 200 with one A |
+| DR10d-D2 | HIGH | Matching on raw `raci_code_id` misses project-override codes: deploy abort on A, silent duplicate R/C/I | **Fix** — match on org role + resolved behaviour; A conflict decided before restore/insert |
+| DR10d-P1 | HIGH | Switching process with unsaved text drops it silently; Save & next could drop a refused BR | **Fix** — Save / Discard / Stay on leaving; Save & next only when all saved |
+| DR10d-P2 | MED | Performer and trigger tiles hold half-filled forms that Done / switch / Ctrl+S drop | **Fix** — confirm before dropping; honest caption; accordions keep content mounted |
+| DR10d-P3 | MED | No owner for the lost-Accountable list | **Fix** — 0052 prints the list; deploy step: send it to Ben / project leads |
+| DR10d-P4 | MED | No lock / deploy order: a running old API fails 0052 or 500s after it | **Fix** — ACCESS EXCLUSIVE lock first; deploy note: stop API, upgrade, start new code |
+| DR10d-P5 | MED | The no-BR block is reachable through "Retire requirement" today | **Fix** — read-only pre-check script run before deploy; the menu hides "Retire requirement…" on to-be processes (Q-3 below) |
+| DR10d-D3 | MED | Step-5 inserts collide with the grain; re-runs undefined | **Fix** — NOT EXISTS, `not_carried`, no event on a no-op run |
+| DR10d-D4 | MED | "Its retired BR" ambiguous after promote/demote/promote | **Fix** — the BR with the event stamp and in the event's rows; else `unplaced` in the event |
+| DR10d-D5 | LOW | As-is Data tile had no editor | **Fix** — as-is: Accountable → step RaciPanel, Data → StepData |
+| DR10d-S1 | LOW | Pre-10d restore without the chart skip → 500 | **Fix** — skip by the step's chart; 409 before relink; test asserts 200 |
+| DR10d-Q | — | (1) Same-behaviour codes = same role? (2) merge actor? (3) "Retire requirement…" on a to-be process? | (1) **Yes** (rec, to Ben); (2) NULL, 0051 precedent (Lilly); (3) **hide it** — retiring the step retires both (rec, to Ben) |
+
+**Deploy checklist (10d):** run the pre-check on the target DB and fix its list → stop the API → `alembic upgrade head`
+→ start the new code → send 0052's conflict list to Ben.
 
 ## 11. Open for Ben
 - **Purpose and Data processing** — recommended: Purpose is the description on L1–L4 boxes (shown), and on processes
