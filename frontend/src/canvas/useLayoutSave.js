@@ -21,8 +21,8 @@ export function useLayoutSave({ projectId, diagramType, scopeKey, canEdit, getNo
 
   const send = useCallback((sk, items, quiet) => {
     const { projectId: p, diagramType: type, onSaved: ok, onError: fail } = latest.current;
-    if (!items.length || sk == null) return;
-    layoutApi.save(p, type, sk, items).then((layout) => ok?.(layout, sk)).catch((err) => {
+    if (!items.length || sk == null) return Promise.resolve();
+    return layoutApi.save(p, type, sk, items).then((layout) => ok?.(layout, sk)).catch((err) => {
       if (quiet) console.error('Diagram positions not saved on leaving the diagram', err);
       else fail?.(err);
     });
@@ -53,6 +53,15 @@ export function useLayoutSave({ projectId, diagramType, scopeKey, canEdit, getNo
     for (const c of changes) if (c.type === 'position' && !c.dragging) queue(c.id, c.position);
   }, [queue]);
 
+  /** Place a box that is not on the canvas yet where it was dropped (slice 13d: a store a drawn flow
+   * brings in). `item` is a saved item ({object_type, object_id, x, y}); it is sent now, with anything
+   * still queued, and the promise settles once saved, so the page can redraw with it in place. */
+  const place = useCallback((item) => {
+    if (!canEdit || !item) return Promise.resolve();
+    pending.current.set(`${item.object_type}:${item.object_id}`, item);
+    return send(latest.current.scopeKey, take(), false);
+  }, [canEdit, send, take]);
+
   /** Drop the queue — call it when a Reset starts. */
   const discard = useCallback(() => { clearTimeout(timer.current); pending.current.clear(); }, []);
 
@@ -62,5 +71,5 @@ export function useLayoutSave({ projectId, diagramType, scopeKey, canEdit, getNo
     return () => send(sk, take(), true);
   }, [scopeKey, send, take]);
 
-  return useMemo(() => ({ queue, onChanges, discard }), [queue, onChanges, discard]);
+  return useMemo(() => ({ queue, onChanges, place, discard }), [queue, onChanges, place, discard]);
 }
