@@ -367,13 +367,19 @@ export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetire
 
         {node.is_process && (
           <Box>
-            {showBr && (solutionsOn || frsOn) && (
-              <PanelSection id="delivery" sections={sections} title={t('processes.sec.delivery')}
-                count={facts.delivery.count} summary={facts.delivery.summary}>
-                {solutionsOn && <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} />}
-                {/* D-52: the BR maps to FRs directly; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
-                {frsOn && <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn}
-                  warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />}
+            {/* D-66: the delivery items lead the collapsed sections — Solutions, then Function requirements */}
+            {showBr && solutionsOn && (
+              <PanelSection id="solutions" sections={sections} title={t('processes.sec.solutions')}
+                count={facts.solutions.count} summary={facts.solutions.summary}>
+                <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} />
+              </PanelSection>
+            )}
+            {/* D-52: the BR maps to FRs directly; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
+            {showBr && frsOn && (
+              <PanelSection id="frs" sections={sections} title={t('processes.sec.frs')}
+                count={facts.frs.count} summary={facts.frs.summary}>
+                <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn}
+                  warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />
               </PanelSection>
             )}
             {dfdOn && (

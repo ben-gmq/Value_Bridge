@@ -11,12 +11,19 @@ import { t } from '../../i18n/t';
 // remembered per user in this browser — a convenience only, so every read and write tolerates blocked storage.
 const storeKey = (userId) => `vb.processPanel.open.${userId ?? 'anon'}`;
 
+// D-66 (slice 13a): Solutions and Function requirements open on a first visit (nothing stored yet); from then on
+// the user's own choice is kept. A choice stored before the split named one "delivery" section: it carries over.
+const OPEN_FIRST = ['solutions', 'frs'];
+
 function readOpen(userId) {
   try {
-    const v = JSON.parse(window.localStorage.getItem(storeKey(userId)) ?? '[]');
-    return Array.isArray(v) ? v : [];
+    const raw = window.localStorage.getItem(storeKey(userId));
+    if (raw == null) return OPEN_FIRST;
+    const v = JSON.parse(raw);
+    if (!Array.isArray(v)) return OPEN_FIRST;
+    return v.includes('delivery') ? [...v.filter((k) => k !== 'delivery'), ...OPEN_FIRST] : v;
   } catch {
-    return [];
+    return OPEN_FIRST;
   }
 }
 
@@ -73,10 +80,10 @@ export function useSectionFacts({ projectId, br, nodeId, solutionsOn, frsOn, par
     enabled: systemsOn });
   const sols = solsQ.data ?? [];
   const frs = frsQ.data ?? [];
-  const delivery = [solutionsOn && t('processes.sec.solutionsN', { n: sols.length }), frsOn && t('processes.sec.frsN', { n: frs.length })]
-    .filter(Boolean).join(' · ');
   return {
-    delivery: { count: sols.length + frs.length, summary: delivery },
+    // D-66: numbers and names, as the sections' own lists show them
+    solutions: { count: sols.length, summary: listSummary(sols.map((s) => `${s.solution_number} ${s.solution_name}`)) },
+    frs: { count: frs.length, summary: listSummary(frs.map((f) => `${f.fr_number} ${f.fr_name}`)) },
     parties: { count: (flowsQ.data ?? []).length, summary: listSummary([...new Set((flowsQ.data ?? []).map((f) => (partiesQ.data ?? [])
       .find((p) => p.external_entity_id === f.external_entity_id)?.ext_name).filter(Boolean))]) },
     systems: { count: (appsQ.data ?? []).length, summary: listSummary((appsQ.data ?? []).map((a) => a.application_name)) },
