@@ -468,7 +468,7 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | SC-11 | Four lookup lists (`bfc_set_code`, `performer_kind`, `trigger_kind`, `flow_type`) get a playbook-deviation line; A-15 (naming final) confirmed; "effort by L1 area" moves to the reports slice | C-11 |
 | SP-1 | **One save model on the process panel**: typed text waits for Save (unsaved counter, Ctrl+S); everything else saves the moment it changes; the performer and trigger editors lose their own Save (Done = saved) | P-1 |
 | S10c-2 | **10c Q-1…Q-3**: the performer can be recorded whatever the DFD setting (performer gated by the function chart; triggers stay with the DFD); every live project switches to assigned-only after its team is checked; Lilly keeps the inventory (`slice10c_spec.md` §12) and an admin confirms each switch on its Access screen | slice10c_spec §11 |
-| S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, all frozen from hash spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
+| S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, frozen from the next hash spec — spec 4, since slice 13c takes spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
 | S-T | "Trailer" in Ben's 2026-10-12 note means **trigger** | D-56…D-62 note |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
