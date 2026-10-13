@@ -333,7 +333,7 @@ Levels rank `VIEW` < `EDIT` < `ADMIN`; only platform admins reach ADMIN.
 | `restore_record` | the business entities on the restore allow-list | U | Un-delete (P5). **Only entities on the allow-list** (§7.12). Memberships, control rules, users and `code_master` rows are excluded (R2-S5). **Refused while any parent is inactive** (R2-D2) — restore the parent first |
 | `consistency_check` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `DATA_FIELD`, `BR_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BR_FUNCTION_REQUIREMENT`, `FR_INTERFACE`, every frozen table | R | **Errors:** `hier_code`/`level_no` drift, to-be processes without a BR, processes with children, BR CRUD or external flows with no matching step I/O, `FR_INTERFACE` rows under a non-interface type, and **an active row under an inactive parent, in any of the frozen tables** (R2-D2). **Freeze-blocking warnings:** processes missing an input or an output in a chart whose DFD is on (D-38, S7-3), live rows in an off component. **Warnings:** entities with no fields, entities with keys only under `FULL` (D-39), `fr_solution_outside_its_brs`. **Informational:** e.g. `as_is_support_on_to_be`. **Precondition of freeze, run inside the freeze transaction** (D11, R2-P6) |
 | `(manual)` access review | `PROJECT_MEMBER`, `PROJECT` | R | Ben reviews **effective** access per project — restriction, members and platform admins — at each baseline freeze |
-| client access | `APP_USER`, `PROJECT`, `AUDIT_EVENT` | — | **D-43, before first client use, only with the client's consent recorded on the project.** (a) A client read-only login sees **its own project only** — the one place the project wall holds whatever staff can see; withdrawable, every view audited. (b) An offline HTML viewer file generated from a frozen baseline, by an admin or user, never a viewer; once sent it cannot be withdrawn; each file audited (OR-9) |
+| client access | `APP_USER`, `PROJECT`, `AUDIT_EVENT` | — | **D-43, before first client use, only with the client's consent recorded on the project.** (a) A client read-only login sees **its own project only** — the one place the project wall holds whatever staff can see; withdrawable, every view audited. **Gate (D-11, A-11, finding S8):** before any external party gets a login, record-level confidentiality is built first — `issue_dashboard` reports open issues per named stakeholder, a per-person complaint count, which a client login must not see. (b) An offline HTML viewer file generated from a frozen baseline, by an admin or user, never a viewer; once sent it cannot be withdrawn; each file audited (OR-9) |
 
 `USER_ACCESS_GRANT` is retired history: its rows were copied into `PROJECT_MEMBER` and soft-revoked,
 and `vb_app` holds SELECT only on it (D-40, S7-6).
@@ -1581,7 +1581,7 @@ cost in one table is a few `CHECK`s plus a process guard on each step-level link
 queries use the index; if the chart ever exceeds a few thousand nodes, add `ltree`.
 
 **BFC_NODE_DATA_ENTITY** — one row per (process node, data entity, direction). **The one record of a
-step's inputs and outputs (D-24)**, written only by `bfc.ensure_step_io` (R2-D13); the DFD, BR CRUD and the
+step's inputs and outputs (D-24)**, written only by `step_io.ensure_step_io` (R2-D13); the DFD, BR CRUD and the
 completeness rule all read it. A step has 0..N inputs and 0..N outputs. PK `bfc_node_data_entity_id`
 (S1-5); UK `(bfc_node_id, data_entity_id, direction)`, `CHECK (direction IN ('I','O'))`. Direction is in
 the key because a step can both read and write the same entity. FKs: `(bfc_node_id, project_id) →
@@ -2484,7 +2484,7 @@ What this costs and how each cost is carried:
   same denormalization as `project_id` everywhere, made safe the same way, by a composite FK (§5.5).
 - **The service writes the step I/O first.** Linking a BR CRUD creates the matching step I/O row
   (or restores a retired one) in the same transaction, *before* inserting the CRUD, through the one
-  writer `bfc.ensure_step_io` (§7.3 `link_data_entity`). The consultant never sees a refusal on the
+  writer `step_io.ensure_step_io` (§7.3 `link_data_entity`). The consultant never sees a refusal on the
   BR.
 - **Retiring a step I/O row is refused while an active BR CRUD depends on it.** A soft delete
   changes `is_active`, which is part of the referenced key, so NO ACTION fires. The service
@@ -2901,7 +2901,8 @@ Three rules that only work together:
 - **`hier_code` cross-checks** ("moved since export"). It is unique only among live nodes of one set
   (R2-D10, D-47), so it cannot resolve a step alone.
 - **A new step, arriving with neither, must not duplicate a live sibling's name** (Q1), normalised
-  (NFKC, case-folded, whitespace collapsed). That is a partial unique index, not a hope.
+  (NFKC, case-folded, whitespace collapsed) — checked by the service (`assert_name_free`), with the partial unique
+  index on `lower(btrim(node_name))` as the backstop.
 
 **A row exported from VB carries a signed row token** (project, table, id, `row_version`). A token
 row that no longer resolves to its live row is an error, never an INSERT: a rename or move by
@@ -5872,7 +5873,7 @@ guard that does not fit its path.**
 | `POST /projects/{project_id}/bulk/{target}/check` | project_ctx(EDIT) | the raw `.xlsx` body | file-level checks only; nothing is staged |
 | `POST /projects/{project_id}/bulk/{target}/validate` | project_ctx(EDIT) | the raw `.xlsx` body (never multipart); display name in `X-VB-File-Name` | `IMPORT_BATCH` + the preview. **Writes nothing to business tables.** Body capped at ingress at 10 MB (R2-S8, `ROUTE_CAPS`) |
 | `GET /bulk/batches/{batch_id}` · `GET /bulk/batches/{batch_id}/preview` | object_guard(ImportBatch, EDIT) | — | the batch, and per-row INSERT / UPDATE / MATCH verdicts with before/after per changed field (P3, D3) |
-| `POST /bulk/batches/{batch_id}/commit` | object_guard(ImportBatch, EDIT) | row_version, `acknowledged_inserts` | applies the batch in one transaction, under a row lock, re-validating every row (P2, D1, D3). **422 unless `acknowledged_inserts` equals a non-zero insert count** (R2-P2). Any project editor may commit a batch another uploaded |
+| `POST /bulk/batches/{batch_id}/commit` | object_guard(ImportBatch, EDIT) | row_version, `acknowledged_inserts`, `acknowledged_retires` | applies the batch in one transaction, under a row lock, re-validating every row (P2, D1, D3). **422 unless each of `acknowledged_inserts` and `acknowledged_retires` is acknowledged whenever its count is non-zero** (R2-P2). Any project editor may commit a batch another uploaded |
 | **Baselines (always on, no component; slice8_schema §5)** | | | |
 | `GET /projects/{project_id}/baselines` | project_ctx(VIEW) | — | headers, newest first, with the agreed one marked |
 | `GET /projects/{project_id}/baselines/next?bump=MINOR\|MAJOR` | project_ctx(VIEW) | — | the freeze preview: next label, the confirm text, errors, freeze-blocking warnings, warnings, counts by entity. Writes nothing |
@@ -6959,7 +6960,7 @@ it.
 | Environment | Where | Data |
 |---|---|---|
 | Local | Build machine, PostgreSQL 16 | Seeded fake data only. API on port 8100, web on 5180 |
-| Dev | Azure, own resource group, disposable | Seeded fake data only. **Never client data** |
+| Dev | Azure Japan East (the prod region, so a restore drill never moves data across regions), own resource group, disposable | Seeded fake data only. **Never client data** |
 | Prod | Azure Japan East, FTC tenant | Real engagements |
 
 This is the environment switch `env-switch` reports on. A write is never made before the

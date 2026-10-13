@@ -661,3 +661,7 @@ it stood at commit `7a811ff` (`git show 7a811ff:docs/VB_design.md`, §11).
   narratives, the APP_ROLE withdrawal.
 
 **Criteria added on the rewrite:** 18a, 19a, 49c (from `slice7_schema.md` §8.8, accepted under S7-1) and 49b (slice7 §5.2).
+
+**Stated as built, with no decision recorded:** §14.1 — the business function tree loads the whole set
+(`GET /projects/{id}/bfc-tree`), not "lazy-loaded one level at a time" as first designed. §14.5 — the CSP is no longer
+described as "tested by a criterion"; no criterion ever tested it.
