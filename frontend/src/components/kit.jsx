@@ -31,7 +31,7 @@ export function Card({ title, action, children, sx, bodySx, component = 'section
 export function SectionLabel({ children, sx, action, info }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...sx }}>
-      <Typography component="h3" sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
+      <Typography component="h3" sx={(th) => ({ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
         textTransform: 'uppercase' })}>{children}</Typography>
       {info && <InfoTip title={info} sx={{ ml: -0.75 }} />}
       {action && <><Box sx={{ flexGrow: 1 }} />{action}</>}

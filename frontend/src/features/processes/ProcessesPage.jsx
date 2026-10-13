@@ -197,7 +197,7 @@ export default function ProcessesPage() {
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('node');
   const { isOn } = useComponents(projectId);
-  const wide = useMediaQuery('(min-width:900px)');       // D-63: side by side from 900px, one at a time below
+  const wide = useMediaQuery('(min-width:1100px)');      // D-63: side by side from 1100px (UAT: the panel is too narrow at 900), one at a time below
   // D-47: the to-be chart always; the as-is chart only while its component is on.
   const bfcSet = params.get('set') === 'AS_IS' && isOn('AS_IS') ? 'AS_IS' : 'TO_BE';
   const [showRetired, setShowRetired] = useState(false);
@@ -279,7 +279,7 @@ export default function ProcessesPage() {
     return () => window.removeEventListener('popstate', onPop, true);
   }, [navigate]);
 
-  // One at a time below 900px: a newly opened panel starts at its top.
+  // One at a time below 1100px: a newly opened panel starts at its top.
   useEffect(() => { if (!wide && selectedId) window.scrollTo({ top: 0 }); }, [wide, selectedId]);
 
   // The selected row stays in view in its own scrolling column.

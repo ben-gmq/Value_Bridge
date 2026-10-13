@@ -40,7 +40,7 @@ function EntityChip({ projectId, de, deId, onDelete, disabled, busy }) {
       <Box component={RouterLink} to={links.entity(projectId, deId)}
         sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, minWidth: 0, color: 'text.primary', textDecoration: 'none',
           '&:hover .vb-de-name': { textDecoration: 'underline' } }}>
-        {de && <Code tone="teal" sx={{ fontSize: 12 }}>{de.de_number}</Code>}
+        {de && <Code tone="teal" sx={{ fontSize: 12.5 }}>{de.de_number}</Code>}
         <Box component="span" className="vb-de-name" sx={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis',
           whiteSpace: 'nowrap' }}>{name}</Box>
       </Box>
