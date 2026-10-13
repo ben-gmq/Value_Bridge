@@ -147,10 +147,10 @@ export function PickDialog({ open, title, options, getOptionLabel, optionLabel, 
   );
 }
 
-export function SimpleSelect({ id, label, value, onChange, options, allowEmpty, emptyLabel }) {
+export function SimpleSelect({ id, label, value, onChange, options, allowEmpty, emptyLabel, disabled }) {
   const v = options.some((o) => o.value === value) ? value : '';
   return (
-    <FormControl size="small" fullWidth>
+    <FormControl size="small" fullWidth disabled={disabled}>
       <InputLabel id={`${id}-label`}>{label}</InputLabel>
       <Select labelId={`${id}-label`} id={id} label={label} value={v} onChange={(e) => onChange(e.target.value)}>
         {allowEmpty && <MenuItem value=""><em>{emptyLabel ?? t('common.none')}</em></MenuItem>}
