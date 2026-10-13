@@ -128,3 +128,14 @@ a client's project to every consultant, recoverable but acted on. Proof:
 
 ## 12. D-62 switch inventory
 _Filled before 10c merges: project · members (level) · switched on / left open by Ben's say-so._
+
+**Inventory taken 2026-10-14 (Lilly, read-only, dev database `vb_db`).** Users: one platform admin
+(`admin@example.test`) and two VIEWERs (`eve@`, `otto@example.test`). No live `project_member` rows.
+
+| Project | Today | Members (level) | Switch to assigned-only? |
+|---|---|---|---|
+| `SALES` Sales transformation | open to all staff | none | **awaiting Ben (Q-2/Q-3)** — switching hides it from both viewers until they are added |
+| `SOLO` Standalone review | open to all staff | none | **awaiting Ben (Q-2/Q-3)** — same |
+
+Production does not exist yet (D-35), so this inventory is the whole of it today. Merge waits for Ben's answers to
+Q-2 and Q-3 (sara's gate); the code change itself switches nothing.
