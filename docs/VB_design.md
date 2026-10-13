@@ -431,7 +431,7 @@ conflict (audited); roles of retired processes are merged so a restore brings th
 across; a to-be process with no live BR blocks migration 0052 with a list; the one-time moved entries in old-baseline
 diffs are accepted.
 
-### Ben's feedback, 2026-10-13 (D-65…D-67)
+### Ben's feedback, 2026-10-13 (D-65…D-70)
 
 **Status: RECORDED, not decided.** Ben: *"just record this, and we will do the spec and the build later on."* Each item
 gets a spec (and D-67 an `apple` model) before build.
@@ -441,6 +441,9 @@ gets a spec (and D-67 an `apple` model) before build.
 | D-65 | **Can the DFD be edited on the diagram itself (connect, move)?** Ben asked whether it is always generated from the BRs and function descriptions | Today: boxes can be **moved** by an editor and the position is kept (D-30); **connections cannot be drawn** — every flow is generated from the process's inputs, outputs and external flows (D-31, D-24), edited in the panel. Open for the spec: drawing a connection on the canvas that writes the same step I/O row (`bfc.ensure_step_io`), so the diagram stays generated from one record | — |
 | D-66 | **Split Delivery in the process panel into two: Solutions and Function requirements.** Ben: they are the most important things | Revises D-63, which put both in one collapsed "Delivery" section. Two sections, ranked higher than the other collapsed sections; FRs list independently of solutions (D-52, solution optional) | 10d follow-up |
 | D-67 | **Optional process-volume fields for a time-saving / ROI analysis.** On the process description: frequency, number of transactions with a **unit chosen from a master**, assumed time to run the process, and from those the **estimated FTEs** to run it | All optional. Units a `code_master` type (send codes). FTEs are derived, never accepted from a request (VB law 6); the hours-per-FTE basis is a spec question. As-is vs to-be values (D-47) would show the time saved. New columns → `apple` first, shadow columns in the same migration | — |
+| D-68 | **The BR list shows each BR's DFD readiness as a traffic light.** Red: the DFD cannot be completed from it. Yellow: partly. Green: complete | Measured against the project's completeness rule (D-70). The light needs a text label and an icon too, never colour alone (as D-50) | — |
+| D-69 | **On each BR, mark the data needed for the DFD.** Ben: *"put a reference that you need to fill in this information in order to complete your DFD"* | A marker on each field the project's rule (D-70) requires, with a short note saying it is needed to complete the DFD. The marker follows the rule, so it changes when the project changes its rule | — |
+| D-70 | **Each project decides what makes its DFD complete.** Ben: a process flow with no data entities is possible, *"but I don't recommend it"* | A project setting listing the required elements, chosen from: process, forward arrow (order), trigger, external entity, data entity in/out. Default is the full set, recommended. **Conflicts to settle in the spec:** (1) D-38's fixed rule (at least one input or trigger and one output, which blocks the freeze) becomes this setting; (2) under D-38, order is **derived from data** and explicit arrows are retired, so "arrows without data entities" needs either explicit arrows back as an option or a different source of order; (3) Ben's wording *"fully with the external, maybe only with the D"* is read as *"or only with the data entities"* (ASSUMPTION, to confirm) | — |
 
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
 
