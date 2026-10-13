@@ -266,7 +266,8 @@ export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetire
         {!live && <Tag tone="neutral" sx={{ flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <InputBase value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)} readOnly={!editable}
+        <InputBase value={v.node_name} onChange={(e) => form.set('node_name', e.target.value.replace(/\n/g, ' '))} readOnly={!editable}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
           multiline maxRows={3} inputProps={{ maxLength: 200, 'aria-label': t('processes.name') }}
           sx={(th) => ({ flex: '1 1 260px', minWidth: 0, mx: -1, px: 1, py: 0.25, borderRadius: '10px', fontSize: 20, fontWeight: 700,
             lineHeight: 1.3, color: 'brand.title', '& textarea': { lineHeight: 1.3 },

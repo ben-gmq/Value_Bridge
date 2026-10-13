@@ -259,6 +259,9 @@ export default function ProcessesPage() {
     return () => document.removeEventListener('click', onClick, true);
   }, [location.pathname, location.search, navigate]);
 
+  // One at a time below 900px: a newly opened panel starts at its top.
+  useEffect(() => { if (!wide && selectedId) window.scrollTo({ top: 0 }); }, [wide, selectedId]);
+
   // The selected row stays in view in its own scrolling column.
   useEffect(() => {
     if (!wide || !selectedId) return;
