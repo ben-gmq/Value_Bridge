@@ -48,10 +48,10 @@ class BaselineOut(BaseModel):
 class BaselineDetailOut(BaselineOut):
     intact: bool
     components: list[str]
-    counts: dict[str, int]
+    counts: dict[str, int | None]
 
 
 class FreezeOut(BaseModel):
     baseline: BaselineOut
-    counts: dict[str, int]
+    counts: dict[str, int | None]
     warnings: dict[str, list]

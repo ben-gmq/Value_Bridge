@@ -135,7 +135,7 @@ export default function SolutionPage() {
         {text('effort_note')}
       </Box>
       <SolutionLinkPanel projectId={projectId} side="solution" solution={sol} disabled={!live} />
-      <FrTracePanel projectId={projectId} side="solution" id={sol.solution_id} />
+      <FrTracePanel projectId={projectId} id={sol.solution_id} />
     </Card>
   );
 

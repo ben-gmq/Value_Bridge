@@ -42,7 +42,6 @@
   "baselines.netOf": "on {base} in {label}",
   "baselines.exposed": "Effort under changed requirements: {n} man-days (for information; not in the net).",
   "baselines.unrated": "{n} function requirements are not rated and count as 0.",
-  "baselines.unlinked": "{n} man-days sit on function requirements with no solution.",
   "baselines.pricingOff": "Effort is not compared: effort was not used in {labels}.",
   "baselines.objects": "{n} items",
   "baselines.area.ORG": "Organisation",
@@ -269,5 +268,9 @@
   "baselines.before": "Before freezing {label}",
   "baselines.check": "Consistency check",
   "baselines.checkReady": "No consistency errors or blocking gaps",
-  "baselines.checkCounts": "{n} items in {m} areas are frozen in one step."
+  "baselines.checkCounts": "{n} items in {m} areas are frozen in one step.",
+  "baselines.untraced": "{n} man-days sit on function requirements not linked to any business requirement.",
+  "baselines.unassigned": "{n} man-days sit on function requirements with no solution (information — a solution is optional).",
+  "baselines.derivedSides": "{labels} predates direct requirement ↔ function requirement links; its links are derived from its solutions.",
+  "baselines.entity.br_function_requirement": "Requirement ↔ function requirement"
 }

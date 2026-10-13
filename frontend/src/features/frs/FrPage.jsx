@@ -13,7 +13,7 @@ import { Card, SectionLabel, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
-import { CodeTitle, FrWarnings, SaveState, TwoCol, solutionOptions } from './frKit';
+import { CodeTitle, FrWarnings, SaveState, TwoCol, solutionOptions, warningList } from './frKit';
 import { FrTraceCard } from './FrTraceCard';
 import { InterfaceCard } from './InterfaceCard';
 import { FrEffort, FrEffortSide } from '../effort/FrEffort';
@@ -56,7 +56,7 @@ export default function FrPage() {
       return frApi.update(fr.fr_id, body);
     },
     onSaved: (row) => { form.saved(row); qc.setQueryData(keys.fr(frId), row); refreshAll();
-      setWarnings((row.warnings ?? []).filter((w) => w !== 'effort_changed')); setEffortChange(row.effort_change ?? null);
+      setWarnings(warningList(row.warnings).filter((w) => w.code !== 'effort_changed')); setEffortChange(row.effort_change ?? null);
       setNotice(t('frs.saved')); },
   });
   const reload = async () => {
@@ -70,6 +70,7 @@ export default function FrPage() {
       save.setConflict(false);
     }
   };
+  // A retire refused while BRs still link the FR (Q-13, S10b-2) shows the server's detail, which names them.
   const actionFail = (err) => {
     refreshAll();
     setActionError(isStale(err) ? t('frs.staleAction') : errorText(err, t('common.saveFailed')));
@@ -161,7 +162,7 @@ export default function FrPage() {
   const side = (
     <>
       <FrEffortSide projectId={projectId} fr={fr} />
-      <FrTraceCard projectId={projectId} solutionId={fr.solution_id} solution={sol} />
+      <FrTraceCard projectId={projectId} solutionId={fr.solution_id} solution={sol} brCount={fr.br_count} />
     </>
   );
 

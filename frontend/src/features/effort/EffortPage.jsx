@@ -62,6 +62,10 @@ export default function EffortPage() {
             <Tile label={t('effort.tiles.rejected')} value={s.rejected.count}
               note={s.rejected.count > 0 ? t('effort.rejected', { n: s.rejected.count, days: s.rejected.days }) : undefined} />
           </TileRow>
+          {/* D-52 (Q-18): information only — these FRs are already inside the totals, never added again */}
+          {s.untraced?.count > 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {t('effort.untraced', { n: s.untraced.count, days: n(s.untraced.days ?? 0) })}</Alert>)}
           {s.on_unconfirmed_default > 0 && (
             <Alert severity="info" sx={{ mb: 2 }}>{t('effort.unconfirmed', { n: s.on_unconfirmed_default })}</Alert>)}
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'repeat(2, minmax(0,1fr))' } }}>
@@ -70,7 +74,7 @@ export default function EffortPage() {
               label={(r) => (r.solution_id ? (
                 <Link component={RouterLink} to={links.solution(projectId, r.solution_id)} underline="hover" color="inherit"
                   sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'baseline' }}>
-                  <Code>{r.solution_number}</Code>{r.solution_name}</Link>) : <Tag tone="caution">{t('effort.unassigned')}</Tag>)} />
+                  <Code>{r.solution_number}</Code>{r.solution_name}</Link>) : <Tag tone="neutral">{t('effort.unassigned')}</Tag>)} />
           </Box>
         </>
       )}

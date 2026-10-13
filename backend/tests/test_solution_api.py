@@ -132,7 +132,7 @@ def test_unlink_then_relink_restores_the_same_row_and_keeps_the_old_note(client,
     first = link(client, ed, br1["br_id"], s["solution_id"], "old statement").json()
     r = client.delete(f"{API}/business-requirements/{br1['br_id']}/solutions/{first['br_solution_id']}",
                       headers=ed["h"], params={"row_version": first["row_version"]})
-    assert r.status_code == 204
+    assert r.status_code == 200 and r.json() == {"warnings": []}           # slice10b: drift warnings, none here
     assert links(client, ed, br1["br_id"]) == []
     again = link(client, ed, br1["br_id"], s["solution_id"], "new statement").json()
     assert again["br_solution_id"] == first["br_solution_id"]

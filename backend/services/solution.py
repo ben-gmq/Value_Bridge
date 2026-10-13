@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import BfcNode, BrSolution, BusinessRequirement, Solution
+from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
 from services import audit, lifecycle, numbering
 from services.code_master import resolve, validate_required_code
 
@@ -128,7 +128,6 @@ def link(db: Session, actor_id: int, br: BusinessRequirement, solution_id: int,
     else:                                                     # re-link restores (S1-7)
         lifecycle.relink(db, actor_id, row, detail={"previous_coverage_note": row.coverage_note})  # DR1-D2
         row.coverage_note = coverage_note
-    # D-34 hook: once function_requirement.suggested_br_id exists (S6a-1, FR import), clear it here.
     db.commit()
     db.refresh(row)
     return row
@@ -151,8 +150,21 @@ def edit_note(db: Session, actor_id: int, row: BrSolution, row_version: int,
     return row
 
 
-def unlink(db: Session, actor_id: int, row: BrSolution, row_version: int) -> None:
-    lifecycle.unlink(db, actor_id, row, row_version)
+def unlink(db: Session, actor_id: int, row: BrSolution, row_version: int) -> list[dict]:
+    """The pairing row is locked FOR UPDATE first, so a tag write holding it FOR SHARE (slice10b §2.3) finishes
+    before the drift is computed (DR10b-S2); no FR is locked here. Returns the D-52 drift warnings: FRs linked to
+    this BR and tagged with this solution whose tag now answers none of their BRs. The tag is never cleared."""
+    from services.function_requirement import drift_warnings
+    lifecycle.lock(db, row)
+    lifecycle.unlink(db, actor_id, row, row_version, commit=False)
+    db.flush()
+    fr_ids = db.scalars(select(BrFunctionRequirement.fr_id)
+                        .join(FunctionRequirement, FunctionRequirement.fr_id == BrFunctionRequirement.fr_id)
+                        .where(BrFunctionRequirement.br_id == row.br_id, BrFunctionRequirement.is_active,
+                               FunctionRequirement.solution_id == row.solution_id)).all()
+    warnings = drift_warnings(db, fr_ids)
+    db.commit()
+    return warnings
 
 
 def links_of_br(db: Session, br: BusinessRequirement) -> list[dict]:

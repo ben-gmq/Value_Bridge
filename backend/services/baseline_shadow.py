@@ -24,8 +24,9 @@ from sqlalchemy import (CHAR, BigInteger, Column, ForeignKey, ForeignKeyConstrai
 AUDIT_COLUMNS = frozenset({"created_at", "updated_at", "created_by", "updated_by", "is_active",
                            "deleted_at", "deleted_by", "row_version"})
 SNAPSHOT_COLUMNS = ("baseline_id", "source_id", "content_hash")
-# Live columns that never reach a snapshot (D-34: a suggestion is a to-do, not agreed scope).
-SHADOW_EXCLUDED: dict[str, tuple[str, ...]] = {"function_requirement": ("suggested_br_id",)}
+# Live columns that never reach a snapshot. Empty since D-52 retired D-34's suggested_br_id (slice10b §3.5),
+# which was never built; a future non-scope live column is listed here.
+SHADOW_EXCLUDED: dict[str, tuple[str, ...]] = {}
 CODE_LEN, LABEL_LEN = 40, 200
 
 

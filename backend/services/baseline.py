@@ -57,9 +57,12 @@ def _next(prior: Baseline | None, bump: str) -> tuple[int, int]:
     return (prior.major_no + 1, 0) if bump == "MAJOR" else (prior.major_no, prior.minor_no + 1)
 
 
-def counts(db: Session, baseline_id: int) -> dict[str, int]:
-    return {e.table: db.scalar(select(func.count()).select_from(freeze_set.shadow(e.table))
-                               .where(freeze_set.shadow(e.table).c.baseline_id == baseline_id))
+def counts(db: Session, baseline_id: int, version: int | None = None) -> dict[str, int | None]:
+    """Rows per entity. None (not 0) for an entity not in the set at the baseline's hash spec: it was not
+    frozen at that spec, which is different from frozen with no rows (slice10b §5.3)."""
+    return {e.table: (None if version is not None and freeze_set.columns_for(e, version) is None else
+                      db.scalar(select(func.count()).select_from(freeze_set.shadow(e.table))
+                                .where(freeze_set.shadow(e.table).c.baseline_id == baseline_id)))
             for e in FREEZE_SET}
 
 
@@ -175,10 +178,32 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
                          "content_digest": content_digest,                  # sara M3: a second, append-only record
                          "counts": n, "superseded": prior.version_label if prior else None,
                          "superseded_awaiting_sign_off": bool(prior and prior.client_approver_name is None),
-                         "warnings": sorted(warnings)})
+                         "warnings": sorted(warnings), "warning_detail": warning_detail(warnings)})
     tx.flush()
     tx.refresh(b)
     return {"baseline": header(tx, b), "counts": n, "warnings": warnings}
+
+
+# S10b-3 step 1, DR10b-S4: WHICH rows each open warning was about, kept on the append-only freeze record. Business
+# numbers only — never names, which a purge could not clean out of audit_event — and at most this many per line.
+WARNING_DETAIL_CAP = 100
+_NUMBER_KEYS = ("fr_number", "br_number", "de_number", "solution_number", "application_code", "hier_code")
+
+
+def _number_of(item) -> str | None:
+    """A business number from a report row, or None — never free text into the append-only audit."""
+    if isinstance(item, dict):
+        return next((str(item[k]) for k in _NUMBER_KEYS if item.get(k) is not None), None)
+    return None
+
+
+def warning_detail(warnings: dict[str, list]) -> dict[str, dict]:
+    """{line: {"count": n, "numbers": [first WARNING_DETAIL_CAP business numbers]}} for every open warning."""
+    out = {}
+    for key in sorted(warnings):
+        numbers = [n for n in (_number_of(x) for x in warnings[key]) if n is not None]
+        out[key] = {"count": len(warnings[key]), "numbers": numbers[:WARNING_DETAIL_CAP]}
+    return out
 
 
 # ---- approve ---------------------------------------------------------------------------------------------
@@ -238,7 +263,7 @@ def agreed_id(baselines: list[Baseline]) -> int | None:
 def verify(db: Session, b: Baseline) -> bool:
     """DR8-S1, sara M3: the shadows still hold exactly what was frozen — no row added, removed or re-hashed
     (the digest), and no row whose columns no longer match its own hash."""
-    if freeze_set.digest(db, b.project_id, frozenset(), b.baseline_id) != b.content_digest:
+    if freeze_set.digest(db, b.project_id, frozenset(), b.baseline_id, b.hash_spec_version) != b.content_digest:
         return False
     return all(freeze_set.rehash_mismatches(db, e, b.baseline_id, b.hash_spec_version) == 0 for e in FREEZE_SET)
 
@@ -265,7 +290,7 @@ def header(db: Session, b: Baseline) -> dict:
 
 
 def detail(db: Session, b: Baseline) -> dict:
-    return {**header(db, b), "intact": verify(db, b), "components": components_of(db, b.baseline_id), "counts": counts(db, b.baseline_id)}
+    return {**header(db, b), "intact": verify(db, b), "components": components_of(db, b.baseline_id), "counts": counts(db, b.baseline_id, b.hash_spec_version)}
 
 
 # ---- rows of one side ------------------------------------------------------------------------------------
@@ -319,6 +344,9 @@ def rows(db: Session, b: Baseline, table: str, offset: int, limit: int) -> dict:
     if table not in BY_TABLE:
         raise HTTPException(400, "Not a frozen entity")
     t = freeze_set.shadow(table)
+    if freeze_set.columns_for(BY_TABLE[table], b.hash_spec_version) is None:     # not frozen at this spec
+        return {"entity": table, "area": BY_TABLE[table].area, "total": None, "frozen": False,
+                "columns": [], "rows": []}
     total = db.scalar(select(func.count()).select_from(t).where(t.c.baseline_id == b.baseline_id))
     page = [dict(r) for r in db.execute(select(t).where(t.c.baseline_id == b.baseline_id)
                                         .order_by(t.c.source_id).offset(offset).limit(limit)).mappings()]
@@ -351,6 +379,59 @@ def _label_of(side) -> str:
     return "LIVE" if side == LIVE else side.version_label
 
 
+BRFR = "br_function_requirement"
+
+
+def _derive_links(lab: "_Labeller") -> dict:
+    """slice10b §5.3, DR10b-P1/D1: a side frozen before direct links existed has its links DERIVED from its own
+    frozen rows — the 0051 backfill rule applied to the snapshot: BR_SOLUTION ⋈ SOLUTION ⋈ FR tagged with it.
+    Keyed by (br_id, fr_id); no source_id, no hash, and a NULL note (DR10b-D2)."""
+    sols = lab.rows("solution")
+    by_sol: dict = {}
+    for fid, fr in lab.rows("function_requirement").items():
+        if fr.get("solution_id") is not None:
+            by_sol.setdefault(fr["solution_id"], []).append(fid)
+    out = {}
+    for bs in lab.rows("br_solution").values():
+        if bs["solution_id"] not in sols:
+            continue
+        for fid in by_sol.get(bs["solution_id"], ()):
+            out[(bs["br_id"], fid)] = {"source_id": None, "br_id": bs["br_id"], "fr_id": fid, "coverage_note": None,
+                                       "content_hash": None, "derived": True}
+    return out
+
+
+def _link_changes(e, A: dict, B: dict, la, lb) -> tuple[list, dict]:
+    """The link entity is always matched on its grain (br_id, fr_id), so a derived side and a stored side compare
+    pair for pair; an unlink + relink keeps one row and one pair anyway (S1-7)."""
+    pa = {(r["br_id"], r["fr_id"]): r for r in A.values()}
+    pb = {(r["br_id"], r["fr_id"]): r for r in B.values()}
+    changes, counted = [], {c: 0 for c in CHANGES}
+    for pair in sorted(pa.keys() | pb.keys()):
+        ra, rb = pa.get(pair), pb.get(pair)
+        if ra is None:
+            kind, fields = "ADDED", []
+        elif rb is None:
+            kind, fields = "REMOVED", []
+        elif ra.get("derived") or rb.get("derived"):
+            if ra.get("coverage_note") == rb.get("coverage_note"):
+                continue
+            kind, fields = "CHANGED", ["coverage_note"]
+        elif ra["content_hash"] != rb["content_hash"]:
+            kind, fields = "CHANGED", [c for c in ("br_id", "fr_id", "coverage_note") if ra.get(c) != rb.get(c)]
+        else:
+            continue
+        row = rb or ra
+        changes.append({"source_id": row["source_id"] if row["source_id"] is not None else (ra or {}).get("source_id"),
+                        "pair": list(pair),        # the row's key on screen: a derived row has no source_id
+                        "change": kind, "fields": fields, "moved": False,
+                        "label": (lb if rb else la).label(e.table, row),
+                        "before": {c: _shown(ra, c) for c in fields} if ra and fields else {},
+                        "after": {c: _shown(rb, c) for c in fields} if rb and fields else {}})
+        counted[kind] += 1
+    return changes, counted
+
+
 def diff(db: Session, project_id: int, a, b) -> dict:
     """ADDED / CHANGED / REMOVED / MOVED per entity (§7.7, [Q-14], [Q-16])."""
     on_a = frozenset(components.enabled(db, project_id) if a == LIVE else components_of(db, a.baseline_id))
@@ -358,10 +439,23 @@ def diff(db: Session, project_id: int, a, b) -> dict:
     cache_a, cache_b = {}, {}
     la = _Labeller(db, project_id, a, cache_a, on_a)
     lb = _Labeller(db, project_id, b, cache_b, on_b)
+    # DR10b-P1/D1: each side frozen before the link entity derives its links once, into its own cache, so the
+    # diff, the labels, the priced lines and effort exposed all read the same rows.
+    derived = []
+    for name, side, lab, cache in (("a", a, la, cache_a), ("b", b, lb, cache_b)):
+        if freeze_set.columns_for(BY_TABLE[BRFR], _spec(side)) is None:
+            cache[BRFR] = _derive_links(lab)
+            derived.append(name)
     out, summary = {}, {c: 0 for c in CHANGES}
     for e in FREEZE_SET:
         cols_a, cols_b = freeze_set.columns_for(e, _spec(a)), freeze_set.columns_for(e, _spec(b))
         entry = {"area": e.area, "component_on": {"a": e.gate.open(on_a), "b": e.gate.open(on_b)}}
+        if e.table == BRFR:
+            rows_, counted = _link_changes(e, la.rows(e.table), lb.rows(e.table), la, lb)
+            for k, v in counted.items():
+                summary[k] += v
+            out[e.table] = {**entry, "status": "OK", "rows": rows_, "derived_sides": derived}
+            continue
         if cols_a is None or cols_b is None:      # joined the set later: its rows are ADDED / REMOVED below
             cols_a = cols_b = cols_a or cols_b
         if cols_a != cols_b:
@@ -412,6 +506,8 @@ def priced(d: dict, a, b, on_a: frozenset, on_b: frozenset) -> dict:
         return {"available": False, "reason": "EFFORT_OFF", "in": off}
     cache_a, cache_b = d["_rows"]
     A, B = cache_a.get("function_requirement", {}), cache_b.get("function_requirement", {})
+    traced_a = {r["fr_id"] for r in cache_a.get(BRFR, {}).values()}
+    traced_b = {r["fr_id"] for r in cache_b.get(BRFR, {}).values()}
     lines = []
     for fid in sorted(A.keys() | B.keys()):
         ea = A[fid]["effort_days"] if fid in A else None
@@ -425,8 +521,10 @@ def priced(d: dict, a, b, on_a: frozenset, on_b: frozenset) -> dict:
         else:
             continue
         row = B.get(fid) or A[fid]
+        traced = traced_b if fid in B else traced_a          # the side the line is read from (slice10b §6.5)
         lines.append({"source_id": fid, "fr_number": row["fr_number"], "fr_name": row["fr_name"], "change": cls,
-                      "delta_days": float(delta), "unlinked": row["solution_id"] is None,
+                      "delta_days": float(delta), "untraced": fid not in traced,
+                      "unassigned": row["solution_id"] is None,
                       "unrated": (eb if fid in B else ea) is None})
 
     def total(pred):
@@ -434,7 +532,9 @@ def priced(d: dict, a, b, on_a: frozenset, on_b: frozenset) -> dict:
     totals = {"added_days": total(lambda x: x["change"] == "ADDED"),
               "removed_days": total(lambda x: x["change"] == "REMOVED"),
               "changed_days": total(lambda x: x["change"] == "CHANGED"),
-              "net_days": total(lambda x: True), "unlinked_days": total(lambda x: x["unlinked"]),
+              "net_days": total(lambda x: True), "untraced_days": total(lambda x: x["untraced"]),
+              "unassigned_days": total(lambda x: x["unassigned"]),
+              "unlinked_days": total(lambda x: x["untraced"]),      # pre-10b name of untraced_days, kept for the UI
               "unrated_fr_count": sum(1 for x in lines if x["unrated"]),
               "base_days": float(sum((r["effort_days"] or 0) for r in A.values())),
               "effort_exposed_days": _exposed(d, cache_a, cache_b, on_a, on_b)}
@@ -442,22 +542,23 @@ def priced(d: dict, a, b, on_a: frozenset, on_b: frozenset) -> dict:
 
 
 def _exposed(d, cache_a, cache_b, on_a, on_b) -> float | None:
-    """Σ effort of the FRs reachable BR → BR_SOLUTION → SOLUTION → FR from a changed BR, in b (in a for a
-    REMOVED BR). Informational, never added to net (Q3)."""
+    """Σ effort of the FRs reachable BR → BR ↔ FR link → FR from a changed BR, in b (in a for a REMOVED BR);
+    slice10b §6.5: needs only FUNCTION_REQUIREMENT, and a pre-v2 side's links are the derived ones in its cache.
+    Lines de-duplicated by FR. Informational, never added to net (Q3)."""
     changed = d["entities"]["business_requirement"]["rows"]
     if not changed:
         return 0.0
-    if "SOLUTION" not in on_a | on_b:
+    if "FUNCTION_REQUIREMENT" not in on_a | on_b:
         return None
     seen: dict[int, Decimal] = {}
     for r in changed:
         side_rows, on = (cache_a, on_a) if r["change"] == "REMOVED" else (cache_b, on_b)
-        if "SOLUTION" not in on:
+        if "FUNCTION_REQUIREMENT" not in on:
             continue
-        sols = {x["solution_id"] for x in side_rows.get("br_solution", {}).values() if x["br_id"] == r["source_id"]}
-        for fid, fr in side_rows.get("function_requirement", {}).items():
-            if fr["solution_id"] in sols and fid not in seen:
-                seen[fid] = fr["effort_days"] or Decimal(0)
+        frs = side_rows.get("function_requirement", {})
+        for link in side_rows.get(BRFR, {}).values():
+            if link["br_id"] == r["source_id"] and link["fr_id"] in frs and link["fr_id"] not in seen:
+                seen[link["fr_id"]] = frs[link["fr_id"]]["effort_days"] or Decimal(0)
     return float(sum(seen.values()))
 
 

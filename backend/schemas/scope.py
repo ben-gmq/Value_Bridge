@@ -65,6 +65,8 @@ class RetirePreviewOut(BaseModel):
     owned: list[RowRef]
     blockers: list[RowRef]
     confirm_hash: str
+    # slice10b §4.2: FRs whose solution tag will answer none of their remaining BRs (information, not hashed)
+    tag_drift: list[str] = []
 
 
 class RetireConfirmIn(BaseModel):

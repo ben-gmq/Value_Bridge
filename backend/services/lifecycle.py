@@ -57,6 +57,9 @@ LABELS = {
     # Both ends, so a solution's 409 names the BRs and a step's preview names the solutions (DR1-P1).
     "br_solution": ("Requirement ↔ solution",
                     lambda r: f"{r.br_row.br_number} ↔ {r.solution_row.solution_number}"),
+    # D-52 (slice10b §1): a refusal on either end names the other.
+    "br_function_requirement": ("Requirement ↔ function requirement",
+                                lambda r: f"{r.br_row.br_number} ↔ {r.fr_row.fr_number}"),
     "process_trigger": ("Trigger", lambda r: r.trigger_name),
     "bfc_node_trigger": ("Step trigger", lambda r: f"{r.trigger_row.trigger_name} ↔ {r.node_row.hier_code}"),
     "bfc_node_flow": ("Flow edge",
@@ -196,8 +199,9 @@ def child_of(db: Session, model, link_id: int, owner_col: str, owner_id: int):
     return row
 
 
-def unlink(db: Session, actor_id: int, row, row_version: int) -> None:
-    """Remove a link row (soft), audited like every DELETE. Callers check their own blockers."""
+def unlink(db: Session, actor_id: int, row, row_version: int, commit: bool = True) -> None:
+    """Remove a link row (soft), audited like every DELETE. Callers check their own blockers. `commit=False`
+    lets a caller report what the unlink left (slice10b drift warnings) before it commits."""
     check_version(row, row_version)
     if not row.is_active:
         raise HTTPException(409, f"{_label(row)} is already removed")
@@ -205,7 +209,8 @@ def unlink(db: Session, actor_id: int, row, row_version: int) -> None:
     row.updated_by = actor_id
     audit.record(db, "RECORD_DELETED", actor_id=actor_id, project_id=row.project_id,
                  target_table=row.__table__.name, target_id=_pk(row), detail={"label": _label(row)})
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def relink(db: Session, actor_id: int, row, detail: dict | None = None) -> None:

@@ -81,16 +81,25 @@ export const solutionApi = {
   unallocate: (id, linkId, rowVersion) => del(`${V}/solutions/${id}/applications/${linkId}`, rowVersion),
 };
 
-// Slice 6a (docs/slice6a_spec.md). BR → FR is derived through solutions, never stored (D-7).
+// Slice 6a (docs/slice6a_spec.md), re-based by D-52 (docs/slice10b_schema.md §1.2): a BR maps to FRs through a
+// stored link, made from the BR screen; the FR's solution is an optional tag. `unlinked` = no live BR link,
+// `unassigned` = no solution. `create` takes an optional br_id: create and link in one step.
 export const frApi = {
-  list: (projectId, { includeRetired = false, unlinked = false } = {}) =>
-    d(http.get(`${P(projectId)}/function-requirements`, { params: { include_retired: includeRetired, unlinked } })),
+  list: (projectId, { includeRetired = false, unlinked = false, unassigned = false } = {}) =>
+    d(http.get(`${P(projectId)}/function-requirements`, { params: { include_retired: includeRetired, unlinked, unassigned } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/function-requirements`, body)),
   get: (id) => d(http.get(`${V}/function-requirements/${id}`)),
   update: (id, body) => d(http.patch(`${V}/function-requirements/${id}`, body)),
   retire: (id, rowVersion) => del(`${V}/function-requirements/${id}`, rowVersion),
   restore: (id) => d(http.patch(`${V}/function-requirements/${id}/restore`)),
+  // The BR's links, one row per link (D-52). Writes are on the BR's route, whichever page is open.
   ofBr: (brId) => d(http.get(`${V}/business-requirements/${brId}/function-requirements`)),
+  linkToBr: (brId, body) => d(http.post(`${V}/business-requirements/${brId}/function-requirements`, body)),
+  editBrLink: (brId, linkId, body) => d(http.patch(`${V}/business-requirements/${brId}/function-requirements/${linkId}`, body)),
+  unlinkFromBr: (brId, linkId, rowVersion) => del(`${V}/business-requirements/${brId}/function-requirements/${linkId}`, rowVersion),
+  // The FR's solution tag, set from this BR's row: only one of this BR's live solutions, or null (422 otherwise).
+  setSolutionFromBr: (brId, linkId, body) =>
+    d(http.put(`${V}/business-requirements/${brId}/function-requirements/${linkId}/solution`, body)),
 };
 
 export const dataApi = {

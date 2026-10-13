@@ -92,11 +92,12 @@ class Baseline(Base):
 
 
 # The live tables a baseline freezes, in freeze (FK) order (§6.1 less the unbuilt tables; slice8 §3.1).
+# br_function_requirement joined at hash spec 2 (slice10b §5.2), right after function_requirement.
 # services/freeze_set.FREEZE_SET carries the rest of each entry; a test asserts the two agree.
 SHADOWED = ("org_unit", "org_role", "bfc_node", "data_entity", "data_field", "external_entity",
             "process_trigger", "bfc_node_data_entity", "bfc_node_org_role", "bfc_node_external_flow",
             "bfc_node_trigger", "business_requirement", "br_data_entity", "br_org_role", "application",
-            "solution", "br_solution", "function_requirement", "fr_interface", "fr_interface_data_entity",
+            "solution", "br_solution", "function_requirement", "br_function_requirement", "fr_interface", "fr_interface_data_entity",
             "application_solution", "application_bfc_node", "effort_rate", "project_component")
 
 SHADOW_TABLES = {name: shadow_table(Base.metadata.tables[name], Base.metadata) for name in SHADOWED}

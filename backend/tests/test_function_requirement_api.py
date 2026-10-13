@@ -7,8 +7,8 @@ Deliberately uncovered (spec §8): two editors relinking one FR at the same inst
 decides), and phone width."""
 from sqlalchemy import select, text
 
-from models import AuditEvent, FunctionRequirement
-from services import consistency, lifecycle
+from models import AuditEvent
+from services import consistency
 from tests.test_scope_api import API, ed  # noqa: F401 — ed is a fixture
 from tests.test_solution_api import link, sol, two_brs
 
@@ -40,18 +40,21 @@ def test_create_mints_numbers_copies_behaviour_and_starts_specified(client, ed):
     b = fr(client, ed, "Order feed to ERP", "INTERFACE", s["solution_id"])
     assert (a["fr_number"], b["fr_number"]) == ("FR-0001", "FR-0002")
     assert (b["fr_type_code"], b["fr_type_behaviour"]) == ("INTERFACE", "INTERFACE")
-    assert a["fulfilment_status_code"] == "SPECIFIED" and a["warnings"] == []
+    assert a["fulfilment_status_code"] == "SPECIFIED" and a["warnings"] == ["no_br"]     # D-52: untraced
     assert (a["complexity_code"], a["effort_days"]) == (None, None)        # S6a-3
 
 
 def test_unlinked_fr_saves_with_a_warning_and_shows_in_the_unlinked_filter(client, ed):
-    """Criterion 105 (first half), D-28."""
+    """Criterion 105 (first half), D-28 re-based by D-52 (slice10b Q-17): `unlinked` = no BR link (no_br);
+    `unassigned` = no solution, which is information now."""
     s = sol(client, ed, "Order portal", "TECHNOLOGY")
-    fr(client, ed, "Linked", solution_id=s["solution_id"])
+    fr(client, ed, "Tagged", solution_id=s["solution_id"])
     loose = fr(client, ed, "Loose")
-    assert loose["warnings"] == ["no_solution"] and loose["solution_id"] is None
-    rows = client.get(f"{API}/projects/{ed['p']}/function-requirements", headers=ed["rv"],
-                      params={"unlinked": True}).json()
+    assert loose["warnings"] == ["no_br"] and loose["solution_id"] is None
+    url = f"{API}/projects/{ed['p']}/function-requirements"
+    rows = client.get(url, headers=ed["rv"], params={"unlinked": True}).json()
+    assert [r["fr_name"] for r in rows] == ["Tagged", "Loose"]          # by number
+    rows = client.get(url, headers=ed["rv"], params={"unassigned": True}).json()
     assert [r["fr_name"] for r in rows] == ["Loose"]
 
 
@@ -88,7 +91,7 @@ def test_warnings_for_non_technology_rejected_and_duplicate(client, ed):
     tech = sol(client, ed, "Portal", "TECHNOLOGY")
     client.patch(f"{API}/solutions/{tech['solution_id']}", headers=ed["h"],
                  json={"row_version": tech["row_version"], "status_code": "REJECTED"})
-    assert fr(client, ed, "Search", solution_id=tech["solution_id"])["warnings"] == ["rejected_solution"]
+    assert fr(client, ed, "Search", solution_id=tech["solution_id"])["warnings"] == ["no_br", "rejected_solution"]
     # the same name under a different solution is not a duplicate
     assert "duplicate_name" not in fr(client, ed, "Approve form", solution_id=tech["solution_id"])["warnings"]
 
@@ -149,7 +152,7 @@ def test_patch_edits_retypes_moves_unlinks_and_audits_the_move(client, ed, db):
                                              AuditEvent.target_table == "function_requirement")).one()
     assert (ev.detail["previous_solution_number"], ev.detail["previous_fr_type_code"]) == ("SOL-0001", "FORM")
     u = patch(client, ed, g, solution_id=None)
-    assert u.status_code == 200 and u.json()["solution_id"] is None and u.json()["warnings"] == ["no_solution"]
+    assert u.status_code == 200 and u.json()["solution_id"] is None and u.json()["warnings"] == ["no_br"]
     assert patch(client, ed, f, description="stale").status_code == 409     # old row_version
 
 
@@ -191,38 +194,41 @@ def test_an_fr_cannot_be_restored_under_a_retired_solution(client, ed):
     assert r.status_code == 409 and "SOL-0001" in r.json()["detail"]
 
 
-def test_one_solution_three_brs_two_frs_gives_six_derived_rows(client, ed, db):
-    """Criterion 10a: BR → FR is derived through BR_SOLUTION; no fr_br table exists."""
+def test_a_solution_path_alone_is_no_longer_a_mapping(client, ed, db):
+    """Criterion 10a superseded by D-52 (slice10b Q-16): BR → FR is the stored link; a BR_SOLUTION → SOL → FR
+    path with no link maps nothing, and the view reads the links only."""
     br1, br2, a = two_brs(client, ed)
-    step3 = client.post(f"{API}/projects/{ed['p']}/bfc-nodes", headers=ed["h"], json={
-        "node_name": "Dispatch", "parent_bfc_node_id": a["parent_bfc_node_id"], "is_process": True}).json()
-    br3 = next(b for b in client.get(f"{API}/projects/{ed['p']}/business-requirements", headers=ed["h"]).json()
-               if b["bfc_node_id"] == step3["bfc_node_id"])
     s = sol(client, ed, "Portal", "TECHNOLOGY")
-    for b in (br1, br2, br3):
+    for b in (br1, br2):
         assert link(client, ed, b["br_id"], s["solution_id"]).status_code == 201
-    fr(client, ed, "Order entry form", solution_id=s["solution_id"])
+    f1 = fr(client, ed, "Order entry form", solution_id=s["solution_id"])
     fr(client, ed, "Order feed", "INTERFACE", solution_id=s["solution_id"])
-    fr(client, ed, "Loose")                                                  # D-28: never in the view
     n = db.scalar(text("SELECT count(*) FROM v_br_function_requirement WHERE project_id = :p"), {"p": ed["p"]})
-    assert n == 6
-    assert db.scalar(text("SELECT to_regclass('fr_br')")) is None
-    rows = client.get(f"{API}/business-requirements/{br1['br_id']}/function-requirements", headers=ed["rv"]).json()
-    assert [(r["fr_number"], r["solution_number"]) for r in rows] == [("FR-0001", "SOL-0001"), ("FR-0002", "SOL-0001")]
+    assert n == 0
+    url = f"{API}/business-requirements/{br1['br_id']}/function-requirements"
+    assert client.post(url, headers=ed["h"], json={"fr_id": f1["fr_id"]}).status_code == 201
+    rows = client.get(url, headers=ed["rv"]).json()
+    assert [(r["fr_number"], r["solution_number"], r["tag_answers_this_br"]) for r in rows] == \
+        [("FR-0001", "SOL-0001", True)]
     under = client.get(f"{API}/solutions/{s['solution_id']}/function-requirements", headers=ed["rv"]).json()
-    assert [r["fr_number"] for r in under] == ["FR-0001", "FR-0002"]
+    assert [r["fr_number"] for r in under] == ["FR-0001", "FR-0002"]     # the solution side is unchanged
 
 
-def test_the_br_panel_drops_frs_when_the_link_goes(client, ed):
+def test_the_link_stays_when_the_brs_solution_goes(client, ed):
+    """D-52 (slice10b §2.2): unlinking the BR_SOLUTION no longer drops the FR from the BR; the tag stays and
+    the response names the FR whose tag now answers none of its BRs."""
     br1, _, _ = two_brs(client, ed)
     s = sol(client, ed, "Portal", "TECHNOLOGY")
     row = link(client, ed, br1["br_id"], s["solution_id"]).json()
-    fr(client, ed, solution_id=s["solution_id"])
+    f = fr(client, ed, solution_id=s["solution_id"])
     url = f"{API}/business-requirements/{br1['br_id']}/function-requirements"
-    assert len(client.get(url, headers=ed["h"]).json()) == 1
-    client.delete(f"{API}/business-requirements/{br1['br_id']}/solutions/{row['br_solution_id']}",
-                  headers=ed["h"], params={"row_version": row["row_version"]})
-    assert client.get(url, headers=ed["h"]).json() == []
+    assert client.post(url, headers=ed["h"], json={"fr_id": f["fr_id"]}).status_code == 201
+    r = client.delete(f"{API}/business-requirements/{br1['br_id']}/solutions/{row['br_solution_id']}",
+                      headers=ed["h"], params={"row_version": row["row_version"]})
+    assert r.json()["warnings"] == [{"code": "fr_solution_outside_its_brs", "frs": [f["fr_number"]]}]
+    rows = client.get(url, headers=ed["h"]).json()
+    assert [(r["fr_id"], r["solution_id"], r["tag_answers_this_br"]) for r in rows] == \
+        [(f["fr_id"], s["solution_id"], False)]
 
 
 def test_the_view_is_read_only_to_the_app(db):
@@ -231,16 +237,3 @@ def test_the_view_is_read_only_to_the_app(db):
                           "has_table_privilege('v_br_function_requirement', 'INSERT'), "
                           "has_table_privilege('v_br_function_requirement', 'UPDATE')")).one()
     assert tuple(can) == (True, False, False)
-
-
-# ---- S6a-1 tripwire -----------------------------------------------------------------------
-
-def test_suggested_br_id_never_arrives_without_its_exclusions():
-    """S6a-1: the D-34 hint is deferred. When the FR import adds it, it must also exclude it from
-    FK_LIVENESS (a hint never blocks a BR retire) and from the baseline shadow and hash."""
-    if "suggested_br_id" not in FunctionRequirement.__table__.c:
-        return
-    assert "fk_fr_suggested_br" in getattr(lifecycle, "EXCLUDED_FKS", ()), "add it to lifecycle.EXCLUDED_FKS"
-    from services import baseline_shadow
-    excluded = getattr(baseline_shadow, "SHADOW_EXCLUDED", {}).get("function_requirement", ())
-    assert "suggested_br_id" in excluded, "exclude it from the baseline shadow (D-34)"

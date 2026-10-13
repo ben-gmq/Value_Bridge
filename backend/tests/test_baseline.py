@@ -568,10 +568,12 @@ def test_spec_versions_that_differ_report_per_entity(client, ed, monkeypatch):
     scope(client, ed)
     v10 = bid(freeze(client, ed))
     e = freeze_set.BY_TABLE["data_entity"]
-    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 2)
-    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 2)
+    nxt = freeze_set.CURRENT_HASH_SPEC + 1
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", nxt)
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", nxt)
     for x in freeze_set.FREEZE_SET:
-        monkeypatch.setitem(x.hash_columns, 2, x.hash_columns[1] if x is not e else ("de_number",))
+        monkeypatch.setitem(x.hash_columns, nxt,
+                            freeze_set.columns_for(x, nxt - 1) if x is not e else ("de_number",))
     d = diff(client, ed, v10, "live")
     assert d["entities"]["data_entity"]["status"] == "SCHEMA_VERSION_MISMATCH"
     assert d["entities"]["bfc_node"]["status"] == "OK"

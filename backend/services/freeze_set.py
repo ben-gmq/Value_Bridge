@@ -13,8 +13,10 @@ starts with a digit), so NULL, '' and the sentinel itself never collide.
 The baseline's content_digest (DR8-S1, DR8-P2) is sha256 over every entity's ordered source_id:content_hash
 list; the freeze computes it from the live set inside its snapshot, checks it against the preview the
 person confirmed, stores it on the header, and every read of the baseline recomputes it from the shadows.
-The spec version bumps only when an existing entity's hashed list changes; a new entity adds its list
-under the current version (§4).
+The spec version bumps when an existing entity's hashed list changes AND when a new entity joins the set
+(slice10b §5.3, Q-14, amending slice8 §4): the new entity registers its list under the new version only
+(`since=`), and the digest, the re-hash check and the freeze skip every entity unknown at a baseline's spec,
+so a baseline frozen before the entity existed recomputes byte-identical to what it stored.
 """
 import hashlib
 from dataclasses import dataclass, field
@@ -27,7 +29,7 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 1
+CURRENT_HASH_SPEC = 2       # 2: br_function_requirement joined the set (slice 10b, D-52)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -45,13 +47,15 @@ class FrozenEntity:
 
 def columns_for(e: FrozenEntity, version: int) -> tuple[str, ...] | None:
     """sara L5: the hashed list in force at `version` — the newest list at or below it. An entity that joined
-    the set later has none for older versions: its rows there are simply absent (ADDED, §6), never a mismatch."""
+    the set later has none for older versions: it was not frozen at that spec, so a baseline of that spec has
+    no rows of it and its digest never included it (slice10b §5.3). Never a SCHEMA_VERSION_MISMATCH."""
     keys = [v for v in e.hash_columns if v <= version]
     return e.hash_columns[max(keys)] if keys else None
 
 
-def _e(table, area, hashed, position=(), label=(), refs=(), step=None) -> FrozenEntity:
-    return FrozenEntity(table, area, {1: tuple(hashed)}, tuple(position), tuple(label), tuple(refs), step,
+def _e(table, area, hashed, position=(), label=(), refs=(), step=None, since=1) -> FrozenEntity:
+    """`since`: the hash spec the entity joined the set at. A new entity bumps CURRENT_HASH_SPEC and passes it."""
+    return FrozenEntity(table, area, {since: tuple(hashed)}, tuple(position), tuple(label), tuple(refs), step,
                         components.FREEZE_GATES.get(table, components.ALWAYS))
 
 
@@ -100,6 +104,9 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
                                                                                   ("solution_id", SOL))),
     _e(FR, "FR", ("fr_number", "fr_name", "description", "solution_id", "fr_type_code", "fr_type_behaviour",
                   "complexity_code", "effort_days", "acceptance_note"), label=("fr_number", "fr_name")),
+    # D-52 (slice10b §5.2, Q-15): BR ↔ FR, labelled by its ends; joined the set at spec 2.
+    _e("br_function_requirement", "FR", ("br_id", "fr_id", "coverage_note"), refs=(("br_id", BR), ("fr_id", FR)),
+       since=2),
     _e("fr_interface", "APPLICATION", ("source_application_id", "target_application_id", "pattern_code",
                                        "method_code", "frequency_code", "volume_note"),
        refs=(("source_id", FR), ("source_application_id", APP), ("target_application_id", APP))),
@@ -115,6 +122,21 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
 )
 BY_TABLE = {e.table: e for e in FREEZE_SET}
 assert tuple(BY_TABLE) == SHADOWED, "FREEZE_SET and models.baseline.SHADOWED disagree"
+# Grade 1 (slice10b §5.3): the spec-1 set is history. Every baseline frozen before 10b hashed exactly these 24
+# entities; adding one here would change the digest of every one of them. A new entity uses `since=`.
+SPEC_1_ENTITIES = ("org_unit", "org_role", "bfc_node", "data_entity", "data_field", "external_entity",
+                   "process_trigger", "bfc_node_data_entity", "bfc_node_org_role", "bfc_node_external_flow",
+                   "bfc_node_trigger", "business_requirement", "br_data_entity", "br_org_role", "application",
+                   "solution", "br_solution", "function_requirement", "fr_interface", "fr_interface_data_entity",
+                   "application_solution", "application_bfc_node", "effort_rate", "project_component")
+assert tuple(e.table for e in FREEZE_SET if columns_for(e, 1) is not None) == SPEC_1_ENTITIES, \
+    "an entity joined the spec-1 set: register it with since=<new spec> and bump CURRENT_HASH_SPEC"
+assert all(columns_for(e, CURRENT_HASH_SPEC) is not None for e in FREEZE_SET), "an entity is newer than the spec"
+
+
+def at_spec(version: int) -> tuple[FrozenEntity, ...]:
+    """The entities frozen at hash spec `version`, in freeze order."""
+    return tuple(e for e in FREEZE_SET if columns_for(e, version) is not None)
 
 
 def shadow_columns(table: str) -> list[str]:
@@ -132,10 +154,13 @@ def hash_sql(exprs: list):
     return func.encode(func.sha256(func.convert_to(func.concat_ws(literal(SEP), *parts), "UTF8")), "hex")
 
 
-def live_select(e: FrozenEntity, project_id: int, on: frozenset[str]) -> Select | None:
+def live_select(e: FrozenEntity, project_id: int, on: frozenset[str],
+                version: int | None = None) -> Select | None:
     """The live rows a freeze takes for one entity under the components `on`: source_id, every shadow
-    column, content_hash. None when the gate is closed (the table freezes zero rows)."""
-    if not e.gate.open(on):
+    column, content_hash. None when the gate is closed or the entity is not in the set at `version`
+    (default CURRENT_HASH_SPEC): the table freezes zero rows."""
+    version = CURRENT_HASH_SPEC if version is None else version
+    if not e.gate.open(on) or columns_for(e, version) is None:
         return None
     live = Base.metadata.tables[e.table]
     (pk,) = live.primary_key.columns
@@ -154,7 +179,7 @@ def live_select(e: FrozenEntity, project_id: int, on: frozenset[str]) -> Select 
             node = BfcNode.__table__.alias("step")
             q_from = q_from.join(node, node.c.bfc_node_id == live.c[e.step_column])
             where.append(not_(node.c.bfc_set_code.in_(closed)))
-    hashed = [cols[c] for c in columns_for(e, CURRENT_HASH_SPEC)]
+    hashed = [cols[c] for c in columns_for(e, version)]
     return (select(pk.label("source_id"), *[x.label(n) for n, x in cols.items()],
                    hash_sql(hashed).label("content_hash"))
             .select_from(q_from).where(and_(*where)).order_by(pk))
@@ -170,18 +195,26 @@ def _agg(sub) -> object:
 
 
 def rehash_mismatches(db, e: FrozenEntity, baseline_id: int, version: int) -> int:
-    """sara M3: frozen rows whose stored content_hash no longer matches their own columns."""
+    """sara M3: frozen rows whose stored content_hash no longer matches their own columns. An entity unknown at
+    `version` has no list to check against: any row it holds under that baseline is itself a mismatch."""
     t = SHADOW_TABLES[e.table]
+    if columns_for(e, version) is None:
+        return db.scalar(select(func.count()).select_from(t).where(t.c.baseline_id == baseline_id))
     return db.scalar(select(func.count()).select_from(t).where(
         t.c.baseline_id == baseline_id, hash_sql([t.c[c] for c in columns_for(e, version)]) != t.c.content_hash))
 
 
-def digest(db, project_id: int, on: frozenset[str], baseline_id: int | None = None) -> str:
-    """content_digest of the live set under `on`, or of one frozen baseline's shadows."""
+def digest(db, project_id: int, on: frozenset[str], baseline_id: int | None = None,
+           version: int | None = None) -> str:
+    """content_digest of the live set under `on`, or of one frozen baseline's shadows, over the entities in
+    the set at hash spec `version` (default CURRENT_HASH_SPEC; a baseline passes its own hash_spec_version).
+    Slice10b §5.3 [Q-14]: an entity unknown at that spec is skipped, never appended as an empty line, so a
+    baseline frozen before the entity joined recomputes byte-identical to its stored content_digest."""
+    version = CURRENT_HASH_SPEC if version is None else version
     parts = []
-    for e in FREEZE_SET:
+    for e in at_spec(version):
         if baseline_id is None:
-            q = live_select(e, project_id, on)
+            q = live_select(e, project_id, on, version)
             agg = "" if q is None else db.scalar(_agg(q.order_by(None).subquery()))
         else:
             t = SHADOW_TABLES[e.table]

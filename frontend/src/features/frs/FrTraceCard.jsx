@@ -20,11 +20,12 @@ function Line({ k, children }) {
 const none = <Typography sx={{ fontSize: 13, color: 'text.secondary', pt: '3px' }}>—</Typography>;
 
 /**
- * Where an FR traces to (mockup 06's Traceability card): its solution, the BRs that solution answers,
- * their business functions, and the to-be applications that deliver the solution. All derived through
- * the solution (D-7) — read with the same queries the solution page uses, so its edits refresh this.
+ * Where an FR traces to (mockup 06's Traceability card). D-52: the FR's requirements are its direct BR
+ * links (made on the BR screen; `br_count` here). Its solution is an optional tag; when it has one, the
+ * BRs that solution answers, their business functions and the to-be applications delivering it follow —
+ * read with the same queries the solution page uses, so its edits refresh this.
  */
-export function FrTraceCard({ projectId, solutionId, solution }) {
+export function FrTraceCard({ projectId, solutionId, solution, brCount }) {
   const sid = solutionId;
   const brsQ = useQuery({ queryKey: [...keys.solutionLinks(), 'solution', String(sid)], queryFn: () => solutionApi.brs(sid),
     enabled: Boolean(sid) });
@@ -36,14 +37,20 @@ export function FrTraceCard({ projectId, solutionId, solution }) {
   );
   return (
     <Card title={t('frs.trace.title')} bodySx={{ gap: 1 }}>
-      {!sid && <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('frs.unlinkedTip')}</Typography>}
+      {brCount != null && (
+        <Line k={t('frs.trace.brLinks')}>
+          {brCount > 0 ? <Tag tone="purple">{t('frs.trace.brLinkCount', { n: brCount })}</Tag>
+            : <Tag tone="caution">{t('frs.untracedChip')}</Tag>}
+        </Line>)}
+      {brCount === 0 && <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('frs.untracedTip')}</Typography>}
+      {!sid && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('frs.noSolutionTip')}</Typography>}
       {(brsQ.error || appsQ.error) && <Alert severity="error">{errorText(brsQ.error || appsQ.error)}</Alert>}
       {sid && (
         <>
           <Line k={t('frs.trace.bfc')}>
             {steps.length ? steps.map((b) => <Tag key={b.hier_code} tone="purple" sx={{ fontFamily: MONO }}>{b.hier_code}</Tag>) : none}
           </Line>
-          <Line k={t('frs.trace.br')}>
+          <Line k={t('frs.trace.solutionBrs')}>
             {brs.length ? brs.map((b) => tagLink(links.requirement(projectId, b.br_id), 'purple', b.br_number, b.br_solution_id)) : none}
           </Line>
           <Line k={t('frs.solution')}>

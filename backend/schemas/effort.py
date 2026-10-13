@@ -92,3 +92,4 @@ class EffortSummaryOut(BaseModel):
     rejected: CountDays
     on_unconfirmed_default: int
     not_at_current_rate: CountDays
+    untraced: CountDays                 # slice10b Q-18: information, never in a total

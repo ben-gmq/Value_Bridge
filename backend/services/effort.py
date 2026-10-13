@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import CodeMaster, EffortRate, FunctionRequirement, Solution
+from models import BrFunctionRequirement, CodeMaster, EffortRate, FunctionRequirement, Solution
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
 from services import audit, errors, lifecycle
 from services.code_master import resolve, validate_required_code
@@ -247,6 +247,11 @@ def summary(db: Session, project_id: int) -> dict:
     off_head = [f for f in head if f.effort_days is not None
                 and current.get((f.fr_type_code_id, f.complexity_code_id), f.effort_days) != f.effort_days]
     rej = [f for f in frs if f.solution_id in rej_ids]
+    # slice10b §6.4 [Q-18]: information only — every live FR with no live BR link. Never added
+    # into a total, and effort is never summed by BR (an FR serving three BRs would count three times).
+    traced = set(db.scalars(select(BrFunctionRequirement.fr_id).where(
+        BrFunctionRequirement.project_id == project_id, BrFunctionRequirement.is_active)))
+    untraced = [f for f in frs if f.fr_id not in traced]
 
     def total(rows):
         return sum((f.effort_days for f in rows if f.effort_days is not None), Decimal(0))
@@ -276,4 +281,5 @@ def summary(db: Session, project_id: int) -> dict:
                                       and (f.fr_type_code_id, f.complexity_code_id) in unconfirmed),
         # Same basis as the headline total (sara L-1): FRs under rejected solutions are reported apart.
         "not_at_current_rate": {"count": len(off_head), "days": sum((f.effort_days for f in off_head), Decimal(0))},
+        "untraced": {"count": len(untraced), "days": total(untraced)},
     }
