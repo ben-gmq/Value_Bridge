@@ -17,6 +17,6 @@ from models.identity import AppUser, AuditEvent, ProjectMember, UserAccessGrant 
 from models.requirement import BrDataEntity, BrOrgRole, BusinessRequirement  # noqa: F401
 from models.shared import CodeMaster, ProjectSequence  # noqa: F401
 from models.solution import BrSolution, Solution  # noqa: F401
-from models.tenancy import (Client, Program, Project, ProjectComponent,  # noqa: F401
+from models.tenancy import (Client, Program, Project, ProjectComponent, ProjectDfdRule,  # noqa: F401
                             ProjectTemplateComponent)
 from models.baseline import SHADOW_TABLES, SHADOWED, Baseline  # noqa: F401,E402  last: shadows read every live table
