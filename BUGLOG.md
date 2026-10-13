@@ -346,3 +346,6 @@ place.
 - UAT 13a-3 · slice 13a, 2026-10-14 · question · **Unticking a CRUD box leaves the step's data out in place** (D-24: one
   record of step I/O; the grid tooltip says ticking adds it). The BR page lists it under "Recorded on the DFD, not on the
   requirement"; the tester found no control there to remove it — check the panel's Data tile is the obvious path.
+- sara L3 · slice 10c pre-merge review, 2026-10-14 · LOW · **The "keys only" attribute hint rule (D-39) now also lives
+  in the browser** (BR CRUD grid expander, slice 10c) besides the entity page; two places to keep in step. Move to one
+  shared helper, or have the server send the flag.
