@@ -16,6 +16,9 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
+**D-65…D-70 are specced in [`slice13_spec.md`](slice13_spec.md)** (sub-slices 13a–13d, questions Q-1…Q-12, all open
+for Ben). 13a needs no answers and is being built on a slice branch; 13b–13d wait for Ben's answers.
+
 ### Ben's feedback, 2026-10-13 (D-65…D-70)
 
 **Status: RECORDED, not decided.** Ben: *"just record this, and we will do the spec and the build later on."* Each item
