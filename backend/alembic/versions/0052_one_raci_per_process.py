@@ -21,12 +21,14 @@ A to-be process's roles are its requirement's (br_org_role); an as-is process's 
    - otherwise inserted with the resolved code, created_by = the step row's author → `copied`
      (a second step row of the same org role and behaviour joins the first → `already`).
 3. Every live to-be step role is retired with one stamp → `retired`. No actor exists in a migration, so
-   deleted_by / updated_by stay NULL and the audit event carries the provenance (0045 / 0051 precedent).
+   deleted_by stays NULL, updated_by is untouched, and the audit event carries the provenance (0045 / 0051
+   precedent).
 4. History [Q-3]: a to-be step role retired by a step retire that still holds (its stamp is a
-   STEP_RETIRED_WITH_DEPENDENTS event's, which lists it, and the step is still retired with that stamp) gets a RETIRED copy on the event's BR — the BR the event lists whose deleted_at is
+   STEP_RETIRED_WITH_DEPENDENTS event's, which lists it, and the step is still retired with that stamp) gets a
+   RETIRED copy on the event's BR — the BR the event lists whose deleted_at is
    the event's stamp — with the same deleted_at / deleted_by, so undoing that step retire brings the role back
    on the BR (step_retire._same_stamp_links). No such BR → `unplaced`. Same org role and behaviour already on
-   that BR with the stamp → `history_already`. Any other row on the full grain (retired rows included, the
+   that BR with the stamp → `history_already`, not reported (nothing written). Any other row on the full grain (retired rows included, the
    0051 precedent) → `not_carried`. An ACCOUNTABLE when the BR's same-stamp (or live) rows hold one for another
    org role → `conflicts` (kind RETIRED_WITH_STEP): the BR's wins, so the restore brings back exactly one.
 5. One RACI_MERGED_TO_BR audit event per project that changed (app_user_id NULL, decision D-64), listing every
@@ -68,7 +70,8 @@ RESOLVED_COLS = "coalesce(o.code_id, c.code_id) AS raci_code_id, coalesce(o.beha
 def upgrade() -> None:
     # DR10d-3: the exclusive lock first, so no writer upgrades a lock half way (and the API is stopped anyway).
     op.execute("LOCK TABLE bfc_node_org_role IN ACCESS EXCLUSIVE MODE")
-    op.execute("LOCK TABLE br_org_role, business_requirement, bfc_node IN SHARE MODE")
+    op.execute("LOCK TABLE br_org_role, bfc_node IN SHARE ROW EXCLUSIVE MODE")   # no lock upgrade later (sara L1)
+    op.execute("LOCK TABLE business_requirement IN SHARE MODE")
     # 1. pre-check [Q-5] (scripts/precheck_0052.py runs the same query read-only)
     op.execute("""
         DO $$ DECLARE bad text; BEGIN
