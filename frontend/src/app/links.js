@@ -24,13 +24,13 @@ export const links = {
   settings: (p) => `/p/${p}/settings`,
   components: (p) => `/p/${p}/settings/components`,
   access: (p) => `/p/${p}/access`,
-  organisation: (p) => `/p/${p}/settings/organisation`,
+  organisation: (p) => `/p/${p}/organisation`,            // D-56: a rail item under Scope (was settings/organisation)
   parties: (p) => `/p/${p}/settings/parties`,
   interfaces: (p) => `/p/${p}/interfaces`,
   rateCard: (p) => `/p/${p}/settings/rate-card`,
   effort: (p) => `/p/${p}/br-fr/effort`,
-  applications: (p) => `/p/${p}/settings/applications`,
-  application: (p, appId) => `/p/${p}/settings/applications/${appId}`,
+  applications: (p) => `/p/${p}/systems`,                // D-56: "Systems" in the rail (was settings/applications)
+  application: (p, appId) => `/p/${p}/systems/${appId}`,
   baselines: (p, from, to) => (from ? `/p/${p}/baselines?from=${from}&to=${to ?? 'live'}` : `/p/${p}/baselines`),
   baseline: (p, id) => `/p/${p}/baselines/${id}`,
 };

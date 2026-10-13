@@ -49,9 +49,9 @@ const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/dfd', DfdPage], ['dfd', DfdListPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
-  ['settings', SettingsPage], ['settings/organisation', OrganisationPage], ['settings/parties', PartiesPage],
-  ['settings/components', ComponentsPage],
-  ['settings/applications', ApplicationsPage], ['settings/rate-card', RateCardPage], ['settings/applications/:appId', ApplicationPage],
+  ['organisation', OrganisationPage], ['systems', ApplicationsPage], ['systems/:appId', ApplicationPage],
+  ['settings', SettingsPage], ['settings/parties', PartiesPage], ['settings/components', ComponentsPage],
+  ['settings/rate-card', RateCardPage],
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
 ];
 
@@ -61,7 +61,7 @@ const NEEDS = {
   'br-fr': ['SOLUTION', 'FUNCTION_REQUIREMENT'], 'br-fr/:solutionId': ['SOLUTION'],
   'br-fr/frs': ['FUNCTION_REQUIREMENT'], 'br-fr/frs/:frId': ['FUNCTION_REQUIREMENT'],
   'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
-  'settings/applications': ['APPLICATION'], 'settings/applications/:appId': ['APPLICATION'],
+  systems: ['APPLICATION'], 'systems/:appId': ['APPLICATION'],
   'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
 };
 
@@ -80,6 +80,16 @@ function Gated({ path, Screen }) {
 function RequirementsMoved() {
   const { projectId } = useParams();
   return <Navigate to={links.processes(projectId)} replace />;
+}
+
+/** D-56: Organisation and Systems left Settings for the rail; the old addresses still land, ids and query kept. */
+const MOVED = [['settings/organisation', (p) => links.organisation(p)], ['settings/applications', (p) => links.applications(p)],
+  ['settings/applications/:appId', (p, { appId }) => links.application(p, appId)]];
+
+function Moved({ to }) {
+  const params = useParams();
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to(params.projectId, params)}${search}${hash}`} replace />;
 }
 
 function Spinner() {
@@ -115,6 +125,7 @@ export default function App() {
         <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Gated path={path} Screen={Screen} /></RequireAuth>} />
       ))}
       <Route path="/p/:projectId/requirements" element={<RequireAuth><RequirementsMoved /></RequireAuth>} />
+      {MOVED.map(([path, to]) => <Route key={path} path={`/p/:projectId/${path}`} element={<RequireAuth><Moved to={to} /></RequireAuth>} />)}
       {SECTIONS.map(([path, section, slice]) => (
         <Route key={path} path={`/p/:projectId/${path}`}
           element={<RequireAuth><SectionPlaceholder section={section} slice={slice} /></RequireAuth>} />

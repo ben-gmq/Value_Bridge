@@ -185,5 +185,7 @@
   "shell.breadcrumb": "Breadcrumb",
   "user.kind.ADMIN": "Administrator",
   "user.kind.USER": "User",
-  "user.kind.VIEWER": "Viewer"
+  "user.kind.VIEWER": "Viewer",
+  "nav.organisation": "Organisation",
+  "nav.systems": "Systems"
 }

@@ -13,7 +13,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page, WrapperBox } from '../../components/Page';
 import { t } from '../../i18n/t';
-import { RecordDialog, SettingsCrumbs, ShowRetired } from './settingsKit';
+import { RecordDialog, ShowRetired } from './settingsKit';
 
 // Client organisation (§5.3 ORG_UNIT / ORG_ROLE, S1-7): a unit tree fixed at three levels and
 // the roles in each unit. These roles are the R/A/C/I holders on the chart and requirement screens.
@@ -166,7 +166,6 @@ export default function OrganisationPage() {
 
   return (
     <Box>
-      <SettingsCrumbs projectId={projectId} current={t('settings.organisation')} />
       <Page title={t('settings.organisation')} subtitle={t('settings.organisationWhat')}
         error={error || (unitsQ.error && errorText(unitsQ.error)) || (rolesQ.error && errorText(rolesQ.error))}>
         <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 1 }}>{t('settings.org.raciHelp')}</Typography>
