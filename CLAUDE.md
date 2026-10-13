@@ -9,6 +9,10 @@ requirements, data entities and interfaces, all frozen into priced, diffable bas
 Multi-project, with programs as roll-up scopes. **The signed-off design is
 [docs/VB_design.md](docs/VB_design.md) (signed off 2026-09-28). It is the source of truth —
 cite it, don't restate it.** Changes to data design or business logic go to Ben first.
+**Two files, kept apart:** `VB_design.md` is the clean current spec — present tense, no "revised/was/supersedes",
+decisions cited by id only. [docs/VB_design_history.md](docs/VB_design_history.md) holds every decision with its date
+and Ben's words, the reviews, the spec's revisions and the slice-spec index. New feedback goes to history §1 *Open*
+only; once Ben decides, it moves to history §3 and the spec is rewritten to the new state **in the same commit**.
 
 ## Stack & where things run
 - **Backend:** Python 3.11, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic, psycopg 3, PostgreSQL 16.
