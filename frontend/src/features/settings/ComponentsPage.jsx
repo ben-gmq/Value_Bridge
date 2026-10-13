@@ -110,7 +110,7 @@ export default function ComponentsPage() {
             {preview.blockers.length > 0 && (
               <Alert severity="error">
                 <Typography sx={{ mb: 0.5 }}>{t('components.blocked')}</Typography>
-                {preview.blockers.map((b) => <Typography key={`${b.component}-${b.reason}`} variant="body2">{b.message}</Typography>)}
+                {preview.blockers.map((b, i) => <Typography key={`${b.component}-${b.reason}-${i}`} variant="body2">{b.message}</Typography>)}
               </Alert>
             )}
           </Stack>
