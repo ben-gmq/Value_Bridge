@@ -101,6 +101,9 @@ class BfcNodeOut(Orm):
 
 class TreeNodeOut(BfcNodeOut):
     br_number: str | None
+    # D-68 (slice 13a): live process rows of a chart whose DFD is on; null elsewhere
+    dfd_light: Literal["READY", "PARTIAL", "NOT_READY"] | None = None
+    dfd_missing: list[Literal["STARTED", "DATA_OUT"]] | None = None
 
 
 class BrOut(Orm):

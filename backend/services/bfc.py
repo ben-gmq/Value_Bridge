@@ -66,7 +66,11 @@ def tree(db: Session, project_id: int, include_retired: bool = False, bfc_set: s
                                                BfcNode.bfc_set_code == check_set(bfc_set))
     if not include_retired:
         q = q.where(BfcNode.is_active)
-    return [{"node": n, "br_number": br} for n, br in db.execute(q.order_by(BfcNode.hier_code))]
+    # D-68 (slice 13a): each live process row carries its DFD light; None where the chart's DFD is off.
+    from services import process_flow
+    ready = process_flow.readiness(db, project_id, bfc_set)["processes"]
+    return [{"node": n, "br_number": br, "dfd": ready.get(n.bfc_node_id)}
+            for n, br in db.execute(q.order_by(BfcNode.hier_code))]
 
 
 def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | None, name: str,

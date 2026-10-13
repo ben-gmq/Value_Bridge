@@ -21,6 +21,22 @@ class TableRow(BaseModel):
     id: int
 
 
+Light = Literal["READY", "PARTIAL", "NOT_READY"]
+
+
+class ProcessReadiness(BaseModel):
+    light: Light
+    missing: list[str]                  # rule element codes the process does not meet (13a: STARTED, DATA_OUT)
+
+
+class ReadinessOut(BaseModel):
+    """D-68 (slice 13a): the light per live process of one chart, against the fixed D-38 rule."""
+    bfc_set_code: str
+    rule_applies: bool                  # false → the chart's DFD is off: no light anywhere (S7-3)
+    rule: list[str]
+    processes: dict[int, ProcessReadiness]
+
+
 class ProcessCompletenessOut(BaseModel):
     bfc_set_code: str
     rule_applies: bool                  # the chart's DFD component is on (S7-3)
@@ -31,6 +47,7 @@ class ProcessCompletenessOut(BaseModel):
     crud_without_io: list[int]          # br_data_entity ids — must be empty
     ext_without_io: list[int]           # bfc_node_external_flow ids — must be empty
     live_link_on_retired_step: list[TableRow]   # must be empty (docs/step_retire_spec.md §4)
+    readiness: ReadinessOut             # D-68: the same predicates as missing_input / missing_output
 
 
 # ---- the graph (D-21) and saved positions (D-30) ----

@@ -62,6 +62,38 @@ def missing_io(db: Session, project_id: int, sets: list[str] | None = None,
             "missing_output": [_ref(n) for n, _i, o in rows if not o]}
 
 
+# ---- readiness: the red / yellow / green light (D-68, slice13_spec §7.1) -------------------------------
+# 13a reads the fixed D-38 rule through the SAME predicates the freeze gate uses (_has_input / _has_output),
+# so the light and the freeze cannot disagree. It is a new reader only (DR13-P1): missing_io,
+# consistency._process_io and baseline._freeze are untouched until 13b re-expresses them over this.
+STARTED, DATA_OUT = "STARTED", "DATA_OUT"
+FIXED_RULE = (STARTED, DATA_OUT)              # D-38: something starts it, and it outputs a data entity
+READY, PARTIAL, NOT_READY = "READY", "PARTIAL", "NOT_READY"
+_ELEMENTS = {STARTED: _has_input, DATA_OUT: _has_output}
+
+
+def _light(missing: list[str], rule: tuple[str, ...]) -> str:
+    return READY if not missing else NOT_READY if len(missing) == len(rule) else PARTIAL
+
+
+def readiness(db: Session, project_id: int, bfc_set: str, node_ids: list[int] | None = None) -> dict:
+    """Per live process of one chart: which rule elements it misses, and its light. A chart whose DFD
+    component is off carries no light (S7-3). Retired processes are never listed. Read-only."""
+    rule = FIXED_RULE
+    applies = bfc_set in sets_with_dfd_on(db, project_id)
+    out = {"bfc_set_code": bfc_set, "rule_applies": applies, "rule": list(rule), "processes": {}}
+    if not applies:
+        return out
+    q = select(BfcNode.bfc_node_id, *(_ELEMENTS[e]().label(e) for e in rule)).where(
+        BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process, BfcNode.bfc_set_code == bfc_set)
+    if node_ids is not None:
+        q = q.where(BfcNode.bfc_node_id.in_(node_ids or [-1]))
+    for row in db.execute(q.order_by(BfcNode.hier_code)).mappings():
+        missing = [e for e in rule if not row[e]]
+        out["processes"][row["bfc_node_id"]] = {"light": _light(missing, rule), "missing": missing}
+    return out
+
+
 def process_completeness(db: Session, project_id: int, bfc_set: str = "TO_BE") -> dict:
     """§9.7: the gaps of one chart. `missing_input` / `missing_output` block a freeze while that
     chart's DFD is on; `no_performer` is a warning only (D-46). `crud_without_io`, `ext_without_io`
@@ -83,6 +115,7 @@ def process_completeness(db: Session, project_id: int, bfc_set: str = "TO_BE") -
         "ext_without_io": _unlicensed(db, project_id, BfcNodeExternalFlow,
                                       BfcNodeExternalFlow.bfc_node_external_flow_id),
         "live_link_on_retired_step": _live_on_retired(db, project_id),
+        "readiness": readiness(db, project_id, bfc_set),                 # D-68 (13a): the light, per process
     }
 
 
