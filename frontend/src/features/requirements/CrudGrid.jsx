@@ -19,9 +19,10 @@ export const brDataKey = (brId) => [...keys.br(brId), 'data'];
 /**
  * Data usage · CRUD for one requirement (br_data_entity, D-24). One row per entity; the
  * In/Out column is the server's derived `direction` of the live links — never sent.
- * Ticking a CRUD also creates the step's data in/out on the server, so the node is refreshed.
+ * Ticking a CRUD also creates the step's data in/out on the server, so the node is refreshed. `emptyText` lets the
+ * process panel say why an empty grid sits over rows recorded on the DFD only (10e).
  */
-export function CrudGrid({ projectId, br, disabled, mark }) {
+export function CrudGrid({ projectId, br, disabled, mark, emptyText }) {
   const qc = useQueryClient();
   const qk = brDataKey(br.br_id);
   const q = useQuery({ queryKey: qk, queryFn: () => brApi.data(br.br_id) });
@@ -76,7 +77,7 @@ export function CrudGrid({ projectId, br, disabled, mark }) {
           <TableBody>
             {!q.isLoading && !q.error && entityIds.length === 0 && (
               <TableRow><TableCell colSpan={6}>
-                <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('requirements.noData')}</Typography>
+                <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{emptyText ?? t('requirements.noData')}</Typography>
               </TableCell></TableRow>
             )}
             {entityIds.map((deId) => {
