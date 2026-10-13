@@ -5,7 +5,7 @@ Every route declares one guard. Project-scoped collections use project_ctx; ever
 /<things>/{id} uses object_guard, so a row in a project you cannot see is a 404. There is no
 "create a requirement" route: a BR appears with its process step (D-2, §7.3).
 """
-from fastapi import Depends
+from fastapi import Depends, Response
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,8 @@ from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, 
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
                            DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
-                           ExternalEntityOut, ExternalEntityPatch, ExternalFlowIn, ExternalFlowOut,
+                           ExternalEntityOut, ExternalEntityPatch, ExternalFlowIn, ExternalFlowOut, HandOffIn,
+                           HandOffOut,
                            OrgRoleIn, OrgRoleOut, OrgRolePatch, OrgUnitIn, OrgUnitOut, OrgUnitPatch,
                            ProcessIn, ProcessOut, RaciIn, ReorderIn, RestoreCountOut,
                            RetireConfirmIn, RetirePreviewOut, StepIoIn, StepIoOut,
@@ -173,6 +174,17 @@ def unlink_step_io(id: int, link_id: int, row_version: int, node: BfcNode = Depe
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     step_io.unlink(db, _uid(user), _child(db, BfcNodeDataEntity, link_id, "bfc_node_id", node.bfc_node_id),
                    row_version)
+
+
+# D-65 (13d): a hand-off drawn from one process to another on the DFD — A's output and B's input in
+# one transaction, through the same writer. The chart's DFD component, as the canvas's other writes.
+@router.post("/bfc-nodes/{id}/hand-offs", response_model=HandOffOut, status_code=201, **_node_dfd_w.route)
+def hand_off(id: int, body: HandOffIn, response: Response, node: BfcNode = Depends(_node_dfd_w.dep),
+             user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    out = step_io.hand_off(db, _uid(user), node, body.to_bfc_node_id, body.data_entity_id)
+    if out["already"]:
+        response.status_code = 200                            # nothing written: "Already on the diagram"
+    return out
 
 
 @router.get("/bfc-nodes/{id}/external-flows", response_model=list[ExternalFlowOut], **_node_r.route)

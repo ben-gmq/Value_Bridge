@@ -108,7 +108,8 @@ ROUTE_COMPONENTS = (
 )
 # 7c (DR7-D1): these depend on the node's chart, so they must declare the DFD resolver.
 ROUTE_RESOLVERS = (("/external-flows", "<node_dfd_component>"), ("/performer", "<node_dfd_component>"),
-                   ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"))
+                   ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"),
+                   ("/hand-offs", "<node_dfd_component>"))                      # D-65 (13d)
 
 
 def test_every_component_write_declares_its_component():

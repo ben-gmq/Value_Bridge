@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BrDataEntity, DataEntity
 from services import lifecycle
+from services.access import NOT_FOUND
 
 DIRECTIONS = ("I", "O")
 
@@ -78,3 +79,29 @@ def unlink(db: Session, actor_id: int, row: BfcNodeDataEntity, row_version: int)
         names += [f"{db.get(ExternalEntity, x.external_entity_id).ext_number} {x.direction}" for x in ext]
         raise HTTPException(409, f"Still needed by {', '.join(names)}")
     lifecycle.unlink(db, actor_id, row, row_version)
+
+
+def hand_off(db: Session, actor_id: int, a: BfcNode, to_bfc_node_id: int, data_entity_id: int) -> dict:
+    """D-65 (slice13 §4.4, §7.4): process A hands a data entity to process B — A's output and B's input,
+    written through ensure_step_io in ONE transaction, so the derived order A → B appears by itself
+    (D-38: order is never stored). B outside A's project is 404 (never named); B in the other chart is
+    422 (a diagram never crosses charts). Both rows already live → nothing written, `already` true."""
+    b = db.get(BfcNode, to_bfc_node_id)
+    if b is None or b.project_id != a.project_id:
+        raise HTTPException(404, NOT_FOUND)
+    if b.bfc_set_code != a.bfc_set_code:
+        raise HTTPException(422, "Diagrams never cross charts: both steps must be in the same chart")
+    if b.bfc_node_id == a.bfc_node_id:
+        raise HTTPException(422, "A hand-off joins two different process steps")
+    live = set(db.execute(select(BfcNodeDataEntity.bfc_node_id, BfcNodeDataEntity.direction).where(
+        BfcNodeDataEntity.data_entity_id == data_entity_id, BfcNodeDataEntity.is_active,
+        BfcNodeDataEntity.bfc_node_id.in_((a.bfc_node_id, b.bfc_node_id)))).all())
+    already = (a.bfc_node_id, "O") in live and (b.bfc_node_id, "I") in live
+    try:
+        out_row = ensure_step_io(db, actor_id, a, data_entity_id, "O")
+        in_row = ensure_step_io(db, actor_id, b, data_entity_id, "I")
+        db.commit()
+    except Exception:
+        db.rollback()                                         # D2: never A's output without B's input
+        raise
+    return {"output": out_row, "input": in_row, "already": already}
