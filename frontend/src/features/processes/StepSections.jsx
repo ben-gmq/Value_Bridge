@@ -254,8 +254,8 @@ export function useOtherStarts(projectId, nodeId, enabled = true) {
       const p = partyById.get(f.external_entity_id);
       items.push({ key: `ext${f.external_entity_id}`, kind: 'party', label: p ? `${p.ext_number} ${p.ext_name}` : `#${f.external_entity_id}` });
     }
-    return { items, loading: dataQ.isLoading || flowsQ.isLoading, error: dataQ.error || flowsQ.error };
-  }, [dataQ.data, dataQ.isLoading, dataQ.error, flowsQ.data, flowsQ.isLoading, flowsQ.error, partiesQ.data, entities.byId]);
+    return { items, loading: dataQ.isLoading || flowsQ.isLoading, error: dataQ.error || flowsQ.error || partiesQ.error || entities.error };
+  }, [dataQ.data, dataQ.isLoading, dataQ.error, flowsQ.data, flowsQ.isLoading, flowsQ.error, partiesQ.data, partiesQ.error, entities.byId, entities.error]);
 }
 
 /** The read-only line under the trigger editor: the process's other starts, or "Nothing starts this process". */

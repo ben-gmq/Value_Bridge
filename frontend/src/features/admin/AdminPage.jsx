@@ -273,7 +273,7 @@ function Projects({ notify }) {
             <MenuItem value="no">{t('admin.restricted.no')}</MenuItem>
           </Select>
         </FormControl>
-        <Button variant="contained" disabled={m.isPending || !f.is_restricted} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
+        <Button variant="contained" disabled={m.isPending} onClick={() => m.mutate()}>{t('admin.createProject')}</Button>
       </FormRow>
       <GridCard {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}
         columns={[{ field: 'project_code', headerName: t('admin.code'), width: 140 },
