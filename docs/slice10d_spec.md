@@ -17,7 +17,7 @@ and shows each fact once.
 ## 2. Scope
 **In:**
 1. **Layout (D-63).** Tree and panel side by side from 1100 px, each in its own sticky, independently scrolling column
-   (`clamp(340px, 32%, 440px) | 1fr`); the selected tree row stays in view. Below 1100 px, one at a time: the tree, or *(UAT 2026-10-13: at 900 px the panel was ~250 px and clipped its buttons, so the breakpoint moved to 1100 px.)*
+   (`clamp(340px, 32%, 440px) | 1fr`); the selected tree row stays in view. Below 1100 px, one at a time: the tree, or
    the panel with "← Chart". Tree rows: full names with ellipsis + tooltip; the BR chip and flow icon show on hover,
    focus or selection only.
 2. **Panel header (sticky):** level badge · code · parent path (one muted line); the **process name** as an editable
@@ -91,7 +91,7 @@ verify; the old-baseline diff shows each moved role once. **Grade 3 for the layo
 1. Each fact about a process appears once on its panel.
 2. The requirement statement is the largest field; no label in the panel is below 12.5 px.
 3. Performer, trigger, Accountable and data are readable at a glance without scrolling at 1440 × 900.
-4. The tree stays in view while the panel is edited; below 1100 px the two never stack.
+4. The tree stays in view while the panel is edited; below 1100 px the two never stack. *(UAT 2026-10-13: at 900 px the panel was ~250 px and clipped its buttons, so the breakpoint moved to 1100 px.)*
 5. A to-be process has one RACI, on its BR; no Accountable is lost in the merge without being named in the audit.
 6. Every baseline frozen before 10d still verifies.
 
