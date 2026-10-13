@@ -23,12 +23,7 @@ import { AppLinkPanel } from '../applications/AppLinkPanel';
 import { useBrEditor } from '../requirements/BrEditor';
 import { BrSolutionTags } from '../requirements/BrSolutionTags';
 import { BrFrLinks } from '../requirements/BrFrLinks';
-import { BrStatusTag } from '../requirements/reqKit';
-
-// DR 10d-5 (pending Ben): a to-be process's requirement retires only with its step — retiring the step
-// retires both, and after D-64 a to-be process without a live BR has nowhere to record its roles.
-// Flip to true to offer "Retire requirement…" in the ⋯ menu again.
-const OFFER_RETIRE_BR = false;
+import { BrStatusTag, OFFER_RETIRE_BR } from '../requirements/reqKit';
 
 const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose_desc ?? '',
   data_processing_desc: n.data_processing_desc ?? '' });

@@ -18,7 +18,7 @@ import { BrSolutionTags } from './BrSolutionTags';
 import { BrFrLinks } from './BrFrLinks';
 import { warningList } from '../frs/frKit';
 import { CoveragePanel } from './CoveragePanel';
-import { BrStatusTag } from './reqKit';
+import { BrStatusTag, OFFER_RETIRE_BR } from './reqKit';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
 // shown read-only (the server refuses them too: business_requirement.SYSTEM_SET_STATUSES).
@@ -132,7 +132,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
   const actions = (
     <>
       {!live && <Tag tone="neutral">{t('processes.retiredChip')}</Tag>}
-      {canEdit && (live ? (
+      {canEdit && (live ? (OFFER_RETIRE_BR &&
         <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('requirements.retire')}</Button>
       ) : (
         <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('requirements.restore')}</Button>
