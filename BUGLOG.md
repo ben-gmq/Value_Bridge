@@ -339,3 +339,10 @@ place.
 - test-runner · slice 10d, 2026-10-13 · LOW · **Two Pydantic serializer warnings** (a dict where a model is expected):
   `warnings` in `test_application_api.py::test_moving_to_to_be_with_as_is_links_warns_and_the_line_lists_them`,
   `effort_change` in `test_effort_api.py::test_a_type_change_rederives_and_says_so` — loose response-model typing.
+- UAT 13a-1 · slice 13a, 2026-10-14 · LOW · **A selected/hovered process row truncates its name to one letter** ("C…")
+  once the BR chip appears beside the new readiness tag (`ProcessesPage.jsx` row). Evidence/2026-10-13/slice-13a/s13a-01-chart.png.
+- UAT 13a-2 · slice 13a, 2026-10-14 · LOW · **The left rail shows "Settings" to a viewer** (screens inside are read-only;
+  presentation only). s13a-10-viewer.png.
+- UAT 13a-3 · slice 13a, 2026-10-14 · question · **Unticking a CRUD box leaves the step's data out in place** (D-24: one
+  record of step I/O; the grid tooltip says ticking adds it). The BR page lists it under "Recorded on the DFD, not on the
+  requirement"; the tester found no control there to remove it — check the panel's Data tile is the obvious path.
