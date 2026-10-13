@@ -412,6 +412,19 @@ the data model and go to `apple` first (Slice 11). D-58 gets its own spec with a
 | D-62 | **Consultants see only the projects they are assigned to.** Ben: *"when the users actually log in, they have the list of projects that they will be able to access."* Chosen over ticking "restricted" project by project (option A) | **New projects are created restricted**: the new-project form preselects "assigned consultants only" (the API already requires the choice explicitly, §8.10 risk 1, so no schema change), so a USER or VIEWER sees a project only as a live `project_member`; admins still see all. An admin may open a project to all staff by clearing the flag. **Existing projects are switched once**, by an admin, after their member lists are checked — never silently by a migration. The 404-not-403 rule (OR-6) now covers the normal case. No migration (Slice 10c spec); `sara` reviews before commit (access). **Overrides D-40** "staff users see every project" and OR-6's "off by default" | 10c |
 | D-61 | **A BR records system-to-system data flows.** Ben: *"what data entity we want to copy from which system to which system."* | A BR can state data entity + from-system + to-system (Applications as the master list, D-56), which can later seed interface FRs (whose source/target already point at Applications). Model to `apple` | 11 |
 
+### Design critique of the business-functions screen — 2026-10-13 (D-63…D-64)
+
+**Status: DECIDED by Ben, 2026-10-13**, after an /impeccable critique (23/40; `.impeccable/critique/` in the 10b
+worktree): the process panel had become mockup 01 + all of mockup 03 + the DFD facts + the FR section stacked in one
+~1,900 px column, with duplicates and 10.5 px labels. Built as **Slice 10d**, before 10c.
+
+| # | Decision | Effect | Slice |
+|---|---|---|---|
+| D-63 | **The process panel is ranked.** Ben accepted the proposed order | **Primary:** process name (large, editable heading), its path, the **requirement statement** (largest field), business logic, Draft/Confirmed, BR number. **Secondary:** four tiles — performer, what starts it, Accountable, data in/out — each opening its editor. **Collapsed with counts:** Delivery (solutions + FRs), external parties, description, supporting systems. **⋯ menu:** make process, retire, restore, open the BR page. Tree and panel scroll independently; one at a time below 900 px. Static labels ≥ 13 px, a 4-step type scale, help behind (i). The Coverage tile leaves the panel (stays on the BR page) | 10d |
+| D-64 | **One RACI per process on screen: the BR's.** Ben chose it over keeping both | The panel shows and edits the BR's roles only. What happens to the step's own role rows (`bfc_node_org_role`: kept in step with the BR's, derived, or retired) is a data-design change and goes to `apple` before 10d builds it | 10d (apple first) |
+
+Pending: Purpose and Data processing (Ben asked what goes in them, with sample text, before deciding).
+
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
 
 Schema `docs/slice10b_schema.md` (apple). Ben, 2026-10-12: *"Accept all 21 items."*
