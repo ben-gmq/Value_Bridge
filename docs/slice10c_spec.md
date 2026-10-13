@@ -18,9 +18,9 @@ item here is presentation over data that already exists, except D-62's default, 
    Settings tabs redirect to the new addresses (`links.js`), so existing links keep working.
 2. **D-56 performer.** The process panel **already edits** the performer and the time/event triggers
    (`PerformerPanel`, `TriggerPanel`, `NodePanel.jsx:240-245`) when the chart's DFD component is on; that stays as
-   is. 10c makes it plain: the performer heads the panel as "Performed by …" ("Not assigned" when NULL). **When
-   the DFD component is off**, the performer cannot be written today (`node_dfd_component` gate) — whether it should
-   be is Q-1 for Ben; until answered, the section is hidden, as now.
+   is. 10c makes it plain: the performer heads the panel as "Performed by …" ("Not assigned" when NULL). **Whatever
+   the DFD setting** the performer shows and edits (Q-1, Ben 2026-10-14): its route is gated by the function chart
+   (`node_set_component`), not the DFD; triggers stay with the DFD (`node_dfd_component`).
 3. **D-57 guidance.** `processes.stepFactsHelp` is rewritten in plain words, with two buttons: **Open a process
    below** (lists this function's processes) and **Make this a process**, which calls the existing
    `PATCH /bfc-nodes/{id}/process` **behind a new confirmation** saying what happens: a BR is created and numbered
@@ -121,10 +121,12 @@ a client's project to every consultant, recoverable but acted on. Proof:
 1. **Performer without the DFD.** Today a project with the DFD component off cannot record who performs a
    process. Ben asked that *each* process have its organisation in charge. **Rec:** allow the performer whatever
    the DFD setting (a small server change: the performer route gated by the BFC, not the DFD). Triggers stay
-   with the DFD.
+   with the DFD. **Answered: yes (Ben 2026-10-14, S10c-2).** Built: the performer route declares
+   `node_set_component`; a performer neither needs nor blocks the DFD component.
 2. **Existing projects to leave open.** **Rec:** none — switch every live project, after its team is checked.
+   **Answered: yes (Ben 2026-10-14, S10c-2).**
 3. **Who switches them.** **Rec:** Lilly prepares the inventory with each project's members and levels; an admin
-   (Ben) confirms each switch on its Access screen.
+   (Ben) confirms each switch on its Access screen. **Answered: yes (Ben 2026-10-14, S10c-2).**
 
 ## 12. D-62 switch inventory
 _Filled before 10c merges: project · members (level) · switched on / left open by Ben's say-so._
@@ -134,8 +136,8 @@ _Filled before 10c merges: project · members (level) · switched on / left open
 
 | Project | Today | Members (level) | Switch to assigned-only? |
 |---|---|---|---|
-| `SALES` Sales transformation | open to all staff | none | **awaiting Ben (Q-2/Q-3)** — switching hides it from both viewers until they are added |
-| `SOLO` Standalone review | open to all staff | none | **awaiting Ben (Q-2/Q-3)** — same |
+| `SALES` Sales transformation | open to all staff | none | **yes (Q-2/Q-3 answered 2026-10-14)** — an admin confirms the switch on its Access screen once its team is added |
+| `SOLO` Standalone review | open to all staff | none | **yes (Q-2/Q-3 answered 2026-10-14)** — same |
 
-Production does not exist yet (D-35), so this inventory is the whole of it today. Merge waits for Ben's answers to
-Q-2 and Q-3 (sara's gate); the code change itself switches nothing.
+Production does not exist yet (D-35), so this inventory is the whole of it today. Ben answered
+Q-2 and Q-3 on 2026-10-14 (sara's gate met); the code change itself switches nothing.
