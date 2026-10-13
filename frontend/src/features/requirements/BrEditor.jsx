@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Divider, Link, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Divider, TextField, Typography } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
 import { brApi } from '../../api/scope';
-import { keys, links } from '../../app/links';
+import { keys } from '../../app/links';
 import { useCodes } from '../../app/useCodes';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
-import { Code, SectionLabel, Status, Tag } from '../../components/kit';
+import { Status, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
 import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CrudGrid } from './CrudGrid';
@@ -19,7 +18,7 @@ import { BrSolutionTags } from './BrSolutionTags';
 import { BrFrLinks } from './BrFrLinks';
 import { warningList } from '../frs/frKit';
 import { CoveragePanel } from './CoveragePanel';
-import { BrStatusTag } from './reqKit';
+import { BrStatusTag, OFFER_RETIRE_BR } from './reqKit';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
 // shown read-only (the server refuses them too: business_requirement.SYSTEM_SET_STATUSES).
@@ -133,7 +132,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
   const actions = (
     <>
       {!live && <Tag tone="neutral">{t('processes.retiredChip')}</Tag>}
-      {canEdit && (live ? (
+      {canEdit && (live ? (OFFER_RETIRE_BR &&
         <Button color="warning" disabled={busy} onClick={() => { setActionError(''); setConfirmRetire(true); }}>{t('requirements.retire')}</Button>
       ) : (
         <Button disabled={busy} onClick={() => { setActionError(''); restore.mutate(); }}>{t('requirements.restore')}</Button>
@@ -203,35 +202,10 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
 
   return { br, error: brQ.error, getLabel, live, actions, saveState, alerts, fields, dialogs,
     dirty: form.dirty, canSave: editable && form.dirty, busy, saveNow, discard,
-    coverage: isOn('FUNCTION_REQUIREMENT') ? <CoveragePanel projectId={projectId} brId={br.br_id} /> : null };
-}
-
-/** The process's business requirement inside its panel in the function chart (D-53). The panel owns the
- * editor (`useBrEditor({ embedded: true })`) so its one Save covers the function and the requirement. */
-export function BrSection({ projectId, ed }) {
-  if (ed.error) return <Alert severity="error">{errorText(ed.error)}</Alert>;
-  if (!ed.br) return <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
-  const { br } = ed;
-  return (
-    <Box component="section" aria-labelledby="br-section-title"
-      sx={{ containerType: 'inline-size', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Box id="br-section-title"><SectionLabel>{t('requirements.panelTitle')}</SectionLabel></Box>
-        <Link component={RouterLink} to={links.requirement(projectId, br.br_id)} underline="hover"
-          title={t('requirements.openPage')}><Code tone="purple">{br.br_number}</Code></Link>
-        <BrStatusTag code={br.status_code} label={ed.getLabel(br.status_code)} />
-        <Box sx={{ flexGrow: 1 }} />
-        {ed.saveState}
-      </Box>
-      {ed.alerts}
-      {ed.fields}
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
-        <Button component={RouterLink} to={links.requirement(projectId, br.br_id)} sx={{ mr: 'auto' }}>
-          {t('requirements.openPage')}</Button>
-        {ed.actions}
-      </Box>
-      {ed.coverage}
-      {ed.dialogs}
-    </Box>
-  );
+    coverage: isOn('FUNCTION_REQUIREMENT') ? <CoveragePanel projectId={projectId} brId={br.br_id} /> : null,
+    // 10d: the process panel lays the parts out itself (ranked), so it reads these instead of `fields`.
+    values: v, set: form.set, changedCount: form.changed.length, editable, statusSettable, statusOptions,
+    refused, saveError: save.error, actionError, clearActionError: () => setActionError(''),
+    askRetire: () => { setActionError(''); setConfirmRetire(true); }, restoreNow: () => { setActionError(''); restore.mutate(); },
+    frWarnings, setFrWarnings, onLinkWarnings };
 }

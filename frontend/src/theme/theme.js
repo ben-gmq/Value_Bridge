@@ -60,11 +60,15 @@ export const theme = createTheme({
           borderRadius: RADIUS.field, background: theme.vars.palette.background.field,
           '& .MuiOutlinedInput-notchedOutline': { borderColor: theme.vars.palette.brand.lineStrong },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: BRAND.ftcViolet },
+          // the notch follows the shrunk label's 12.5px (below), so the outline gap fits the text
+          '& .MuiOutlinedInput-notchedOutline legend': { fontSize: '0.893em' },
         }),
         input: { fontSize: 14 },
       },
     },
-    MuiInputLabel: { styleOverrides: { root: ({ theme }) => ({ fontSize: 14, '&.Mui-focused': { color: theme.vars.palette.brand.purpleText } }) } },
+    // 10d: a shrunk (floating) label reads at 12.5px, not MUI's 0.75 × 14 = 10.5px — every screen gains.
+    MuiInputLabel: { styleOverrides: { root: ({ theme }) => ({ fontSize: 14, '&.Mui-focused': { color: theme.vars.palette.brand.purpleText },
+      '&.MuiInputLabel-outlined.MuiInputLabel-shrink': { transform: 'translate(14px, -10px) scale(0.893)', maxWidth: 'calc(112% - 32px)' } }) } },
     MuiTextField: { defaultProps: { size: 'small' } },
     MuiChip: { styleOverrides: { root: { borderRadius: RADIUS.pill, fontWeight: 600 } } },
     MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },

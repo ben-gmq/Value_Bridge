@@ -1,6 +1,7 @@
 // The mockups' component kit (docs/mockups/src/kit.jsx, D-51), rebuilt on theme tokens so it works in
 // both colour schemes. Every screen composes these; no screen restyles them locally.
-import { Box, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Box, ButtonBase, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { MONO } from '../theme/theme';
 
 const R = { card: '24px', field: '14px', pill: 999 };
@@ -27,13 +28,70 @@ export function Card({ title, action, children, sx, bodySx, component = 'section
 }
 
 /** Small-caps section label: "DATA USAGE · CRUD". */
-export function SectionLabel({ children, sx, action }) {
+export function SectionLabel({ children, sx, action, info }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...sx }}>
-      <Typography component="h3" sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
+      <Typography component="h3" sx={(th) => ({ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
         textTransform: 'uppercase' })}>{children}</Typography>
+      {info && <InfoTip title={info} sx={{ ml: -0.75 }} />}
       {action && <><Box sx={{ flexGrow: 1 }} />{action}</>}
     </Box>
+  );
+}
+
+/** A group header inside a panel: 14/600, sentence case — one step above SectionLabel's small caps.
+ * `info` puts the explanation behind an (i) tooltip instead of an always-on paragraph (10d). */
+export function GroupHeader({ children, info, action, id, sx }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 28, ...sx }}>
+      <Typography component="h3" id={id} sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary' }}>{children}</Typography>
+      {info && <InfoTip title={info} />}
+      {action && <><Box sx={{ flexGrow: 1 }} />{action}</>}
+    </Box>
+  );
+}
+
+/** An (i) that explains on hover or focus. The text is the label too, so a screen reader hears it. */
+export function InfoTip({ title, sx }) {
+  return (
+    <Tooltip title={title} enterTouchDelay={0}>
+      <IconButton size="small" aria-label={title} sx={(th) => ({ p: 0.5, color: th.vars.palette.brand.muted, ...sx })}>
+        <InfoOutlined sx={{ fontSize: 16 }} />
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+/**
+ * One fact at a glance that opens its editor (10d "How it runs" tiles): a 12.5/600 label, the value
+ * at 14/600, an optional muted note. Empty → muted `emptyText` and a small amber dot on the label;
+ * no alert box. `selected` marks the tile whose editor is open below.
+ */
+export function FactTile({ label, value, note, empty, emptyText, onClick, selected, controls, sx }) {
+  return (
+    <ButtonBase onClick={onClick} aria-expanded={selected} aria-controls={controls} focusRipple
+      sx={(th) => ({ display: 'flex', flexDirection: 'column', alignItems: 'stretch', textAlign: 'left', gap: 0.5,
+        minWidth: 0, minHeight: 76, px: 1.75, py: 1.5, borderRadius: R.field, font: 'inherit', color: 'inherit',
+        bgcolor: selected ? th.vars.palette.brand.purpleTint : th.vars.palette.background.subtle,
+        outline: selected ? `1px solid ${th.vars.palette.brand.ftcViolet}` : `1px solid ${th.vars.palette.divider}`,
+        transition: 'background-color 120ms ease-out',
+        '&:hover': { bgcolor: selected ? th.vars.palette.brand.purpleTint : th.vars.palette.brand.selected },
+        '&.Mui-focusVisible': { outline: `2px solid ${th.vars.palette.brand.ftcViolet}`, outlineOffset: 1 }, ...sx })}>
+      <Box component="span" sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 12.5, fontWeight: 600,
+        color: th.vars.palette.brand.muted })}>
+        {label}
+        {empty && <Box component="span" aria-hidden sx={(th) => ({ width: 6, height: 6, borderRadius: '50%',
+          bgcolor: th.vars.palette.status.caution, flex: 'none' })} />}
+      </Box>
+      {empty ? (
+        <Box component="span" sx={{ fontSize: 14, color: 'text.secondary' }}>{emptyText}</Box>
+      ) : (
+        <Box component="span" sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary', minWidth: 0, overflow: 'hidden',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{value}</Box>
+      )}
+      {note && <Box component="span" sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>{note}</Box>}
+    </ButtonBase>
   );
 }
 

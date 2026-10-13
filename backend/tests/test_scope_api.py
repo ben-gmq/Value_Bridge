@@ -193,8 +193,17 @@ def test_org_unit_level_code_defaults_from_level(client, ed):
     assert (top["level_code"], sub["level_code"], sub["level_no"]) == ("DEPARTMENT", "DIVISION", 2)
 
 
+def as_is_step(client, ed, name="Take order", parent=None):
+    """D-64: step roles are an as-is process's RACI (a to-be process's are its BR's)."""
+    if parent is None:
+        a = client.post(f"{API}/projects/{ed['p']}/bfc-nodes", headers=ed["h"],
+                        json={"node_name": "Sales", "parent_bfc_node_id": None, "bfc_set": "AS_IS"}).json()
+        parent = node(client, ed, "Order to cash", a["bfc_node_id"])["bfc_node_id"]
+    return node(client, ed, name, parent, is_process=True)
+
+
 def test_one_accountable_per_step_named_in_the_409(client, ed):
-    s = step(client, ed)
+    s = as_is_step(client, ed)
     cfo, clerk = _org_role(client, ed, "CFO"), _org_role(client, ed, "CLERK")
     url = f"{API}/bfc-nodes/{s['bfc_node_id']}/org-roles"
     r = client.post(url, headers=ed["h"], json={"org_role_id": cfo["org_role_id"], "raci_code": "A"})
@@ -329,8 +338,8 @@ def test_restored_field_whose_position_was_taken_comes_back_at_the_end(client, e
 
 
 def test_a_link_cannot_be_removed_under_another_owner(client, ed):
-    s1 = step(client, ed)
-    s2 = node(client, ed, "Ship order", s1["parent_bfc_node_id"], is_process=True)
+    s1 = as_is_step(client, ed)
+    s2 = as_is_step(client, ed, "Ship order", s1["parent_bfc_node_id"])
     role = _org_role(client, ed, "CLERK")
     link = client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/org-roles", headers=ed["h"],
                        json={"org_role_id": role["org_role_id"], "raci_code": "C"}).json()

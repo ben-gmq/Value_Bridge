@@ -51,8 +51,6 @@
   "requirements.recordStatus": "Baseline status",
   "requirements.recordState": "State",
   "requirements.recordLock": "If someone else saves first, your save is stopped and you are asked to reload — nothing is overwritten.",
-  "requirements.panelTitle": "Business requirement",
-  "requirements.openPage": "Open the requirement page",
   "requirements.notSaved": "Not saved",
   "requirements.frs.title": "Function requirements",
   "requirements.frs.link": "Link existing FR",

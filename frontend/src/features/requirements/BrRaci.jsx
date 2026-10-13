@@ -56,10 +56,10 @@ export function BrRaci({ projectId, br, disabled }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, minWidth: 0 }}>
       <SectionLabel action={!disabled && (
         <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }}
-          onClick={() => { setError(''); setAddCode(''); setAdding(true); }}>{t('processes.addRole')}</Button>)}>
+          onClick={() => { setError(''); setAddCode(''); setAdding(true); }}>{t('processes.addRole')}</Button>)}
+        info={rule ? t('requirements.raciRule', { rule }) : undefined}>
         {t('requirements.raciTitle')}
       </SectionLabel>
-      {rule && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: -0.75 }}>{t('requirements.raciRule', { rule })}</Typography>}
       {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       {[q.error, rolesQ.error, unitsQ.error].some(Boolean) && (
         <Alert severity="error">{errorText(q.error || rolesQ.error || unitsQ.error)}</Alert>)}

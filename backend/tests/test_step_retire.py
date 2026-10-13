@@ -12,7 +12,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import SessionLocal
-from models import (AuditEvent, BfcNode, BfcNodeOrgRole, BfcNodeTrigger, Base)
+from models import (AuditEvent, BfcNode, BfcNodeTrigger, Base, BrOrgRole)
 from models.base import AuditMixin
 from services import audit, lifecycle, step_retire
 from tests.conftest import OWNER_URL
@@ -64,13 +64,6 @@ def retire_br(client, ed, node_id):
     assert r.status_code == 204, r.text
 
 
-def step_role(client, ed, step, org_role, raci="R"):
-    r = client.post(f"{API}/bfc-nodes/{step['bfc_node_id']}/org-roles", headers=ed["h"],
-                    json={"org_role_id": org_role["org_role_id"], "raci_code": raci})
-    assert r.status_code == 201, r.text
-    return r.json()
-
-
 def br_role(client, ed, br, org_role, raci="A"):
     r = client.post(f"{API}/business-requirements/{br['br_id']}/org-roles", headers=ed["h"],
                     json={"org_role_id": org_role["org_role_id"], "raci_code": raci})
@@ -110,8 +103,9 @@ def summary_events(step_id: int, kind=step_retire.RETIRED) -> list[AuditEvent]:
 
 @pytest.fixture
 def full(client, ed):
-    """Criterion 1's step: a BR with 2 data links and 1 role; 3 step I/O rows (two licensing the
-    BR's CRUD); 1 step role; 1 external flow licensed by an I/O row; 1 trigger link (D-49 — it
+    """Criterion 1's step: a BR with 2 data links and 2 roles (D-64: a to-be process's RACI is its BR's, so
+    the second role, once a step role, is on the BR now); 3 step I/O rows (two licensing the
+    BR's CRUD); 1 external flow licensed by an I/O row; 1 trigger link (D-49 — it
     replaced the 2 arrows of before 7c). Plus a second live step that reads the sales order it writes, so the
     DFD derives s → s2, under the same parent."""
     a = node(client, ed, "Sales")
@@ -126,21 +120,20 @@ def full(client, ed):
     xf = ext_flow(client, ed, s, bank, "I", limit)                       # licensed by (limit, I)
     cfo, clerk = _org_role(client, ed, "CFO"), _org_role(client, ed, "CLERK")
     bror = br_role(client, ed, br, cfo)
-    bnor = step_role(client, ed, s, clerk)
+    bror2 = br_role(client, ed, br, clerk, "R")
     month = trigger(client, ed, "Month-end close")
     link = starts(client, ed, s, month)
     io(client, ed, s2, order, "I")                                       # derived order s → s2
     step_io = client.get(f"{API}/bfc-nodes/{s['bfc_node_id']}/data-entities", headers=ed["h"]).json()
     owned = ({("business_requirement", br["br_id"])}
              | {("br_data_entity", r["br_data_entity_id"]) for r in brde}
-             | {("br_org_role", bror["br_org_role_id"])}
+             | {("br_org_role", bror["br_org_role_id"]), ("br_org_role", bror2["br_org_role_id"])}
              | {("bfc_node_data_entity", r["bfc_node_data_entity_id"]) for r in step_io}
-             | {("bfc_node_org_role", bnor["bfc_node_org_role_id"])}
              | {("bfc_node_external_flow", xf["bfc_node_external_flow_id"])}
              | {("bfc_node_trigger", link["bfc_node_trigger_id"])})
     assert len(step_io) == 3 and len(owned) == 10
     return {"parent": p, "s": s, "s2": s2, "br": br, "owned": owned, "link": link, "trigger": month,
-            "bnor": bnor, "cfo": cfo, "limit": limit, "orders": order}
+            "bror2": bror2, "cfo": cfo, "limit": limit, "orders": order}
 
 
 # ---- criterion 1: the owned set, once each; one stamp; one event per row plus a summary ----------
@@ -200,12 +193,12 @@ def test_step_without_br_is_a_warning_and_a_live_link_on_a_retired_step_is_named
     got = client.get(url, headers=ed["h"]).json()
     assert [x["node_name"] for x in got["step_without_br"]] == ["Confirm order"]
     assert retire(client, ed, full["s"]["bfc_node_id"]).status_code == 204
-    row = db.get(BfcNodeOrgRole, full["bnor"]["bfc_node_org_role_id"])
+    row = db.get(BfcNodeTrigger, full["link"]["bfc_node_trigger_id"])
     lifecycle.relink(db, row.created_by, row)                  # forged: the step stays retired
     db.commit()
     got = client.get(url, headers=ed["h"]).json()
     assert got["live_link_on_retired_step"] == [
-        {"table": "bfc_node_org_role", "id": full["bnor"]["bfc_node_org_role_id"]}]
+        {"table": "bfc_node_trigger", "id": full["link"]["bfc_node_trigger_id"]}]
 
 
 # ---- criterion 3: a stale preview -------------------------------------------------------------------
@@ -232,8 +225,8 @@ def probe_table():
         project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
         bfc_node_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("bfc_node.bfc_node_id"))
         br_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("business_requirement.br_id"))
-        bfc_node_org_role_id: Mapped[int | None] = mapped_column(
-            BigInteger, ForeignKey("bfc_node_org_role.bfc_node_org_role_id"))
+        br_org_role_id: Mapped[int | None] = mapped_column(
+            BigInteger, ForeignKey("br_org_role.br_org_role_id"))
 
     table = StepRetireProbe.__table__
     app_user = make_url(SessionLocal.kw["bind"].url).username
@@ -257,7 +250,7 @@ def test_a_dependent_on_the_step_the_br_or_an_owned_link_blocks(client, ed, full
     assert any(ln.child is probe_table for ln in lifecycle.dependents_of(BfcNode))
     snap = rows_of(ed["p"])
     for col, value in (("bfc_node_id", sid), ("br_id", full["br"]["br_id"]),
-                       ("bfc_node_org_role_id", full["bnor"]["bfc_node_org_role_id"])):
+                       ("br_org_role_id", full["bror2"]["br_org_role_id"])):
         p = probe_table(project_id=ed["p"], created_by=world["users"]["editor"], **{col: value})
         db.add(p)
         db.commit()
@@ -281,7 +274,7 @@ def test_restore_brings_back_exactly_the_listed_rows(client, ed, full, db):
     assert r.status_code == 204                                 # retired on its own, "the day before"
     assert retire(client, ed, sid).status_code == 204
 
-    by_hand = db.get(BfcNodeOrgRole, full["bnor"]["bfc_node_org_role_id"])
+    by_hand = db.get(BrOrgRole, full["bror2"]["br_org_role_id"])
     lifecycle.relink(db, by_hand.created_by, by_hand)          # restored by hand in between
     again = db.get(BfcNodeTrigger, full["link"]["bfc_node_trigger_id"])
     lifecycle.relink(db, again.created_by, again)
@@ -293,7 +286,7 @@ def test_restore_brings_back_exactly_the_listed_rows(client, ed, full, db):
     assert r.status_code == 200 and r.json() == {"restored": 9}, r.text
     assert not live("br_org_role", solo["br_org_role_id"])
     assert not live("bfc_node_trigger", again.bfc_node_trigger_id)
-    assert live("bfc_node_org_role", by_hand.bfc_node_org_role_id)
+    assert live("br_org_role", by_hand.br_org_role_id)
     for table, pk in full["owned"] - {("bfc_node_trigger", again.bfc_node_trigger_id)}:
         assert live(table, pk), (table, pk)
     assert live("bfc_node", sid)
@@ -485,8 +478,8 @@ def test_the_screens_sequence_preview_retire_then_restore(client, ed, full):
     counts = {}
     for o in pv["owned"]:
         counts[o["table"]] = counts.get(o["table"], 0) + 1
-    assert counts == {"business_requirement": 1, "br_data_entity": 2, "br_org_role": 1,
-                      "bfc_node_data_entity": 3, "bfc_node_org_role": 1,
+    assert counts == {"business_requirement": 1, "br_data_entity": 2, "br_org_role": 2,
+                      "bfc_node_data_entity": 3,
                       "bfc_node_external_flow": 1, "bfc_node_trigger": 1}
     assert retire(client, ed, sid, pv["confirm_hash"]).status_code == 204
     assert retire(client, ed, sid, pv["confirm_hash"]).status_code in (409,)   # already retired

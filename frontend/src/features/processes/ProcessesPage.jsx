@@ -1,11 +1,11 @@
-import { forwardRef, useMemo, useState } from 'react';
-import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { Link as RouterLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, IconButton, InputAdornment, Snackbar, Stack, TextField, Tooltip,
-  Typography } from '@mui/material';
+  Typography, useMediaQuery } from '@mui/material';
+import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
-import SwapVertRounded from '@mui/icons-material/SwapVertRounded';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import SearchIcon from '@mui/icons-material/Search';
@@ -19,7 +19,7 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
 import { Page } from '../../components/Page';
-import { Card, Code, LevelBadge, Segmented, Tag } from '../../components/kit';
+import { Card, Code, InfoTip, LevelBadge, Segmented, Tag } from '../../components/kit';
 import { MONO } from '../../theme/theme';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, ShowRetired, blankToNull } from './chartKit';
@@ -65,6 +65,18 @@ function countBelow(rows) {
   return n;
 }
 
+// A name that ellipsises in a narrow column and shows in full on hover — only when it is actually cut.
+function TruncName({ name, sx }) {
+  const ref = useRef(null);
+  const [cut, setCut] = useState(false);
+  return (
+    <Tooltip title={cut ? name : ''} placement="top-start" enterDelay={400}>
+      <Box component="span" ref={ref} onMouseEnter={() => setCut(ref.current ? ref.current.scrollWidth > ref.current.clientWidth : false)}
+        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, ...sx }}>{name}</Box>
+    </Tooltip>
+  );
+}
+
 function NodeLabel({ node }) {
   const { projectId } = useParams();
   const [params] = useSearchParams();
@@ -74,15 +86,14 @@ function NodeLabel({ node }) {
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, minHeight: 28 }}>
       <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} />
       <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none' }}>{node.hier_code}</Code>
-      <Box component="span" sx={{ fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-        color: node.is_active ? 'text.primary' : 'text.disabled' }}>{node.node_name}</Box>
-      {node.is_process && <Tag tone="purple" sx={{ height: 20, flex: 'none', fontSize: 11.5 }}>
-        {node.br_number ?? t('processes.processChip')}</Tag>}
-      {!node.is_active && <Tag tone="neutral" sx={{ height: 20, flex: 'none', fontSize: 11.5 }}>{t('processes.retiredChip')}</Tag>}
+      <TruncName name={node.node_name} sx={{ fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
+        color: node.is_active ? 'text.primary' : 'text.disabled' }} />
+      {node.is_process && <Box component="span" className="vb-row-extra" sx={{ flex: 'none' }}>
+        <Tag tone="purple" sx={{ height: 20, fontSize: 12 }}>{node.br_number ?? t('processes.processChip')}</Tag></Box>}
+      {!node.is_active && <Tag tone="neutral" sx={{ height: 20, flex: 'none', fontSize: 12 }}>{t('processes.retiredChip')}</Tag>}
       {flowable && (
         <Tooltip title={t('processes.openFlow')}>
-          <IconButton size="small" component={RouterLink} to={links.dfd(projectId, node.bfc_node_id)}
+          <IconButton size="small" className="vb-row-extra" component={RouterLink} to={links.dfd(projectId, node.bfc_node_id)}
             aria-label={t('processes.openFlowFor', { name: node.node_name })} sx={{ flex: 'none', p: 0.25 }}
             onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
             <FlowIcon sx={{ fontSize: 17 }} /></IconButton>
@@ -103,6 +114,10 @@ const treeSx = (th) => ({
   '& .MuiTreeItem-content[data-selected], & .MuiTreeItem-content[data-selected]:hover, & .MuiTreeItem-content[data-selected][data-focused]': {
     bgcolor: th.vars.palette.brand.purpleTint, outline: `1px solid ${th.vars.palette.brand.ftcViolet}` },
   '& .MuiTreeItem-iconContainer': { color: th.vars.palette.brand.muted },
+  // D-63: the BR chip and the flow icon show on hover, focus or selection only, so names get the width
+  '& .vb-row-extra': { display: 'none' },
+  '& .MuiTreeItem-content:hover .vb-row-extra, & .MuiTreeItem-content:focus-within .vb-row-extra, & .MuiTreeItem-content[data-focused] .vb-row-extra, & .MuiTreeItem-content[data-selected] .vb-row-extra':
+    { display: 'inline-flex' },
   '& .MuiTreeItem-groupTransition': { display: 'flex', flexDirection: 'column', gap: '2px' },
 });
 
@@ -153,22 +168,55 @@ function AddNodeDialog({ projectId, parent, bfcSet, onDone, onClose }) {
   );
 }
 
+// Leaving with unsaved text asks first (DR 10d-1): what is unsaved, then Save / Discard / Keep editing.
+function LeaveDialog({ pending, onStay, onDiscard, onSave, saving }) {
+  if (!pending) return null;
+  const { count, draft, name } = pending.state;
+  return (
+    <Dialog open onClose={onStay} maxWidth="xs" fullWidth>
+      <DialogTitle>{t('processes.leave.title')}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {count > 0 && <Typography>{t('processes.leave.body', { name, n: count })}</Typography>}
+        {draft && <Typography>{t('processes.leave.draft')}</Typography>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onStay}>{t('processes.leave.stay')}</Button>
+        <Button color="warning" onClick={onDiscard}>{t('processes.leave.discard')}</Button>
+        {count > 0 && <Button variant="contained" disabled={saving} onClick={onSave}>{t('processes.leave.save')}</Button>}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function ProcessesPage() {
   const canEdit = useCanEdit();
   const { projectId } = useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('node');
   const { isOn } = useComponents(projectId);
+  const wide = useMediaQuery('(min-width:1100px)');      // D-63: side by side from 1100px (UAT: the panel is too narrow at 900), one at a time below
   // D-47: the to-be chart always; the as-is chart only while its component is on.
   const bfcSet = params.get('set') === 'AS_IS' && isOn('AS_IS') ? 'AS_IS' : 'TO_BE';
-  const chooseSet = (v) => { const next = new URLSearchParams(); if (v === 'AS_IS') next.set('set', 'AS_IS'); setParams(next); };
   const [showRetired, setShowRetired] = useState(false);
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState(null);          // null → everything expanded
   const [adding, setAdding] = useState(null);              // { parent }
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const guardRef = useRef(null);                           // the open panel's unsaved state (NodePanel)
+  const [leave, setLeave] = useState(null);                // { state, go }
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const treeBoxRef = useRef(null);
+
+  // Every way off the open panel goes through here: unsaved text or a half-filled tile form asks first.
+  const guarded = (go) => {
+    const state = guardRef.current?.get();
+    if (state && (state.count > 0 || state.draft)) setLeave({ state, go });
+    else go();
+  };
 
   const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: showRetired, set: bfcSet }],
     queryFn: () => bfcApi.tree(projectId, showRetired, bfcSet) });
@@ -183,12 +231,63 @@ export default function ProcessesPage() {
   const filtering = filter.trim() !== '';
   const expandedItems = filtering || expanded === null ? rows.map((r) => String(r.bfc_node_id)) : expanded;
 
-  const select = (id) => {
+  const selectNow = (id) => {
     setError('');
     const next = new URLSearchParams(params);
     if (id) next.set('node', id); else next.delete('node');
     setParams(next);
   };
+  const select = (id) => { if (String(id ?? '') !== String(selectedId ?? '')) guarded(() => selectNow(id)); };
+  const chooseSet = (v) => guarded(() => { const next = new URLSearchParams(); if (v === 'AS_IS') next.set('set', 'AS_IS'); setParams(next); });
+
+  // A link elsewhere (the rail, a breadcrumb, a chip in the panel) is asked about too. The app uses a plain
+  // BrowserRouter, so there is no route blocker: in-app links are caught at the document, before React Router.
+  useEffect(() => {
+    const onClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = e.target.closest?.('a[href]');
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === location.pathname && url.search === location.search) return;
+      const state = guardRef.current?.get();
+      if (!state || (state.count === 0 && !state.draft)) return;
+      e.preventDefault(); e.stopPropagation();
+      setLeave({ state, go: () => navigate(url.pathname + url.search + url.hash) });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [location.pathname, location.search, navigate]);
+
+  // Back / Forward too (sara L5). A capture listener on window runs before React Router's own popstate
+  // listener, so it can stop the move: it puts the current entry back, asks, and on Save or Discard goes to
+  // where the button was taking the user.
+  const here = useRef(null);
+  useEffect(() => {
+    here.current = { url: location.pathname + location.search + location.hash, state: window.history.state };
+  }, [location.pathname, location.search, location.hash]);
+  useEffect(() => {
+    const onPop = (e) => {
+      const state = guardRef.current?.get();
+      if (!state || (state.count === 0 && !state.draft) || !here.current) return;
+      e.stopImmediatePropagation();
+      const target = window.location.pathname + window.location.search + window.location.hash;
+      window.history.pushState(here.current.state, '', here.current.url);
+      setLeave({ state, go: () => navigate(target) });
+    };
+    window.addEventListener('popstate', onPop, true);
+    return () => window.removeEventListener('popstate', onPop, true);
+  }, [navigate]);
+
+  // One at a time below 1100px: a newly opened panel starts at its top.
+  useEffect(() => { if (!wide && selectedId) window.scrollTo({ top: 0 }); }, [wide, selectedId]);
+
+  // The selected row stays in view in its own scrolling column.
+  useEffect(() => {
+    if (!wide || !selectedId) return;
+    const el = treeBoxRef.current?.querySelector('[aria-selected="true"]');
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [wide, selectedId, rows.length]);
 
   // Up / down among the live siblings; the server re-codes every shifted subtree (S1-2).
   const siblings = selected?.is_active ? rows.filter((r) => r.is_active
@@ -212,7 +311,16 @@ export default function ProcessesPage() {
   // The live requirement, else the latest retired one — so a retired BR can still be reached.
   const nodeBrs = selected ? (brsQ.data ?? []).filter((b) => b.bfc_node_id === selected.bfc_node_id) : [];
   const br = nodeBrs.find((b) => b.is_active) ?? nodeBrs[nodeBrs.length - 1] ?? null;
-  const parent = selected?.parent_bfc_node_id != null ? rowById.get(String(selected.parent_bfc_node_id)) : null;
+  const path = useMemo(() => {
+    const out = [];
+    for (let p = selected && rowById.get(String(selected.parent_bfc_node_id)); p && out.length < 10;
+      p = rowById.get(String(p.parent_bfc_node_id))) out.unshift(p.node_name);
+    return out;
+  }, [selected, rowById]);
+  const hasChildren = Boolean(selected && rows.some((r) => r.is_active && r.parent_bfc_node_id === selected.bfc_node_id));
+  // "Save & next process": the next live process in chart order (rows arrive ordered by hier_code).
+  const nextProcess = selected ? rows.slice(rows.findIndex((r) => r.bfc_node_id === selected.bfc_node_id) + 1)
+    .find((r) => r.is_process && r.is_active) : null;
   const canAddChild = Boolean(selected?.is_active && !selected.is_process);
 
   const hierarchyAction = (
@@ -220,6 +328,10 @@ export default function ProcessesPage() {
       {[1, 2, 3, 4, 5].map((l) => <LevelBadge key={l} level={l} label={t('processes.levelN', { n: l })} />)}
     </Stack>
   );
+  // Each column scrolls on its own and stays in view while the page scrolls (D-63).
+  const column = wide ? { position: 'sticky', top: 12, height: 'calc(100dvh - 24px)', minHeight: 420 } : {};
+  const showTree = wide || !selected;
+  const showPanel = wide || Boolean(selected);
 
   return (
     <Page title={t('processes.title')} subtitle={t(bfcSet === 'AS_IS' ? 'processes.subtitleAsIs' : 'processes.subtitle')}
@@ -233,74 +345,83 @@ export default function ProcessesPage() {
         {canEdit && <Button variant="contained" startIcon={<AddRounded />}
           onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}
       </>}>
-      <Box sx={{ display: 'grid', gap: 2, alignItems: 'stretch',
-        gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(300px,400px) minmax(0,1fr)' } }}>
-        <Card title={t('processes.hierarchy')} action={hierarchyAction} bodySx={{ gap: 1.25, px: 1.5 }}>
-          <Box sx={{ px: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
-                input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-            <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
-              <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
-              <Box sx={{ flexGrow: 1 }} />
-              {canEdit && <>
-                <Button size="small" variant="outlined" startIcon={<AddRounded />} disabled={!canAddChild}
-                  onClick={() => { setError(''); setAdding({ parent: selected }); }}>{t('processes.addChild')}</Button>
-                <Tooltip title={t('processes.moveUp')}>
-                  <span>
-                    <IconButton size="small" aria-label={t('processes.moveUp')} disabled={pos <= 1 || reorder.isPending}
-                      onClick={() => reorder.mutate(pos - 1)}><ArrowUpwardIcon fontSize="small" /></IconButton>
-                  </span>
-                </Tooltip>
-                <Tooltip title={t('processes.moveDown')}>
-                  <span>
-                    <IconButton size="small" aria-label={t('processes.moveDown')}
-                      disabled={!pos || pos >= siblings.length || reorder.isPending}
-                      onClick={() => reorder.mutate(pos + 1)}><ArrowDownwardIcon fontSize="small" /></IconButton>
-                  </span>
-                </Tooltip>
-              </>}
-            </Stack>
-            {canEdit && selected?.is_process && (
-              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>
+      <Box sx={{ display: 'grid', gap: 2, alignItems: 'start',
+        gridTemplateColumns: wide ? 'clamp(340px, 32%, 440px) minmax(0,1fr)' : 'minmax(0,1fr)' }}>
+        {showTree && (
+          <Card title={t('processes.hierarchy')} action={hierarchyAction} sx={column}
+            bodySx={{ gap: 1.25, px: 1.5, minHeight: 0, ...(wide ? { overflow: 'hidden' } : {}) }}>
+            <Box sx={{ px: 1, display: 'flex', flexDirection: 'column', gap: 1, flex: 'none' }}>
+              <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
+                  input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+              <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+                <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
+                <Box sx={{ flexGrow: 1 }} />
+                {canEdit && <>
+                  <Button size="small" variant="outlined" startIcon={<AddRounded />} disabled={!canAddChild}
+                    onClick={() => { setError(''); setAdding({ parent: selected }); }}>{t('processes.addChild')}</Button>
+                  <Tooltip title={t('processes.moveUp')}>
+                    <span>
+                      <IconButton size="small" aria-label={t('processes.moveUp')} disabled={pos <= 1 || reorder.isPending}
+                        onClick={() => reorder.mutate(pos - 1)}><ArrowUpwardIcon fontSize="small" /></IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={t('processes.moveDown')}>
+                    <span>
+                      <IconButton size="small" aria-label={t('processes.moveDown')}
+                        disabled={!pos || pos >= siblings.length || reorder.isPending}
+                        onClick={() => reorder.mutate(pos + 1)}><ArrowDownwardIcon fontSize="small" /></IconButton>
+                    </span>
+                  </Tooltip>
+                  <InfoTip title={t('processes.reorderHelp')} />
+                </>}
+              </Stack>
+              {canEdit && selected?.is_process && (
+                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>
+              )}
+            </Box>
+            {!treeQ.isLoading && rows.length === 0 && (
+              <Box sx={{ px: 1, py: 2 }}>
+                <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
+                  {t(bfcSet === 'AS_IS' ? 'processes.emptyAsIs' : 'processes.empty')}</Typography>
+                {canEdit && !showRetired && isOn('AS_IS') && (
+                  <CopyChartButton projectId={projectId} toSet={bfcSet} fromSet={bfcSet === 'AS_IS' ? 'TO_BE' : 'AS_IS'}
+                    onCopied={() => { qc.invalidateQueries({ queryKey: keys.tree(projectId) });
+                      qc.invalidateQueries({ queryKey: keys.brs(projectId) }); setNotice(t('processes.chart.copied')); }} />)}
+              </Box>
+            )}
+            {filtering && rows.length > 0 && items.length === 0 && (
+              <Typography sx={{ color: 'text.secondary', px: 1, py: 2 }}>{t('processes.noMatch')}</Typography>
+            )}
+            <Box ref={treeBoxRef} sx={{ minWidth: 0, minHeight: 0, flex: 1, overflowX: 'hidden', overflowY: wide ? 'auto' : 'visible' }}>
+              <RichTreeView items={items} getItemId={(n) => String(n.bfc_node_id)} getItemLabel={(n) => `${n.hier_code} ${n.node_name}`}
+                getItemChildren={(n) => n.children} slots={{ item: NodeItem }}
+                selectedItems={selectedId} onSelectedItemsChange={(_, id) => select(id)}
+                expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => { if (!filtering) setExpanded(ids); }}
+                expansionTrigger="iconContainer" sx={treeSx} />
+            </Box>
+          </Card>
+        )}
+        {showPanel && (
+          <Box sx={{ ...column, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+            {!wide && (
+              <Button startIcon={<ArrowBackRounded />} sx={{ alignSelf: 'flex-start' }} onClick={() => select(null)}>
+                {t('processes.backChart')}</Button>)}
+            {selected ? (
+              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id} wide={wide}
+                  path={path} br={br} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
+                  onNext={nextProcess ? () => selectNow(String(nextProcess.bfc_node_id)) : null}
+                  onNotice={setNotice} onGone={() => selectNow(null)} />
+              </Box>
+            ) : (
+              <Card>
+                <Typography sx={{ color: 'text.secondary' }}>
+                  {selectedId && !treeQ.isLoading ? t('processes.notInTree') : t('processes.pickNode')}</Typography>
+              </Card>
             )}
           </Box>
-          {!treeQ.isLoading && rows.length === 0 && (
-            <Box sx={{ px: 1, py: 2 }}>
-              <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
-                {t(bfcSet === 'AS_IS' ? 'processes.emptyAsIs' : 'processes.empty')}</Typography>
-              {canEdit && !showRetired && isOn('AS_IS') && (
-                <CopyChartButton projectId={projectId} toSet={bfcSet} fromSet={bfcSet === 'AS_IS' ? 'TO_BE' : 'AS_IS'}
-                  onCopied={() => { qc.invalidateQueries({ queryKey: keys.tree(projectId) });
-                    qc.invalidateQueries({ queryKey: keys.brs(projectId) }); setNotice(t('processes.chart.copied')); }} />)}
-            </Box>
-          )}
-          {filtering && rows.length > 0 && items.length === 0 && (
-            <Typography sx={{ color: 'text.secondary', px: 1, py: 2 }}>{t('processes.noMatch')}</Typography>
-          )}
-          <Box sx={{ minWidth: 0, overflowX: 'auto' }}>
-            <RichTreeView items={items} getItemId={(n) => String(n.bfc_node_id)} getItemLabel={(n) => `${n.hier_code} ${n.node_name}`}
-              getItemChildren={(n) => n.children} slots={{ item: NodeItem }}
-              selectedItems={selectedId} onSelectedItemsChange={(_, id) => select(id)}
-              expandedItems={expandedItems} onExpandedItemsChange={(_, ids) => { if (!filtering) setExpanded(ids); }}
-              expansionTrigger="iconContainer" sx={treeSx} />
-          </Box>
-          {canEdit && (
-            <Box sx={(th) => ({ mt: 'auto', mx: 1, pt: 1, display: 'flex', alignItems: 'flex-start', gap: 1,
-              color: th.vars.palette.brand.muted, fontSize: 12.5 })}>
-              <SwapVertRounded sx={{ fontSize: 16, mt: '1px' }} />{t('processes.reorderHelp')}
-            </Box>
-          )}
-        </Card>
-        {selected ? (
-          <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id}
-            parent={parent} br={br} showRetired={showRetired} onNotice={setNotice} onGone={() => select(null)} />
-        ) : (
-          <Card>
-            <Typography sx={{ color: 'text.secondary' }}>
-              {selectedId && !treeQ.isLoading ? t('processes.notInTree') : t('processes.pickNode')}</Typography>
-          </Card>
         )}
       </Box>
       {adding && (
@@ -314,6 +435,16 @@ export default function ProcessesPage() {
             setNotice(t('processes.created', { code: row.hier_code }));
           }} />
       )}
+      <LeaveDialog pending={leave} saving={leaveSaving} onStay={() => setLeave(null)}
+        onDiscard={() => { const go = leave.go; guardRef.current?.get().discardAll(); setLeave(null); go(); }}
+        onSave={async () => {
+          setLeaveSaving(true);
+          const ok = await guardRef.current?.get().saveAll();
+          setLeaveSaving(false);
+          const go = leave.go;
+          setLeave(null);
+          if (ok) go();                 // a refusal keeps the panel, its edits and its message
+        }} />
       <Snackbar open={Boolean(notice)} autoHideDuration={3500} onClose={() => setNotice('')} message={notice} />
     </Page>
   );

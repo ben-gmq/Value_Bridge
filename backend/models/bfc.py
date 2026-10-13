@@ -185,7 +185,8 @@ class BfcNodeDataEntity(AuditMixin, Base):
 
 class BfcNodeOrgRole(AuditMixin, Base):
     """Step × org role × RACI. Rules key on raci_behaviour, FK-verified (VB law 5); the service
-    copies it from the code. S1-5: surrogate PK."""
+    copies it from the code. S1-5: surrogate PK. D-64 (0052): an AS-IS step's roles only — a to-be
+    process's roles are its requirement's (br_org_role); fk_bnor_node_as_is refuses a live row elsewhere."""
 
     __tablename__ = "bfc_node_org_role"
 
@@ -197,6 +198,9 @@ class BfcNodeOrgRole(AuditMixin, Base):
     raci_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     raci_category: Mapped[str] = mapped_column(String(40), Computed("'RACI_TYPE'", persisted=True))
     raci_behaviour: Mapped[str] = mapped_column(String(20), nullable=False)
+    # D-64 guard: 'AS_IS' while live, NULL once retired (history is not checked). GENERATED: not in the shadow.
+    node_live_set: Mapped[str | None] = mapped_column(
+        String(10), Computed("CASE WHEN is_active THEN 'AS_IS' END", persisted=True))
 
     raci_code_row = relationship("CodeMaster", viewonly=True, lazy="joined",
                             primaryjoin="foreign(BfcNodeOrgRole.raci_code_id) == CodeMaster.code_id")
@@ -208,6 +212,9 @@ class BfcNodeOrgRole(AuditMixin, Base):
     __table_args__ = (
         UniqueConstraint("bfc_node_id", "org_role_id", "raci_code_id", name="uq_bnor_grain"),
         *_process_node_fk("bnor"),
+        ForeignKeyConstraint(["bfc_node_id", "project_id", "node_live_set"],
+                             ["bfc_node.bfc_node_id", "bfc_node.project_id", "bfc_node.bfc_set_code"],
+                             name="fk_bnor_node_as_is", onupdate="NO ACTION"),
         ForeignKeyConstraint(["org_role_id", "project_id"],
                              ["org_role.org_role_id", "org_role.project_id"], name="fk_bnor_role"),
         ForeignKeyConstraint(["raci_code_id", "raci_category", "raci_behaviour"],
