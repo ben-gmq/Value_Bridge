@@ -40,13 +40,13 @@ function useRaciFact(projectId, queryKey, list, enabled) {
   const rolesQ = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId), enabled });
   return useMemo(() => {
     const rows = q.data ?? [];
-    const single = new Set(codes.filter((c) => SINGLE.includes(c.behaviour_code)).map((c) => c.code));
-    const a = rows.find((r) => single.has(r.raci_code));
+    // Branch on the row's behaviour (law 5), never on a code; the codes only label the counts.
+    const a = rows.find((r) => SINGLE.includes(r.raci_behaviour));
     const role = a && (rolesQ.data ?? []).find((r) => r.org_role_id === a.org_role_id);
-    const counts = codes.filter((c) => !single.has(c.code))
-      .map((c) => [c.code, rows.filter((r) => r.raci_code === c.code).length]).filter(([, n]) => n > 0);
-    return { name: a ? (role?.org_role_name ?? `#${a.org_role_id}`) : null,
-      note: counts.length ? counts.map(([c, n]) => `${n} ${c}`).join(' · ') : t('processes.run.noOthers'),
+    const counts = codes.filter((c) => !SINGLE.includes(c.behaviour_code))
+      .map((c) => [c.label, rows.filter((r) => r.raci_code === c.code).length]).filter(([, n]) => n > 0);
+    return { name: a ? (role?.org_role_name ?? t('processes.run.unknownRole')) : null,
+      note: counts.length ? counts.map(([label, n]) => `${n} ${label}`).join(' · ') : t('processes.run.noOthers'),
       loading: q.isLoading };
   }, [q.data, q.isLoading, rolesQ.data, codes]);
 }

@@ -382,5 +382,6 @@
   "processes.run.dfdOnly": "Recorded on the DFD, not on the requirement",
   "processes.run.dfdOnlyInfo": "These came from an external flow, a chart copy or the old step editor. Tick the entity in the grid above to make it part of the requirement.",
   "processes.leave.draft": "An unfinished performer or trigger under How it runs is discarded too.",
-  "processes.save.draftOpen": "Finish or cancel the open performer or trigger first."
+  "processes.save.draftOpen": "Finish or cancel the open performer or trigger first.",
+  "processes.run.unknownRole": "Unknown role"
 }
