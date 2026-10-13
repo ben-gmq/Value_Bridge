@@ -155,7 +155,7 @@ export function StepFlows({ projectId, node, disabled, bare = false }) {
           const de = r.data_entity_id ? entities.byId.get(r.data_entity_id) : null;
           return (
             <Stack key={r.bfc_node_external_flow_id} direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Tag tone={r.direction === 'I' ? 'navy' : 'teal'}>{t(r.direction === 'I' ? 'processes.fromParty' : 'processes.toParty')}</Tag>
+              <Tag tone={r.direction === 'I' ? 'navy' : 'teal'} size="lg">{t(r.direction === 'I' ? 'processes.fromParty' : 'processes.toParty')}</Tag>
               <Typography sx={{ fontWeight: 600 }}>{p ? <><Code sx={{ mr: 0.5 }}>{p.ext_number}</Code> {p.ext_name}</> : `#${r.external_entity_id}`}</Typography>
               {r.data_entity_id && (
                 <Link component={RouterLink} to={links.entity(projectId, r.data_entity_id)} sx={{ fontSize: 13 }}>
@@ -219,7 +219,7 @@ export function StepDataNotOnBr({ projectId, node, brRows }) {
       <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1 }}>
         {extra.map((r) => (
           <Box key={r.bfc_node_data_entity_id} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-            <Tag tone={r.direction === 'I' ? 'navy' : 'teal'}>{t(r.direction === 'I' ? 'processes.dataIn' : 'processes.dataOut')}</Tag>
+            <Tag tone={r.direction === 'I' ? 'navy' : 'teal'} size="lg">{t(r.direction === 'I' ? 'processes.dataIn' : 'processes.dataOut')}</Tag>
             <EntityChip projectId={projectId} deId={r.data_entity_id} de={entities.byId.get(r.data_entity_id)} disabled />
           </Box>
         ))}

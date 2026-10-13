@@ -96,14 +96,16 @@ function NodeLabel({ node }) {
   const selected = params.get('node') === String(node.bfc_node_id);
   const flowable = node.is_active && !node.is_process && node.level_no >= FIRST_PROCESS_LEVEL - 1;
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, minHeight: 28 }}>
-      <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} />
-      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none' }}>{node.hier_code}</Code>
-      <TruncName name={node.node_name} sx={{ fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0, minHeight: 28 }}>
+      <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
+        <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} /></Box>
+      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12.5, flex: 'none' }}>{node.hier_code}</Code>
+      <TruncName name={node.node_name} sx={{ flex: '0 1 auto', minWidth: '10ch', fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
         color: node.is_active ? 'text.primary' : 'text.disabled' }} />
-      {node.is_process && <Box component="span" className="vb-row-extra" sx={{ flex: 'none' }}>
-        <Tag tone="purple" sx={{ height: 20, fontSize: 12 }}>{node.br_number ?? t('processes.processChip')}</Tag></Box>}
-      {!node.is_active && <Tag tone="neutral" sx={{ height: 20, flex: 'none', fontSize: 12 }}>{t('processes.retiredChip')}</Tag>}
+      {/* The BR chip gives way first (10e UAT): the name keeps 10ch and the light stays whole */}
+      {node.is_process && <Box component="span" className="vb-row-extra" sx={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', display: 'inline-flex' }}>
+        <Tag tone="purple" size="lg" sx={{ height: 22 }}>{node.br_number ?? t('processes.processChip')}</Tag></Box>}
+      {!node.is_active && <Tag tone="neutral" size="lg" sx={{ height: 22, flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
       {flowable && (
         <Tooltip title={t('processes.openFlow')}>
           <IconButton size="small" className="vb-row-extra" component={RouterLink} to={links.dfd(projectId, node.bfc_node_id)}
@@ -113,9 +115,10 @@ function NodeLabel({ node }) {
         </Tooltip>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      {/* D-68: always visible on a process row (not hover-only like the BR chip) */}
-      {node.is_process && node.dfd_light && <DfdLight light={node.dfd_light} missing={node.dfd_missing} size="sm" />}
-      {node.below > 0 && <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 12, flex: 'none',
+      {/* D-68: always visible on a process row (not hover-only like the BR chip); icon-only so the name keeps the width (10e) */}
+      {node.is_process && node.dfd_light && <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
+        <DfdLight light={node.dfd_light} missing={node.dfd_missing} size="icon" /></Box>}
+      {node.below > 0 && <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 12.5, flex: 'none',
         color: th.vars.palette.brand.muted })}>{node.below}</Box>}
     </Stack>
   );
@@ -370,22 +373,19 @@ export default function ProcessesPage() {
           <Card title={t('processes.hierarchy')} action={hierarchyAction} sx={column}
             bodySx={{ gap: 1.25, px: 1.5, minHeight: 0, ...(wide ? { overflow: 'hidden' } : {}) }}>
             <Box sx={{ px: 1, display: 'flex', flexDirection: 'column', gap: 1, flex: 'none' }}>
-              <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
-                  input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-              <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
-                <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
-                {dfdOn && (
-                  <Stack direction="row" sx={{ alignItems: 'center' }}>
-                    <FormControlLabel label={t('processes.dfdLight.notReadyOnly')} sx={{ mr: 0 }}
-                      control={<Switch id="bfc-not-ready" checked={notReadyOnly} onChange={(e) => setNotReadyOnly(e.target.checked)} />} />
-                    <InfoTip title={t('processes.dfdLight.notReadyOnlyInfo')} />
-                  </Stack>)}
-                <Box sx={{ flexGrow: 1 }} />
+              {/* 10e (VB-005 UAT 10d-2): search and the edit actions share one line, the filters the next — nothing wraps at 1440 */}
+              <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center', minWidth: 0 }}>
+                <TextField fullWidth size="small" id="bfc-filter" placeholder={t('processes.filter')} value={filter}
+                  onChange={(e) => setFilter(e.target.value)} sx={{ minWidth: 0, mr: 0.75 }}
+                  slotProps={{ htmlInput: { 'aria-label': t('processes.filter') },
+                    input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
                 {canEdit && <>
-                  <Button size="small" variant="outlined" startIcon={<AddRounded />} disabled={!canAddChild}
-                    onClick={() => { setError(''); setAdding({ parent: selected }); }}>{t('processes.addChild')}</Button>
+                  <Tooltip title={t('processes.addChild')}>
+                    <span>
+                      <IconButton size="small" aria-label={t('processes.addChild')} disabled={!canAddChild}
+                        onClick={() => { setError(''); setAdding({ parent: selected }); }}><AddRounded fontSize="small" /></IconButton>
+                    </span>
+                  </Tooltip>
                   <Tooltip title={t('processes.moveUp')}>
                     <span>
                       <IconButton size="small" aria-label={t('processes.moveUp')} disabled={pos <= 1 || reorder.isPending}
@@ -401,6 +401,15 @@ export default function ProcessesPage() {
                   </Tooltip>
                   <InfoTip title={t('processes.reorderHelp')} />
                 </>}
+              </Stack>
+              <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5 }}>
+                <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
+                {dfdOn && (
+                  <Stack direction="row" sx={{ alignItems: 'center' }}>
+                    <FormControlLabel label={t('processes.dfdLight.notReadyOnly')} sx={{ mr: 0 }}
+                      control={<Switch id="bfc-not-ready" checked={notReadyOnly} onChange={(e) => setNotReadyOnly(e.target.checked)} />} />
+                    <InfoTip title={t('processes.dfdLight.notReadyOnlyInfo')} />
+                  </Stack>)}
               </Stack>
               {canEdit && selected?.is_process && (
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('processes.noChildOfProcess')}</Typography>

@@ -57,7 +57,7 @@ export function EditNoteDialog({ row, save, onClose, onDone, onStale }) {
  * the note, unlink after a confirm. The note and the solution's category/status sit in the tag's
  * tooltip; a rejected solution is flagged on the tag itself.
  */
-export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
+export function BrSolutionTags({ projectId, br, disabled, onWarnings, bare = false }) {
   const qc = useQueryClient();
   const { getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
   const { getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
@@ -90,7 +90,8 @@ export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-      <SectionLabel>{t('requirements.solutionsTitle')}</SectionLabel>
+      {/* `bare`: inside the process panel's section already titled "Solutions" (10e), no second heading */}
+      {!bare && <SectionLabel>{t('requirements.solutionsTitle')}</SectionLabel>}
       {error && <Alert severity="error" sx={ERR_SX} onClose={() => setError('')}>{error}</Alert>}
       {q.error && <Alert severity="error" sx={ERR_SX}>{errorText(q.error)}</Alert>}
       {!q.isLoading && !q.error && rows.length === 0 && (
@@ -105,14 +106,14 @@ export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
               <Tooltip title={<Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>{tip}</Box>}>
                 <Link component={RouterLink} to={links.solution(projectId, row.solution_id)} underline="hover" color="inherit"
                   sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, minWidth: 0, fontSize: 13.5 }}>
-                  <Code sx={{ fontSize: 12 }}>{row.solution_number}</Code>
+                  <Code sx={{ fontSize: 12.5 }}>{row.solution_number}</Code>
                   <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.solution_name}</Box>
                 </Link>
               </Tooltip>
               {row.status_code === 'REJECTED' && (
                 <Tooltip title={t('solutions.links.rejectedTip')}>
                   <Box component="span" sx={{ display: 'inline-flex' }}>
-                    <Tag tone="caution" sx={{ height: 20, fontSize: 11 }}>{statusLabel(row.status_code)}</Tag></Box>
+                    <Tag tone="caution" size="lg" sx={{ height: 22 }}>{statusLabel(row.status_code)}</Tag></Box>
                 </Tooltip>)}
               {!disabled && (
                 <>

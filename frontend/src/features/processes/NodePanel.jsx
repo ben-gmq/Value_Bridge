@@ -260,7 +260,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
         <Code tone="muted" sx={{ fontSize: 12.5 }}>{node.hier_code}</Code>
         <Typography noWrap title={path.join(' › ')} sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0 })}>
           {path.length ? path.join(' › ') : t('processes.panel.topLevel')}</Typography>
-        {!live && <Tag tone="neutral" sx={{ flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
+        {!live && <Tag tone="neutral" size="lg" sx={{ flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
         <InputBase value={v.node_name} onChange={(e) => form.set('node_name', e.target.value.replace(/\n/g, ' '))} readOnly={!editable}
@@ -375,14 +375,14 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
             {showBr && solutionsOn && (
               <PanelSection id="solutions" sections={sections} title={t('processes.sec.solutions')}
                 count={facts.solutions.count} summary={facts.solutions.summary}>
-                <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} />
+                <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} bare />
               </PanelSection>
             )}
             {/* D-52: the BR maps to FRs directly; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
             {showBr && frsOn && (
               <PanelSection id="frs" sections={sections} title={t('processes.sec.frs')}
                 count={facts.frs.count} summary={facts.frs.summary}>
-                <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn}
+                <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn} bare
                   warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />
               </PanelSection>
             )}

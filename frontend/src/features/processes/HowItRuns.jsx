@@ -53,14 +53,20 @@ function useRaciFact(projectId, queryKey, list, enabled) {
 }
 
 /** Entities in and out of the step. A to-be process edits them through its requirement's CRUD (derived
- * direction), but its step can also carry rows the CRUD does not (an external flow, a chart copy, the old
- * step editor — DR 10d-4), so the count is the union of both; an as-is process has its step data only. */
+ * direction), so the tile counts what that grid shows; its step can also carry rows the CRUD does not (an external
+ * flow, a chart copy, the old step editor — DR 10d-4), and those are named apart as "+n on the DFD only", the same
+ * rows the editor lists under "Recorded on the DFD" (10e: tile and editor agree). An as-is process has its step
+ * data only. Nothing stored changes; this is only how the two sources are counted. */
 function useDataFact(nodeId, br) {
   const stepQ = useQuery({ queryKey: stepKey(nodeId, 'data'), queryFn: () => bfcApi.stepData(nodeId) });
   const brQ = useQuery({ queryKey: br ? brDataKey(br.br_id) : ['none'], queryFn: () => brApi.data(br.br_id), enabled: Boolean(br) });
-  const rows = [...(stepQ.data ?? []), ...(br ? brQ.data ?? [] : [])];
-  const count = (d) => new Set(rows.filter((r) => r.direction === d).map((r) => r.data_entity_id)).size;
-  return { inN: count('I'), outN: count('O'), loading: stepQ.isLoading || (Boolean(br) && brQ.isLoading), brRows: brQ.data };
+  const stepRows = stepQ.data ?? [];
+  const brRows = br ? brQ.data ?? [] : [];
+  const shown = br ? brRows : stepRows;
+  const count = (d) => new Set(shown.filter((r) => r.direction === d).map((r) => r.data_entity_id)).size;
+  const onBr = new Set(brRows.map((r) => `${r.data_entity_id}:${r.direction}`));
+  const dfdOnly = br ? stepRows.filter((r) => !onBr.has(`${r.data_entity_id}:${r.direction}`)).length : 0;
+  return { inN: count('I'), outN: count('O'), dfdOnly, loading: stepQ.isLoading || (Boolean(br) && brQ.isLoading), brRows: brQ.data };
 }
 
 function useTriggerFact(nodeId, enabled) {
@@ -96,7 +102,7 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
     hasBr ? () => brApi.roles(br.br_id) : () => bfcApi.roles(nodeId), asIs || hasBr);
   const data = useDataFact(nodeId, hasBr ? br : null);
   const factsEditable = hasBr ? brEditable : editable;
-  const dataEmpty = !data.loading && data.inN + data.outN === 0;
+  const dataEmpty = !data.loading && data.inN + data.outN + data.dfdOnly === 0;
   const emptyText = t(factsEditable ? 'processes.run.notSetSet' : 'processes.run.notSet');
 
   const tiles = [
@@ -117,10 +123,12 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
     (asIs || hasBr) && { key: 'data', label: t('processes.run.data'),
       mark: dataEmpty ? <DfdMark dfd={dfd} element="DATA_OUT" /> : null,            // an empty tile shows no "out" half
       value: <>{t('processes.run.dataValue', { in: data.inN, out: data.outN })} <DfdMark dfd={dfd} element="DATA_OUT" /></>,
+      note: data.dfdOnly > 0 ? t('processes.run.dfdOnlyCount', { n: data.dfdOnly }) : null,
       empty: dataEmpty,
       editor: hasBr ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <CrudGrid projectId={projectId} br={br} disabled={!brEditable} />
+          <CrudGrid projectId={projectId} br={br} disabled={!brEditable}
+            emptyText={data.dfdOnly > 0 ? t('processes.run.noBrDataButDfd') : undefined} />
           <StepDataNotOnBr projectId={projectId} node={node} brRows={data.brRows} />
         </Box>)
         : <StepData projectId={projectId} node={node} disabled={!editable} /> },
