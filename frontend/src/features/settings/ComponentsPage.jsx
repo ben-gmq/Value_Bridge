@@ -40,6 +40,7 @@ export default function ComponentsPage() {
       if (res.applied) {
         setPreview(null); setNotice(t('components.saved'));
         qc.invalidateQueries({ queryKey: keys.components(projectId) });
+        qc.invalidateQueries({ queryKey: keys.tree(projectId) });      // DR13-D2: a DFD toggle turns the light on or off
       } else setPreview(res);
     },
     onError: (err) => { setPreview(null); setError(errorText(err, t('common.saveFailed'))); },
@@ -109,7 +110,7 @@ export default function ComponentsPage() {
             {preview.blockers.length > 0 && (
               <Alert severity="error">
                 <Typography sx={{ mb: 0.5 }}>{t('components.blocked')}</Typography>
-                {preview.blockers.map((b) => <Typography key={`${b.component}-${b.reason}`} variant="body2">{b.message}</Typography>)}
+                {preview.blockers.map((b, i) => <Typography key={`${b.component}-${b.reason}-${i}`} variant="body2">{b.message}</Typography>)}
               </Alert>
             )}
           </Stack>

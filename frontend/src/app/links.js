@@ -42,6 +42,9 @@ export const keys = {
   projectTemplates: () => ['project-templates'],
   project: (p) => ['project', String(p)],
   projectAccess: (p) => ['access', String(p)],
+  // The tree read carries each process's DFD light (D-68, slice 13a). DR13-D2, one choice: there is no separate
+  // readiness key — every writer of step I/O, external flows, trigger links, BR CRUD, step retire/restore,
+  // make-process/demote and component toggles invalidates tree(p).
   tree: (p) => ['bfc-tree', String(p)],
   node: (id) => ['bfc-node', String(id)],
   retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview

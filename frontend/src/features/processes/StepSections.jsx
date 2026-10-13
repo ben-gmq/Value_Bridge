@@ -64,6 +64,7 @@ export function StepData({ projectId, node, disabled }) {
   const refresh = (deId) => {
     qc.invalidateQueries({ queryKey: qk });
     qc.invalidateQueries({ queryKey: keys.flows(projectId) });   // the flow and DFD graphs draw step I/O
+    qc.invalidateQueries({ queryKey: keys.tree(projectId) });    // DR13-D2: the DFD light
     if (deId) qc.invalidateQueries({ queryKey: keys.entity(deId) });
   };
   const unlink = useMutation({
@@ -126,6 +127,7 @@ export function StepFlows({ projectId, node, disabled, bare = false }) {
   const refresh = () => {                                    // flows can add step data
     qc.invalidateQueries({ queryKey: keys.node(node.bfc_node_id) });
     qc.invalidateQueries({ queryKey: keys.flows(projectId) });  // the flow and DFD graphs draw them
+    qc.invalidateQueries({ queryKey: keys.tree(projectId) });   // DR13-D2: an inbound party starts it → the light
   };
   const unlink = useMutation({
     mutationFn: (row) => bfcApi.unlinkFlow(node.bfc_node_id, row.bfc_node_external_flow_id, row.row_version),

@@ -12,6 +12,7 @@ import { PerformerPanel, TriggerPanel, usePerformerText } from './StepDfd';
 import { StepData, StepDataNotOnBr, stepKey } from './StepSections';
 import { BrRaci } from '../requirements/BrRaci';
 import { CrudGrid, brDataKey } from '../requirements/CrudGrid';
+import { DfdMark } from './DfdLight';
 
 const SINGLE = ['ACCOUNTABLE'];      // services/raci.py SINGLE — the one Accountable, named by behaviour (law 5)
 
@@ -74,7 +75,7 @@ function useTriggerFact(nodeId, enabled) {
  * where the chart's DFD is on (10c widens the performer). D-64: a to-be process has one RACI — its
  * requirement's — and its data is the CRUD grid; an as-is process keeps the step's roles and data.
  */
-export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, onDraftChange }) {
+export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, dfd, onDraftChange }) {
   const asIs = node.bfc_set_code === 'AS_IS';
   const nodeId = node.bfc_node_id;
   const hasBr = !asIs && Boolean(br);
@@ -95,13 +96,15 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, on
     hasBr ? () => brApi.roles(br.br_id) : () => bfcApi.roles(nodeId), asIs || hasBr);
   const data = useDataFact(nodeId, hasBr ? br : null);
   const factsEditable = hasBr ? brEditable : editable;
+  const dataEmpty = !data.loading && data.inN + data.outN === 0;
   const emptyText = t(factsEditable ? 'processes.run.notSetSet' : 'processes.run.notSet');
 
   const tiles = [
     dfdOn && { key: 'performer', label: t('processes.run.performer'), value: performer.text,
       empty: !node.performer_kind,
       editor: <PerformerPanel projectId={projectId} node={node} disabled={!editable} startEditing onDraftChange={onPerformerDraft} /> },
-    dfdOn && { key: 'trigger', label: t('processes.run.trigger'), value: trigger.first,
+    // D-69: one STARTED mark on "Started by" (a trigger, a data input or an inbound party all meet it — DR13-D1)
+    dfdOn && { key: 'trigger', label: t('processes.run.trigger'), mark: <DfdMark dfd={dfd} element="STARTED" />, value: trigger.first,
       note: trigger.more > 0 ? t('processes.run.more', { n: trigger.more }) : null, empty: !trigger.loading && !trigger.first,
       editor: <TriggerPanel projectId={projectId} node={node} disabled={!editable} onDraftChange={onTriggerDraft} /> },
     (asIs || hasBr) && { key: 'accountable', label: t('processes.run.accountable'), value: raci.name, note: raci.note,
@@ -110,9 +113,11 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, on
         : <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
             list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
             unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={SINGLE} /> },
+    // D-69: the DATA_OUT mark sits on the tile's "out" half; no data-in mark under the fixed rule
     (asIs || hasBr) && { key: 'data', label: t('processes.run.data'),
-      value: t('processes.run.dataValue', { in: data.inN, out: data.outN }),
-      empty: !data.loading && data.inN + data.outN === 0,
+      mark: dataEmpty ? <DfdMark dfd={dfd} element="DATA_OUT" /> : null,            // an empty tile shows no "out" half
+      value: <>{t('processes.run.dataValue', { in: data.inN, out: data.outN })} <DfdMark dfd={dfd} element="DATA_OUT" /></>,
+      empty: dataEmpty,
       editor: hasBr ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <CrudGrid projectId={projectId} br={br} disabled={!brEditable} />
@@ -146,7 +151,7 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, on
         <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'minmax(0,1fr)',
           '@container (min-width: 420px)': { gridTemplateColumns: 'repeat(2, minmax(0,1fr))' } }}>
           {tiles.map((x) => (
-            <FactTile key={x.key} label={x.label} value={x.value} empty={x.empty} emptyText={emptyText}
+            <FactTile key={x.key} label={x.mark ? <>{x.label}{x.mark}</> : x.label} value={x.value} empty={x.empty} emptyText={emptyText}
               note={drafts[x.key] && open !== x.key ? t('processes.run.draft') : x.note}
               selected={open === x.key} controls={mounted.has(x.key) ? editorId(x.key) : undefined} onClick={() => toggle(x.key)} />
           ))}
