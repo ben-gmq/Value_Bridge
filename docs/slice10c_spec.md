@@ -50,7 +50,7 @@ item here is presentation over data that already exists, except D-62's default, 
      on Ben's explicit say-so — and D-62 is done only when the admin's Home shows "Open to all staff" on nothing
      but those exceptions. **No script, no migration.**
 
-**Out:** editing performer or triggers from the panel (stays in the DFD, one place); the BR picking attributes
+**Out:** editing triggers from the panel when the DFD is off (they stay with the DFD; the performer edits whatever the setting, Q-1); the BR picking attributes
 (D-60b), structured BR lines (D-59), system-to-system flows (D-61) — slice 11, apple first; dashboards (D-58) —
 slice 12.
 
@@ -63,7 +63,7 @@ None new. Read-only views over `bfc_node` (performer), `bfc_node_trigger` / `pro
 | Function | Entity | Use | Logic → output |
 |---|---|---|---|
 | rail items | — | R | Organisation always; Systems when APPLICATION is on (`useComponents`) |
-| performer on panel | `bfc_node` | R | VIEW. From the existing process read; link to the DFD step |
+| performer on panel | `bfc_node` | R/U | VIEW to read; EDIT under `node_set_component`, whatever the DFD setting (Q-1) |
 | triggers on panel | `bfc_node_trigger` | R | VIEW. From the existing step read used by the DFD; no new route if one already returns them, else one GET with `object_guard(BfcNode, VIEW)` |
 | attributes on BR | `data_field` | R | VIEW. Existing entity-fields route per expanded entity (fetched on expand, cached by query key) |
 | mark as process | `bfc_node` | U | EDIT. Existing route and refusals, unchanged |
