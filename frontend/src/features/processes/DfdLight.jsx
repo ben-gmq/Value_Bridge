@@ -22,17 +22,30 @@ export function lightTip(light, missing = []) {
     t('processes.dfdLight.blocks')].join('\n');
 }
 
-/** A process's light: an icon and a word in a tone tag, its gaps in the tooltip. Nothing when the rule does not apply. */
+/** A process's light: an icon and a word in a tone tag, its gaps in the tooltip. Nothing when the rule does not apply.
+ * `size="icon"` is the tree row's form (10e): the icon alone in a round tone badge, so the process name keeps the
+ * width; its word and gaps stay in the aria-label and the tooltip (D-50: icon + colour + text, the text named). */
 export function DfdLight({ light, missing, size = 'md', sx }) {
   const look = LOOK[light];
   if (!look) return null;
-  const small = size === 'sm';
+  const label = `${t('processes.dfdLight.label')}: ${t(`processes.dfdLight.${light}`)}. ${lightTip(light, missing)}`;
+  const tip = <Box component="span" sx={{ whiteSpace: 'pre-line' }}>{`${t(`processes.dfdLight.${light}`)}\n${lightTip(light, missing)}`}</Box>;
+  if (size === 'icon') {
+    return (
+      <Tooltip title={tip}>
+        <Box component="span" role="img" aria-label={label} sx={(th) => ({ display: 'inline-grid', placeItems: 'center', flex: 'none',
+          width: 22, height: 22, borderRadius: '50%', bgcolor: th.vars.palette.status[`${look.tone}Bg`],
+          color: th.vars.palette.status[look.tone], ...sx })}>
+          <look.Icon aria-hidden sx={{ fontSize: 15 }} />
+        </Box>
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip title={<Box component="span" sx={{ whiteSpace: 'pre-line' }}>{lightTip(light, missing)}</Box>}>
-      <Box component="span" tabIndex={small ? undefined : 0} aria-label={`${t('processes.dfdLight.label')}: ${t(`processes.dfdLight.${light}`)}. ${lightTip(light, missing)}`}
+      <Box component="span" tabIndex={0} aria-label={label}
         sx={{ display: 'inline-flex', flex: 'none', borderRadius: 999, '&:focus-visible': { outline: '2px solid', outlineOffset: 1 }, ...sx }}>
-        <Tag tone={look.tone} icon={<look.Icon aria-hidden sx={{ fontSize: small ? 14 : 16 }} />}
-          sx={small ? { height: 20, px: 0.75, fontSize: 11.5 } : undefined}>
+        <Tag tone={look.tone} size="lg" icon={<look.Icon aria-hidden sx={{ fontSize: 16 }} />}>
           {t(`processes.dfdLight.${light}`)}</Tag>
       </Box>
     </Tooltip>
@@ -65,10 +78,10 @@ export function DfdMark({ dfd, element }) {
   return (
     <Tooltip title={tip}>
       <Box component="span" role="img" aria-label={tip} sx={(th) => ({ display: 'inline-flex', alignItems: 'center', gap: 0.4, flex: 'none',
-        height: 18, px: 0.6, borderRadius: 999, border: `1px solid ${th.vars.palette.divider}`, fontSize: 10.5, fontWeight: 700,
+        height: 20, px: 0.75, borderRadius: 999, border: `1px solid ${th.vars.palette.divider}`, fontSize: 12.5, fontWeight: 700,
         letterSpacing: 0.3, color: th.vars.palette.brand.muted, verticalAlign: 'middle' })}>
         {t('processes.dfdMark.label')}
-        {met ? <CheckRounded aria-hidden sx={(th) => ({ fontSize: 13, color: th.vars.palette.status.ok })} />
+        {met ? <CheckRounded aria-hidden sx={(th) => ({ fontSize: 14, color: th.vars.palette.status.ok })} />
           : <Box component="span" aria-hidden sx={(th) => ({ width: 6, height: 6, borderRadius: '50%', bgcolor: th.vars.palette.status.caution })} />}
       </Box>
     </Tooltip>
