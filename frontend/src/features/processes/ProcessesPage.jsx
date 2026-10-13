@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, IconButton, InputAdornment, Snackbar, Stack, TextField, Tooltip,
+  DialogTitle, FormControlLabel, IconButton, InputAdornment, Snackbar, Stack, Switch, TextField, Tooltip,
   Typography, useMediaQuery } from '@mui/material';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
@@ -25,6 +25,7 @@ import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, ShowRetired, blankToNull } from './chartKit';
 import { NodePanel } from './NodePanel';
 import { CopyChartButton } from './StepDfd';
+import { DfdLight } from './DfdLight';
 
 // Business function chart (§7.2, mockup 01). The tree arrives flat, ordered by hier_code; it is
 // built here from parent_bfc_node_id. Codes, levels and positions are derived by the server.
@@ -49,6 +50,18 @@ function filterRows(rows, text) {
     if (r.hier_code.toLowerCase().includes(q) || r.node_name.toLowerCase().includes(q)) {
       for (let n = r; n && !keep.has(n.bfc_node_id); n = byId.get(n.parent_bfc_node_id)) keep.add(n.bfc_node_id);
     }
+  }
+  return rows.filter((r) => keep.has(r.bfc_node_id));
+}
+
+// D-68 / DR13-P2: every process that is not Ready (yellow and red — under the fixed rule both block the freeze),
+// with its ancestors so it is never shown without its chain.
+function notReadyRows(rows) {
+  const byId = new Map(rows.map((r) => [r.bfc_node_id, r]));
+  const keep = new Set();
+  for (const r of rows) {
+    if (!r.dfd_light || r.dfd_light === 'READY') continue;
+    for (let n = r; n && !keep.has(n.bfc_node_id); n = byId.get(n.parent_bfc_node_id)) keep.add(n.bfc_node_id);
   }
   return rows.filter((r) => keep.has(r.bfc_node_id));
 }
@@ -100,6 +113,8 @@ function NodeLabel({ node }) {
         </Tooltip>
       )}
       <Box sx={{ flexGrow: 1 }} />
+      {/* D-68: always visible on a process row (not hover-only like the BR chip) */}
+      {node.is_process && node.dfd_light && <DfdLight light={node.dfd_light} missing={node.dfd_missing} size="sm" />}
       {node.below > 0 && <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 12, flex: 'none',
         color: th.vars.palette.brand.muted })}>{node.below}</Box>}
     </Stack>
@@ -202,6 +217,7 @@ export default function ProcessesPage() {
   const bfcSet = params.get('set') === 'AS_IS' && isOn('AS_IS') ? 'AS_IS' : 'TO_BE';
   const [showRetired, setShowRetired] = useState(false);
   const [filter, setFilter] = useState('');
+  const [notReadyOnly, setNotReadyOnly] = useState(false);
   const [expanded, setExpanded] = useState(null);          // null → everything expanded
   const [adding, setAdding] = useState(null);              // { parent }
   const [notice, setNotice] = useState('');
@@ -223,12 +239,15 @@ export default function ProcessesPage() {
   const brsQ = useQuery({ queryKey: [...keys.brs(projectId), { retired: true }], queryFn: () => brApi.list(projectId, true) });
   const rows = useMemo(() => treeQ.data ?? [], [treeQ.data]);
   const rowById = useMemo(() => new Map(rows.map((r) => [String(r.bfc_node_id), r])), [rows]);
+  const dfdOn = bfcSet === 'AS_IS' ? isOn('AS_IS') : isOn('TO_BE_DFD');     // the chart's DFD component: the light applies
+  const lightFilter = dfdOn && notReadyOnly;
   const items = useMemo(() => {
     const below = countBelow(rows);
-    return buildTree(filterRows(rows, filter).map((r) => ({ ...r, below: below.get(r.bfc_node_id) ?? 0 })));
-  }, [rows, filter]);
+    const shown = filterRows(lightFilter ? notReadyRows(rows) : rows, filter);
+    return buildTree(shown.map((r) => ({ ...r, below: below.get(r.bfc_node_id) ?? 0 })));
+  }, [rows, filter, lightFilter]);
   const selected = selectedId ? rowById.get(selectedId) ?? null : null;
-  const filtering = filter.trim() !== '';
+  const filtering = filter.trim() !== '' || lightFilter;
   const expandedItems = filtering || expanded === null ? rows.map((r) => String(r.bfc_node_id)) : expanded;
 
   const selectNow = (id) => {
@@ -357,6 +376,12 @@ export default function ProcessesPage() {
                   input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
               <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
                 <ShowRetired id="bfc-show-retired" checked={showRetired} onChange={setShowRetired} />
+                {dfdOn && (
+                  <Stack direction="row" sx={{ alignItems: 'center' }}>
+                    <FormControlLabel label={t('processes.dfdLight.notReadyOnly')} sx={{ mr: 0 }}
+                      control={<Switch id="bfc-not-ready" checked={notReadyOnly} onChange={(e) => setNotReadyOnly(e.target.checked)} />} />
+                    <InfoTip title={t('processes.dfdLight.notReadyOnlyInfo')} />
+                  </Stack>)}
                 <Box sx={{ flexGrow: 1 }} />
                 {canEdit && <>
                   <Button size="small" variant="outlined" startIcon={<AddRounded />} disabled={!canAddChild}
@@ -392,7 +417,8 @@ export default function ProcessesPage() {
               </Box>
             )}
             {filtering && rows.length > 0 && items.length === 0 && (
-              <Typography sx={{ color: 'text.secondary', px: 1, py: 2 }}>{t('processes.noMatch')}</Typography>
+              <Typography sx={{ color: 'text.secondary', px: 1, py: 2 }}>
+                {t(lightFilter && filter.trim() === '' ? 'processes.dfdLight.allReady' : 'processes.noMatch')}</Typography>
             )}
             <Box ref={treeBoxRef} sx={{ minWidth: 0, minHeight: 0, flex: 1, overflowX: 'hidden', overflowY: wide ? 'auto' : 'visible' }}>
               <RichTreeView items={items} getItemId={(n) => String(n.bfc_node_id)} getItemLabel={(n) => `${n.hier_code} ${n.node_name}`}
@@ -411,7 +437,7 @@ export default function ProcessesPage() {
             {selected ? (
               <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id} wide={wide}
-                  path={path} br={br} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
+                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [] }} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
                   onNext={nextProcess ? () => selectNow(String(nextProcess.bfc_node_id)) : null}
                   onNotice={setNotice} onGone={() => selectNow(null)} />
               </Box>

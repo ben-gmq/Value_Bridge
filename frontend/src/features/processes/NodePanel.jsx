@@ -18,6 +18,7 @@ import { CompletenessPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepFlows } from './StepSections';
 import { HowItRuns } from './HowItRuns';
+import { DfdLight } from './DfdLight';
 import { PanelSection, useOpenSections, useSectionFacts } from './PanelSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
 import { useBrEditor } from '../requirements/BrEditor';
@@ -55,7 +56,7 @@ const textBox = (size) => ({ '& .MuiInputBase-input': { fontSize: size, lineHeig
  * (the name, the requirement, purpose) wait for one Save; everything else saves as it is changed.
  * `guardRef` lets the chart ask before a switch would drop unsaved text (DR 10d-1).
  */
-export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetired, wide, guardRef, onNext,
+export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showRetired, wide, guardRef, onNext,
   onNotice, onGone }) {
   const { isOn } = useComponents(projectId);
   const qc = useQueryClient();
@@ -222,6 +223,7 @@ export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetire
   const solutionsOn = isOn('SOLUTION');
   const frsOn = isOn('FUNCTION_REQUIREMENT');
   const systemsOn = asIs && isOn('APPLICATION', 'AS_IS');
+  const liveDfd = node?.is_process && live && dfdOn && dfd?.light ? dfd : null;
   const facts = useSectionFacts({ projectId, br: showBr ? brEd.br : null, nodeId, solutionsOn, frsOn,
     partiesOn: Boolean(node?.is_process) && dfdOn, systemsOn: Boolean(node?.is_process) && systemsOn });
 
@@ -270,6 +272,8 @@ export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetire
               '&.Mui-focused': { bgcolor: th.vars.palette.background.field, outline: `1px solid ${th.vars.palette.brand.ftcViolet}` } } : {}),
             ...(editable && v.node_name.trim() === '' ? { outline: `1px solid ${th.vars.palette.status.escalate}` } : {}) })} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: 'auto' }}>
+          {/* D-68: the process's DFD light, from the tree row the chart already holds (null when the rule is off) */}
+          {liveDfd && <DfdLight light={liveDfd.light} missing={liveDfd.missing} />}
           {showBr && (
             <Tooltip title={t('processes.panel.openBr', { br: brEd.br.br_number })}>
               <Link component={RouterLink} to={links.requirement(projectId, br.br_id)} underline="none"
@@ -354,7 +358,7 @@ export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetire
 
         {node.is_process && (
           <HowItRuns projectId={projectId} node={node} br={showBr ? brEd.br : null} brEditable={showBr && brEd.editable}
-            editable={editable} dfdOn={dfdOn} onDraftChange={setDraft} />
+            editable={editable} dfdOn={dfdOn} dfd={liveDfd} onDraftChange={setDraft} />
         )}
 
         {!node.is_process && live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && dfdOn && (

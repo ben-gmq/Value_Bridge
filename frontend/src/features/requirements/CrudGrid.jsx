@@ -21,7 +21,7 @@ export const brDataKey = (brId) => [...keys.br(brId), 'data'];
  * In/Out column is the server's derived `direction` of the live links — never sent.
  * Ticking a CRUD also creates the step's data in/out on the server, so the node is refreshed.
  */
-export function CrudGrid({ projectId, br, disabled }) {
+export function CrudGrid({ projectId, br, disabled, mark }) {
   const qc = useQueryClient();
   const qk = brDataKey(br.br_id);
   const q = useQuery({ queryKey: qk, queryFn: () => brApi.data(br.br_id) });
@@ -36,6 +36,7 @@ export function CrudGrid({ projectId, br, disabled }) {
   const refresh = (deId) => {
     qc.invalidateQueries({ queryKey: qk });
     qc.invalidateQueries({ queryKey: keys.node(br.bfc_node_id) });
+    qc.invalidateQueries({ queryKey: keys.tree(projectId) });          // DR13-D2: CRUD writes step I/O → the light
     if (deId) qc.invalidateQueries({ queryKey: keys.entity(deId) });
   };
   const toggle = useMutation({
@@ -57,6 +58,7 @@ export function CrudGrid({ projectId, br, disabled }) {
         <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }}
           onClick={() => { setError(''); setAdding(true); }}>{t('requirements.addEntity')}</Button>)} info={t('requirements.crudHelp')}>
         {t('requirements.crudTitle')}
+        {mark && <Box component="span" sx={{ ml: 0.75, textTransform: 'none', letterSpacing: 0 }}>{mark}</Box>}
       </SectionLabel>
       {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <LoadError errors={[q.error, entQ.error]} />

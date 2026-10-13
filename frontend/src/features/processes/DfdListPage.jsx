@@ -11,6 +11,7 @@ import { Card, Code, ListRow, Segmented } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DfdView } from './DfdPage';
+import { LightCounts } from './DfdLight';
 
 /**
  * One DFD per direct parent of processes (D-54): every live non-process node with a live process
@@ -21,22 +22,34 @@ function dfdsOf(rows) {
   const byId = new Map(rows.map((r) => [r.bfc_node_id, r]));
   const parents = new Set();
   const count = new Map();
+  const lights = new Map();                  // D-68: ready / partly / not per diagram, over the same processes
   for (const r of rows) {
     if (!r.is_active || !r.is_process) continue;
     const parent = byId.get(r.parent_bfc_node_id);
     if (parent?.is_active && !parent.is_process) parents.add(parent.bfc_node_id);
-    for (let p = parent; p; p = byId.get(p.parent_bfc_node_id)) count.set(p.bfc_node_id, (count.get(p.bfc_node_id) ?? 0) + 1);
+    for (let p = parent; p; p = byId.get(p.parent_bfc_node_id)) {
+      count.set(p.bfc_node_id, (count.get(p.bfc_node_id) ?? 0) + 1);
+      if (r.dfd_light) {
+        const n = lights.get(p.bfc_node_id) ?? { READY: 0, PARTIAL: 0, NOT_READY: 0 };
+        n[r.dfd_light] += 1;
+        lights.set(p.bfc_node_id, n);
+      }
+    }
   }
-  return rows.filter((r) => parents.has(r.bfc_node_id)).map((r) => ({ ...r, processes: count.get(r.bfc_node_id) ?? 0 }));
+  return rows.filter((r) => parents.has(r.bfc_node_id))
+    .map((r) => ({ ...r, processes: count.get(r.bfc_node_id) ?? 0, lights: lights.get(r.bfc_node_id) ?? null }));
 }
 
 function DfdRow({ projectId, dfd, bfcSet, selected }) {
   return (
     <ListRow component={RouterLink} to={links.dfds(projectId, dfd.bfc_node_id, bfcSet)} selected={selected}
       aria-current={selected ? 'page' : undefined} sx={{ py: 1, gap: 1, flexShrink: 0 }}>
-      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none' }}>{dfd.hier_code}</Code>
-      <Typography noWrap sx={{ fontSize: 13.5, fontWeight: selected ? 700 : 500, minWidth: 0, flexGrow: 1 }}>{dfd.node_name}</Typography>
-      <Box component="span" sx={(th) => ({ flex: 'none', fontSize: 12, color: th.vars.palette.brand.muted, whiteSpace: 'nowrap' })}>
+      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none', alignSelf: 'flex-start', mt: '2px' }}>{dfd.hier_code}</Code>
+      <Box sx={{ minWidth: 0, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+        <Typography noWrap sx={{ fontSize: 13.5, fontWeight: selected ? 700 : 500 }}>{dfd.node_name}</Typography>
+        {dfd.lights && <LightCounts counts={dfd.lights} />}
+      </Box>
+      <Box component="span" sx={(th) => ({ flex: 'none', alignSelf: 'flex-start', mt: '2px', fontSize: 12, color: th.vars.palette.brand.muted, whiteSpace: 'nowrap' })}>
         {t(dfd.processes === 1 ? 'processes.dfdList.countOne' : 'processes.dfdList.count', { n: dfd.processes })}</Box>
     </ListRow>
   );

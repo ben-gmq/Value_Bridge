@@ -37,7 +37,7 @@ const WIDE = '@container (min-width: 700px)';
  * `embedded`: the process panel owns Save and Discard (one Save for the function and its BR, Ben
  * 2026-10-12) — `actions` then carries only retire/restore, and the panel calls `saveNow`/`discard`.
  */
-export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
+export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudMark = null }) {
   const { isOn } = useComponents(projectId);
   const canEdit = useCanEdit();             // UAT 7b: a viewer sees the requirement, not its controls
   const qc = useQueryClient();
@@ -176,7 +176,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false }) {
       <Divider />
       <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: 'minmax(0,1fr)',
         [WIDE]: { gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)' } }}>
-        <CrudGrid projectId={projectId} br={br} disabled={!editable} />
+        <CrudGrid projectId={projectId} br={br} disabled={!editable} mark={crudMark?.(br.bfc_node_id)} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}>
           <BrRaci projectId={projectId} br={br} disabled={!editable} />
           {isOn('SOLUTION') && <BrSolutionTags projectId={projectId} br={br} disabled={!editable} onWarnings={onLinkWarnings} />}
