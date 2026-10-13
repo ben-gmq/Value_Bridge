@@ -17,7 +17,9 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 Nothing here is in the spec yet.
 
 **D-65…D-70 are specced in [`slice13_spec.md`](slice13_spec.md)** (sub-slices 13a–13d, questions Q-1…Q-12, all open
-for Ben). 13a needs no answers and is being built on a slice branch; 13b–13d wait for Ben's answers.
+for Ben). **13a is built and merged (`bd93239`, 2026-10-14)**: D-66 split, D-68 light and D-69 marks against today's rule,
+placed as Q-1/Q-2 recommend and with the Q-13 interim rule (yellow and red both "Blocks the freeze"). They fold into the
+spec once Ben confirms Q-1, Q-2 and Q-13. 13b–13d wait for Ben's answers (schema proposal: `slice13_schema.md`).
 
 ### Ben's feedback, 2026-10-13 (D-65…D-70)
 
