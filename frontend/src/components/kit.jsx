@@ -29,11 +29,12 @@ export function Card({ title, action, children, sx, bodySx, component = 'section
 
 /** Small-caps section label: "DATA USAGE · CRUD". */
 export function SectionLabel({ children, sx, action, info }) {
+  const titled = children != null && children !== false;       // untitled: the row carries only its info and action
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...sx }}>
-      <Typography component="h3" sx={(th) => ({ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
-        textTransform: 'uppercase' })}>{children}</Typography>
-      {info && <InfoTip title={info} sx={{ ml: -0.75 }} />}
+      {titled && <Typography component="h3" sx={(th) => ({ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
+        textTransform: 'uppercase' })}>{children}</Typography>}
+      {info && <InfoTip title={info} sx={titled ? { ml: -0.75 } : undefined} />}
       {action && <><Box sx={{ flexGrow: 1 }} />{action}</>}
     </Box>
   );

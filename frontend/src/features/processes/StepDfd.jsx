@@ -3,6 +3,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import AddRounded from '@mui/icons-material/AddRounded';
 import { errorText } from '../../api/client';
 import { appApi, bfcApi, chartApi, orgApi, triggerApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
@@ -75,7 +76,7 @@ export function PerformerPanel({ projectId, node, disabled, startEditing = false
     <Box>
       <SectionTitle action={!disabled && !editing && (
         <Button size="small" onClick={() => { setEditing(true); setKind(node.performer_kind ?? ''); setCode(''); }}>
-          {t('processes.performer.change')}</Button>)} info={t('processes.performer.help')}>{t('processes.performer.title')}</SectionTitle>
+          {t('processes.performer.change')}</Button>)} info={t('processes.performer.help')}>{null}</SectionTitle>
       <LoadError errors={[units.error, roles.error, apps.error]} />
       {warning && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setWarning('')}>{warning}</Alert>}
       {!editing && (node.performer_kind
@@ -140,13 +141,14 @@ export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
   const free = (cat.data ?? []).filter((c) => !linked.has(c.process_trigger_id));
   return (
     <Box>
-      <SectionTitle info={t('processes.trigger.help')}>{t('processes.trigger.title')}</SectionTitle>
+      {/* 10e: the tile above already says "Started by"; the editor keeps only its (i) */}
+      <SectionTitle info={t('processes.trigger.help')}>{null}</SectionTitle>
       <LoadError errors={[links_.error, cat.error]} />
       {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1, mb: 1 }}>
         {(links_.data ?? []).length === 0 && <Typography sx={{ fontSize: 13 }}>{t('processes.trigger.none')}</Typography>}
         {(links_.data ?? []).map((r) => (
-          <Chip key={r.bfc_node_trigger_id} variant="outlined"
+          <Chip key={r.bfc_node_trigger_id} variant="outlined" sx={{ maxWidth: '100%' }}
             label={`${r.trigger_row.trigger_name} · ${t(`processes.trigger.kind.${r.trigger_row.trigger_kind}`)}`
               + (r.trigger_row.schedule_note ? ` (${r.trigger_row.schedule_note})` : '')}
             onDelete={disabled ? undefined : () => unlink.mutate(r)}
@@ -154,14 +156,18 @@ export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
         ))}
       </Stack>
       {!disabled && !adding && (
-        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-          <Box sx={{ flex: '1 1 220px', minWidth: 0, maxWidth: 360 }}>
+        // 10e (VB-005 UAT 10a): the picker shrinks first and the buttons never do, so nothing passes the panel's edge
+        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, minWidth: 0 }}>
+          <Box sx={{ flex: '1 1 180px', minWidth: 0, maxWidth: 360 }}>
             <SimpleSelect id="trigger-pick" label={t('processes.trigger.pick')} value={pick} onChange={setPick}
               options={free.map((c) => ({ value: c.process_trigger_id, label: c.trigger_name }))} />
           </Box>
-          <Button size="small" variant="outlined" disabled={!pick || link.isPending} onClick={() => link.mutate(pick)}>
-            {t('processes.trigger.link')}</Button>
-          <Button size="small" onClick={() => setAdding(true)}>{t('processes.trigger.new')}</Button>
+          <Stack direction="row" spacing={1} sx={{ flex: 'none', alignItems: 'center' }}>
+            <Button size="small" variant="outlined" disabled={!pick || link.isPending} onClick={() => link.mutate(pick)}>
+              {t('processes.trigger.link')}</Button>
+            <Button size="small" startIcon={<AddRounded />} sx={{ whiteSpace: 'nowrap' }} onClick={() => setAdding(true)}>
+              {t('processes.trigger.new')}</Button>
+          </Stack>
         </Stack>
       )}
       {!disabled && adding && (
