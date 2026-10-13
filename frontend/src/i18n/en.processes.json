@@ -387,5 +387,21 @@
   "processes.dfdMark.element.STARTED": "any one of: a trigger, a data input, or an inbound external party",
   "processes.dfdMark.element.DATA_OUT": "at least one data entity out",
   "processes.dfdMark.met": "Done.",
-  "processes.dfdMark.missing": "Not yet."
+  "processes.dfdMark.missing": "Not yet.",
+  "processes.guide.what": "“{name}” is a business function: a heading that groups the work below it. The requirement, who does the work, what starts it and the data it uses are written on a process, not here.",
+  "processes.guide.below": "{n} processes sit below it. Open one to describe it.",
+  "processes.guide.below_one": "One process sits below it. Open it to describe it.",
+  "processes.guide.tooHigh": "Processes start at level {n}. Add a box below this one, then make that box a process.",
+  "processes.guide.noneBelow": "Nothing below it is a process yet. Open a box below it and make that box a process.",
+  "processes.guide.make": "If the work is done at this level, make this box a process.",
+  "processes.guide.openBelow": "Open a process below",
+  "processes.guide.makeButton": "Make this a process",
+  "processes.run.notAssigned": "Not assigned",
+  "processes.run.notAssignedSet": "Not assigned · Set",
+  "processes.starts.others": "Also started by",
+  "processes.starts.where": "Input data and inbound outside parties start a process too. They are recorded under Data and External parties, and on the DFD — this list only shows them.",
+  "processes.starts.none": "No input data and no inbound outside party.",
+  "processes.starts.nothing": "Nothing starts this process yet: no trigger, no input data and no inbound outside party.",
+  "processes.starts.kind.data": "Data in",
+  "processes.starts.kind.party": "From"
 }
