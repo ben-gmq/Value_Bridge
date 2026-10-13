@@ -30,6 +30,9 @@ OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNode
                  ApplicationBfcNode, BfcNodeTrigger)       # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)
 # Tables an older retire event may list that a restore must skip: their rows can never be live again.
 RETIRED_TABLES = frozenset({"bfc_node_flow"})
+# …and, by chart rather than by table (D-64, slice10d §3): step roles of a to-be step. 0052 moved them onto the
+# BR (same-stamp copies for a step retired with its BR), and fk_bnor_node_as_is refuses them live.
+AS_IS_ONLY_TABLES = frozenset({"bfc_node_org_role"})
 OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution,          # BrSolution: S5-1 (Ben, 2026-10-09)
                BrFunctionRequirement)                         # D-52, slice10b Q-12: the FR itself survives
 
@@ -224,17 +227,24 @@ def _retired_with_dependents(db: Session, step: BfcNode) -> dict | None:
     return ev.detail
 
 
+# Rows a migration wrote for an older step retire without listing them in its event; they carry its stamp.
+SAME_STAMP_BR_ROWS = (BrFunctionRequirement,       # slice10b §3.2 [Q-8], 0051
+                      BrOrgRole)                   # slice10d Q-3, 0052: the to-be step roles moved to the BR
+
+
 def _same_stamp_links(db: Session, rows: list, at: datetime) -> list:
-    """The retired BR ↔ FR links of the event's BR that carry the event's stamp and are not already listed.
-    For a retire made after 10b they are in the event already, so this finds nothing new."""
+    """The retired rows of the event's BR (SAME_STAMP_BR_ROWS) that carry the event's stamp and are not already
+    listed. For a retire made after 10b / 10d they are in the event already, so this finds nothing new."""
     listed = {_key(r) for r in rows}
     br_ids = [r.br_id for r in rows if isinstance(r, BusinessRequirement)]
     if not br_ids:
         return []
-    found = db.scalars(select(BrFunctionRequirement).where(
-        BrFunctionRequirement.br_id.in_(br_ids), ~BrFunctionRequirement.is_active,
-        BrFunctionRequirement.deleted_at == at).order_by(BrFunctionRequirement.br_function_requirement_id))
-    return [r for r in found if _key(r) not in listed]
+    out = []
+    for model in SAME_STAMP_BR_ROWS:
+        found = db.scalars(select(model).where(model.br_id.in_(br_ids), ~model.is_active, model.deleted_at == at)
+                           .order_by(model.__mapper__.primary_key[0]))
+        out += [r for r in found if _key(r) not in listed]
+    return out
 
 
 def restore_plain(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
@@ -259,7 +269,8 @@ def restore(db: Session, actor_id: int, step: BfcNode) -> dict:
     if event is None:
         raise HTTPException(409, "This step was retired on its own. Use Restore.", headers=USE_PLAIN)
     at = datetime.fromisoformat(event["deleted_at"])
-    rows = [r for r in (_load(db, (t, i)) for t, i in event["rows"] if t not in RETIRED_TABLES)
+    skip = RETIRED_TABLES | (AS_IS_ONLY_TABLES if step.bfc_set_code != "AS_IS" else frozenset())
+    rows = [r for r in (_load(db, (t, i)) for t, i in event["rows"] if t not in skip)
             if r is not None and not r.is_active and r.deleted_at == at]          # §9.6: arrows stay retired
     # slice10b §3.2 [Q-8]: links backfilled for a pre-10b step retire are not in its event; they carry its stamp.
     # Merged BEFORE the parent and component checks, so they are held to the same all-or-nothing rule.

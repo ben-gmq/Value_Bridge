@@ -16,11 +16,11 @@ import os
 import secrets
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from auth.security import hash_password
 from database import SessionLocal
-from models import AppUser, BfcNodeOrgRole
+from models import AppUser, BrOrgRole, BusinessRequirement
 from services import audit, bfc, bfc_set, client_org, data_entity, external_entity, raci, step_io, trigger
 from services import components
 from services.project import create_client, create_project
@@ -110,7 +110,9 @@ def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
         (fulfil, "Ship goods", r_wh), (billing, "Raise invoice", r_ar), (billing, "Post payment", r_ar),
     ]:
         node = bfc.create_node(db, a, pid, parent.bfc_node_id, sname, is_process=True)
-        raci.link(db, a, BfcNodeOrgRole, node, role.org_role_id, "R")
+        br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.bfc_node_id == node.bfc_node_id,
+                                                          BusinessRequirement.is_active)).one()
+        raci.link(db, a, BrOrgRole, br, role.org_role_id, "R")          # D-64: a to-be process's RACI is its BR's
         step[sname] = node
 
     # Data entities, shaped for the ERD cases.

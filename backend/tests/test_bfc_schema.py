@@ -39,11 +39,11 @@ class W:
                         is_process=process, hier_code=code or f"{level}.{seq}.{parent}",
                         node_name=name or f"n{level}{seq}{parent}", bfc_set_code=bfc_set)
 
-    def step(self, seq=1):
+    def step(self, seq=1, bfc_set="TO_BE"):
         """L1 (at position `seq`) → L2 → L3 process step."""
-        a = self.node(seq=seq)
-        b = self.node(parent=a, level=2)
-        return self.node(parent=b, level=3, process=True)
+        a = self.node(seq=seq, bfc_set=bfc_set)
+        b = self.node(parent=a, level=2, bfc_set=bfc_set)
+        return self.node(parent=b, level=3, process=True, bfc_set=bfc_set)
 
     def de(self, n=1):
         return self.ins("data_entity", de_number=f"DE-{n:04d}", de_name=f"Entity {n}")
@@ -193,9 +193,10 @@ def test_external_flow_named_de_needs_step_io_but_unnamed_does_not(db, world):
 # ---- RACI keys on behaviour: VB law 5 ------------------------------------------------------
 
 def test_one_accountable_per_step_and_several_responsible_are_normal(db, world):
-    """D-46 / Q-26: the lane is the performer, so 0046 dropped the one-RESPONSIBLE index."""
+    """D-46 / Q-26: the lane is the performer, so 0046 dropped the one-RESPONSIBLE index. D-64: step roles
+    are an as-is process's."""
     w = W(db, world)
-    step, r1 = w.step(), w.unit_role()
+    step, r1 = w.step(bfc_set="AS_IS"), w.unit_role()
     r2 = w.ins("org_role", org_unit_id=db.execute(text("SELECT org_unit_id FROM org_role WHERE "
                                                        "org_role_id = :r"), {"r": r1}).scalar_one(),
                org_role_code="R2", org_role_name="R2")
@@ -207,6 +208,17 @@ def test_one_accountable_per_step_and_several_responsible_are_normal(db, world):
 
 
 # ---- the two charts, the performer and triggers (7c, slice7_schema §9) ----------------------------
+
+def test_a_live_step_role_only_on_an_as_is_step(db, world):
+    """D-64 (0052): a to-be process's RACI is its BR's. fk_bnor_node_as_is checks live rows only."""
+    w = W(db, world)
+    to_be, r1 = w.step(), w.unit_role()
+    db.commit()
+    _refused(db, lambda: w.raci("bfc_node_org_role", "bfc_node_id", to_be, r1, "R", "RESPONSIBLE"))
+    w.ins("bfc_node_org_role", bfc_node_id=to_be, org_role_id=r1, raci_code_id=_code(db, "RACI_TYPE", "R"),
+          raci_behaviour="RESPONSIBLE", is_active=False)                # history is not checked
+    db.commit()
+
 
 def test_a_child_is_always_in_its_parents_chart(db, world):
     w = W(db, world)
@@ -330,7 +342,7 @@ def _demote(db, node):
 @pytest.mark.parametrize("dependent", ["step_io", "step_raci", "external_flow"])
 def test_process_with_a_live_step_link_cannot_be_demoted(db, world, dependent):
     w = W(db, world)
-    step = w.step()
+    step = w.step(bfc_set="AS_IS" if dependent == "step_raci" else "TO_BE")
     if dependent == "step_io":
         w.io(step, w.de(), "I")
     elif dependent == "step_raci":
@@ -346,7 +358,7 @@ def test_process_with_a_live_step_link_cannot_be_demoted(db, world, dependent):
                                               ("br_org_role", "br_id")])
 def test_raci_to_another_projects_org_role_is_refused(db, world, table, owner_col):
     w, other = W(db, world), W(db, world, "p_fin")
-    step = w.step()
+    step = w.step(bfc_set="AS_IS" if owner_col == "bfc_node_id" else "TO_BE")    # D-64: each RACI's home
     owner = step if owner_col == "bfc_node_id" else w.br(step)
     foreign_role = other.unit_role()
     db.commit()

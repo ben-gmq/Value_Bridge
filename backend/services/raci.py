@@ -12,6 +12,9 @@ from services import lifecycle
 # One Accountable per step or BR. Several Responsible are normal RACI again: the lane is the step's
 # performer now (D-46, Q-26; 0046 dropped uq_bnor_one_responsible).
 SINGLE = {BfcNodeOrgRole: ("ACCOUNTABLE",), BrOrgRole: ("ACCOUNTABLE",)}
+# D-64 (slice 10d): one RACI per process — a to-be process's roles are its requirement's (br_org_role), an
+# as-is process's roles are the step's (bfc_node_org_role). The database refuses a live step role elsewhere.
+TO_BE_STEP = "Roles of a to-be process are recorded on its requirement. Add them there."
 
 
 def _owner(model):
@@ -35,6 +38,8 @@ def link(db: Session, actor_id: int, model, owner, org_role_id: int, raci_code: 
         raise HTTPException(409, "Restore it first")
     if model is BfcNodeOrgRole and not owner.is_process:
         raise HTTPException(422, "Roles are assigned to a process step")
+    if model is BfcNodeOrgRole and owner.bfc_set_code != "AS_IS":          # D-64; fk_bnor_node_as_is
+        raise HTTPException(409, TO_BE_STEP)
     role = db.get(OrgRole, org_role_id)
     if role is None or role.project_id != owner.project_id or not role.is_active:
         raise HTTPException(422, "Choose an active org role in this project")

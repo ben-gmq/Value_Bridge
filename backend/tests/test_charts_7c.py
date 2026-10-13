@@ -235,19 +235,28 @@ def _cfg() -> Config:
     return cfg
 
 
+def _plant_step_role(c, p, step_id, org_role_id, code, at=None, by=None):
+    """A step role as pre-10d code wrote it (live, or retired with `at`), as the owner."""
+    return c.execute(text(
+        "INSERT INTO bfc_node_org_role (project_id, bfc_node_id, org_role_id, raci_code_id, raci_behaviour, created_by, "
+        "is_active, deleted_at, deleted_by) SELECT :p, :s, :r, code_id, behaviour_code, 1, :live, :at, :by "
+        "FROM code_master WHERE category = 'RACI_TYPE' AND code = :c AND project_id IS NULL "
+        "RETURNING bfc_node_org_role_id"),
+        {"p": p, "s": step_id, "r": org_role_id, "c": code, "live": at is None, "at": at, "by": by}).scalar()
+
+
 def test_0041_backfills_performers_from_responsible_and_0045_retires_arrows(client, ed, db):
     """Built at head, stepped back to 0040, arrows and RESPONSIBLE roles planted as the owner, then
     upgraded: the lane survives as the performer and every arrow is retired, audited, SELECT-only."""
     _a, b, s1 = step_in(client, ed)
     s2 = node(client, ed, "Second", b["bfc_node_id"], process=True)
     _u, role = org(client, ed)
-    client.post(f"{API}/bfc-nodes/{s1['bfc_node_id']}/org-roles", headers=ed["h"],
-                json={"org_role_id": role["org_role_id"], "raci_code": "R"})
     cfg = _cfg()
     command.downgrade(cfg, "0040")
     eng = create_engine(OWNER_URL)
     try:
         with eng.begin() as c:
+            _plant_step_role(c, ed["p"], s1["bfc_node_id"], role["org_role_id"], "R")    # D-64: the API refuses it now
             c.execute(text("INSERT INTO bfc_node_flow (project_id, from_bfc_node_id, to_bfc_node_id, flow_type, created_by) "
                            "VALUES (:p, :a, :b, 'SEQUENCE', 1)"), {"p": ed["p"], "a": s1["bfc_node_id"], "b": s2["bfc_node_id"]})
         command.upgrade(cfg, "head")
@@ -258,6 +267,10 @@ def test_0041_backfills_performers_from_responsible_and_0045_retires_arrows(clie
             assert c.execute(text("SELECT count(*) FROM bfc_node_flow WHERE is_active")).scalar() == 0
             ev = c.execute(text("SELECT detail FROM audit_event WHERE event_type = 'FLOW_EDGES_RETIRED'")).scalar_one()
             assert ev["count"] == 1 and ev["decision"] == "D-38"
+            # …and 0052 then moved the step role onto the step's BR (D-64)
+            assert c.execute(text("SELECT count(*) FROM br_org_role r JOIN business_requirement b USING (br_id) "
+                                  "WHERE b.bfc_node_id = :n AND r.is_active AND r.org_role_id = :r"),
+                             {"n": s1["bfc_node_id"], "r": role["org_role_id"]}).scalar() == 1
     finally:
         command.upgrade(cfg, "head")
         eng.dispose()
@@ -317,8 +330,6 @@ def test_a_step_retired_before_0041_and_0045_restores_with_its_lane_and_without_
     _a, b, s1 = step_in(client, ed)
     s2 = node(client, ed, "Second", b["bfc_node_id"], process=True)
     _u, role = org(client, ed)
-    client.post(f"{API}/bfc-nodes/{s2['bfc_node_id']}/org-roles", headers=ed["h"],
-                json={"org_role_id": role["org_role_id"], "raci_code": "R"})
     prev = client.get(f"{API}/bfc-nodes/{s2['bfc_node_id']}/retire-preview", headers=ed["h"]).json()
     assert client.post(f"{API}/bfc-nodes/{s2['bfc_node_id']}/retire-with-dependents", headers=ed["h"],
                        json={"confirm_hash": prev["confirm_hash"]}).status_code == 204
@@ -334,7 +345,9 @@ def test_a_step_retired_before_0041_and_0045_restores_with_its_lane_and_without_
                 {"p": ed["p"], "a": s1["bfc_node_id"], "b": s2["bfc_node_id"], "at": at}).scalar()
             ev = c.execute(text("SELECT app_user_id, detail FROM audit_event WHERE event_type = 'STEP_RETIRED_WITH_DEPENDENTS' "
                                 "AND target_id = :n ORDER BY audit_event_id DESC LIMIT 1"), {"n": s2["bfc_node_id"]}).one()
-            detail = {**ev.detail, "rows": [*ev.detail["rows"], ["bfc_node_flow", flow]]}
+            # the RESPONSIBLE step role a pre-10d retire took with it (D-64: the API refuses one on a to-be step now)
+            bnor = _plant_step_role(c, ed["p"], s2["bfc_node_id"], role["org_role_id"], "R", at, ev.app_user_id)
+            detail = {**ev.detail, "rows": [*ev.detail["rows"], ["bfc_node_flow", flow], ["bfc_node_org_role", bnor]]}
             c.execute(text("INSERT INTO audit_event (app_user_id, project_id, event_type, target_table, target_id, detail) "
                            "VALUES (:u, :p, 'STEP_RETIRED_WITH_DEPENDENTS', 'bfc_node', :n, CAST(:d AS jsonb))"),
                       {"u": ev.app_user_id, "p": ed["p"], "n": s2["bfc_node_id"], "d": __import__("json").dumps(detail)})
@@ -348,3 +361,9 @@ def test_a_step_retired_before_0041_and_0045_restores_with_its_lane_and_without_
     assert restored["is_active"] and restored["performer_kind"] == "ORG_ROLE" \
         and restored["performer_org_role_id"] == role["org_role_id"]
     assert db.execute(text("SELECT is_active FROM bfc_node_flow WHERE bfc_node_flow_id = :f"), {"f": flow}).scalar() is False
+    # 0052 (Q-3): the step role came back on the BR, and the step row stayed retired
+    assert db.execute(text("SELECT is_active FROM bfc_node_org_role WHERE bfc_node_org_role_id = :i"),
+                      {"i": bnor}).scalar() is False
+    assert db.execute(text("SELECT count(*) FROM br_org_role r JOIN business_requirement b USING (br_id) "
+                           "WHERE b.bfc_node_id = :n AND r.is_active AND r.org_role_id = :r"),
+                      {"n": s2["bfc_node_id"], "r": role["org_role_id"]}).scalar() == 1
