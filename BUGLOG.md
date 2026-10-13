@@ -349,3 +349,6 @@ place.
 - sara L3 · slice 10c pre-merge review, 2026-10-14 · LOW · **The "keys only" attribute hint rule (D-39) now also lives
   in the browser** (BR CRUD grid expander, slice 10c) besides the entity page; two places to keep in step. Move to one
   shared helper, or have the server send the flag.
+- UAT 10c-1 · slice 10c, 2026-10-14 · LOW · **A project you cannot see still draws the project shell under "Not found"**
+  (rail items, empty Baselines / Program dashboard cards; no name leaks, 404s are correct). Render the plain not-found
+  page when the project read is 404. Evidence/2026-10-14/slice-10c/s10c-28*.png.
