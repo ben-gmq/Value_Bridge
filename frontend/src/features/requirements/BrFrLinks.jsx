@@ -70,7 +70,7 @@ function NewFrDialog({ projectId, br, brSolutions, solutionsOn, onClose, onDone 
  * The server's drift warnings (`warnings`, kept by the editor so a solution unlink can report too) are shown
  * with their two explicit fixes; nothing is ever fixed implicitly (Q-4, Q-5).
  */
-export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setWarnings, onNotice }) {
+export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setWarnings, onNotice, bare = false }) {
   const qc = useQueryClient();
   const brId = br.br_id;
   const { getLabel: typeLabel } = useCodes(projectId, 'FR_TYPE');
@@ -182,16 +182,18 @@ export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setW
   };
 
   return (
-    <Box component="section" aria-labelledby={`brfr-title-${brId}`} sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-      <SectionLabel action={!disabled && (
+    <Box component="section" aria-labelledby={bare ? undefined : `brfr-title-${brId}`} aria-label={bare ? t('requirements.frs.title') : undefined}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      {/* `bare`: inside the process panel's section already titled "Function requirements" (10e), only the actions show */}
+      {(!bare || !disabled) && <SectionLabel action={!disabled && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Button size="small" variant="outlined" startIcon={<LinkRounded />}
             onClick={() => { setError(null); setNote(''); setLinking(true); }}>{t('requirements.frs.link')}</Button>
           <Button size="small" variant="outlined" startIcon={<AddRounded />}
             onClick={() => { setError(null); setCreating(true); }}>{t('requirements.frs.new')}</Button>
         </Box>)}>
-        <Box component="span" id={`brfr-title-${brId}`}>{t('requirements.frs.title')}</Box>
-      </SectionLabel>
+        {!bare && <Box component="span" id={`brfr-title-${brId}`}>{t('requirements.frs.title')}</Box>}
+      </SectionLabel>}
 
       {warnings.map((w) => (
         <Alert key={w.code} severity="warning" sx={ERR_SX} onClose={() => setWarnings((ws) => ws.filter((x) => x.code !== w.code))}>

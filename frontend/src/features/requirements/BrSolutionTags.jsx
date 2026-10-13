@@ -57,7 +57,7 @@ export function EditNoteDialog({ row, save, onClose, onDone, onStale }) {
  * the note, unlink after a confirm. The note and the solution's category/status sit in the tag's
  * tooltip; a rejected solution is flagged on the tag itself.
  */
-export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
+export function BrSolutionTags({ projectId, br, disabled, onWarnings, bare = false }) {
   const qc = useQueryClient();
   const { getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
   const { getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
@@ -90,7 +90,8 @@ export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-      <SectionLabel>{t('requirements.solutionsTitle')}</SectionLabel>
+      {/* `bare`: inside the process panel's section already titled "Solutions" (10e), no second heading */}
+      {!bare && <SectionLabel>{t('requirements.solutionsTitle')}</SectionLabel>}
       {error && <Alert severity="error" sx={ERR_SX} onClose={() => setError('')}>{error}</Alert>}
       {q.error && <Alert severity="error" sx={ERR_SX}>{errorText(q.error)}</Alert>}
       {!q.isLoading && !q.error && rows.length === 0 && (

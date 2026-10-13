@@ -375,14 +375,14 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
             {showBr && solutionsOn && (
               <PanelSection id="solutions" sections={sections} title={t('processes.sec.solutions')}
                 count={facts.solutions.count} summary={facts.solutions.summary}>
-                <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} />
+                <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} bare />
               </PanelSection>
             )}
             {/* D-52: the BR maps to FRs directly; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
             {showBr && frsOn && (
               <PanelSection id="frs" sections={sections} title={t('processes.sec.frs')}
                 count={facts.frs.count} summary={facts.frs.summary}>
-                <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn}
+                <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn} bare
                   warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />
               </PanelSection>
             )}

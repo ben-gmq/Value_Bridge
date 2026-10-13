@@ -11,39 +11,48 @@ import { t } from '../../i18n/t';
 // remembered per user in this browser — a convenience only, so every read and write tolerates blocked storage.
 const storeKey = (userId) => `vb.processPanel.open.${userId ?? 'anon'}`;
 
-// D-66 (slice 13a): Solutions and Function requirements open on a first visit (nothing stored yet); from then on
-// the user's own choice is kept. A choice stored before the split named one "delivery" section: it carries over.
+// D-66 (slice 13a): Solutions and Function requirements are the sections that may open by themselves; 10e: only
+// when they have something in them — an empty one starts collapsed, its summary reading "None yet". Every other
+// section starts collapsed. Once the user opens or closes a section, that choice is kept for it.
 const OPEN_FIRST = ['solutions', 'frs'];
+const KNOWN = ['solutions', 'frs', 'parties', 'description', 'systems'];
 
-function readOpen(userId) {
+/** The user's own choices, { key: open }. A list stored before 10e named the open sections (and one "delivery"
+ * section before the split): it carries over as a choice for every section it knew about. */
+function readChoices(userId) {
   try {
     const raw = window.localStorage.getItem(storeKey(userId));
-    if (raw == null) return OPEN_FIRST;
+    if (raw == null) return {};
     const v = JSON.parse(raw);
-    if (!Array.isArray(v)) return OPEN_FIRST;
-    return v.includes('delivery') ? [...v.filter((k) => k !== 'delivery'), ...OPEN_FIRST] : v;
+    if (Array.isArray(v)) {
+      const open = v.includes('delivery') ? [...v.filter((k) => k !== 'delivery'), ...OPEN_FIRST] : v;
+      return Object.fromEntries(KNOWN.map((k) => [k, open.includes(k)]));
+    }
+    return v && typeof v === 'object' ? v : {};
   } catch {
-    return OPEN_FIRST;
+    return {};
   }
 }
 
 export function useOpenSections() {
   const { me } = useAuth() ?? {};
   const userId = me?.user?.app_user_id ?? me?.user?.email;
-  const [open, setOpen] = useState(() => readOpen(userId));
-  const toggle = useCallback((key) => setOpen((prev) => {
-    const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+  const [choices, setChoices] = useState(() => readChoices(userId));
+  const isOpen = useCallback((key, filled) => (key in choices ? Boolean(choices[key])
+    : OPEN_FIRST.includes(key) && Boolean(filled)), [choices]);
+  const toggle = useCallback((key, wasOpen) => setChoices((prev) => {
+    const next = { ...prev, [key]: !wasOpen };
     try { window.localStorage.setItem(storeKey(userId), JSON.stringify(next)); } catch { /* storage blocked: keep it in memory */ }
     return next;
   }), [userId]);
-  return { isOpen: (key) => open.includes(key), toggle };
+  return { isOpen, toggle };
 }
 
 /** One collapsed section. Content stays mounted while collapsed (MUI's default), so closing never drops a draft. */
 export function PanelSection({ id, title, count, summary, sections, children }) {
-  const expanded = sections.isOpen(id);
+  const expanded = sections.isOpen(id, count > 0);
   return (
-    <Accordion disableGutters elevation={0} expanded={expanded} onChange={() => sections.toggle(id)}
+    <Accordion disableGutters elevation={0} expanded={expanded} onChange={() => sections.toggle(id, expanded)}
       sx={(th) => ({ bgcolor: 'transparent', borderTop: `1px solid ${th.vars.palette.divider}`, borderRadius: 0,
         '&::before': { display: 'none' } })}>
       <AccordionSummary expandIcon={<ExpandMoreRounded />} aria-controls={`sec-${id}-body`} id={`sec-${id}-head`}
