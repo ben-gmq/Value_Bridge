@@ -361,7 +361,7 @@
   "processes.leave.save": "Save and continue",
   "processes.run.draft": "Not saved yet — open to finish",
   "processes.run.dfdOnly": "Recorded on the DFD, not on the requirement",
-  "processes.run.dfdOnlyCount": "+{n} on the DFD only",
+  "processes.run.dfdOnlyCount": "{n} not on the requirement yet",
   "processes.run.noBrDataButDfd": "Nothing on the requirement yet — the data below is recorded on the DFD only. Add an entity and tick what the requirement does with it.",
   "processes.run.dfdOnlyInfo": "These came from an external flow, a chart copy or the old step editor. Tick the entity in the grid above to make it part of the requirement.",
   "processes.leave.draft": "An unfinished performer or trigger under How it runs is discarded too.",

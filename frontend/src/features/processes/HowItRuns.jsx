@@ -52,18 +52,16 @@ function useRaciFact(projectId, queryKey, list, enabled) {
   }, [q.data, q.isLoading, rolesQ.data, codes]);
 }
 
-/** Entities in and out of the step. A to-be process edits them through its requirement's CRUD (derived
- * direction), so the tile counts what that grid shows; its step can also carry rows the CRUD does not (an external
- * flow, a chart copy, the old step editor — DR 10d-4), and those are named apart as "+n on the DFD only", the same
- * rows the editor lists under "Recorded on the DFD" (10e: tile and editor agree). An as-is process has its step
- * data only. Nothing stored changes; this is only how the two sources are counted. */
+/** Entities in and out of the step. The tile counts the step's own I/O — the one record (D-24) that the DFD, the
+ * readiness tick and "Started by" read, so all four agree (10f, critique P2). A to-be process edits them through its
+ * requirement's CRUD; step rows the CRUD does not hold (an external flow, a chart copy — DR 10d-4) are named apart as
+ * "n not on the requirement yet", the rows the editor lists under "Recorded on the DFD". Nothing stored changes. */
 function useDataFact(nodeId, br) {
   const stepQ = useQuery({ queryKey: stepKey(nodeId, 'data'), queryFn: () => bfcApi.stepData(nodeId) });
   const brQ = useQuery({ queryKey: br ? brDataKey(br.br_id) : ['none'], queryFn: () => brApi.data(br.br_id), enabled: Boolean(br) });
   const stepRows = stepQ.data ?? [];
   const brRows = br ? brQ.data ?? [] : [];
-  const shown = br ? brRows : stepRows;
-  const count = (d) => new Set(shown.filter((r) => r.direction === d).map((r) => r.data_entity_id)).size;
+  const count = (d) => new Set(stepRows.filter((r) => r.direction === d).map((r) => r.data_entity_id)).size;
   const onBr = new Set(brRows.map((r) => `${r.data_entity_id}:${r.direction}`));
   const dfdOnly = br ? stepRows.filter((r) => !onBr.has(`${r.data_entity_id}:${r.direction}`)).length : 0;
   return { inN: count('I'), outN: count('O'), dfdOnly, loading: stepQ.isLoading || (Boolean(br) && brQ.isLoading), brRows: brQ.data };

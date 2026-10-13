@@ -100,11 +100,12 @@ function NodeLabel({ node }) {
       <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
         <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} /></Box>
       <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12.5, flex: 'none' }}>{node.hier_code}</Code>
-      <TruncName name={node.node_name} sx={{ flex: '0 1 auto', minWidth: '10ch', fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
+      <TruncName name={node.node_name} sx={{ flex: '0 1 auto', flexShrink: 1, minWidth: '10ch', fontSize: 13.5, fontWeight: node.level_no <= 2 || selected ? 700 : 500,
         color: node.is_active ? 'text.primary' : 'text.disabled' }} />
       {/* The BR chip gives way first (10e UAT): the name keeps 10ch and the light stays whole */}
-      {node.is_process && <Box component="span" className="vb-row-extra" sx={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', display: 'inline-flex' }}>
-        <Tag tone="purple" size="lg" sx={{ height: 22 }}>{node.br_number ?? t('processes.processChip')}</Tag></Box>}
+      {node.is_process && <Box component="span" className="vb-row-extra" sx={{ flex: '0 1000 auto', minWidth: 0, overflow: 'hidden', display: 'inline-flex' }}>
+        <Tag tone="purple" size="lg" sx={{ height: 22, display: 'inline-block', lineHeight: '22px', maxWidth: '100%',
+          overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.br_number ?? t('processes.processChip')}</Tag></Box>}
       {!node.is_active && <Tag tone="neutral" size="lg" sx={{ height: 22, flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
       {flowable && (
         <Tooltip title={t('processes.openFlow')}>

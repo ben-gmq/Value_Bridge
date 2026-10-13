@@ -16,27 +16,10 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-**D-65…D-70 are specced in [`slice13_spec.md`](slice13_spec.md)** (sub-slices 13a–13d, questions Q-1…Q-12, all open
-for Ben). **13a is built and merged (`bd93239`, 2026-10-14)**: D-66 split, D-68 light and D-69 marks against today's rule,
-placed as Q-1/Q-2 recommend and with the Q-13 interim rule (yellow and red both "Blocks the freeze"). They fold into the
-spec once Ben confirms Q-1, Q-2 and Q-13. 13b–13d wait for Ben's answers (schema proposal: `slice13_schema.md`).
-
-### Ben's feedback, 2026-10-13 (D-65…D-70)
-
-**Status: RECORDED, not decided.** Ben: *"just record this, and we will do the spec and the build later on."* Each item
-gets a spec (and D-67 an `apple` model) before build.
-
-| # | Feedback | Notes for the spec | Slice |
-|---|---|---|---|
-| D-65 | **Can the DFD be edited on the diagram itself (connect, move)?** Ben asked whether it is always generated from the BRs and function descriptions | Today: boxes can be **moved** by an editor and the position is kept (D-30); **connections cannot be drawn** — every flow is generated from the process's inputs, outputs and external flows (D-31, D-24), edited in the panel. Open for the spec: drawing a connection on the canvas that writes the same step I/O row (`bfc.ensure_step_io`), so the diagram stays generated from one record | — |
-| D-66 | **Split Delivery in the process panel into two: Solutions and Function requirements.** Ben: they are the most important things | Revises D-63, which put both in one collapsed "Delivery" section. Two sections, ranked higher than the other collapsed sections; FRs list independently of solutions (D-52, solution optional) | 10d follow-up |
-| D-67 | **Optional process-volume fields for a time-saving / ROI analysis.** On the process description: frequency, number of transactions with a **unit chosen from a master**, assumed time to run the process, and from those the **estimated FTEs** to run it | All optional. Units a `code_master` type (send codes). FTEs are derived, never accepted from a request (VB law 6); the hours-per-FTE basis is a spec question. As-is vs to-be values (D-47) would show the time saved. New columns → `apple` first, shadow columns in the same migration | — |
-| D-68 | **The BR list shows each BR's DFD readiness as a traffic light.** Red: the DFD cannot be completed from it. Yellow: partly. Green: complete | Measured against the project's completeness rule (D-70). The light needs a text label and an icon too, never colour alone (as D-50) | — |
-| D-69 | **On each BR, mark the data needed for the DFD.** Ben: *"put a reference that you need to fill in this information in order to complete your DFD"* | A marker on each field the project's rule (D-70) requires, with a short note saying it is needed to complete the DFD. The marker follows the rule, so it changes when the project changes its rule | — |
-| D-70 | **Each project decides what makes its DFD complete.** Ben: a process flow with no data entities is possible, *"but I don't recommend it"* | A project setting listing the required elements, chosen from: process, forward arrow (order), trigger, external entity, data entity in/out. Default is the full set, recommended. **Conflicts to settle in the spec:** (1) D-38's fixed rule (at least one input or trigger and one output, which blocks the freeze) becomes this setting; (2) under D-38, order is **derived from data** and explicit arrows are retired, so "arrows without data entities" needs either explicit arrows back as an option or a different source of order; (3) Ben's wording *"fully with the external, maybe only with the D"* is read as *"or only with the data entities"* (ASSUMPTION, to confirm) | — |
-
-Also pending from 2026-10-13: Purpose and Data processing on the process panel (Ben asked what goes in them, with
-sample text, before deciding).
+- **Slice 11 [Q-11]** — are BR system-to-system flows ongoing integration only, or also one-off data migration? (If
+  both, each flow gets a kind: Integration / Migration.) `docs/slice11_schema.md` §8.
+- **Slice 11 [Q-17]** — "the system has to be like a master": one master list of systems (as modelled), or also a
+  master system (system of record) per data entity? `docs/slice11_schema.md` §8.
 
 ---
 
@@ -450,6 +433,44 @@ accepted as recommended — to-be roles live on the BR, as-is roles on the step 
 conflict (audited); roles of retired processes are merged so a restore brings them back; chart copy carries roles
 across; a to-be process with no live BR blocks migration 0052 with a list; the one-time moved entries in old-baseline
 diffs are accepted.
+
+### Ben's rulings, 2026-10-14 — "I accept all of your recommendations" (D-65…D-70 and the open questions)
+
+**Status: DECIDED by Ben, 2026-10-14**, on the decision page of that night (every open question with Lilly's
+recommendation). Ben: *"I cannot select the button, so I accept all of your recommendations."* The page's slice 11 line
+excluded [Q-11] and [Q-17], which stay open (§1).
+
+**D-65…D-70 (Ben's feedback of 2026-10-13), now decided as specced in `slice13_spec.md` and `slice13_schema.md`:**
+
+| # | Decision | Effect (as recorded; the spec and schema give the detail) | Slice |
+|---|---|---|---|
+| D-65 | **Can the DFD be edited on the diagram itself (connect, move)?** Ben asked whether it is always generated from the BRs and function descriptions | Today: boxes can be **moved** by an editor and the position is kept (D-30); **connections cannot be drawn** — every flow is generated from the process's inputs, outputs and external flows (D-31, D-24), edited in the panel. Open for the spec: drawing a connection on the canvas that writes the same step I/O row (`bfc.ensure_step_io`), so the diagram stays generated from one record | — |
+| D-66 | **Split Delivery in the process panel into two: Solutions and Function requirements.** Ben: they are the most important things | Revises D-63, which put both in one collapsed "Delivery" section. Two sections, ranked higher than the other collapsed sections; FRs list independently of solutions (D-52, solution optional) | 10d follow-up |
+| D-67 | **Optional process-volume fields for a time-saving / ROI analysis.** On the process description: frequency, number of transactions with a **unit chosen from a master**, assumed time to run the process, and from those the **estimated FTEs** to run it | All optional. Units a `code_master` type (send codes). FTEs are derived, never accepted from a request (VB law 6); the hours-per-FTE basis is a spec question. As-is vs to-be values (D-47) would show the time saved. New columns → `apple` first, shadow columns in the same migration | — |
+| D-68 | **The BR list shows each BR's DFD readiness as a traffic light.** Red: the DFD cannot be completed from it. Yellow: partly. Green: complete | Measured against the project's completeness rule (D-70). The light needs a text label and an icon too, never colour alone (as D-50) | — |
+| D-69 | **On each BR, mark the data needed for the DFD.** Ben: *"put a reference that you need to fill in this information in order to complete your DFD"* | A marker on each field the project's rule (D-70) requires, with a short note saying it is needed to complete the DFD. The marker follows the rule, so it changes when the project changes its rule | — |
+| D-70 | **Each project decides what makes its DFD complete.** Ben: a process flow with no data entities is possible, *"but I don't recommend it"* | A project setting listing the required elements, chosen from: process, forward arrow (order), trigger, external entity, data entity in/out. Default is the full set, recommended. **Conflicts to settle in the spec:** (1) D-38's fixed rule (at least one input or trigger and one output, which blocks the freeze) becomes this setting; (2) under D-38, order is **derived from data** and explicit arrows are retired, so "arrows without data entities" needs either explicit arrows back as an option or a different source of order; (3) Ben's wording *"fully with the external, maybe only with the D"* is read as *"or only with the data entities"* (ASSUMPTION, to confirm) | — |
+
+| # | Ruling | Source |
+|---|---|---|
+| S13-1 | **All slice 13 questions accepted as recommended**: Q-1…Q-16 (`slice13_spec.md` §15 — incl. Q-3 option A: per-project rule, order still derived from data only, chart order when there is none; Q-13 red = blocks the freeze, yellow = passes it but misses a recommended element; Q-15 one rule per chart) and Q-17…Q-28 (`slice13_schema.md` §8 — incl. Q-8 transactions per run and time per transaction, stored in seconds; 240 × 8 h working year) | slice13_spec §15, slice13_schema §8 |
+| S13-2 | **The interim 13a rule ends**: yellow no longer says "Blocks the freeze" once 13b ships the rule (Q-13) | slice13_spec §16 DR13-P2 |
+| SC-1 | Cross-project hand-off: the other project is shown as an outside party on the DFD boundary ("Project: X"); no new table | spec CHECK C-1 |
+| SC-2 | A change request may target a FROZEN or APPROVED baseline, or a SUPERSEDED one that carries the agreed approval (DR8-P1 wins over Q8) | C-2 |
+| SC-3 | `FR_BFC_NODE` (FR linked straight to a function, never built) is retired; BR ↔ FR direct covers it | C-3 |
+| SC-4 | WBS progress updates: `apple` models the table when the WBS wave is specced | C-4 |
+| SC-5 | As-is vs to-be system gap: matched by area (code and name), as Q-28; a process link later | C-5 |
+| SC-6 | Flow-file import: identity errors still block; as-is processes match by name within their parent; cap 2,000 inputs/outputs/flows/triggers combined; export at `/bfc-nodes/{id}/dfd/export?format=json` | C-6 |
+| SC-7 | Deciding a change request and resetting control rules: EDIT (project editors); admins always | C-7 |
+| SC-8 | "Split into sub-steps" keeps the built rule: refused with a list until the consultant clears the facts (R2-P5) | C-8 |
+| SC-9 | Issue module and control rules come right after slice 12 (dashboards), opening the next wave | C-9 |
+| SC-10 | House rate card stays a fixed default in code until a client needs another; removed from the admin list | C-10 |
+| SC-11 | Four lookup lists (`bfc_set_code`, `performer_kind`, `trigger_kind`, `flow_type`) get a playbook-deviation line; A-15 (naming final) confirmed; "effort by L1 area" moves to the reports slice | C-11 |
+| SP-1 | **One save model on the process panel**: typed text waits for Save (unsaved counter, Ctrl+S); everything else saves the moment it changes; the performer and trigger editors lose their own Save (Done = saved) | P-1 |
+| S10c-2 | **10c Q-1…Q-3**: the performer can be recorded whatever the DFD setting (performer gated by the function chart; triggers stay with the DFD); every live project switches to assigned-only after its team is checked; Lilly keeps the inventory (`slice10c_spec.md` §12) and an admin confirms each switch on its Access screen | slice10c_spec §11 |
+| S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, all frozen from hash spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
+| S-T | "Trailer" in Ben's 2026-10-12 note means **trigger** | D-56…D-62 note |
+| S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
 
