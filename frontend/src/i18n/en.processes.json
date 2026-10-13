@@ -328,7 +328,7 @@
   "processes.demoteConfirm": "Stop being a process",
   "processes.run.title": "How it runs",
   "processes.run.savesAsYouGo": "each change saves on its own",
-  "processes.run.info": "Roles, data ticks and trigger links save the moment you change them. The performer and a new trigger save with their own Save button. The Save at the bottom covers only the text above.",
+  "processes.run.info": "Text you type above (the name, description and other fields) waits for Save — the counter shows how many changes are unsaved, and Ctrl+S saves too. Everything under How it runs saves the moment you change it: choosing the performer, adding or removing a trigger, ticking roles and data. A name you type here (an AI performer, a new trigger) saves when you press Enter or move on. Done just closes the editor.",
   "processes.run.saved": "Saved",
   "processes.run.notSet": "Not set",
   "processes.run.notSetSet": "Not set · Set",
