@@ -38,8 +38,8 @@ one position saver), 9 (untrusted text as text), 10 (one migration per commit). 
 
 | Sub-slice | Items | Data change | Risk grade | Waits on |
 |---|---|---|---|---|
-| **13a** | D-66 split; D-68 light + D-69 marks against **today's fixed rule** (D-38: something starts it, and an output data entity) | **none** | 3 — presentation | 10d merged; **no answers needed** (Q-1, Q-2 have recommendations it builds to) |
-| **13b** | D-70 per-project rule; light, marks, warnings and freeze driven by it | new rule storage + one baseline-header column → **`apple`** | **1** — changes what blocks a freeze | **Q-3, Q-4, Q-5, Q-6**; 13a |
+| **13a** | D-66 split; D-68 light + D-69 marks against **today's fixed rule** (D-38: something starts it, and an output data entity) | **none** | 3 — presentation | 10d merged; **no answers needed** (Q-1, Q-2 have recommendations it builds to; the light follows the interim rule until Q-13) |
+| **13b** | D-70 per-project rule; light, marks, warnings and freeze driven by it | new rule storage + one baseline-header column → **`apple`** | **1** — changes what blocks a freeze | **Q-3, Q-4, Q-5, Q-6, Q-13, Q-14, Q-15, Q-16**; 13a |
 | **13c** | D-67 volume fields; derived hours and FTE; as-is vs to-be totals | new `bfc_node` columns + shadow columns + two project settings → **`apple`** | **1** for the migration (shadows, hash spec bump), 2 for the screen | **Q-7, Q-8, Q-9, Q-10**; 13a (section placement) |
 | **13d** | D-65 drawing connections on the DFD canvas | **none** (one composite route) | 2 — writes through the existing single writer | **Q-11, Q-12**; independent of 13b/13c |
 
@@ -63,10 +63,11 @@ one position saver), 9 (untrusted text as text), 10 (one migration per commit). 
 |---|---|---|---|
 | panel: Solutions section | `BR_SOLUTION`, `SOLUTION` | R (writes unchanged) | **D-66.** Its own collapsed section, count + one-line summary, shown when SOLUTION is on. `BrSolutionTags` unchanged inside. Ranked **first** of the collapsed sections |
 | panel: Function requirements section | `BR_FUNCTION_REQUIREMENT`, `FUNCTION_REQUIREMENT` | R (writes unchanged) | **D-66.** Its own section, second, shown when FUNCTION_REQUIREMENT is on, **independently of SOLUTION** (D-52). `BrFrLinks` unchanged inside (its solution picker still needs SOLUTION) |
-| `dfd_readiness` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER` | R | **D-68.** Per live process of a chart whose DFD component is on: the rule's elements (13a: the fixed D-38 pair *started* and *data out*) → each `met` / `missing` → **light**: all met = READY (green), some = PARTIAL (yellow), none = NOT_READY (red). A chart with its DFD off → no light (`rule_applies = false`). Computed from the same predicates as `missing_io`, so the light and the freeze can never disagree |
-| tree + panel: light | — | R | **D-68.** Light on each **process row of the function chart** (always visible, not hover-only like the BR chip) and in the **panel header** beside the BR number. Colour **plus** icon **plus** text ("Ready", "Partly", "Not ready"), never colour alone (D-50). Tooltip lists the missing elements. A chart filter "Not ready only". Exact place: **Q-1** |
+| `dfd_readiness` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER` | R | **D-68.** Per live process of a chart whose DFD component is on: the rule's elements (13a: the fixed D-38 pair *started* and *data out*) → each `met` / `missing` → **light**: all met = READY (green), some = PARTIAL (yellow), none = NOT_READY (red). A chart with its DFD off → no light (`rule_applies = false`). **A new reader only (DR13-P1):** `readiness()` is built on the existing `_has_input` / `_has_output` expressions, so the light and the freeze use the same predicates — but 13a **does not touch** `missing_io`, `consistency._process_io` or `baseline._freeze`; the freeze gate is unchanged in 13a |
+| tree + panel: light | — | R | **D-68.** Light on each **process row of the function chart** (always visible, not hover-only like the BR chip) and in the **panel header** beside the BR number. Colour **plus** icon **plus** text ("Ready", "Partly", "Not ready"), never colour alone (D-50). Tooltip lists the missing elements. **Interim rule until Q-13 (DR13-P2):** under the fixed rule every missing element blocks the freeze, so **both** non-green tooltips (yellow and red) end "Blocks the freeze", and the chart filter **"Not ready only" shows every non-green process, yellow and red**. Exact place: **Q-1** |
+| readiness refresh | — | R | **DR13-D2.** The light must follow every edit without a reload. **Invalidation set:** every writer of step I/O (`/bfc-nodes/{id}/data-entities` link/unlink), external flows, trigger links, BR CRUD (`CrudGrid`), step retire / restore (`retire-with-dependents`, `restore-with-dependents`), make-process / demote, and component toggles invalidates `keys.tree(p)` — or a dedicated `keys.readiness(p)` added to `links.js` if the tree read stays cheaper without it; one choice, recorded in `links.js` |
 | DFD index: counts | — | R | Per listed DFD (D-54): "12 ready · 3 partly · 1 not" |
-| panel + BR page: marks | — | R | **D-69.** A small "DFD" mark on each field the rule needs (13a: the *Started by* tile and the *Data* tile's in/out; on the BR page the CRUD grid header), with the note "Needed to complete the DFD". Met → the mark shows a tick; missing → the amber dot 10d already uses. The marks are drawn from the rule's element list, so 13b changes them by changing data, not screens |
+| panel + BR page: marks | — | R | **D-69.** A small "DFD" mark on each field the rule needs, with the note "Needed to complete the DFD". **Met / missing comes only from the server's `dfd_missing` element codes for that process, never from whether a tile looks empty (DR13-D1).** 13a's marks: **one** mark on *Started by*, reading "Any one of: a trigger, a data input, or an inbound external party" (STARTED); one on the *Data* tile's **out** half (DATA_OUT); on the BR page the CRUD grid header (DATA_OUT). **No data-in mark until a rule contains DATA_IN** (13b). Met → tick; missing → the amber dot 10d already uses. The marks are drawn from the rule's element list, so 13b changes them by changing data, not screens |
 
 ### 4.2 Slice 13b — the project's DFD rule (D-70)
 
@@ -76,7 +77,9 @@ one position saver), 9 (untrusted text as text), 10 (one migration per commit). 
 | `preview_dfd_rule` | rule, `BFC_NODE` + step links | R | ADMIN. For a proposed set: per chart, how many live processes would turn red/yellow/green and how many would **block the next freeze**. No write |
 | `set_dfd_rule` | `PROJECT_DFD_RULE`, `PROJECT`, `AUDIT_EVENT` | C/U | ADMIN (platform admin, as D-39 depth — **Q-5**). Body: element codes + `row_version` of the project + preview digest. Validates the set (§7.2), soft-retires dropped rows, inserts/relinks added rows (S1-7), bumps `project.row_version`, audit `PROJECT_DFD_RULE_CHANGED {from, to, would_block}` |
 | `dfd_readiness` | as 13a + rule | R | Reads the project's rule instead of the constant. One owner: `process_flow.readiness` |
-| `process_completeness` / `consistency_check` | as today + rule | R | The freeze-blocking keys are **the rule's elements**, not a fixed pair. Elements outside the rule are not reported as warnings at all (they would be noise), only as information in the DFD's warnings panel. Still applies only to a chart whose DFD component is on (S7-3) |
+| `process_completeness` / `consistency_check` | as today + rule | R | The freeze-blocking keys are **the rule's elements**, not a fixed pair. **Re-expressing `missing_io`, `consistency._process_io` and the `baseline._freeze` gate over `readiness()` happens here, not in 13a, under `sara`** (DR13-P1), with a test that **an as-is gap still refuses a freeze**. Elements outside the rule are not reported as warnings at all (they would be noise), only as information in the DFD's warnings panel. Still applies only to a chart whose DFD component is on (S7-3) |
+| empty rule | `PROJECT_DFD_RULE` | R | **Fails closed (DR13-D3).** A project with no live rule rows reads as `FIXED_RULE` (STARTED + DATA_OUT) — never as "nothing required". New consistency line **`project_without_dfd_rule`** (must be empty). The backfill covers **every project, whatever its `is_active`** |
+| `generate_dfd` | `BFC_NODE` | R | **DR13-P4, option A.** When the derived `order` in scope is empty (a project whose rule drops the data elements, or a diagram with no data yet), `rank` falls back to **chart order**: `seq_no` under each parent, in `hier_code` order. Nothing stored; no arrows drawn |
 | `freeze_baseline` | `BASELINE` | C | Refused on any process missing a **rule** element in a chart whose DFD is on. **Copies the rule onto the header** (as `data_model_depth`), so a baseline says which rule it passed |
 | `create_project` | `PROJECT_DFD_RULE` | C | New projects start with the **recommended set** (**Q-4**) |
 | migration backfill | `PROJECT_DFD_RULE` | C | Every existing project gets **exactly today's rule** (STARTED + DATA_OUT), so no project's freeze changes on deploy (**Q-4**) |
@@ -85,10 +88,10 @@ one position saver), 9 (untrusted text as text), 10 (one migration per commit). 
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `set_process_volume` | `BFC_NODE` (or `PROCESS_VOLUME`) | U | EDIT, process nodes only (non-process → 422, as criterion 4), either chart. Fields all optional: how often it runs (`runs_per_period` + `volume_period_code`), transactions per run (`transactions_per_run` + `transaction_unit_code`), minutes per transaction (`minutes_per_transaction`). Codes, never labels. `row_version` checked. Audit `PROCESS_VOLUME_SET {from, to}`. Body never carries hours or FTE (VB law 6 — 422 if it does) |
+| `set_process_volume` | `BFC_NODE` (or `PROCESS_VOLUME`) | U | EDIT, process nodes only (non-process → 422, as criterion 4), either chart. Fields all optional: how often it runs (`runs_per_period` + `volume_period_code`), transactions per run (`transactions_per_run` + `transaction_unit_code`), minutes per transaction (`minutes_per_transaction`). **Ranges, fixed before the migration (DR13-D5):** `runs_per_period` 0–10,000; `transactions_per_run` 0–10,000,000; time per transaction **0.0001–10,000 minutes** (≈ 0.006 s to one week) so an automated to-be step (e.g. 0.3 s = 0.005 min per invoice) is storable without rounding to zero; out of range → 422. Codes, never labels. `row_version` checked. Audit `PROCESS_VOLUME_SET {from, to}`. Body never carries hours or FTE (VB law 6 — 422 if it does) |
 | `derive_volume` | `BFC_NODE`, `PROJECT`, `CODE_MASTER` | R | Server-side, one owner `services/process_volume.py`: `annual_runs = runs_per_period × periods_per_year(behaviour of volume_period_code)`; `annual_hours = annual_runs × transactions_per_run × minutes_per_transaction / 60`; `fte = annual_hours / (project.working_days_per_year × project.hours_per_working_day)`. Any input missing → `null` with `incomplete: [fields]`. Returned on every read of a process; never stored (**Q-8**) |
 | `set_fte_basis` | `PROJECT`, `AUDIT_EVENT` | U | The FTE basis as a project setting with a default (**Q-7**). Audited, `row_version` |
-| `volume_summary` | `BFC_NODE` | R | VIEW. Per chart, totals of annual hours and FTE per L1 and L2 area, as-is beside to-be **matched by area code** (`hier_code` prefix) — the time saved per area (**Q-9**). Processes with incomplete volume are counted and listed, never guessed |
+| `volume_summary` | `BFC_NODE` | R | VIEW. Per chart, totals of annual hours and FTE per L1 and L2 area, as-is beside to-be **matched by area code** (`hier_code` prefix) — the time saved per area (**Q-9**). **Codes drift after a reorder (DR13-D4):** every matched row shows **both area names**; a row whose as-is and to-be names differ is **listed as unmatched, never paired**. Processes with incomplete volume are counted and listed, never guessed |
 | `freeze_baseline` | `BASELINE_BFC_NODE`, `BASELINE` | C | The volume columns are frozen with the node (shadow columns, same migration) and hashed under a new hash spec; the FTE basis is copied onto the header, so a baseline's FTE re-derives byte-identical |
 | `maintain_code_master` | `CODE_MASTER` | C/U | New categories `VOLUME_PERIOD` (system, with behaviour) and `TRANSACTION_UNIT` (library + project override), §8 |
 
@@ -101,7 +104,7 @@ one position saver), 9 (untrusted text as text), 10 (one migration per commit). 
 | draw party ↔ process | `BFC_NODE_EXTERNAL_FLOW` (+ step I/O) | C | The existing external-flow route; a small form asks for the data entity (optional) or a flow label, as the panel does. The external-flow service ensures the step I/O (R2-D13) |
 | draw trigger → process | `BFC_NODE_TRIGGER` | C | The existing `trigger.link` route |
 | draw process → process (a hand-off) | `BFC_NODE_DATA_ENTITY` ×2 | C | **The only new route.** Order stays derived (D-38): the user picks the data entity A hands to B; one transaction writes A's output and B's input through `ensure_step_io`. Both steps live, same project, **same chart** (else 422 "Diagrams never cross charts"). The derived order arrow then appears by itself |
-| remove a flow | the same three tables | D (soft) | Click a flow → "Remove this flow" → the existing unlink route. **A step I/O a BR CRUD or an external flow depends on stays (409, the message names them)** — the canvas shows the message and a link to the requirement. No keyboard delete (§7.14) |
+| remove a flow | the same three tables | D (soft) | **Only STORE, EXTERNAL and TRIGGER flows are removable, each backed by exactly one row; the derived order arrows are not selectable for removal** — they disappear only when the data behind them changes (DR13-P3). Click such a flow → "Remove this flow" → the existing unlink route. **A step I/O a BR CRUD or an external flow depends on stays (409, the message names them)** — the canvas shows the message and a link to the requirement. No keyboard delete (§7.14) |
 | `save_diagram_layout` | `DIAGRAM_LAYOUT` | C/U | A store or party that appears because of a new connection is placed where it was dropped, through `useLayoutSave` (D-30) |
 | BR CRUD after drawing | `BR_DATA_ENTITY` | — | **Not written.** Drawing writes step I/O; D-24 runs one way (CRUD → I/O). The CRUD grid shows the I/O with no CRUD as a hint "On the diagram, not in the requirement yet — pick C, R, U or D" (**Q-11**) |
 
@@ -129,8 +132,9 @@ from these and a project-level FTE basis; never stored, never accepted. Frozen w
 1. **Columns on `bfc_node`** (with a CHECK that a non-process row holds none) — recommended, as
    `data_processing_desc` — versus a 1:1 `process_volume` table (cleaner if volume later gains history or scenarios,
    but a new frozen entity and a new step-owned table for `step_retire.OWNED`).
-2. Types: `runs_per_period numeric(9,2)`, `transactions_per_run numeric(12,2)`, `minutes_per_transaction
-   numeric(9,2)`, each `CHECK (>= 0)`; the two codes as `code_master` FKs with the category-in-key pattern (§5.4.13).
+2. Types: `runs_per_period numeric(9,2)`, `transactions_per_run numeric(12,2)`, and **time per transaction sized by
+   `apple` for an automated to-be step** (DR13-D5) — e.g. `numeric(12,4)` minutes, or seconds instead — tested against the
+   example "0.3 s per invoice × 40,000 invoices a month" (= 0.005 min; 2,400,000 invoices a year → 200 h, 0.10 FTE), each `CHECK (>= 0)`; the two codes as `code_master` FKs with the category-in-key pattern (§5.4.13).
 3. FTE basis on `project`: `working_days_per_year smallint NOT NULL DEFAULT 240`, `hours_per_working_day numeric(4,2)
    NOT NULL DEFAULT 8.00` (Q-7), and their copies on `baseline`.
 4. Whether `periods_per_year` for `DAY` reads the project's `working_days_per_year` (recommended) or 365.
@@ -168,6 +172,9 @@ ELEMENTS = {   # code → predicate over one live process; the code is the behav
                (it reads what another writes, or writes what another reads); a chart with one process passes
 }
 FIXED_RULE = {STARTED, DATA_OUT}            # D-38 today; 13a uses this constant; 13b reads the project's rule
+                                            # 13b: no live rule rows → FIXED_RULE (fails closed, DR13-D3)
+# 13a: a NEW reader on the existing _has_input/_has_output expressions; missing_io, consistency._process_io and
+# baseline._freeze are untouched until 13b (DR13-P1)
 
 readiness(db, project_id, bfc_set, node_ids=None):
     rule = FIXED_RULE (13a) | project rule (13b)
@@ -274,6 +281,13 @@ Every new GET is covered by `test_no_get_route_leaks_a_restricted_project`; ever
 - A6. The *Started by* and *Data* tiles carry a "DFD" mark with the note "Needed to complete the DFD"; it shows a tick
   when met.
 - A7. The DFD index shows ready / partly / not-ready counts per diagram that sum to its process count.
+- A8. **(DR13-P1)** 13a's diff touches none of `missing_io`, `consistency._process_io`, `baseline._freeze`; the freeze
+  suite passes unchanged.
+- A9. **(DR13-P2)** "Not ready only" lists every yellow and red process; both their tooltips end "Blocks the freeze".
+- A10. **(DR13-D1)** A process whose only start is an inbound external party shows the *Started by* mark as met, though
+  its trigger list is empty; no data-in mark appears anywhere under the fixed rule.
+- A11. **(DR13-D2)** Adding an output data entity in the BR's CRUD grid turns that process's light from "Partly" to
+  "Ready" in the tree without a page reload; likewise a step retire / restore and a DFD component toggle.
 
 **13b**
 - B1. A new project's rule is the recommended set; every project existing at deploy has exactly STARTED + DATA_OUT,
@@ -285,6 +299,11 @@ Every new GET is covered by `test_no_get_route_leaks_a_restricted_project`; ever
 - B5. A non-admin `PUT /dfd-rule` returns 403; a non-member of a restricted project gets 404 on the GET.
 - B6. A baseline frozen after 13b shows its rule on the header; one frozen before shows "D-38 rule"; both still verify.
 - B7. The marks on the panel follow the rule: dropping DATA_IN removes the mark from the data-in half of the Data tile.
+- B8. **(DR13-P1)** With the freeze gate re-expressed over `readiness()`, an as-is process missing a rule element still
+  refuses the freeze while AS_IS is on (`sara` reviewed).
+- B9. **(DR13-D3)** A project whose rule rows are all retired (or missing) behaves as STARTED + DATA_OUT and appears in
+  `project_without_dfd_rule`; after deploy that line is empty, inactive projects included.
+- B10. **(DR13-P4)** A diagram with no derived order ranks its processes left to right in chart order (`seq_no`).
 
 **13c**
 - C1. A process with 3 runs per week, 40 invoices per run, 6 minutes per invoice, on the default basis, returns
@@ -298,6 +317,10 @@ Every new GET is covered by `test_no_get_route_leaks_a_restricted_project`; ever
 - C7. The volume summary shows as-is and to-be hours per L1 area side by side and lists processes with incomplete
   volume; no process with incomplete volume contributes a number.
 - C8. Unit and period send codes; a project override label shows on the screen, the code is stored.
+- C9. **(DR13-D4)** After the to-be area 02 is reordered to 03, the summary shows each matched row with both area names,
+  and a row whose as-is and to-be names differ is listed unmatched, not paired.
+- C10. **(DR13-D5)** 0.3 s per invoice (0.005 min) × 40,000 invoices a month stores without rounding and returns 200 h /
+  0.10 FTE; 0 and the caps are accepted, a value above a cap returns 422.
 
 **13d**
 - D1. Dragging from a data store to a process creates exactly one step input; the DFD redraws with the flow; the same
@@ -309,6 +332,8 @@ Every new GET is covered by `test_no_get_route_leaks_a_restricted_project`; ever
 - D5. A hand-off between an as-is and a to-be process returns 422; to a process in a project the user cannot see, 404.
 - D6. Every row written by drawing is identical to the row the panel writes for the same choice (same table, same
   writer `step_io.ensure_step_io`, same audit).
+- D7. **(DR13-P3)** A derived order arrow cannot be selected for removal; removing a STORE, EXTERNAL or TRIGGER flow
+  soft-deletes exactly one row.
 
 ## 11. Assumptions
 - **ASSUMPTION A-13-1:** "BR list" in D-68 means wherever BRs are seen, since D-53 removed the BR list; the light goes
@@ -369,11 +394,32 @@ Plain answers are enough; each has a recommendation, and **"accept all recommend
 | **Q-6** | "External entity" as a requirement: must **every** process talk to an outside party, or must **each diagram** have at least one outside party? (Most internal steps never touch one.) | Each diagram, not each process; and off by default | **13b** |
 | **Q-7** | To turn hours into FTEs we need a working year. Make it a project setting with a default of **240 working days × 8 hours = 1,920 hours**, changeable by an admin? | Yes, 240 × 8 by default; platform admin can change it per project; the value used is stamped on each baseline | **13c** |
 | **Q-8** | Is "number of transactions" counted **per run** of the process, and is "time" the minutes **per transaction**? (e.g. runs 3× a week, 40 invoices each time, 6 minutes per invoice) | Yes to both — time per transaction scales with volume, which is what a time-saving case needs | **13c** (must be answered before the data model) |
-| **Q-9** | To show time saved, as-is and to-be need matching. Compare by area (same function-chart branch code), or do you need a process-by-process link? | By area for now; a process-to-process link is a later, separate design | **13c** (the summary only; the fields can be built without it) |
+| **Q-9** | To show time saved, as-is and to-be need matching. Compare by area (same function-chart branch code), or do you need a process-by-process link? Example of the catch: if "02 Order to cash" is moved to position 03 in the to-be chart, code 02 now means something else there — so the screen shows both area names on every pair and refuses to pair areas whose names differ | By area for now, with both names shown and mismatched names listed apart; a process-to-process link is a later, separate design | **13c** (the summary only; the fields can be built without it) |
 | **Q-10** | Should volume be frozen in baselines (so a signed scope carries its ROI figures) and switchable as a project component? | Frozen: yes. Separate on/off component: no — the fields are optional and sit in a collapsed section | **13c** |
 | **Q-11** | When someone draws a data flow on the diagram, should the requirement's data use (create/read/update/delete) be filled in automatically? | No — the diagram cannot know whether it is a create or an update. The requirement shows "on the diagram, not in the requirement yet" so the consultant picks | **13d** |
 | **Q-12** | When drawing to an empty spot on the diagram, may the consultant create a **new** data entity there, or only pick an existing one? | Allow creating one (it gets its `DE-` number on save), as the flow-file import already does | **13d** |
+| **Q-13** | Should red mean "this blocks the freeze"? Today any gap blocks the freeze, so yellow and red both block. | Yes: **red = blocks the freeze; yellow = meets the freeze but misses a recommended element; green = complete.** Until you answer, 13a uses the interim rule (yellow and red both say "Blocks the freeze") | nothing in 13a (interim rule); **13b** |
+| **Q-14** | Can a project require a **trigger** specifically (a time or event), separate from "something starts it" (which a data input or an outside party also satisfies)? | No for now — "something starts it" covers your list; a trigger-only element can be added later as one more choice | **13b** |
+| **Q-15** | One rule per project for both charts, or a separate rule for the as-is and the to-be chart? | **Per chart**, so a rough as-is chart never blocks the to-be freeze | **13b** (changes the rule table's key) |
+| **Q-16** | If outside parties are checked per diagram (Q-6), which diagram — and does it change a process's light? | The DFD listed on the DFD screen (one per direct parent of processes, D-54); it does **not** change any process's light, it shows on the DFD list only | **13b** |
 
 **Buildable with no answers: 13a** (D-66 split, and the light and marks against today's rule, placed per Q-1/Q-2's
-recommendations — a one-line move if Ben differs). 13b needs Q-3…Q-6; 13c needs Q-7…Q-10 (Q-8 before `apple`);
+recommendations — a one-line move if Ben differs). 13b needs Q-3…Q-6 and Q-13…Q-16; 13c needs Q-7…Q-10 (Q-8 before `apple`);
 13d needs Q-11, Q-12.
+
+---
+
+## 16. Design review round 1 (design-auditor, 2026-10-13)
+
+| Id | Rating | Finding | Disposition |
+|---|---|---|---|
+| DR13-P1 | HIGH | 13a re-expressed the freeze gate over a new reader, changing what blocks a freeze inside a "screen only" slice | **Fix** — 13a's `readiness()` is a new reader on the existing `_has_input` / `_has_output`; `missing_io`, `consistency._process_io` and `baseline._freeze` untouched (A8). Re-expression moves to 13b under `sara`, with an as-is-gap freeze test (B8) |
+| DR13-P2 | MED | Under the fixed rule yellow also blocks the freeze, but "Not ready only" and the tooltips implied only red did | **Fix** — the filter shows every non-green; both non-green tooltips say "Blocks the freeze" (A9). Q-13 asks Ben for red = blocks / yellow = misses a recommended element; interim rule until answered |
+| DR13-P3 | MED | 13d "remove a flow" did not say derived order arrows are not removable | **Fix** — only STORE, EXTERNAL and TRIGGER flows are removable, each one row (§4.4, D7) |
+| DR13-P4 | LOW | Option A's chart-order fallback had no owner in the grid | **Fix** — `generate_dfd` row in §4.2: empty derived order → rank by `seq_no` (B10) |
+| DR13-D1 | HIGH | Marks could read tile emptiness, so an external-party start showed as missing; a data-in mark appeared with no DATA_IN in the rule | **Fix** — marks read only the server's `dfd_missing` codes; one STARTED mark ("any one of: a trigger, a data input, or an inbound external party"); no data-in mark until a rule has DATA_IN (A10) |
+| DR13-D2 | MED | No invalidation set: the light goes stale after edits on other components | **Fix** — the named writer set invalidates `keys.tree` (or a dedicated readiness key) (§4.1, A11) |
+| DR13-D3 | MED | An empty rule would read as "nothing required" and unblock every freeze | **Fix** — fails closed to `FIXED_RULE`; consistency line `project_without_dfd_rule` must be empty; backfill every project regardless of `is_active` (B9) |
+| DR13-D4 | HIGH | As-is / to-be matched by `hier_code` pairs the wrong areas after a reorder | **Fix** — every pair shows both names; differing names listed unmatched (§4.3, C9); the example is in Q-9 |
+| DR13-D5 | MED | `minutes_per_transaction numeric(9,2)` rounds an automated step (0.3 s) to zero | **Fix** — `apple` sizes it against an automated example; §4.3 states the ranges before the migration (C10) |
+| DR13-Q | — | Unanswered: trigger-only element; per-project or per-chart rule; which diagram Q-6 means | Raised to Ben as **Q-14, Q-15, Q-16**; all Q-n stay open |
