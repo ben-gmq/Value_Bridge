@@ -229,7 +229,7 @@ export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setW
               <Link component={RouterLink} to={links.fr(projectId, row.fr_id)} underline="hover"><Code>{row.fr_number}</Code></Link>
               <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 600, flex: '1 1 140px', minWidth: 0 }} title={row.fr_name}>
                 {row.fr_name}</Typography>
-              {row.fr_type_code && <Tag tone="navy">{typeLabel(row.fr_type_code)}</Tag>}
+              {row.fr_type_code && <Tag tone="navy" size="lg">{typeLabel(row.fr_type_code)}</Tag>}
               {!disabled && (
                 <Box sx={{ display: 'inline-flex' }}>
                   <IconButton size="small" aria-label={t('requirements.frs.editNote')} title={t('requirements.frs.editNote')}
@@ -246,7 +246,7 @@ export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setW
                     {row.solution_id != null ? (
                       <Link component={RouterLink} to={links.solution(projectId, row.solution_id)} underline="hover" color="inherit"
                         sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'baseline' }}>
-                        <Code sx={{ fontSize: 12 }}>{row.solution_number}</Code>{row.solution_name}</Link>
+                        <Code sx={{ fontSize: 12.5 }}>{row.solution_number}</Code>{row.solution_name}</Link>
                     ) : <span>{t('requirements.frs.noSolution')}</span>}
                   </Typography>
                 ) : (
@@ -260,7 +260,7 @@ export function BrFrLinks({ projectId, br, disabled, solutionsOn, warnings, setW
                         tag.mutate({ row, solutionId: next });
                       }} />
                   </Box>)}
-                {outside && <Tag tone="caution">{t('requirements.frs.notThisBr')}</Tag>}
+                {outside && <Tag tone="caution" size="lg">{t('requirements.frs.notThisBr')}</Tag>}
                 {outside && fixes(row.fr_number)}
               </Box>)}
             {row.coverage_note && (

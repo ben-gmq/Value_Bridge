@@ -73,7 +73,7 @@ export function BrRaci({ projectId, br, disabled }) {
           <Box key={roleId} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Box sx={{ minWidth: 0, flex: '1 1 120px' }}>
               <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{role ? role.org_role_name : `#${roleId}`}</Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                 {role && [role.org_role_code, unitById.get(role.org_unit_id)?.org_unit_name].filter(Boolean).join(' · ')}
               </Typography>
             </Box>

@@ -87,7 +87,7 @@ export function CrudGrid({ projectId, br, disabled, mark }) {
                 <TableRow key={deId}>
                   <TableCell sx={{ minWidth: 150 }}>
                     <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
-                      {de ? <><Code tone="teal" sx={{ fontSize: 12, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
+                      {de ? <><Code tone="teal" sx={{ fontSize: 12.5, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
                     </Link>
                   </TableCell>
                   {CRUD.map((c) => {
@@ -103,7 +103,7 @@ export function CrudGrid({ projectId, br, disabled, mark }) {
                   })}
                   <TableCell sx={{ pl: 1, whiteSpace: 'nowrap' }}>
                     {dirs.length > 0 && (
-                      <MonoChip tone={dirs.includes('O') ? 'purple' : 'neutral'}>{dirs.map(dirLabel).join(' · ')}</MonoChip>)}
+                      <MonoChip size="lg" tone={dirs.includes('O') ? 'purple' : 'neutral'}>{dirs.map(dirLabel).join(' · ')}</MonoChip>)}
                   </TableCell>
                 </TableRow>
               );

@@ -105,14 +105,14 @@ export function BrSolutionTags({ projectId, br, disabled, onWarnings }) {
               <Tooltip title={<Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>{tip}</Box>}>
                 <Link component={RouterLink} to={links.solution(projectId, row.solution_id)} underline="hover" color="inherit"
                   sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, minWidth: 0, fontSize: 13.5 }}>
-                  <Code sx={{ fontSize: 12 }}>{row.solution_number}</Code>
+                  <Code sx={{ fontSize: 12.5 }}>{row.solution_number}</Code>
                   <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.solution_name}</Box>
                 </Link>
               </Tooltip>
               {row.status_code === 'REJECTED' && (
                 <Tooltip title={t('solutions.links.rejectedTip')}>
                   <Box component="span" sx={{ display: 'inline-flex' }}>
-                    <Tag tone="caution" sx={{ height: 20, fontSize: 11 }}>{statusLabel(row.status_code)}</Tag></Box>
+                    <Tag tone="caution" size="lg" sx={{ height: 22 }}>{statusLabel(row.status_code)}</Tag></Box>
                 </Tooltip>)}
               {!disabled && (
                 <>

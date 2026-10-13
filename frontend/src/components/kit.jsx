@@ -120,8 +120,9 @@ export function Status({ tone = 'neutral', children, size = 'md', sx }) {
   );
 }
 
-/** A soft tag: purple (BR, selection), navy (actions/data), teal (data entities), neutral. */
-export function Tag({ children, tone = 'purple', sx, icon }) {
+/** A soft tag: purple (BR, selection), navy (actions/data), teal (data entities), neutral.
+ * `size="lg"` is the 12.5 px label the process screen holds to (10e); the default stays 12 elsewhere. */
+export function Tag({ children, tone = 'purple', sx, icon, size = 'md' }) {
   return (
     <Box component="span" sx={(th) => {
       const map = {
@@ -134,7 +135,7 @@ export function Tag({ children, tone = 'purple', sx, icon }) {
         escalate: [th.vars.palette.status.escalateBg, th.vars.palette.status.escalate],
       }[tone];
       return { display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1.1, height: 24, borderRadius: R.pill, bgcolor: map[0],
-        color: map[1], fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', ...sx };
+        color: map[1], fontSize: size === 'lg' ? 12.5 : 12, fontWeight: 600, whiteSpace: 'nowrap', ...sx };
     }}>{icon}{children}</Box>
   );
 }
@@ -145,7 +146,7 @@ export function LevelBadge({ level, label }) {
   return (
     <Box component="span" aria-label={label ?? `Level ${lv}`} sx={(th) => {
       const c = th.vars.palette.brand[`level${lv}`];
-      return { display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '8px', flexShrink: 0, fontSize: 11.5,
+      return { display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '8px', flexShrink: 0, fontSize: 12.5,
         fontWeight: 700, fontFamily: MONO, bgcolor: lv >= 4 ? c : 'transparent', color: lv >= 4 ? th.vars.palette.brand.ftc : c,
         border: `1.5px solid ${c}` };
     }}>{lv}</Box>
@@ -223,6 +224,6 @@ export function ListRow({ selected, children, onClick, component, to, sx, ...res
 }
 
 /** Inline monospace "In · Out" / derived chips used by CRUD and I/O tables. */
-export function MonoChip({ children, tone = 'neutral' }) {
-  return <Tag tone={tone} sx={{ fontFamily: MONO, fontSize: 11.5, height: 22, px: 0.9 }}>{children}</Tag>;
+export function MonoChip({ children, tone = 'neutral', size = 'md' }) {
+  return <Tag tone={tone} sx={{ fontFamily: MONO, fontSize: size === 'lg' ? 12.5 : 11.5, height: 22, px: 0.9 }}>{children}</Tag>;
 }
