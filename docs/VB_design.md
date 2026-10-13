@@ -425,6 +425,12 @@ worktree): the process panel had become mockup 01 + all of mockup 03 + the DFD f
 
 Pending: Purpose and Data processing (Ben asked what goes in them, with sample text, before deciding).
 
+**Slice 10d RACI rulings (Ben, 2026-10-13: "I accept all six").** S10d-1: all six [Q-n] in `docs/slice10d_raci_schema.md`
+accepted as recommended — to-be roles live on the BR, as-is roles on the step (option c); the BR's Accountable wins a
+conflict (audited); roles of retired processes are merged so a restore brings them back; chart copy carries roles
+across; a to-be process with no live BR blocks migration 0052 with a list; the one-time moved entries in old-baseline
+diffs are accepted.
+
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
 
 Schema `docs/slice10b_schema.md` (apple). Ben, 2026-10-12: *"Accept all 21 items."*
