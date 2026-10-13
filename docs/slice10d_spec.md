@@ -32,7 +32,7 @@ and shows each fact once.
    with Done: the existing PerformerPanel, TriggerPanel (row wraps), BrRaci, CrudGrid. Performer/Started by tiles show
    only where they can be written today (DFD on); 10c widens the performer.
 5. **Tertiary — collapsed sections** with count and one-line summary, open state remembered per user: **Delivery**
-   (solutions + function requirements, 10b's controls unchanged inside), **External parties**, **Description**
+   (solutions + function requirements, 10b's controls unchanged inside — *pending D-66, recorded 2026-10-13: split into Solutions and Function requirements, ranked above the other collapsed sections; a follow-up, not this slice*), **External parties**, **Description**
    (Purpose and Data processing — see §11), **Supporting systems** (as-is only).
 6. **Removed from the panel:** the Coverage tile (stays on the BR page); the step's own RACI panel and step Data
    in/out block for to-be processes (the BR's RACI and the CRUD grid are the single editors — CRUD already writes the
