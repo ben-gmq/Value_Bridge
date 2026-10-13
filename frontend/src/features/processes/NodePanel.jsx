@@ -1,25 +1,34 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Divider, FormControlLabel, Stack, Switch, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, IconButton, InputBase, Link, ListItemText, Menu, MenuItem, TextField, Tooltip,
+  Typography } from '@mui/material';
+import MoreHorizRounded from '@mui/icons-material/MoreHorizRounded';
 import { errorKind, errorText, isStale } from '../../api/client';
 import { bfcApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
+import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
-import { Card, SectionLabel, Status, Tag } from '../../components/kit';
-import { MONO } from '../../theme/theme';
-import { useComponents } from '../../app/useComponents';
+import { Card, Code, InfoTip, LevelBadge, Segmented, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
-import { FIRST_PROCESS_LEVEL, RaciPanel, blankToNull, useEditForm, useFormSave } from './chartKit';
-import { CompletenessPanel, PerformerPanel, TriggerPanel } from './StepDfd';
+import { FIRST_PROCESS_LEVEL, blankToNull, useEditForm, useFormSave } from './chartKit';
+import { CompletenessPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
-import { StepData, StepFlows, stepKey } from './StepSections';
+import { StepFlows } from './StepSections';
+import { HowItRuns } from './HowItRuns';
+import { PanelSection, useOpenSections, useSectionFacts } from './PanelSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
-import { BrSection, useBrEditor } from '../requirements/BrEditor';
+import { useBrEditor } from '../requirements/BrEditor';
+import { BrSolutionTags } from '../requirements/BrSolutionTags';
+import { BrFrLinks } from '../requirements/BrFrLinks';
+import { BrStatusTag } from '../requirements/reqKit';
 
-const STEP_SINGLE = ['ACCOUNTABLE'];      // services/raci.py SINGLE[BfcNodeOrgRole] — several R are normal (D-46)
+// DR 10d-5 (pending Ben): a to-be process's requirement retires only with its step — retiring the step
+// retires both, and after D-64 a to-be process without a live BR has nowhere to record its roles.
+// Flip to true to offer "Retire requirement…" in the ⋯ menu again.
+const OFFER_RETIRE_BR = false;
 
 const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose_desc ?? '',
   data_processing_desc: n.data_processing_desc ?? '' });
@@ -30,7 +39,29 @@ const restoreFirstList = (err) => {
   return detail.slice(detail.indexOf(':') + 1).split(';').map((s) => s.trim()).filter(Boolean);
 };
 
-export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice, onGone }) {
+/** A panel field: a static 13/600 label above the box (no floating label in the panel, D-63). */
+function Field({ id, label, info, children }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minHeight: 22 }}>
+        <Box component="label" htmlFor={id} sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary' }}>{label}</Box>
+        {info && <InfoTip title={info} />}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+const textBox = (size) => ({ '& .MuiInputBase-input': { fontSize: size, lineHeight: 1.5 } });
+
+/**
+ * One function of the chart, ranked (D-63): the sticky header names it; the requirement leads; "How it runs"
+ * shows performer, trigger, Accountable and data as tiles; the rest sits in collapsed sections. Text fields
+ * (the name, the requirement, purpose) wait for one Save; everything else saves as it is changed.
+ * `guardRef` lets the chart ask before a switch would drop unsaved text (DR 10d-1).
+ */
+export function NodePanel({ projectId, nodeId, path, br, hasChildren, showRetired, wide, guardRef, onNext,
+  onNotice, onGone }) {
   const { isOn } = useComponents(projectId);
   const qc = useQueryClient();
   const canEdit = useCanEdit();
@@ -39,10 +70,15 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const form = useEditForm(node, pickNode);
   // D-53: the process's requirement is edited in this panel, and one Save covers both (Ben, 2026-10-12).
   const brEd = useBrEditor({ projectId, brId: br?.br_id, onNotice, embedded: true });
+  const sections = useOpenSections();
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
-  const [nodeRefused, setNodeRefused] = useState(false);     // stays "not saved" after its dialog closes
+  const [confirmSwitch, setConfirmSwitch] = useState(null);     // true = make a process, false = stop
+  const [nodeRefused, setNodeRefused] = useState(false);
   const [retiringStep, setRetiringStep] = useState(false);
+  const [menuAt, setMenuAt] = useState(null);
+  const [draft, setDraft] = useState(false);                     // a half-filled performer or trigger form
+  const [saveNote, setSaveNote] = useState('');
   // Which restore fits a retired step is the server's call (SR-1): a step is offered the
   // with-dependents restore until a 409 says it was retired on its own.
   const [plainFor, setPlainFor] = useState(null);
@@ -87,14 +123,14 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
   const mark = useMutation({
     mutationFn: (isProcess) => bfcApi.markProcess(nodeId, { row_version: node.row_version, is_process: isProcess }),
     onSuccess: (res) => {
-      setActionError('');
+      setActionError(''); setConfirmSwitch(null);
       qc.setQueryData(keys.node(nodeId), res.node);
       form.rebase(res.node);                       // our own click is not someone else's edit
       refreshAll();
       onNotice(res.business_requirement
         ? t('processes.promoted', { br: res.business_requirement.br_number }) : t('processes.demoted'));
     },
-    onError: actionFail,
+    onError: (err) => { setConfirmSwitch(null); actionFail(err); },
   });
   const retire = useMutation({
     mutationFn: () => bfcApi.retire(nodeId, node.row_version),
@@ -126,168 +162,300 @@ export function NodePanel({ projectId, nodeId, parent, br, showRetired, onNotice
     },
   });
 
-  if (nodeQ.error) return <Card><Alert severity="error">{errorText(nodeQ.error)}</Alert></Card>;
-  if (!node || !form.values) return <Card><Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography></Card>;
-
-  const live = node.is_active;
-  const editable = live && canEdit;      // a read-only user sees the panel, not its controls (sara LOW-3)
-  const asIs = node.bfc_set_code === 'AS_IS';
-  const dfdOn = asIs ? isOn('AS_IS') : isOn('TO_BE_DFD');      // the chart's DFD component (D-37, D-47)
+  const ready = Boolean(node && form.values);
+  const live = node?.is_active;
+  const editable = Boolean(live && canEdit);      // a read-only user sees the panel, not its controls (sara LOW-3)
   const v = form.values;
-  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending || Boolean(brEd.busy);
-  const showBr = Boolean(node.is_process && br && brEd.br);
-  const nodeSavable = live && form.dirty && v.node_name.trim() !== '';
+  const showBr = Boolean(node?.is_process && br && brEd.br);
+  const nodeSavable = Boolean(ready && live && form.dirty && v.node_name.trim() !== '');
   const brSavable = showBr && brEd.canSave;
-  // One Save: only what is dirty, the function first, then its requirement. Each keeps its own
-  // row_version check; a refusal leaves the other saved, keeps the refused edits and shows its own
-  // conflict dialog or error (useFormSave), and its save-state chip turns to "not saved".
+  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending || Boolean(brEd.busy);
+  const dirtyCount = (ready ? form.changed.length : 0) + (showBr ? brEd.changedCount : 0);
+
+  // One Save: only what is dirty, the function first, then its requirement. Each keeps its own row_version
+  // check; a refusal leaves the other saved, keeps the refused edits and shows its own conflict dialog or
+  // error. Resolves true only when every dirty part saved (DR 10d-1: Save & next and the leave guard rely on it).
   const saveAll = async () => {
-    save.setError('');
+    save.setError(''); setSaveNote('');
+    if (!nodeSavable && !brSavable) return dirtyCount === 0;
     const nodeOk = nodeSavable ? await save.m.mutateAsync().then(() => true, () => false) : true;
     if (nodeSavable) setNodeRefused(!nodeOk);
     const brOk = brSavable ? await brEd.saveNow() : true;
     if (nodeOk && brOk) onNotice(t(brSavable ? (nodeSavable ? 'processes.savedBoth' : 'requirements.saved') : 'processes.saved'));
     else if (nodeSavable && brSavable && (nodeOk || brOk)) onNotice(t(nodeOk ? 'processes.savedNodeOnly' : 'processes.savedBrOnly'));
+    return nodeOk && brOk && (form.values.node_name.trim() !== '' || !form.changed.includes('node_name'));
   };
-  const discardAll = () => { form.discard(); setNodeRefused(false); if (showBr) brEd.discard(); };
-  const anyDirty = form.dirty || (showBr && brEd.dirty);
+  const discardAll = () => { form.discard(); setNodeRefused(false); setSaveNote(''); if (showBr) brEd.discard(); };
+  const saveAndNext = async () => {
+    if (draft) { setSaveNote(t('processes.save.draftOpen')); return; }
+    if (await saveAll()) onNext?.();
+  };
+
+  // The chart reads this before it switches node, so a switch never drops typed text (DR 10d-1).
+  const latest = useRef({});
+  latest.current = { count: dirtyCount, draft, name: node ? `${node.hier_code} ${form.values?.node_name ?? node.node_name}` : '',
+    saveAll, discardAll };
+  useEffect(() => {
+    if (!guardRef) return undefined;
+    guardRef.current = { get: () => latest.current };
+    return () => { guardRef.current = null; };
+  }, [guardRef]);
+
+  // Closing the tab with unsaved text asks the browser's own question.
+  const unsavedAny = dirtyCount > 0 || draft;
+  useEffect(() => {
+    if (!unsavedAny) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsavedAny]);
+
+  // Ctrl/Cmd+S saves the text form — never the browser's "save page".
+  const onKey = useCallback((e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey) return;
+    e.preventDefault();
+    if (!busy) latest.current.saveAll();
+  }, [busy]);
+  useEffect(() => {
+    if (!canEdit) return undefined;
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canEdit, onKey]);
+
+  const asIs = node?.bfc_set_code === 'AS_IS';
+  const dfdOn = asIs ? isOn('AS_IS') : isOn('TO_BE_DFD');      // the chart's DFD component (D-37, D-47)
+  const solutionsOn = isOn('SOLUTION');
+  const frsOn = isOn('FUNCTION_REQUIREMENT');
+  const systemsOn = asIs && isOn('APPLICATION', 'AS_IS');
+  const facts = useSectionFacts({ projectId, br: showBr ? brEd.br : null, nodeId, solutionsOn, frsOn,
+    partiesOn: Boolean(node?.is_process) && dfdOn, systemsOn: Boolean(node?.is_process) && systemsOn });
+
+  if (nodeQ.error) return <Card><Alert severity="error">{errorText(nodeQ.error)}</Alert></Card>;
+  if (!ready) return <Card><Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography></Card>;
+
   const restoreWithDependents = node.is_process && plainFor !== nodeId;
   const note = !live && restoreNote?.nodeId === nodeId ? restoreNote : null;
-  const canSwitch = editable && node.level_no >= FIRST_PROCESS_LEVEL;
-  const labels = { node_name: t('processes.name'), purpose_desc: t('processes.purpose'),
+  const canSwitch = editable && node.level_no >= FIRST_PROCESS_LEVEL && (node.is_process || !hasChildren);
+  const labels = { node_name: t('processes.name'), purpose_desc: t(node.is_process ? 'processes.purpose' : 'processes.panel.description'),
     data_processing_desc: t('processes.dataProcessing') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], v[k]]));
+  const refused = (form.dirty && nodeRefused) || (showBr && brEd.refused && brEd.dirty) || Boolean(save.error || (showBr && brEd.saveError));
+  const showFooter = canEdit && (dirtyCount > 0 || refused || Boolean(saveNote));
 
-  const headerAction = (
-    <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-      {node.is_process && <Tag tone="purple">{t('processes.processChip')}</Tag>}
-      {!live && <Tag tone="neutral">{t('processes.retiredChip')}</Tag>}
-      {form.dirty && nodeRefused
-        ? <Status tone="escalate" size="sm">{t('processes.notSaved')}</Status>
-        : form.dirty
-        ? <Status tone="caution" size="sm">{t('processes.unsaved')}</Status>
-        : <Status tone="ok" size="sm">{t('processes.savedVersion', { v: node.row_version })}</Status>}
-    </Stack>
+  const menuItems = !canEdit ? [] : [
+    canSwitch && { key: 'switch', label: t(node.is_process ? 'processes.panel.unmakeProcess' : 'processes.panel.makeProcess'),
+      run: () => setConfirmSwitch(!node.is_process) },
+    live && { key: 'retire', label: t(node.is_process ? 'processes.panel.retireStep' : 'processes.panel.retireFunction'), warn: true,
+      run: () => (node.is_process ? setRetiringStep(true) : setConfirmRetire(true)) },
+    OFFER_RETIRE_BR && showBr && brEd.live && { key: 'retireBr', label: t('processes.panel.retireBr'), warn: true, run: brEd.askRetire },
+    showBr && live && !brEd.live && { key: 'restoreBr', label: t('processes.panel.restoreBr'), run: brEd.restoreNow },
+    !live && { key: 'restore', label: t(restoreWithDependents ? 'processes.restoreWithDependents' : 'processes.restore'),
+      run: () => { setRestoreNote(null); restore.mutate(restoreWithDependents); } },
+    br && { key: 'open', label: t('processes.panel.openBrPage'), to: links.requirement(projectId, br.br_id) },
+  ].filter(Boolean);
+
+  // ── header ────────────────────────────────────────────────────────────────────────────────
+  const header = (
+    <Box sx={(th) => ({ position: 'sticky', top: 0, zIndex: 3, bgcolor: th.vars.palette.background.paper,
+      borderBottom: `1px solid ${th.vars.palette.divider}`, px: 2.5, pt: 2, pb: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75 })}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <LevelBadge level={node.level_no} label={t('processes.levelN', { n: node.level_no })} />
+        <Code tone="muted" sx={{ fontSize: 12.5 }}>{node.hier_code}</Code>
+        <Typography noWrap title={path.join(' › ')} sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0 })}>
+          {path.length ? path.join(' › ') : t('processes.panel.topLevel')}</Typography>
+        {!live && <Tag tone="neutral" sx={{ flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <InputBase value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)} readOnly={!editable}
+          multiline maxRows={3} inputProps={{ maxLength: 200, 'aria-label': t('processes.name') }}
+          sx={(th) => ({ flex: '1 1 260px', minWidth: 0, mx: -1, px: 1, py: 0.25, borderRadius: '10px', fontSize: 20, fontWeight: 700,
+            lineHeight: 1.3, color: 'brand.title', '& textarea': { lineHeight: 1.3 },
+            ...(editable ? { '&:hover': { bgcolor: th.vars.palette.background.subtle },
+              '&.Mui-focused': { bgcolor: th.vars.palette.background.field, outline: `1px solid ${th.vars.palette.brand.ftcViolet}` } } : {}),
+            ...(editable && v.node_name.trim() === '' ? { outline: `1px solid ${th.vars.palette.status.escalate}` } : {}) })} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: 'auto' }}>
+          {showBr && (
+            <Tooltip title={t('processes.panel.openBr', { br: brEd.br.br_number })}>
+              <Link component={RouterLink} to={links.requirement(projectId, br.br_id)} underline="none"
+                sx={(th) => ({ display: 'inline-flex', alignItems: 'center', height: 28, px: 1.25, borderRadius: 999,
+                  bgcolor: th.vars.palette.brand.purpleTint, '&:hover': { outline: `1px solid ${th.vars.palette.brand.ftcViolet}` } })}>
+                <Code tone="purple">{brEd.br.br_number}</Code></Link>
+            </Tooltip>)}
+          {showBr && (brEd.statusSettable && brEd.editable ? (
+            <Segmented size="sm" label={t('processes.panel.status')} value={brEd.values.status_code}
+              onChange={(s) => brEd.set('status_code', s)} options={brEd.statusOptions} />
+          ) : <BrStatusTag code={brEd.br.status_code} label={brEd.getLabel(brEd.br.status_code)} />)}
+          {menuItems.length > 0 && (
+            <IconButton aria-label={t('processes.panel.menu')} aria-haspopup="menu" disabled={busy}
+              onClick={(e) => { setActionError(''); setMenuAt(e.currentTarget); }}><MoreHorizRounded /></IconButton>)}
+        </Box>
+      </Box>
+    </Box>
   );
-  const twoCol = { display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1fr) minmax(0,1.15fr)' } };
+
+  // ── primary ───────────────────────────────────────────────────────────────────────────────
+  const nodeText = (name, label, rows, info) => (
+    <Field id={`node-${name}`} label={label} info={info}>
+      <TextField fullWidth multiline minRows={rows} id={`node-${name}`} value={v[name]} sx={textBox(14)}
+        onChange={(e) => form.set(name, e.target.value)}
+        slotProps={{ htmlInput: { maxLength: 4000 }, input: { readOnly: !editable } }} />
+    </Field>
+  );
+  const brText = (name, label, rows, size, placeholder) => (
+    <Field id={`br-${name}`} label={label}>
+      <TextField fullWidth multiline minRows={rows} id={`br-${name}`} value={brEd.values[name]} sx={textBox(size)}
+        placeholder={brEd.editable ? placeholder : undefined} onChange={(e) => brEd.set(name, e.target.value)}
+        slotProps={{ htmlInput: { maxLength: 8000 }, input: { readOnly: !brEd.editable } }} />
+    </Field>
+  );
+  const describe = (
+    <>
+      {nodeText('purpose_desc', t('processes.purpose'), 2)}
+      {nodeText('data_processing_desc', t('processes.dataProcessing'), 2, t('processes.panel.dataProcessingInfo'))}
+    </>
+  );
+  let primary;
+  if (!node.is_process) {
+    primary = nodeText('purpose_desc', t('processes.panel.description'), 3, t('processes.panel.descriptionInfo'));
+  } else if (showBr) {
+    primary = (
+      <>
+        {brText('br_statement', t('processes.panel.statement'), 2, 16, t('processes.panel.statementPlaceholder'))}
+        {brText('business_logic', t('processes.panel.logic'), 3, 14, t('processes.panel.logicPlaceholder'))}
+        {brText('output_expectation', t('processes.panel.output'), 1, 14, t('processes.panel.outputPlaceholder'))}
+      </>
+    );
+  } else if (br && !brEd.error) {
+    primary = <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>;
+  } else {
+    primary = describe;     // an as-is step carries no requirement: what it is for leads
+  }
 
   return (
-    <Card title={t('processes.panelTitle', { n: node.level_no, name: node.node_name })} action={headerAction} sx={{ overflow: 'visible' }}>
-        {actionError && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
-        {save.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
-        {note?.hint && <Alert severity="info" onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
-        {note?.first && (
-          <Alert severity="warning" onClose={() => setRestoreNote(null)}>
-            <Typography sx={{ fontSize: 13, mb: 0.5 }}>{t('processes.restoreFirstTitle')}</Typography>
-            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-              {note.first.map((name, i) => <Typography component="li" key={i} sx={{ fontSize: 13 }}>{name}</Typography>)}
-            </Box>
-          </Alert>
+    <Card sx={wide ? { height: '100%' } : { overflow: 'visible' }}
+      bodySx={{ p: 0, gap: 0, ...(wide ? { overflowY: 'auto', minHeight: 0 } : {}) }}>
+      {header}
+      <Box sx={{ px: 2.5, pt: 2.5, pb: 3, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        {(actionError || save.error || note || (showBr && (brEd.saveError || brEd.actionError)) || brEd.error) && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {actionError && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
+            {save.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
+            {brEd.error && <Alert severity="error">{errorText(brEd.error)}</Alert>}
+            {showBr && brEd.alerts}
+            {note?.hint && <Alert severity="info" onClose={() => setRestoreNote(null)}>{note.hint}</Alert>}
+            {note?.first && (
+              <Alert severity="warning" onClose={() => setRestoreNote(null)}>
+                <Typography sx={{ fontSize: 13, mb: 0.5 }}>{t('processes.restoreFirstTitle')}</Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {note.first.map((name, i) => <Typography component="li" key={i} sx={{ fontSize: 13 }}>{name}</Typography>)}
+                </Box>
+              </Alert>
+            )}
+          </Box>
         )}
 
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'minmax(0,1fr) minmax(0,1fr)' } }}>
-          <TextField fullWidth id="node-parent" label={node.level_no > 1 ? t('processes.parentLevel', { n: node.level_no - 1 }) : t('processes.parent')} disabled
-            value={parent ? `${parent.hier_code} ${parent.node_name}` : t('processes.noParent')} />
-          <TextField fullWidth id="node-code" label={t('processes.code')} disabled value={node.hier_code}
-            helperText={t('processes.codeHelp')}
-            sx={(th) => ({ '& .MuiInputBase-input.Mui-disabled': { fontFamily: MONO,
-              WebkitTextFillColor: th.vars.palette.brand.purpleText, color: th.vars.palette.brand.purpleText } })} />
-          <TextField fullWidth id="node-name" label={t('processes.name')} required disabled={!editable}
-            value={v.node_name} onChange={(e) => form.set('node_name', e.target.value)}
-            sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 200 } }} />
-          <TextField fullWidth multiline minRows={2} id="node-purpose" label={t('processes.purpose')} disabled={!editable}
-            value={v.purpose_desc} onChange={(e) => form.set('purpose_desc', e.target.value)}
-            sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 4000 } }} />
-          {node.is_process && (
-            <TextField fullWidth multiline minRows={2} id="node-dpd" label={t('processes.dataProcessing')} disabled={!editable}
-              value={v.data_processing_desc} onChange={(e) => form.set('data_processing_desc', e.target.value)}
-              sx={{ gridColumn: '1 / -1' }} slotProps={{ htmlInput: { maxLength: 4000 } }} />
-          )}
-        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{primary}</Box>
 
-        <Box sx={(th) => ({ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', px: 1.5, py: 0.75,
-          borderRadius: '14px', bgcolor: th.vars.palette.background.subtle })}>
-          <FormControlLabel label={t('processes.isProcess')} sx={{ mr: 1 }}
-            control={<Switch id="node-is-process" checked={node.is_process} disabled={!canSwitch || busy}
-              onChange={(e) => { setActionError(''); mark.mutate(e.target.checked); }} />} />
-          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', flex: '1 1 200px' }}>
-            {canSwitch ? t('processes.processHelp') : t('processes.processLevels')}</Typography>
-        </Box>
-
-        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', flexWrap: 'wrap' }} useFlexGap>
-          {!canEdit ? null : live ? (
-            <Button color="warning" disabled={busy}
-              onClick={() => { setActionError(''); if (node.is_process) setRetiringStep(true); else setConfirmRetire(true); }}>
-              {t('processes.retire')}</Button>
-          ) : (
-            <Button disabled={busy} onClick={() => { setActionError(''); setRestoreNote(null); restore.mutate(restoreWithDependents); }}>
-              {t(restoreWithDependents ? 'processes.restoreWithDependents' : 'processes.restore')}</Button>
-          )}
-        </Stack>
-
-        {/* D-53: the process's business requirement is part of the chart — read and edited here. */}
-        {node.is_process && br && <><Divider /><BrSection projectId={projectId} ed={brEd} /></>}
         {node.is_process && (
-          <>
-            <Divider />
-            <SectionLabel>{t('processes.stepFacts')}</SectionLabel>
-            <Box sx={twoCol}>
-              <StepData projectId={projectId} node={node} disabled={!editable} />
-              <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
-                list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
-                unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={STEP_SINGLE} />
-            </Box>
-            {dfdOn && <>
-              <Divider />
-              <Box sx={twoCol}>
-                <PerformerPanel projectId={projectId} node={node} disabled={!editable} />
-                <TriggerPanel projectId={projectId} node={node} disabled={!editable} />
-              </Box>
-              <Divider />
-              <StepFlows projectId={projectId} node={node} disabled={!editable} />
-            </>}
+          <HowItRuns projectId={projectId} node={node} br={showBr ? brEd.br : null} brEditable={showBr && brEd.editable}
+            editable={editable} dfdOn={dfdOn} onDraftChange={setDraft} />
+        )}
+
+        {!node.is_process && live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && dfdOn && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Button variant="outlined" sx={{ alignSelf: 'flex-start' }} component={RouterLink} to={links.dfd(projectId, nodeId)}>
+              {t('processes.openDfd')}</Button>
+            <CompletenessPanel projectId={projectId} node={node} />
+          </Box>
+        )}
+
+        {node.is_process && (
+          <Box>
+            {showBr && (solutionsOn || frsOn) && (
+              <PanelSection id="delivery" sections={sections} title={t('processes.sec.delivery')}
+                count={facts.delivery.count} summary={facts.delivery.summary}>
+                {solutionsOn && <BrSolutionTags projectId={projectId} br={brEd.br} disabled={!brEd.editable} onWarnings={brEd.onLinkWarnings} />}
+                {/* D-52: the BR maps to FRs directly; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
+                {frsOn && <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn}
+                  warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />}
+              </PanelSection>
+            )}
+            {dfdOn && (
+              <PanelSection id="parties" sections={sections} title={t('processes.sec.parties')}
+                count={facts.parties.count} summary={facts.parties.summary}>
+                <StepFlows projectId={projectId} node={node} disabled={!editable} bare />
+              </PanelSection>
+            )}
+            {showBr && (
+              <PanelSection id="description" sections={sections} title={t('processes.sec.description')}
+                summary={facts.description(v.purpose_desc)}>
+                {describe}
+              </PanelSection>
+            )}
             {/* Supporting systems of an as-is step (Q-23): a to-be step's come from its solutions. */}
-            {asIs && isOn('APPLICATION', 'AS_IS') && <><Divider /><AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
-              empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
-              rowId="application_bfc_node_id" disabled={!editable}
-              api={{ list: () => bfcApi.apps(nodeId),
-                link: (applicationId, note) => bfcApi.linkApp(nodeId, { application_id: applicationId, note }),
-                edit: (row, note) => bfcApi.editAppLink(nodeId, row.application_bfc_node_id, { row_version: row.row_version, note }),
-                unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} /></>}
-          </>
+            {systemsOn && (
+              <PanelSection id="systems" sections={sections} title={t('processes.sec.systems')}
+                count={facts.systems.count} summary={facts.systems.summary}>
+                <AppLinkPanel projectId={projectId} title={t('applications.links.supportedBy')}
+                  empty={t('applications.links.noneSupported')} ownerKey={['step', nodeId]}
+                  rowId="application_bfc_node_id" disabled={!editable}
+                  api={{ list: () => bfcApi.apps(nodeId),
+                    link: (applicationId, n) => bfcApi.linkApp(nodeId, { application_id: applicationId, note: n }),
+                    edit: (row, n) => bfcApi.editAppLink(nodeId, row.application_bfc_node_id, { row_version: row.row_version, note: n }),
+                    unlink: (row) => bfcApi.unlinkApp(nodeId, row.application_bfc_node_id, row.row_version) }} />
+              </PanelSection>
+            )}
+          </Box>
         )}
-        {!node.is_process && (
-          <>
-            <Divider />
-            <Box>
-              <SectionLabel sx={{ mb: 1 }}>{t('processes.stepFacts')}</SectionLabel>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.stepFactsHelp')}</Typography>
-              {live && node.level_no >= FIRST_PROCESS_LEVEL - 1 && dfdOn && (
-                <>
-                  <Button variant="outlined" sx={{ mt: 2 }} component={RouterLink} to={links.dfd(projectId, nodeId)}>
-                    {t('processes.openDfd')}</Button>
-                  <Box sx={{ mt: 3 }}><CompletenessPanel projectId={projectId} node={node} /></Box>
-                </>
-              )}
-            </Box>
-          </>
-        )}
-      {canEdit && (
-        <Box sx={(th) => ({ position: 'sticky', bottom: 0, zIndex: 2, mx: -2.5, mb: -2.5, px: 2.5, py: 1.5,
+      </Box>
+
+      {showFooter && (
+        <Box role="region" aria-label={t('common.save')} sx={(th) => ({ position: 'sticky', bottom: 0, zIndex: 3, mt: 'auto', px: 2.5, py: 1.5,
           display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end',
           bgcolor: th.vars.palette.background.paper, borderTop: `1px solid ${th.vars.palette.divider}`,
           borderBottomLeftRadius: 24, borderBottomRightRadius: 24 })}>
-          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mr: 'auto' }}>
-            {t(showBr ? 'processes.saveCoversBoth' : 'processes.saveCoversNode')}</Typography>
-          <Button variant="outlined" color="warning" disabled={!anyDirty || busy} onClick={discardAll}>{t('processes.discard')}</Button>
-          <Button variant="contained" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAll}>{t('common.save')}</Button>
+          <Typography role="status" sx={{ fontSize: 13, fontWeight: 600, mr: 'auto',
+            color: refused || saveNote ? 'error.main' : 'text.primary' }}>
+            {saveNote || (refused ? t('processes.save.refused') : t('processes.save.unsavedN', { n: dirtyCount }))}</Typography>
+          <Button disabled={dirtyCount === 0 || busy} onClick={discardAll}>{t('processes.discard')}</Button>
+          {node.is_process && onNext && (
+            <Button variant="outlined" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAndNext}>
+              {t('processes.save.next')}</Button>)}
+          <Tooltip title={t('processes.save.shortcut')}>
+            <span>
+              <Button variant="contained" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAll}>{t('common.save')}</Button>
+            </span>
+          </Tooltip>
         </Box>
       )}
+
+      <Menu anchorEl={menuAt} open={Boolean(menuAt)} onClose={() => setMenuAt(null)}>
+        {menuItems.map((m) => (m.to ? (
+          <MenuItem key={m.key} component={RouterLink} to={m.to} onClick={() => setMenuAt(null)}>
+            <ListItemText>{m.label}</ListItemText></MenuItem>
+        ) : (
+          <MenuItem key={m.key} onClick={() => { setMenuAt(null); m.run(); }}
+            sx={m.warn ? { color: 'warning.main' } : undefined}><ListItemText>{m.label}</ListItemText></MenuItem>
+        )))}
+      </Menu>
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
+      {showBr && brEd.dialogs}
       <ConfirmDialog open={confirmRetire} title={t('processes.retireTitle')}
         body={t('processes.retireBody', { name: `${node.hier_code} ${node.node_name}` })}
         confirmLabel={t('processes.retire')} busy={retire.isPending}
         onClose={() => setConfirmRetire(false)} onConfirm={() => retire.mutate()} />
+      <ConfirmDialog open={confirmSwitch !== null} busy={mark.isPending} onClose={() => setConfirmSwitch(null)}
+        onConfirm={() => mark.mutate(Boolean(confirmSwitch))}
+        title={t(confirmSwitch ? 'processes.promoteTitle' : 'processes.demoteTitle')}
+        confirmLabel={t(confirmSwitch ? 'processes.promoteConfirm' : 'processes.demoteConfirm')}
+        body={t(confirmSwitch ? 'processes.promoteBody' : 'processes.demoteBody', { name: `${node.hier_code} ${node.node_name}` })}>
+        {confirmSwitch && (
+          <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            {(asIs ? ['asIs', 'noChildren', 'freeze'] : ['br', 'noChildren', 'undo', 'freeze']).map((k) => (
+              <Typography component="li" key={k} sx={{ fontSize: 14 }}>{t(`processes.promote.${k}`)}</Typography>))}
+          </Box>
+        )}
+      </ConfirmDialog>
       {retiringStep && (
         <RetireStepDialog step={node} onClose={() => setRetiringStep(false)}
           onRetired={() => {
