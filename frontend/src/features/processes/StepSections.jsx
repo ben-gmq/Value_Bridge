@@ -7,7 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { errorText, isStale } from '../../api/client';
 import { bfcApi, dataApi, partyApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
-import { Code, SectionLabel, Tag } from '../../components/kit';
+import { Code, InfoTip, SectionLabel, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
 import { PickDialog, SectionTitle, SimpleSelect, blankToNull, entityLabel } from './chartKit';
 
@@ -113,7 +113,7 @@ export function StepData({ projectId, node, disabled }) {
 }
 
 /** External parties the step exchanges data with (bfc_node_external_flow). */
-export function StepFlows({ projectId, node, disabled }) {
+export function StepFlows({ projectId, node, disabled, bare = false }) {
   const qc = useQueryClient();
   const qk = stepKey(node.bfc_node_id, 'flows');
   const q = useQuery({ queryKey: qk, queryFn: () => bfcApi.flows(node.bfc_node_id) });
@@ -137,10 +137,11 @@ export function StepFlows({ projectId, node, disabled }) {
   const partyLabel = (p) => (p ? `${p.ext_number} ${p.ext_name}` : '');
   return (
     <Box>
-      <SectionTitle action={!disabled && (
+      {/* `bare`: inside a section already titled "External parties" (10d), only the action shows */}
+      {(!bare || !disabled) && <SectionTitle action={!disabled && (
         <Button size="small" startIcon={<AddRounded />} onClick={() => {
           setError(''); setDraft({ direction: 'I', data_entity_id: '', flow_label: '' }); setAdding(true);
-        }}>{t('processes.addParty')}</Button>)}>{t('processes.parties')}</SectionTitle>
+        }}>{t('processes.addParty')}</Button>)}>{bare ? null : t('processes.parties')}</SectionTitle>}
       {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <LoadError errors={[q.error, partiesQ.error, entities.error]} />
       {!q.isLoading && !q.error && rows.length === 0 && (
@@ -198,3 +199,29 @@ export function StepFlows({ projectId, node, disabled }) {
   );
 }
 
+
+/** D-64 / DR 10d-4: a to-be step's data in/out that its requirement's CRUD does not carry (written by an
+ * external flow, a chart copy or the retired step editor). Shown read-only so nothing is hidden. */
+export function StepDataNotOnBr({ projectId, node, brRows }) {
+  const q = useQuery({ queryKey: stepKey(node.bfc_node_id, 'data'), queryFn: () => bfcApi.stepData(node.bfc_node_id) });
+  const entities = useEntities(projectId);
+  const onBr = new Set((brRows ?? []).map((r) => `${r.data_entity_id}:${r.direction}`));
+  const extra = (q.data ?? []).filter((r) => !onBr.has(`${r.data_entity_id}:${r.direction}`));
+  if (extra.length === 0) return null;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{t('processes.run.dfdOnly')}</Typography>
+        <InfoTip title={t('processes.run.dfdOnlyInfo')} />
+      </Box>
+      <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1 }}>
+        {extra.map((r) => (
+          <Box key={r.bfc_node_data_entity_id} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+            <Tag tone={r.direction === 'I' ? 'navy' : 'teal'}>{t(r.direction === 'I' ? 'processes.dataIn' : 'processes.dataOut')}</Tag>
+            <EntityChip projectId={projectId} deId={r.data_entity_id} de={entities.byId.get(r.data_entity_id)} disabled />
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}

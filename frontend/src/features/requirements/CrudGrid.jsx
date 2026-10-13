@@ -55,7 +55,7 @@ export function CrudGrid({ projectId, br, disabled }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <SectionLabel action={!disabled && (
         <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }}
-          onClick={() => { setError(''); setAdding(true); }}>{t('requirements.addEntity')}</Button>)}>
+          onClick={() => { setError(''); setAdding(true); }}>{t('requirements.addEntity')}</Button>)} info={t('requirements.crudHelp')}>
         {t('requirements.crudTitle')}
       </SectionLabel>
       {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
@@ -108,7 +108,6 @@ export function CrudGrid({ projectId, br, disabled }) {
           </TableBody>
         </Table>
       </Box>
-      <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('requirements.crudHelp')}</Typography>
       {adding && (
         <PickDialog open title={t('requirements.addEntityTitle')} optionLabel={t('requirements.entity')}
           options={available} getOptionLabel={entityLabel} submitLabel={t('processes.add')}

@@ -28,11 +28,12 @@ export function Card({ title, action, children, sx, bodySx, component = 'section
 }
 
 /** Small-caps section label: "DATA USAGE · CRUD". */
-export function SectionLabel({ children, sx, action }) {
+export function SectionLabel({ children, sx, action, info }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...sx }}>
       <Typography component="h3" sx={(th) => ({ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', color: th.vars.palette.brand.muted,
         textTransform: 'uppercase' })}>{children}</Typography>
+      {info && <InfoTip title={info} sx={{ ml: -0.75 }} />}
       {action && <><Box sx={{ flexGrow: 1 }} />{action}</>}
     </Box>
   );
@@ -88,7 +89,7 @@ export function FactTile({ label, value, note, empty, emptyText, onClick, select
         <Box component="span" sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary', minWidth: 0, overflow: 'hidden',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{value}</Box>
       )}
-      {note && !empty && <Box component="span" sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0,
+      {note && <Box component="span" sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>{note}</Box>}
     </ButtonBase>
   );

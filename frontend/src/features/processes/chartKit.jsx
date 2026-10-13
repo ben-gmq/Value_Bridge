@@ -23,8 +23,8 @@ export function ShowRetired({ id, checked, onChange }) {
 }
 
 // The kit's small-caps section label (D-51), with the bottom margin the chart's sections expect.
-export function SectionTitle({ children, action }) {
-  return <SectionLabel action={action || undefined} sx={{ mb: 1, justifyContent: 'space-between' }}>{children}</SectionLabel>;
+export function SectionTitle({ children, action, info }) {
+  return <SectionLabel action={action || undefined} info={info} sx={{ mb: 1, justifyContent: 'space-between' }}>{children}</SectionLabel>;
 }
 
 // The mockup's RACI pill toggle: one round pill per RACI code inside a pill track, held codes in violet.
@@ -101,10 +101,13 @@ export function useEditForm(record, pick) {
 }
 
 // One mutation shape for a pinned-form save: stale → conflict, anything else → its detail.
+// Tagged FORM_SAVE so the "saves as you go" ✓ (useSavedFlash) ignores the Save button's saves.
+export const FORM_SAVE = 'form-save';
 export function useFormSave({ save, onSaved }) {
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
   const m = useMutation({
+    mutationKey: [FORM_SAVE],
     mutationFn: save,
     onSuccess: (row) => { setError(''); onSaved(row); },
     onError: (err) => { if (isStale(err)) setConflict(true); else setError(errorText(err, t('common.saveFailed'))); },

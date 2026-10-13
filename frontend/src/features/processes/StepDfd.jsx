@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Stack, TextField, Tooltip, Typography } from '@mui/material';
@@ -22,14 +22,30 @@ function useRefresh(projectId, nodeId) {
   };
 }
 
-/** Who or what performs the step — the step's lane on the DFD (D-46): a department, a position,
- * an IT system (chosen by code) or an AI (named). One per step. */
-export function PerformerPanel({ projectId, node, disabled }) {
-  const refresh = useRefresh(projectId, node.bfc_node_id);
+/** The performer as one line ("FIN Finance"), from the lists the editor loads too — null when unset. */
+export function usePerformerText(projectId, node) {
   const units = useQuery({ queryKey: keys.units(projectId), queryFn: () => orgApi.units(projectId) });
   const roles = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
   const apps = useQuery({ queryKey: keys.applications(projectId), queryFn: () => appApi.list(projectId) });
-  const [editing, setEditing] = useState(false);
+  const text = (() => {
+    switch (node.performer_kind) {
+      case 'ORG_UNIT': { const u = (units.data ?? []).find((x) => x.org_unit_id === node.performer_org_unit_id); return u && `${u.org_unit_code} ${u.org_unit_name}`; }
+      case 'ORG_ROLE': { const r = (roles.data ?? []).find((x) => x.org_role_id === node.performer_org_role_id); return r && `${r.org_role_code} ${r.org_role_name}`; }
+      case 'APPLICATION': { const a = (apps.data ?? []).find((x) => x.application_id === node.performer_application_id); return a && `${a.application_code} ${a.application_name}`; }
+      case 'AI': return node.performer_label;
+      default: return null;
+    }
+  })();
+  return { text, units, roles, apps };
+}
+
+/** Who or what performs the step — the step's lane on the DFD (D-46): a department, a position,
+ * an IT system (chosen by code) or an AI (named). One per step. */
+export function PerformerPanel({ projectId, node, disabled, startEditing = false, onDraftChange }) {
+  const refresh = useRefresh(projectId, node.bfc_node_id);
+  const { text: current, units, roles, apps } = usePerformerText(projectId, node);
+  // Opened from an empty tile (10d), an editor goes straight to the picker.
+  const [editing, setEditing] = useState(startEditing && !disabled && !node.performer_kind);
   const [kind, setKind] = useState(node.performer_kind ?? '');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState(node.performer_label ?? '');
@@ -41,15 +57,6 @@ export function PerformerPanel({ projectId, node, disabled }) {
     ORG_ROLE: (roles.data ?? []).filter((r) => r.is_active).map((r) => ({ value: r.org_role_code, label: `${r.org_role_code} ${r.org_role_name}` })),
     APPLICATION: (apps.data ?? []).filter((a) => a.is_active).map((a) => ({ value: a.application_code, label: `${a.application_code} ${a.application_name}` })),
   };
-  const current = (() => {
-    switch (node.performer_kind) {
-      case 'ORG_UNIT': { const u = (units.data ?? []).find((x) => x.org_unit_id === node.performer_org_unit_id); return u && `${u.org_unit_code} ${u.org_unit_name}`; }
-      case 'ORG_ROLE': { const r = (roles.data ?? []).find((x) => x.org_role_id === node.performer_org_role_id); return r && `${r.org_role_code} ${r.org_role_name}`; }
-      case 'APPLICATION': { const a = (apps.data ?? []).find((x) => x.application_id === node.performer_application_id); return a && `${a.application_code} ${a.application_name}`; }
-      case 'AI': return node.performer_label;
-      default: return null;
-    }
-  })();
   const m = useMutation({
     mutationFn: () => bfcApi.setPerformer(node.bfc_node_id, { row_version: node.row_version,
       performer_kind: kind || null, code: kind && kind !== 'AI' ? code : null, performer_label: kind === 'AI' ? blankToNull(label) : null }),
@@ -59,12 +66,16 @@ export function PerformerPanel({ projectId, node, disabled }) {
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
   });
   const ready = kind === '' || (kind === 'AI' ? label.trim() : code);
+  // An open picker with a choice not yet saved is a draft: the panel must not drop it silently (DR 10d-2).
+  const draft = editing && (kind !== (node.performer_kind ?? '') || Boolean(code)
+    || (kind === 'AI' && label !== (node.performer_label ?? '')));
+  useEffect(() => { onDraftChange?.(draft); }, [draft, onDraftChange]);
+  useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   return (
     <Box>
       <SectionTitle action={!disabled && !editing && (
         <Button size="small" onClick={() => { setEditing(true); setKind(node.performer_kind ?? ''); setCode(''); }}>
-          {t('processes.performer.change')}</Button>)}>{t('processes.performer.title')}</SectionTitle>
-      <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1 }}>{t('processes.performer.help')}</Typography>
+          {t('processes.performer.change')}</Button>)} info={t('processes.performer.help')}>{t('processes.performer.title')}</SectionTitle>
       <LoadError errors={[units.error, roles.error, apps.error]} />
       {warning && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setWarning('')}>{warning}</Alert>}
       {!editing && (node.performer_kind
@@ -72,7 +83,7 @@ export function PerformerPanel({ projectId, node, disabled }) {
             <Chip size="small" label={t(`processes.performer.kind.${node.performer_kind}`)} />
             <Typography sx={{ fontWeight: 600 }}>{current ?? '…'}</Typography>
           </Stack>
-        : <Alert severity="warning">{t('processes.performer.none')}</Alert>)}
+        : <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>{t('processes.performer.none')}</Typography>)}
       {editing && (
         <Stack spacing={1.5}>
           {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{error}</Alert>}
@@ -97,7 +108,7 @@ export function PerformerPanel({ projectId, node, disabled }) {
 
 /** The time or event triggers that start the step (D-49): picked from the project's catalogue, or
  * added to it here. A trigger counts as the step's input. */
-export function TriggerPanel({ projectId, node, disabled }) {
+export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
   const qc = useQueryClient();
   const refresh = useRefresh(projectId, node.bfc_node_id);
   const linkKey = keys.stepTriggers(node.bfc_node_id);
@@ -123,11 +134,13 @@ export function TriggerPanel({ projectId, node, disabled }) {
   const unlink = useMutation({ mutationFn: (row) => bfcApi.unlinkTrigger(node.bfc_node_id, row.bfc_node_trigger_id, row.row_version),
     onSuccess: done, onError: fail });
   const linked = new Set((links_.data ?? []).map((r) => r.process_trigger_id));
+  const draft = Boolean(pick) || (adding && Boolean(name.trim() || schedule.trim()));
+  useEffect(() => { onDraftChange?.(draft); }, [draft, onDraftChange]);
+  useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   const free = (cat.data ?? []).filter((c) => !linked.has(c.process_trigger_id));
   return (
     <Box>
-      <SectionTitle>{t('processes.trigger.title')}</SectionTitle>
-      <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1 }}>{t('processes.trigger.help')}</Typography>
+      <SectionTitle info={t('processes.trigger.help')}>{t('processes.trigger.title')}</SectionTitle>
       <LoadError errors={[links_.error, cat.error]} />
       {error && <Alert severity="error" sx={{ mb: 1, whiteSpace: 'pre-wrap' }} onClose={() => setError('')}>{error}</Alert>}
       <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 1, mb: 1 }}>
@@ -141,8 +154,8 @@ export function TriggerPanel({ projectId, node, disabled }) {
         ))}
       </Stack>
       {!disabled && !adding && (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Box sx={{ minWidth: 240 }}>
+        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ flex: '1 1 220px', minWidth: 0, maxWidth: 360 }}>
             <SimpleSelect id="trigger-pick" label={t('processes.trigger.pick')} value={pick} onChange={setPick}
               options={free.map((c) => ({ value: c.process_trigger_id, label: c.trigger_name }))} />
           </Box>
@@ -182,8 +195,7 @@ export function CompletenessPanel({ projectId, node }) {
   const gaps = GAP_KINDS.map((k) => [k, (q.data?.[k] ?? []).filter(under)]).filter(([, rs]) => rs.length);
   return (
     <Box>
-      <SectionTitle>{t('processes.gapsTitle')}</SectionTitle>
-      <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1 }}>{t('processes.gapsHelp')}</Typography>
+      <SectionTitle info={t('processes.gapsHelp')}>{t('processes.gapsTitle')}</SectionTitle>
       <LoadError errors={[q.error]} />
       {q.data && !q.data.rule_applies && <Typography sx={{ fontSize: 13, mb: 1 }}>{t('processes.gapsRuleOff')}</Typography>}
       {q.data && gaps.length === 0 && <Typography sx={{ fontSize: 13 }}>{t('processes.gapsNone')}</Typography>}
