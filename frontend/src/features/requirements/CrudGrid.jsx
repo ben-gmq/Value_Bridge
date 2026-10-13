@@ -37,6 +37,7 @@ export function CrudGrid({ projectId, br, disabled, mark }) {
     qc.invalidateQueries({ queryKey: qk });
     qc.invalidateQueries({ queryKey: keys.node(br.bfc_node_id) });
     qc.invalidateQueries({ queryKey: keys.tree(projectId) });          // DR13-D2: CRUD writes step I/O → the light
+    qc.invalidateQueries({ queryKey: keys.flows(projectId) });         // …and the DFD graph and gaps draw it (sara L1)
     if (deId) qc.invalidateQueries({ queryKey: keys.entity(deId) });
   };
   const toggle = useMutation({

@@ -22,11 +22,12 @@ class TableRow(BaseModel):
 
 
 Light = Literal["READY", "PARTIAL", "NOT_READY"]
+RuleElement = Literal["STARTED", "DATA_OUT"]     # 13a: the fixed D-38 rule; 13b widens it (sara L4)
 
 
 class ProcessReadiness(BaseModel):
     light: Light
-    missing: list[str]                  # rule element codes the process does not meet (13a: STARTED, DATA_OUT)
+    missing: list[RuleElement]                  # rule element codes the process does not meet (13a: STARTED, DATA_OUT)
 
 
 class ReadinessOut(BaseModel):

@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from schemas.common import Orm
+from schemas.process_flow import Light, RuleElement
 
 def Name(**kw):
     return Field(min_length=1, max_length=200, **kw)
@@ -102,8 +103,8 @@ class BfcNodeOut(Orm):
 class TreeNodeOut(BfcNodeOut):
     br_number: str | None
     # D-68 (slice 13a): live process rows of a chart whose DFD is on; null elsewhere
-    dfd_light: Literal["READY", "PARTIAL", "NOT_READY"] | None = None
-    dfd_missing: list[Literal["STARTED", "DATA_OUT"]] | None = None
+    dfd_light: Light | None = None
+    dfd_missing: list[RuleElement] | None = None
 
 
 class BrOut(Orm):

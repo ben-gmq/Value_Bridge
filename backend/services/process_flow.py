@@ -102,12 +102,13 @@ def process_completeness(db: Session, project_id: int, bfc_set: str = "TO_BE") -
     steps = list(db.scalars(select(BfcNode).where(
         BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process,
         BfcNode.bfc_set_code == bfc_set).order_by(BfcNode.hier_code)))
-    gaps = missing_io(db, project_id, [bfc_set] if bfc_set in sets_with_dfd_on(db, project_id) else [])
+    applies = bfc_set in sets_with_dfd_on(db, project_id)                # once per request (sara L3)
+    gaps = missing_io(db, project_id, [bfc_set] if applies else [])
     with_br = set(db.scalars(select(BusinessRequirement.bfc_node_id).where(
         BusinessRequirement.project_id == project_id, BusinessRequirement.is_active)))
     return {
         "bfc_set_code": bfc_set,
-        "rule_applies": bfc_set in sets_with_dfd_on(db, project_id),
+        "rule_applies": applies,
         **gaps,
         "no_performer": [_ref(s) for s in steps if s.performer_kind is None],
         "step_without_br": [_ref(s) for s in steps if bfc_set == "TO_BE" and s.bfc_node_id not in with_br],
