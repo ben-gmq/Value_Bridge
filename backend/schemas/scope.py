@@ -414,8 +414,11 @@ class ScopeTotalsOut(BaseModel):
     with_fr: int
     with_solution: int
     frs: int
+    frs_traced: int                   # distinct FRs reached from any area — the table's total row
     frs_without_br: int
-    effort_days: float
+    effort_days: float                # every live FR
+    traced_effort_days: float         # distinct traced FRs — the table's total row
+    untraced_effort_days: float
 
 
 class ScopeSummaryOut(BaseModel):

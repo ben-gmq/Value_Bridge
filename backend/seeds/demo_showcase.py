@@ -5,13 +5,15 @@ Called by seeds.seed_demo after the acceptance-case project; it keeps the same d
 All names, figures and organisations are illustrative."""
 from datetime import date
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from models import AppUser, BfcNode, BrOrgRole, BusinessRequirement
 from services import (application, baseline, bfc, business_requirement, client_org, components, data_entity, effort,
                       external_entity, freeze_set, function_requirement, raci, solution, trigger)
 from services.project import create_client, create_project
 from services.user_admin import create_user
+
+from seeds._guard import assert_throwaway_db
 
 # Org: unit code → (name, [(role code, role name)]).
 ORG = {
@@ -231,9 +233,7 @@ def _node(db, nid):
 
 
 def build_showcase(db, admin: AppUser, domain: str, pw: str) -> int:
-    name = db.scalar(text("select current_database()"))
-    if not any(m in name.lower() for m in ("uat", "demo", "test")):
-        raise SystemExit(f"Refusing: connected database '{name}' is not a uat/demo/test database")
+    assert_throwaway_db(db, ("uat", "demo", "test"))
     yamada = create_user(db, admin, f"k.yamada@{domain}", "K. Yamada", pw, "USER")
     db.commit()
     y = yamada.app_user_id

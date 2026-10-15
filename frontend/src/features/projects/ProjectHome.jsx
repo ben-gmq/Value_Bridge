@@ -67,7 +67,7 @@ function AreaTable({ s }) {
         </TableRow></TableHead>
         <TableBody>
           {s.areas.map((r) => row(r, false))}
-          {s.areas.length > 1 && row({ ...s.totals, frs: s.totals.frs - s.totals.frs_without_br }, true)}
+          {s.areas.length > 1 && row({ ...s.totals, frs: s.totals.frs_traced, effort_days: s.totals.traced_effort_days }, true)}
         </TableBody>
       </Table>
     </Box>
@@ -86,7 +86,7 @@ export default function ProjectHome() {
   const latest = bl.data?.[0];
   const lq = useQuery({ queryKey: keys.baseline(latest?.baseline_id), queryFn: () => baselineApi.get(latest.baseline_id),
     enabled: Boolean(latest) });
-  const dq = useQuery({ queryKey: ['baseline-diff', String(projectId), String(latest?.baseline_id), 'live'],
+  const dq = useQuery({ queryKey: keys.baselineDiff(projectId, latest?.baseline_id, 'live', false),   // sara M4
     queryFn: () => baselineApi.diff(projectId, latest.baseline_id, 'live'), enabled: Boolean(latest), staleTime: 60_000 });
   const p = q.data;
   const s = sq.data;

@@ -57,7 +57,13 @@ def summary(db: Session, project_id: int) -> dict:
         out.append(r)
     traced = set().union(*frs_of.values()) if frs_of else set()
     totals = {k: sum(r[k] for r in out) for k in ("processes", "brs", "confirmed", "with_fr", "with_solution")}
+    # sara M2: the total row is computed here, over DISTINCT FRs — an FR traced from two areas counts in each area's
+    # row but once in the total, and an untraced FR is in no area. The tiles read the whole register.
+    days = lambda ids: float(sum((live_frs[i].effort_days or Decimal(0)) for i in ids))      # noqa: E731
     totals["frs"] = len(live_frs)
+    totals["frs_traced"] = len(traced)
     totals["frs_without_br"] = len(set(live_frs) - traced)
-    totals["effort_days"] = float(sum((f.effort_days or Decimal(0)) for f in live_frs.values()))
+    totals["effort_days"] = days(live_frs)
+    totals["traced_effort_days"] = days(traced)
+    totals["untraced_effort_days"] = days(set(live_frs) - traced)
     return {"areas": out, "totals": totals}

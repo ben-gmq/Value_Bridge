@@ -16,7 +16,7 @@ import os
 import secrets
 from pathlib import Path
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from auth.security import hash_password
 from database import SessionLocal
@@ -26,6 +26,7 @@ from services import components
 from services.project import create_client, create_project
 from services.user_admin import check_ftc_address, create_user
 
+from seeds._guard import assert_throwaway_db
 from seeds.demo_showcase import build_showcase
 
 SAFE_MARKERS = ("uat", "demo")
@@ -57,9 +58,7 @@ def main() -> None:
     fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 
     with SessionLocal() as db, os.fdopen(fd, "w") as fh:
-        name = db.scalar(text("select current_database()"))
-        if not any(m in name.lower() for m in SAFE_MARKERS):
-            raise SystemExit(f"Refusing: connected database '{name}' is not a uat/demo database")
+        name = assert_throwaway_db(db, SAFE_MARKERS)
         admin = AppUser(email=f"uat.admin@{args.domain}", display_name="UAT Admin",
                         password_hash=hash_password(pw), is_platform_admin=True)
         db.add(admin)
@@ -81,9 +80,7 @@ def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
     """The demo project itself, through the services. Split from main() so the DFD invariant
     test (slice 3 criterion 5a) runs over exactly this data. It keeps a guard of its own, so an
     importer cannot use it to seed a real database around main()'s checks (sara L2)."""
-    name = db.scalar(text("select current_database()"))
-    if not any(m in name.lower() for m in (*SAFE_MARKERS, "test")):
-        raise SystemExit(f"Refusing: connected database '{name}' is not a uat/demo/test database")
+    assert_throwaway_db(db, (*SAFE_MARKERS, "test"))
     a = admin.app_user_id
     client = create_client(db, admin, "DEMO", "Demo Trading Co", "Distribution")
     proj = create_project(db, admin, client.client_id, "DEMO", "Order to cash demo", None, None, None,

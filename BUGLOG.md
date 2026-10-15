@@ -359,3 +359,15 @@ place.
 - test-runner · slice 10c, 2026-10-15 · LOW · **An interrupted pytest run leaves rows the next run's downgrade refuses**
   (`br_function_requirement`, `baseline`: the 0049 / 0047 downgrade guards raise), so every test errors in the `schema`
   fixture until the DB is cleared by hand. The `clean` fixture's `DATA_TABLES` omits them; wipe them before the downgrade.
+- sara L1–L8 · `sara`, night-batch bundle review (ui-mockup + slice 13c), 2026-10-16 · LOW · **eight lines,
+  one review**: (L1) the node/BR detail reads assemble `stamp.of` in the router — move to a service read;
+  (L2) `scope_summary.AGREED` branches on BR_STATUS codes — a `behaviour_code` later; (L3) the dashboard tests
+  `status_code === 'FROZEN'` — prefer a server `awaiting_signoff` flag; (L4) dashboard queries other than the
+  project and the scope summary fail silently (cards vanish) — fold into the page error; (L5) the home page runs a
+  full baseline→live diff per visit — a counts-only diff for large projects; (L6) `process_volume.set_volume`
+  writes, bumps `row_version` and audits on a no-op — skip as `set_basis` does; (L7) `lock_for_share` then UPDATE
+  can deadlock two saves of one node → 500, not 409 (pre-existing in `set_performer`) — map 40P01 to 409 once,
+  centrally; (L8) housekeeping — `select` imported inside `process_volume.summary`, `ProjectOut.hours_per_working_day`
+  float vs Decimal string elsewhere, `VolumeSection` repeats the period list (deviation 7h), a stray
+  `s13d-snap-check2b.yml` at main's root.
+

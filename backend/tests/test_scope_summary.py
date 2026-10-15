@@ -3,7 +3,7 @@ numbers are counted by hand from seeds/demo_showcase.py: which process each FR w
 processes each solution covers."""
 from sqlalchemy import select
 
-from models import AppUser, BrFunctionRequirement, FunctionRequirement
+from models import AppUser, BrFunctionRequirement, BusinessRequirement, FunctionRequirement
 from tests.conftest import PW
 
 API = "/api/v1"
@@ -48,3 +48,28 @@ def test_unlinking_an_fr_drops_reach_and_counts_it_as_untraced(client, world, db
     assert (proc(after)["with_fr"], proc(after)["frs"]) == (proc(before)["with_fr"] - 1, proc(before)["frs"] - 1)
     assert after["totals"]["frs"] == before["totals"]["frs"]                    # still live, only untraced
     assert after["totals"]["frs_without_br"] == before["totals"]["frs_without_br"] + 1
+
+
+def test_the_total_row_counts_a_shared_fr_once_and_keeps_untraced_effort_apart(client, world, db):
+    """sara M2: an FR traced from two areas is in both area rows but once in the total; an untraced FR is in none."""
+    pid, before = _summary(client, world, db)
+    h = world["admin"]
+    sales_br = db.scalar(select(BusinessRequirement).where(BusinessRequirement.project_id == pid,
+                                                           BusinessRequirement.br_statement.like("Decide acceptance%")))
+    shared = db.scalar(select(FunctionRequirement).where(FunctionRequirement.project_id == pid,
+                                                        FunctionRequirement.fr_name == "Payment file to bank"))   # Procurement
+    r = client.post(f"{API}/business-requirements/{sales_br.br_id}/function-requirements", headers=h,
+                    json={"fr_id": shared.fr_id, "coverage_note": None})
+    assert r.status_code == 201, r.text
+    link = db.scalar(select(BrFunctionRequirement).where(BrFunctionRequirement.fr_id == db.scalar(
+        select(FunctionRequirement.fr_id).where(FunctionRequirement.project_id == pid,
+                                                FunctionRequirement.fr_name == "Supplier scorecard")),
+        BrFunctionRequirement.is_active))
+    assert client.delete(f"{API}/business-requirements/{link.br_id}/function-requirements/{link.br_function_requirement_id}",
+                         headers=h, params={"row_version": link.row_version}).status_code == 200
+    s = client.get(f"{API}/projects/{pid}/scope-summary", headers=h).json()
+    t = s["totals"]
+    assert sum(a["frs"] for a in s["areas"]) == t["frs_traced"] + 1                   # the shared FR, twice in the rows
+    assert t["frs_traced"] + t["frs_without_br"] == t["frs"]
+    assert t["traced_effort_days"] + t["untraced_effort_days"] == t["effort_days"] == before["totals"]["effort_days"]
+    assert t["untraced_effort_days"] > 0
