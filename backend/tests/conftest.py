@@ -26,6 +26,10 @@ OWNER_URL = os.environ["MIGRATION_DATABASE_URL"]
 # Every component on: a test project behaves as a pre-7a project did (D-37 backfill, Q-9).
 ALL_COMPONENTS = ["SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD",
                   "AS_IS", "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST"]
+# D-70 (slice13_schema §2.8 "fixture risk"): the test projects keep today's D-38 rule on both charts, as every project
+# existing at the 13b deploy does, so the freeze tests built on "trigger + output" keep their meaning. A new project
+# with no dfd_rule in its body starts with the recommended set (tests/test_dfd_rule.py covers that default).
+TODAYS_RULE = {"TO_BE": ["STARTED", "DATA_OUT"], "AS_IS": ["STARTED", "DATA_OUT"]}
 DATA_TABLES = ("audit_event", "user_access_grant", "project_sequence", "project", "program",
                "client", "app_user")
 
@@ -113,7 +117,8 @@ def world(client):
     def project(code, program_id=None, client_id=c["client_id"]):
         r = client.post("/api/v1/projects", headers=admin, json={
             "client_id": client_id, "project_code": code, "project_name": code.title(),
-            "program_id": program_id, "component_codes": ALL_COMPONENTS, "is_restricted": False})
+            "program_id": program_id, "component_codes": ALL_COMPONENTS, "is_restricted": False,
+            "dfd_rule": TODAYS_RULE})
         assert r.status_code == 201, r.text
         return r.json()["project_id"]
 

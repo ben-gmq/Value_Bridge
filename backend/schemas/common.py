@@ -99,6 +99,9 @@ class ProgramOut(Orm):
     row_version: int
 
 
+DfdElement = Literal["STARTED", "DATA_IN", "DATA_OUT", "EXTERNAL", "ORDER"]     # D-70: services/dfd_rule.ELEMENTS
+
+
 class ProjectIn(BaseModel):
     client_id: int
     project_code: str = Field(min_length=1, max_length=30)
@@ -112,6 +115,8 @@ class ProjectIn(BaseModel):
     is_restricted: bool                  # asked with no default (§8.10 risk 1, OR-6)
     template_code: str | None = Field(default=None, max_length=40)
     data_model_depth: Literal["KEYS_ONLY", "FULL"] = "FULL"          # D-39
+    # D-70 (Q-4): each chart's DFD rule; a chart left out starts with the recommended set (dfd_rule.RECOMMENDED)
+    dfd_rule: dict[Literal["TO_BE", "AS_IS"], list[DfdElement]] | None = None
 
 
 class ProjectPatch(BaseModel):
@@ -177,6 +182,53 @@ class ComponentsChangeOut(BaseModel):
     blockers: list[ComponentBlockerOut]
     confirm_hash: str
     applied: bool
+
+
+# ---- the DFD rule (D-70, slice13_schema §2.5) ----
+class DfdRuleChart(BaseModel):
+    bfc_set_code: Literal["TO_BE", "AS_IS"]
+    codes: list[DfdElement]
+    rule_applies: bool                    # the chart's DFD component is on (S7-3)
+    fallback: bool                        # no live rule row: the D-38 rule applies (DR13-D3)
+    recommended: list[DfdElement]
+
+
+class DfdRuleElement(BaseModel):
+    code: DfdElement
+    locked: bool                          # always required (STARTED)
+    requires: list[DfdElement]            # ORDER needs DATA_IN and DATA_OUT (option A)
+    per_diagram: bool                     # EXTERNAL: checked per diagram, never in a light (Q-6, Q-16)
+
+
+class DfdRuleOut(BaseModel):
+    project_id: int
+    row_version: int                      # the project's: the one token for the whole rule
+    charts: list[DfdRuleChart]
+    catalogue: list[DfdRuleElement]
+
+
+class DfdRulePreviewIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    bfc_set_code: Literal["TO_BE", "AS_IS"]
+    codes: list[DfdElement] = Field(max_length=5)
+
+
+class DfdRulePreviewOut(BaseModel):
+    bfc_set_code: str
+    codes: list[DfdElement]
+    current: list[DfdElement]
+    rule_applies: bool
+    ready: int
+    partly: int
+    not_ready: int
+    would_block: int                      # processes the next freeze would refuse on
+    would_block_diagrams: int             # diagrams with no outside party, under EXTERNAL
+    preview_digest: str
+
+
+class DfdRuleIn(DfdRulePreviewIn):
+    row_version: int
+    preview_digest: str = Field(min_length=64, max_length=64)
 
 
 class DepthIn(BaseModel):
