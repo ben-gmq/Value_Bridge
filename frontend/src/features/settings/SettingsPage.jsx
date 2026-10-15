@@ -6,9 +6,10 @@ import { useComponents } from '../../app/useComponents';
 import { useAuth } from '../../app/AuthContext';
 import { t } from '../../i18n/t';
 
-// Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9).
-const ITEMS = [['access', links.access, null, true], ['components', links.components], ['organisation', links.organisation],
-  ['parties', links.parties], ['applications', links.applications, 'APPLICATION'], ['rateCard', links.rateCard, 'EFFORT']];
+// Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9). The organisation
+// and the systems are rail items under Scope since D-56.
+const ITEMS = [['access', links.access, null, true], ['components', links.components],
+  ['parties', links.parties], ['rateCard', links.rateCard, 'EFFORT']];
 
 export default function SettingsPage() {
   const { projectId } = useParams();

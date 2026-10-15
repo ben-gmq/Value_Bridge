@@ -62,11 +62,10 @@ COMPONENT_ROWS = {
     "APPLICATION": (_rows(Application, Application.application_code),),
     "EFFORT": (_rows(FunctionRequirement, FunctionRequirement.fr_number,
                      FunctionRequirement.complexity_code_id.is_not(None)),),
-    # 7c: the to-be DFD's own rows — external flows, trigger links and performers on to-be steps.
+    # 7c: the to-be DFD's own rows — external flows and trigger links on to-be steps. The performer is the
+    # function chart's (S10c-2, Ben 2026-10-14), so it neither needs nor blocks the DFD.
     "TO_BE_DFD": (_rows(BfcNodeExternalFlow, None, step_set="TO_BE"),
-                  _rows(BfcNodeTrigger, None, step_set="TO_BE"),
-                  _rows(BfcNode, BfcNode.hier_code, BfcNode.performer_kind.is_not(None),
-                        BfcNode.bfc_set_code == "TO_BE")),
+                  _rows(BfcNodeTrigger, None, step_set="TO_BE")),
     # the as-is chart itself (D-47): its nodes carry everything else of it
     "AS_IS": (_rows(BfcNode, BfcNode.hier_code, BfcNode.bfc_set_code == "AS_IS"),),
 }
@@ -128,18 +127,25 @@ def dfd_component(bfc_set: str) -> str:
 
 
 def node_dfd_component(node) -> str:
-    """Guard resolver (DR7-D1): performer, trigger links and external flows belong to the node's
-    chart's DFD component. One definition, imported by every router."""
+    """Guard resolver (DR7-D1): trigger links and external flows belong to the node's chart's DFD
+    component. One definition, imported by every router."""
     return dfd_component(node.bfc_set_code)
+
+
+def node_set_component(node) -> str | None:
+    """Guard resolver: a node of the as-is chart needs AS_IS on (D-47); the to-be chart is always on.
+    The performer is written under this one, whatever the DFD setting (S10c-2, Ben 2026-10-14)."""
+    return "AS_IS" if node.bfc_set_code == "AS_IS" else None
 
 
 def needed_for_rows(rows, bfc_set: str | None = None) -> tuple[str, ...]:
     """Every component the rows about to become live need, including an FR's rating (EFFORT)
-    and its solution link (SOLUTION), and a step's DFD rows and performer (its chart's DFD)."""
+    and its solution link (SOLUTION), and a step's DFD rows (its chart's DFD). A performer needs only its
+    chart (S10c-2)."""
     out: set[str] = set()
     for r in rows:
         out.update(ROW_COMPONENTS.get(type(r), ()))
-        if bfc_set is not None and (isinstance(r, DFD_ROWS) or (isinstance(r, BfcNode) and r.performer_kind)):
+        if bfc_set is not None and isinstance(r, DFD_ROWS):
             out.add(dfd_component(bfc_set))
         if isinstance(r, BfcNode) and r.bfc_set_code == "AS_IS":
             out.add("AS_IS")

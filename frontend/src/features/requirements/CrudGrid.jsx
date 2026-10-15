@@ -1,20 +1,56 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Checkbox, Link, Table, TableBody, TableCell, TableHead,
+import { Alert, Box, Button, Checkbox, IconButton, Link, Table, TableBody, TableCell, TableHead,
   TableRow, Typography } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
+import KeyboardArrowDownRounded from '@mui/icons-material/KeyboardArrowDownRounded';
+import KeyboardArrowRightRounded from '@mui/icons-material/KeyboardArrowRightRounded';
 import { errorText, isStale } from '../../api/client';
 import { brApi, dataApi } from '../../api/scope';
+import { api } from '../../api/vb';
+import { useCodes } from '../../app/useCodes';
 import { keys, links } from '../../app/links';
 import { t } from '../../i18n/t';
-import { Code, MonoChip, SectionLabel } from '../../components/kit';
+import { Code, MonoChip, SectionLabel, Tag } from '../../components/kit';
 import { MONO } from '../../theme/theme';
 import { PickDialog, dirLabel, entityLabel } from '../processes/chartKit';
 import { LoadError } from '../processes/StepSections';
+import { requiredText } from '../data/fieldRules';
 
 const CRUD = ['C', 'R', 'U', 'D'];
 export const brDataKey = (brId) => [...keys.br(brId), 'data'];
+
+/**
+ * D-60(a): one entity's live attributes under its grid row, read-only, in field order — the same query the entity
+ * page reads, fetched on first expand. Under KEYS_ONLY (D-39) only keys are expected, so keys alone raise nothing;
+ * under FULL an entity whose fields are all keys says so, as the consistency report does (entities_keys_only).
+ */
+function Attributes({ projectId, deId, depth }) {
+  const q = useQuery({ queryKey: [...keys.entity(deId), 'fields'], queryFn: () => dataApi.fields(deId) });
+  const { getLabel } = useCodes(projectId, 'FIELD_DATA_TYPE');
+  if (q.isLoading) return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('requirements.attr.loading')}</Typography>;
+  if (q.error) return <LoadError errors={[q.error]} />;
+  const fields = (q.data ?? []).filter((f) => f.is_active !== false).sort((a, b) => a.seq_no - b.seq_no);
+  if (!fields.length) return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('requirements.attr.none')}</Typography>;
+  const keysOnly = depth === 'FULL' && fields.every((f) => f.is_primary_key || f.is_foreign_key);
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
+      <Box component="ul" aria-label={t('requirements.attr.title')} sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {fields.map((f) => (
+          <Box component="li" key={f.data_field_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', fontSize: 13 }}>
+            <Box component="span" sx={{ fontWeight: f.is_primary_key ? 700 : 500, wordBreak: 'break-word' }}>{f.field_name}</Box>
+            {f.data_type_code && <Box component="span" sx={{ fontFamily: MONO, fontSize: 12.5, color: 'text.secondary' }}>{getLabel(f.data_type_code)}</Box>}
+            {f.is_primary_key && <Tag tone="caution">{t('requirements.attr.pk')}</Tag>}
+            {f.is_foreign_key && <Tag tone="teal">{t('requirements.attr.fk')}</Tag>}
+            <Box component="span" sx={{ fontSize: 12.5, color: 'brand.muted' }}>
+              {t('requirements.attr.mandatory', { value: requiredText(f.is_mandatory) })}</Box>
+          </Box>))}
+      </Box>
+      {keysOnly && <Typography sx={{ fontSize: 12.5, color: 'warning.main' }}>{t('requirements.attr.keysOnly')}</Typography>}
+    </Box>
+  );
+}
 
 /**
  * Data usage · CRUD for one requirement (br_data_entity, D-24). One row per entity; the
@@ -28,6 +64,9 @@ export function CrudGrid({ projectId, br, disabled, mark, emptyText }) {
   const q = useQuery({ queryKey: qk, queryFn: () => brApi.data(br.br_id) });
   const entQ = useQuery({ queryKey: keys.entities(projectId), queryFn: () => dataApi.list(projectId) });
   const byId = useMemo(() => new Map((entQ.data ?? []).map((e) => [e.data_entity_id, e])), [entQ.data]);
+  const projQ = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId) });
+  const [open, setOpen] = useState(() => new Set());   // entities whose attributes are shown (D-60a)
+  const flip = (deId) => setOpen((o) => { const n = new Set(o); if (n.has(deId)) n.delete(deId); else n.add(deId); return n; });
   const [added, setAdded] = useState([]);          // entities picked but not yet ticked
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
@@ -84,12 +123,21 @@ export function CrudGrid({ projectId, br, disabled, mark, emptyText }) {
               const de = byId.get(deId);
               const mine = linksList.filter((l) => l.data_entity_id === deId);
               const dirs = ['I', 'O'].filter((d) => mine.some((l) => l.direction === d));
+              const shown = open.has(deId);
               return (
-                <TableRow key={deId}>
-                  <TableCell sx={{ minWidth: 150 }}>
-                    <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
-                      {de ? <><Code tone="teal" sx={{ fontSize: 12.5, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
-                    </Link>
+                <Fragment key={deId}>
+                <TableRow sx={shown ? { '& > td': { borderBottom: 0 } } : undefined}>
+                  <TableCell sx={{ minWidth: 150, pl: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                      <IconButton size="small" onClick={() => flip(deId)} aria-expanded={shown} aria-controls={`attrs-${br.br_id}-${deId}`}
+                        aria-label={t(shown ? 'requirements.attr.hide' : 'requirements.attr.show', { entity: entityLabel(de) || `#${deId}` })}
+                        sx={{ width: 28, height: 28, flex: 'none' }}>
+                        {shown ? <KeyboardArrowDownRounded fontSize="small" /> : <KeyboardArrowRightRounded fontSize="small" />}
+                      </IconButton>
+                      <Link component={RouterLink} to={links.entity(projectId, deId)} underline="hover" color="inherit">
+                        {de ? <><Code tone="teal" sx={{ fontSize: 12.5, mr: 1 }}>{de.de_number}</Code>{de.de_name}</> : `#${deId}`}
+                      </Link>
+                    </Box>
                   </TableCell>
                   {CRUD.map((c) => {
                     const link = mine.find((l) => l.crud_code === c);
@@ -107,6 +155,13 @@ export function CrudGrid({ projectId, br, disabled, mark, emptyText }) {
                       <MonoChip size="lg" tone={dirs.includes('O') ? 'purple' : 'neutral'}>{dirs.map(dirLabel).join(' · ')}</MonoChip>)}
                   </TableCell>
                 </TableRow>
+                {shown && (
+                  <TableRow id={`attrs-${br.br_id}-${deId}`}>
+                    <TableCell colSpan={6} sx={{ pl: 5, pt: 0, pb: 1.5 }}>
+                      <Attributes projectId={projectId} deId={deId} depth={projQ.data?.data_model_depth} />
+                    </TableCell>
+                  </TableRow>)}
+                </Fragment>
               );
             })}
           </TableBody>

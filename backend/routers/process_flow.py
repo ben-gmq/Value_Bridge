@@ -2,8 +2,8 @@
 Mermaid export, the completeness report, saved positions, the performer, time/event triggers and their
 links, and copying one chart into the other. The process-flow arrows and their routes were retired by
 D-38 (0045). Collections use project_ctx; object routes use object_guard, so an object you cannot see is
-a 404. A write names the component it needs: the chart's DFD component for performer, trigger links and
-external flows (DR7-D1)."""
+a 404. A write names the component it needs: the chart's DFD component for trigger links and external flows
+(DR7-D1); the performer only its chart, whatever the DFD setting (S10c-2, Ben 2026-10-14)."""
 from typing import Annotated
 
 from fastapi import Depends
@@ -28,10 +28,12 @@ _edit_asis = project_ctx("EDIT", "AS_IS")              # copying a chart needs t
 
 
 node_dfd_component = components.node_dfd_component      # one resolver (sara 7c L4)
+node_set_component = components.node_set_component      # the performer: the chart's own component (S10c-2)
 
 
 _node_r = object_guard(BfcNode, "VIEW")
 _node_dfd_w = object_guard(BfcNode, "EDIT", component=node_dfd_component)
+_node_set_w = object_guard(BfcNode, "EDIT", component=node_set_component)
 _trig_w = object_guard(ProcessTrigger, "EDIT")       # the catalogue's any-of check is in the service
 
 
@@ -81,8 +83,8 @@ def reset_layout(project_id: int, diagram_type: str, scope_key: str,
 
 
 # ---- the performer (D-46) -------------------------------------------------------------------------
-@router.put("/bfc-nodes/{id}/performer", response_model=BfcNodeOut, **_node_dfd_w.route)
-def set_performer(id: int, body: PerformerIn, node: BfcNode = Depends(_node_dfd_w.dep),
+@router.put("/bfc-nodes/{id}/performer", response_model=BfcNodeOut, **_node_set_w.route)
+def set_performer(id: int, body: PerformerIn, node: BfcNode = Depends(_node_set_w.dep),
                   user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     node, warnings = bfc.set_performer(db, _uid(user), node, body.row_version, body.performer_kind,
                                        body.code, body.performer_label)
