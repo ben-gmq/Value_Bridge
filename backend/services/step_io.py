@@ -93,6 +93,8 @@ def hand_off(db: Session, actor_id: int, a: BfcNode, to_bfc_node_id: int, data_e
         raise HTTPException(422, "Diagrams never cross charts: both steps must be in the same chart")
     if b.bfc_node_id == a.bfc_node_id:
         raise HTTPException(422, "A hand-off joins two different process steps")
+    lifecycle.lock_for_share(db, a)                           # A then B, as ensure_step_io will (sara L1):
+    lifecycle.lock_for_share(db, b)                           # `already` is read under the same locks
     live = set(db.execute(select(BfcNodeDataEntity.bfc_node_id, BfcNodeDataEntity.direction).where(
         BfcNodeDataEntity.data_entity_id == data_entity_id, BfcNodeDataEntity.is_active,
         BfcNodeDataEntity.bfc_node_id.in_((a.bfc_node_id, b.bfc_node_id)))).all())
