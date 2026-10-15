@@ -156,6 +156,14 @@ export const triggerApi = {
   restore: (id) => d(http.patch(`${V}/process-triggers/${id}/restore`)),
 };
 
+// The project's DFD rule (D-70): per chart, the elements a process needs before a freeze. Everyone reads it; a
+// platform admin previews a change (no write) and saves it with the preview's digest and the project's row_version.
+export const dfdRuleApi = {
+  get: (projectId) => d(http.get(`${P(projectId)}/dfd-rule`)),
+  preview: (projectId, body) => d(http.post(`${P(projectId)}/dfd-rule/preview`, body)),
+  save: (projectId, body) => d(http.put(`${P(projectId)}/dfd-rule`, body)),
+};
+
 // The DFD of one parent node — the one process diagram (D-38): lanes are performers, order is derived.
 export const dfdApi = {
   graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),

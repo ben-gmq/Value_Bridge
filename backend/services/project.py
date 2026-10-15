@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from models import AppUser, Client, Program, Project, ProjectMember
 from services import access, audit, components, effort, numbering
+from services import dfd_rule as dfd_rule_service
 from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
 
@@ -57,7 +58,7 @@ def list_visible_projects(db: Session, user: AppUser) -> list[Project]:
 def create_project(db: Session, actor: AppUser, client_id: int, project_code: str,
                    project_name: str, program_id: int | None, start_date, end_date, *,
                    component_codes, is_restricted: bool, template_code: str | None = None,
-                   data_model_depth: str = "FULL") -> Project:
+                   data_model_depth: str = "FULL", dfd_rule: dict | None = None) -> Project:
     """Platform admin only (route guard). Creating a project grants nobody anything (D-32); it is
     asked whether the project is restricted (§8.10 risk 1), and the answer is audited.
     Its components (D-37) are inserted in the same transaction; the list must be closed under
@@ -87,10 +88,11 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     numbering.seed_all(db, p.project_id)            # all ten series, same transaction (R2-D14)
     cells = effort.seed_rate_card(db, p.project_id, actor.app_user_id)   # same transaction (§7.10, S6c-1)
     on = components.initial_rows(db, p.project_id, component_codes, actor.app_user_id)   # D-37
+    rule = dfd_rule_service.initial_rows(db, p.project_id, dfd_rule, actor.app_user_id)  # D-70 (Q-4), same tx
     # A later slice copies CONTROL_RULE house defaults here (§7.13).
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
                  detail={"program_id": program_id, **cells, "template_code": template_code,
-                         "components": on, "data_model_depth": data_model_depth,
+                         "components": on, "data_model_depth": data_model_depth, "dfd_rule": rule,
                          "is_restricted": is_restricted})
     db.commit()
     return p

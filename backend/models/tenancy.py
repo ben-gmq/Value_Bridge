@@ -113,6 +113,32 @@ class ProjectComponent(AuditMixin, Base):
         return self.project_id
 
 
+class ProjectDfdRule(AuditMixin, Base):
+    """One DFD element a chart of a project requires before its scope can be frozen (D-70; slice13_schema
+    §2.2, S13-1). Live row = required, retired row = not required; re-adding restores the same row (S1-7).
+    The element vocabulary is closed and code-defined (each code is a predicate in services/process_flow), so it
+    is CHECK-listed, not a code_master FK [Q-17]. Changed only through services.dfd_rule.set (audited). Not
+    shadowed: the rule a baseline passed is copied onto its header (baseline.dfd_rule_to_be / _as_is)."""
+
+    __tablename__ = "project_dfd_rule"
+
+    project_dfd_rule_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    bfc_set_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    element_code: Mapped[str] = mapped_column(String(12), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "bfc_set_code", "element_code", name="uq_project_dfd_rule"),
+        CheckConstraint("bfc_set_code IN ('TO_BE', 'AS_IS')", name="ck_pdr_set"),
+        CheckConstraint("element_code IN ('STARTED', 'DATA_IN', 'DATA_OUT', 'EXTERNAL', 'ORDER')",
+                        name="ck_pdr_element"),
+        CheckConstraint("element_code <> 'STARTED' OR is_active", name="ck_pdr_started_locked"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
 class ProjectTemplateComponent(AuditMixin, Base):
     """One component of one project template (OR-3). Global and seeded; copied once at
     create_project, never linked afterwards."""

@@ -46,6 +46,7 @@ export const keys = {
   // readiness key — every writer of step I/O, external flows, trigger links, BR CRUD, step retire/restore,
   // make-process/demote and component toggles invalidates tree(p).
   tree: (p) => ['bfc-tree', String(p)],
+  dfdRule: (p) => ['dfd-rule', String(p)],          // D-70: the chart rules; a save also invalidates tree(p) and flows(p)
   node: (id) => ['bfc-node', String(id)],
   retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview
   brs: (p) => ['brs', String(p)],

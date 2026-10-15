@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card, ListRow, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
+import { DfdRuleCard } from './DfdRuleCard';
 
 // Settings → Components (D-37, D-39). Everyone sees what the project uses; only a platform admin
 // changes it, through a preview that names what a dependency adds and what blocks a switch-off
@@ -77,23 +78,27 @@ export default function ComponentsPage() {
           ))}
         </Card>
 
-        <Card title={t('components.depthTitle')} bodySx={{ gap: 1 }}>
-          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>{t('components.depthWhat')}</Typography>
-          {depth && (
-            <RadioGroup value={depth} onChange={(e) => setDepth(e.target.value)} aria-label={t('components.depthTitle')}>
-              {['KEYS_ONLY', 'FULL'].map((v) => (
-                <FormControlLabel key={v} value={v} disabled={!isAdmin} control={<Radio />} label={t(`components.depth.${v}`)} />
-              ))}
-            </RadioGroup>
-          )}
-          {isAdmin && (
-            <Box>
-              <Button variant="contained" onClick={() => saveDepth.mutate()}
-                disabled={saveDepth.isPending || !project.data || depth === project.data.data_model_depth}>
-                {t('components.saveDepth')}</Button>
-            </Box>
-          )}
-        </Card>
+        <Stack spacing={2} sx={{ minWidth: 0 }}>
+          <Card title={t('components.depthTitle')} bodySx={{ gap: 1 }}>
+            <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>{t('components.depthWhat')}</Typography>
+            {depth && (
+              <RadioGroup value={depth} onChange={(e) => setDepth(e.target.value)} aria-label={t('components.depthTitle')}>
+                {['KEYS_ONLY', 'FULL'].map((v) => (
+                  <FormControlLabel key={v} value={v} disabled={!isAdmin} control={<Radio />} label={t(`components.depth.${v}`)} />
+                ))}
+              </RadioGroup>
+            )}
+            {isAdmin && (
+              <Box>
+                <Button variant="contained" onClick={() => saveDepth.mutate()}
+                  disabled={saveDepth.isPending || !project.data || depth === project.data.data_model_depth}>
+                  {t('components.saveDepth')}</Button>
+              </Box>
+            )}
+          </Card>
+          {/* D-70: the project's DFD rule, per chart — next to the other "how complete" setting, the depth */}
+          <DfdRuleCard projectId={projectId} isAdmin={isAdmin} onNotice={setNotice} />
+        </Stack>
       </Box>
 
       <ConfirmDialog open={Boolean(preview)} title={t('components.reviewTitle')} confirmLabel={t('components.apply')}

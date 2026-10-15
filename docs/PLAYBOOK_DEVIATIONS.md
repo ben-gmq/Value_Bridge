@@ -25,6 +25,7 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 7h | The DFD rule elements (`project_dfd_rule`) and the volume period (`bfc_node.volume_period_code`) are `CHECK`-listed; only transaction units are a `code_master` category | §9.3 all lookups in `code_master` | The program depends on both lists; seeds run after migrations, so the 13b backfill cannot reference `code_master` rows | slice13_schema [Q-17] |
 | 8a | `baseline` (header) has no soft delete and no `created_at` / `created_by`; `frozen_at` / `frozen_by_user_id` are that pair | §9.7 soft delete; §5.1 audit columns | A baseline is never retracted (A-36); the design names the creation pair (§5.2) | slice8_schema §2, Q-6 |
 | 8b | `baseline_*` shadow tables carry no audit columns, no `is_active`, no `row_version` | §5.1 audit columns on every business table | A snapshot is never updated or deleted (A-7); `baseline_id` → the header carries who and when | slice8_schema §3 |
+| 13b | `project_dfd_rule.element_code` (STARTED / DATA_IN / DATA_OUT / EXTERNAL / ORDER) is `CHECK`-listed, not a `code_master` lookup; labels in `en.components.json`. `baseline.dfd_rule_to_be` / `_as_is` are `varchar(12)[]` arrays (a 1NF exception) | §9.3 all lookups in `code_master`; normal form | Each code is a predicate the code branches on (S2-1); a `code_master` FK would make the 0053 backfill impossible (seeds run after migrations). The arrays are a frozen record of a small set, read whole, never queried by element | slice13_schema §2.3, §2.6, [Q-17], [Q-19] |
 
 ## Frontend
 

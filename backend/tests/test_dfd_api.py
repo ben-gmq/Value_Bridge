@@ -437,7 +437,8 @@ def test_an_l1_dfd_draws_every_step_below_it(client, ed, area):
     assert names(g["processes"]) == ["Receive order", "Check credit"]
     assert g["flows"] == [] and g["stores"] == [] and g["cross_area"] == [] and g["layout"] == []
     assert g["order"] == [] and g["boundary"] == {"in": [], "out": []} and g["triggers"] == []
-    assert [p["rank"] for p in g["processes"]] == [0, 0]
+    assert [p["rank"] for p in g["processes"]] == [0, 1]          # DR13-P4: no derived order → chart order
+    assert g["order_source"] == "CHART"
     assert all(p["br_number"] and p["systems"] == [] for p in g["processes"])         # to-be steps carry a BR
 
 

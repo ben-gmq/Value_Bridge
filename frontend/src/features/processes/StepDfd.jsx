@@ -217,10 +217,12 @@ export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
   );
 }
 
-const GAP_KINDS = ['missing_input', 'missing_output', 'no_performer'];
+// D-70: one list per element of the chart's DFD rule (empty when the element is off the rule), then the performer
+// warning. The per-diagram outside-party check shows on the DFD list only (Q-16).
+const GAP_KINDS = ['missing_input', 'missing_data_in', 'missing_output', 'missing_order', 'no_performer'];
 
-/** The gaps of the steps under one parent (§9.7): with no input or trigger, or no output, a step
- * blocks the baseline freeze while its chart's DFD is used (D-38, S7-3); no performer only warns. */
+/** The gaps of the steps under one parent (§9.7): a step missing an element of its chart's DFD rule blocks the
+ * baseline freeze while that chart's DFD is used (D-38, D-70, S7-3); no performer only warns. */
 export function CompletenessPanel({ projectId, node }) {
   const q = useQuery({ queryKey: [...keys.flowGaps(projectId), node.bfc_set_code],
     queryFn: () => chartApi.completeness(projectId, node.bfc_set_code) });

@@ -31,6 +31,8 @@ class BaselineOut(BaseModel):
     status_label: str | None
     hash_spec_version: int
     data_model_depth: str
+    dfd_rule_to_be: list[str] | None = None          # D-70 [Q-19]: both null = frozen before 13b (the D-38 rule)
+    dfd_rule_as_is: list[str] | None = None
     note: str | None
     prior_baseline_id: int | None
     frozen_at: datetime

@@ -123,6 +123,16 @@ export default function BaselinePage() {
               <KV k={t('baselines.view.frozen')} v={t('baselines.frozenOn', { date: fmtDateTime(b.frozen_at), who: b.frozen_by ?? '' })} />
               {b.note && <KV k={t('baselines.view.note')} v={<Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>{b.note}</Box>} />}
               <KV k={t('baselines.view.depth')} v={t(`baselines.view.depth.${b.data_model_depth}`)} />
+              {/* D-70 [Q-19]: the DFD rule each chart passed; a baseline frozen before 13b carries none — the D-38 rule */}
+              {['TO_BE', 'AS_IS'].map((set) => {
+                const codes = set === 'TO_BE' ? b.dfd_rule_to_be : b.dfd_rule_as_is;
+                return (
+                  <KV key={set} k={t(`baselines.view.dfdRule.${set}`)} v={codes ? (
+                    <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                      {codes.map((c) => <Tag key={c} tone="neutral">{t(`baselines.view.dfdRule.element.${c}`)}</Tag>)}
+                    </Stack>) : t('baselines.view.dfdRule.d38')} />
+                );
+              })}
               <KV k={t('baselines.view.components')} v={(
                 <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap' }}>
                   {b.components.map((c) => <Tag key={c} tone="neutral">{catalogue.find((x) => x.code === c)?.label ?? c}</Tag>)}

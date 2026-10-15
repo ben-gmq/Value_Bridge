@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, InputAdornment, Link, TextField, Typography } from '@mui/material';
+import { Alert, Box, InputAdornment, Link, TextField, Tooltip, Typography } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { errorText } from '../../api/client';
-import { bfcApi } from '../../api/scope';
+import { bfcApi, chartApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
-import { Card, Code, ListRow, Segmented } from '../../components/kit';
+import { Card, Code, ListRow, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DfdView } from './DfdPage';
@@ -40,7 +40,7 @@ function dfdsOf(rows) {
     .map((r) => ({ ...r, processes: count.get(r.bfc_node_id) ?? 0, lights: lights.get(r.bfc_node_id) ?? null }));
 }
 
-function DfdRow({ projectId, dfd, bfcSet, selected }) {
+function DfdRow({ projectId, dfd, bfcSet, selected, noParty }) {
   return (
     <ListRow component={RouterLink} to={links.dfds(projectId, dfd.bfc_node_id, bfcSet)} selected={selected}
       aria-current={selected ? 'page' : undefined} sx={{ py: 1, gap: 1, flexShrink: 0 }}>
@@ -48,6 +48,12 @@ function DfdRow({ projectId, dfd, bfcSet, selected }) {
       <Box sx={{ minWidth: 0, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
         <Typography noWrap sx={{ fontSize: 13.5, fontWeight: selected ? 700 : 500 }}>{dfd.node_name}</Typography>
         {dfd.lights && <LightCounts counts={dfd.lights} />}
+        {/* Q-6 / Q-16: under a rule with EXTERNAL, each diagram needs an outside party — shown here only, never in a light */}
+        {noParty && (
+          <Tooltip title={t('processes.dfdList.noPartyHelp')}>
+            <Box component="span" tabIndex={0} sx={{ alignSelf: 'flex-start', display: 'inline-flex', borderRadius: 999 }}>
+              <Tag tone="escalate" size="lg">{t('processes.dfdList.noParty')}</Tag></Box>
+          </Tooltip>)}
       </Box>
       <Box component="span" sx={(th) => ({ flex: 'none', alignSelf: 'flex-start', mt: '2px', fontSize: 12, color: th.vars.palette.brand.muted, whiteSpace: 'nowrap' })}>
         {t(dfd.processes === 1 ? 'processes.dfdList.countOne' : 'processes.dfdList.count', { n: dfd.processes })}</Box>
@@ -69,6 +75,9 @@ export default function DfdListPage() {
   const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: false, set: bfcSet }],
     queryFn: () => bfcApi.tree(projectId, false, bfcSet) });
   const dfds = useMemo(() => dfdsOf(treeQ.data ?? []), [treeQ.data]);
+  // The process panel's completeness read (same cache entry): which diagrams lack an outside party (D-70, Q-16).
+  const gapsQ = useQuery({ queryKey: [...keys.flowGaps(projectId), bfcSet], queryFn: () => chartApi.completeness(projectId, bfcSet) });
+  const noParty = useMemo(() => new Set((gapsQ.data?.diagram_missing_external ?? []).map((r) => r.bfc_node_id)), [gapsQ.data]);
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return q ? dfds.filter((d) => d.hier_code.toLowerCase().includes(q) || d.node_name.toLowerCase().includes(q)) : dfds;
@@ -109,7 +118,7 @@ export default function DfdListPage() {
             <Box component="nav" aria-label={t('processes.dfdList.listLabel')}
               sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, overflowY: 'auto', maxHeight: { xs: 300, lg: 'calc(100vh - 260px)' } }}>
               {shown.map((d) => (
-                <DfdRow key={d.bfc_node_id} projectId={projectId} dfd={d} bfcSet={bfcSet}
+                <DfdRow key={d.bfc_node_id} projectId={projectId} dfd={d} bfcSet={bfcSet} noParty={noParty.has(d.bfc_node_id)}
                   selected={d.bfc_node_id === selected?.bfc_node_id} />))}
             </Box>
           </Card>

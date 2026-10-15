@@ -6,11 +6,12 @@ from database import get_db
 from models import AppUser, ProjectMember
 from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin,
                             program_ctx, project_ctx)
-from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn,
+from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn, DfdRuleIn,
+                            DfdRuleOut, DfdRulePreviewIn, DfdRulePreviewOut,
                             EffectiveAccessOut, MemberAddOut, MemberIn, MemberOut, MemberPatch,
                             ProgramIn, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
                             RestrictionIn, RestrictionOut, TemplateOut)
-from services import access, code_master, components
+from services import access, code_master, components, dfd_rule
 from services import program as program_service
 from services import project as project_service
 
@@ -37,7 +38,8 @@ def create_project(body: ProjectIn, actor: AppUser = Depends(_admin.dep), db: Se
                                           body.end_date, component_codes=body.component_codes,
                                           is_restricted=body.is_restricted,
                                           template_code=body.template_code,
-                                          data_model_depth=body.data_model_depth)
+                                          data_model_depth=body.data_model_depth,
+                                          dfd_rule=body.dfd_rule)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectOut, **_reader.route)
@@ -90,6 +92,26 @@ def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_auth.dep
               db: Session = Depends(get_db)):
     return components.set_depth(db, actor, project_service.get_project(db, project_id),
                                 body.data_model_depth, body.row_version)
+
+
+# ---- the DFD rule (D-70; slice13_schema §2.5): everyone sees it, a project ADMIN (platform admin, Q-5) changes it.
+# A project setting, not a component write: no component= (the rule only has effect where the chart's DFD is on).
+@router.get("/projects/{project_id}/dfd-rule", response_model=DfdRuleOut, **_reader.route)
+def read_dfd_rule(project_id: int, db: Session = Depends(get_db)):
+    return dfd_rule.describe(db, project_service.get_project(db, project_id))
+
+
+@router.post("/projects/{project_id}/dfd-rule/preview", response_model=DfdRulePreviewOut, **_proj_admin.route)
+def preview_dfd_rule(project_id: int, body: DfdRulePreviewIn, db: Session = Depends(get_db)):
+    """No write: per chart, the lights under the proposed rule and what the next freeze would refuse."""
+    return dfd_rule.preview(db, project_service.get_project(db, project_id), body.bfc_set_code, body.codes)
+
+
+@router.put("/projects/{project_id}/dfd-rule", response_model=DfdRuleOut, **_proj_admin.route)
+def set_dfd_rule(project_id: int, body: DfdRuleIn, actor: AppUser = Depends(_auth.dep),
+                 db: Session = Depends(get_db)):
+    return dfd_rule.set_rule(db, actor, project_service.get_project(db, project_id), body.bfc_set_code,
+                             body.codes, body.row_version, body.preview_digest)
 
 
 # ---- access: who can open the project, members, restriction (D-40, OR-6) ----

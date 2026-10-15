@@ -11,7 +11,7 @@ import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { useBrEditor } from './BrEditor';
 import { BrStatusTag } from './reqKit';
-import { DfdMark } from '../processes/DfdLight';
+import { DfdMark, useDfdRule } from '../processes/DfdLight';
 
 // Business requirement page — mockup 03 (D-51). D-53: a BR is part of the function chart and is
 // edited in its process's panel there; this page stays as the deep link (from FRs, solutions, the
@@ -22,10 +22,13 @@ export default function RequirementPage() {
   const [notice, setNotice] = useState('');
   // The parent path in the eyebrow; retired nodes too, so a retired step still shows where it sat.
   const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: true }], queryFn: () => bfcApi.tree(projectId, true) });
-  // D-69: the CRUD grid makes the step's output, so its header carries the DATA_OUT mark (server codes only, DR13-D1).
+  // D-69 / D-70: the CRUD grid makes the step's data in (R) and out (C, U, D), so its header carries the marks of
+  // those of the to-be rule's elements (server codes only, DR13-D1; none off the rule, B7).
+  const { ruleFor } = useDfdRule(projectId);
   const crudMark = (nodeId) => {
     const row = (treeQ.data ?? []).find((n) => n.bfc_node_id === nodeId);
-    return row?.dfd_light ? <DfdMark dfd={{ missing: row.dfd_missing ?? [] }} element="DATA_OUT" /> : null;
+    const dfd = row?.dfd_light ? { missing: row.dfd_missing ?? [], rule: ruleFor('TO_BE') ?? [] } : null;
+    return dfd ? <>{['DATA_IN', 'DATA_OUT'].map((e) => <DfdMark key={e} dfd={dfd} element={e} />)}</> : null;
   };
   const ed = useBrEditor({ projectId, brId, onNotice: setNotice, crudMark });
   const br = ed.br;

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import SessionLocal
 from models import AppUser, Baseline, BusinessRequirement, Project
-from services import access, audit, components, freeze_set
+from services import access, audit, components, dfd_rule, freeze_set
 from services.code_master import resolve
 from services.consistency import FREEZE_BLOCKING_WARNINGS, INFORMATIONAL, WARNINGS, consistency_check
 from services.freeze_set import BY_TABLE, CURRENT_HASH_SPEC, FREEZE_SET
@@ -144,9 +144,11 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
     content_digest = freeze_set.digest(tx, project_id, on)
     if content_digest != preview_digest:
         raise HTTPException(409, "The scope changed since you opened this freeze. Review it again; nothing was saved.")
+    rule = dfd_rule.rules(tx, project_id)          # D-70: the rule the gate above just applied, same snapshot
     b = Baseline(content_digest=content_digest, project_id=project_id, major_no=major, minor_no=minor, note=note,
                  status_code_id=_code_id(tx, project_id, "BASELINE_STATUS", "FROZEN"),
                  hash_spec_version=CURRENT_HASH_SPEC, data_model_depth=project.data_model_depth,
+                 dfd_rule_to_be=list(rule["TO_BE"]), dfd_rule_as_is=list(rule["AS_IS"]),
                  prior_baseline_id=prior.baseline_id if prior else None, frozen_by_user_id=user.app_user_id)
     tx.add(b)
     tx.flush()
@@ -175,6 +177,7 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
     audit.record(tx, "BASELINE_FROZEN", actor_id=user.app_user_id, project_id=project_id,
                  target_table="baseline", target_id=b.baseline_id,
                  detail={"version_label": label, "hash_spec_version": CURRENT_HASH_SPEC, "components": sorted(on),
+                         "dfd_rule": {k: list(v) for k, v in rule.items()},
                          "content_digest": content_digest,                  # sara M3: a second, append-only record
                          "counts": n, "superseded": prior.version_label if prior else None,
                          "superseded_awaiting_sign_off": bool(prior and prior.client_approver_name is None),
@@ -281,6 +284,8 @@ def header(db: Session, b: Baseline) -> dict:
             "major_no": b.major_no, "minor_no": b.minor_no, "status_code": b.status_code,
             "status_label": b.status_code_row.label if b.status_code_row else None,
             "hash_spec_version": b.hash_spec_version, "data_model_depth": b.data_model_depth, "note": b.note,
+            # D-70 [Q-19]: null on both = frozen before 13b, under the D-38 rule
+            "dfd_rule_to_be": b.dfd_rule_to_be, "dfd_rule_as_is": b.dfd_rule_as_is,
             "prior_baseline_id": b.prior_baseline_id, "frozen_at": b.frozen_at,
             "frozen_by": names.get(b.frozen_by_user_id), "client_approver_name": b.client_approver_name,
             "client_approved_on": b.client_approved_on, "approval_note": b.approval_note,

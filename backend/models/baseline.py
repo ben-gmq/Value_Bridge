@@ -8,7 +8,7 @@ services/baseline_shadow.py from the live models — never hand-written (law 2) 
 services/baseline.freeze with INSERT … SELECT."""
 from datetime import date, datetime
 
-from sqlalchemy import (CHAR, BigInteger, CheckConstraint, Computed, Date, DateTime, ForeignKey, ForeignKeyConstraint,
+from sqlalchemy import (ARRAY, CHAR, BigInteger, CheckConstraint, Computed, Date, DateTime, ForeignKey, ForeignKeyConstraint,
                         Identity, Index, Integer, SmallInteger, String, Text, UniqueConstraint, func, text)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,11 @@ import models.tenancy  # noqa: F401
 from services.baseline_shadow import shadow_table
 
 
+_ELEMENTS = "ARRAY['STARTED','DATA_IN','DATA_OUT','EXTERNAL','ORDER']::varchar(12)[]"
+DFD_RULE_VALS = (f"dfd_rule_to_be IS NULL OR (cardinality(dfd_rule_to_be) >= 1 AND cardinality(dfd_rule_as_is) >= 1 "
+                 f"AND dfd_rule_to_be <@ {_ELEMENTS} AND dfd_rule_as_is <@ {_ELEMENTS})")
+
+
 class Baseline(Base):
     __tablename__ = "baseline"
 
@@ -39,6 +44,10 @@ class Baseline(Base):
     status_category: Mapped[str] = mapped_column(String(40), Computed("'BASELINE_STATUS'", persisted=True))
     hash_spec_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False)
+    # D-70 (slice13_schema §2.6, 0053): the DFD rule each chart passed at the freeze, in catalogue order
+    # (dfd_rule.ELEMENTS). Both NULL = frozen before 13b, i.e. the D-38 rule. Header facts like data_model_depth: frozen by the guard, not in the digest.
+    dfd_rule_to_be: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
+    dfd_rule_as_is: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
     note: Mapped[str | None] = mapped_column(Text)
     prior_baseline_id: Mapped[int | None] = mapped_column(BigInteger)
     frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -74,6 +83,8 @@ class Baseline(Base):
         CheckConstraint("hash_spec_version >= 1", name="ck_baseline_hash_spec"),
         CheckConstraint("data_model_depth IN ('KEYS_ONLY', 'FULL')", name="ck_baseline_depth"),
         CheckConstraint("note IS NULL OR btrim(note) <> ''", name="ck_baseline_note_not_blank"),
+        CheckConstraint("num_nonnulls(dfd_rule_to_be, dfd_rule_as_is) IN (0, 2)", name="ck_baseline_dfd_rule_pair"),
+        CheckConstraint(DFD_RULE_VALS, name="ck_baseline_dfd_rule_vals"),
         CheckConstraint("approval_note IS NULL OR btrim(approval_note) <> ''",
                         name="ck_baseline_approval_note_not_blank"),
         CheckConstraint("approval_reference IS NULL OR client_approver_name IS NOT NULL",
