@@ -160,8 +160,6 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
             </Box>
           </Fade>)}>
         {t('processes.run.title')}
-        <Box component="span" sx={(th) => ({ fontWeight: 400, color: th.vars.palette.brand.muted, ml: 0.75 })}>
-          · {t('processes.run.savesAsYouGo')}</Box>
       </GroupHeader>
       <Box sx={{ containerType: 'inline-size' }}>
         <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'minmax(0,1fr)',

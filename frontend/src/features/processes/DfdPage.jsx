@@ -212,7 +212,7 @@ const farNode = (f) => ({ STORE: storeNode(f.data_entity_id), EXTERNAL: partyNod
 const flowId = (f, i) => `f${i}-${f.kind}-${f.bfc_node_id}-${f.direction}`;
 
 const laneTitle = (lane) => (lane.kind === 'UNASSIGNED' ? t('processes.laneUnassigned')
-  : lane.code ? `${lane.code} ${lane.name ?? ''}`.trim() : lane.name);
+  : lane.name ?? lane.code);
 
 /** Each step's gap: 'missing_input', 'missing_output', 'both' or absent. */
 function gapsOf(g) {

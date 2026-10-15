@@ -11,7 +11,8 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
-import { Card, Code, InfoTip, LevelBadge, Segmented, Tag } from '../../components/kit';
+import { Card, Code, InfoTip, LevelBadge, ListRow, SectionLabel, Segmented, Status, Tag } from '../../components/kit';
+import { fmtDate } from '../baselines/baselineKit';
 import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, blankToNull, useEditForm, useFormSave } from './chartKit';
 import { CompletenessPanel } from './StepDfd';
@@ -55,7 +56,27 @@ const textBox = (size) => ({ '& .MuiInputBase-input': { fontSize: size, lineHeig
  * it, or make this box a process (only where the switch is allowed: level 3 or deeper, nothing below it). "Make this
  * a process" opens the confirmation that says what it creates (DR10c-P2). Viewers read the text only.
  */
-function FunctionGuide({ name, level, below, canSwitch, canEdit, busy, onOpenList, onMakeProcess }) {
+function FunctionGuide({ name, level, below, canSwitch, canEdit, busy, onOpenList, onMakeProcess, onOpenNode }) {
+  // With processes below, show them — each one click away, with its readiness light — and keep what this box is
+  // behind the (i): the list says "open one" better than a paragraph does (mockup 01's calm panel).
+  if (below.length > 0) {
+    return (
+      <Box component="section" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <SectionLabel info={t('processes.guide.what', { name })}>
+          {t(below.length === 1 ? 'processes.guide.listOne' : 'processes.guide.list', { n: below.length })}</SectionLabel>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {below.map((p) => (
+            <ListRow key={p.bfc_node_id} component="button" type="button" onClick={() => onOpenNode?.(p.bfc_node_id)}
+              sx={{ py: 1, border: 0, font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}>
+              <Code tone="muted" sx={{ fontSize: 12.5, flex: 'none' }}>{p.hier_code}</Code>
+              <Typography sx={{ fontSize: 14, fontWeight: 600, flexGrow: 1, minWidth: 0 }}>{p.node_name}</Typography>
+              {p.br_number && <Code tone="purple" sx={{ fontSize: 12, flex: 'none' }}>{p.br_number}</Code>}
+              {p.dfd_light && <DfdLight light={p.dfd_light} missing={p.dfd_missing ?? []} size="sm" />}
+            </ListRow>))}
+        </Box>
+      </Box>
+    );
+  }
   const lines = [t('processes.guide.what', { name })];
   if (below.length) lines.push(t('processes.guide.below', { n: below.length }));
   else if (level < FIRST_PROCESS_LEVEL) lines.push(t('processes.guide.tooHigh', { n: FIRST_PROCESS_LEVEL }));
@@ -282,6 +303,12 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
     br && { key: 'open', label: t('processes.panel.openBrPage'), to: links.requirement(projectId, br.br_id) },
   ].filter(Boolean);
 
+  // Mockups 01/03: who last saved this, and when — the later of the function and its requirement.
+  const stampOf = [node, showBr ? brEd.br : null].filter((r) => r?.updated_at)
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+  const stamp = stampOf && t('processes.panel.saved', { v: stampOf.row_version, who: stampOf.updated_by_name ?? '',
+    when: fmtDate(stampOf.updated_at) });
+
   // ── header ────────────────────────────────────────────────────────────────────────────────
   const header = (
     <Box sx={(th) => ({ position: 'sticky', top: 0, zIndex: 3, bgcolor: th.vars.palette.background.paper,
@@ -292,6 +319,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
         <Typography noWrap title={path.join(' › ')} sx={(th) => ({ fontSize: 12.5, color: th.vars.palette.brand.muted, minWidth: 0 })}>
           {path.length ? path.join(' › ') : t('processes.panel.topLevel')}</Typography>
         {!live && <Tag tone="neutral" size="lg" sx={{ flex: 'none' }}>{t('processes.retiredChip')}</Tag>}
+        {stamp && <Status tone="ok" size="sm" sx={{ ml: 'auto', flex: 'none' }}>{stamp}</Status>}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
         <InputBase value={v.node_name} onChange={(e) => form.set('node_name', e.target.value.replace(/\n/g, ' '))} readOnly={!editable}
@@ -387,7 +415,8 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
 
         {!node.is_process && live && (
           <FunctionGuide name={node.node_name} level={node.level_no} below={processesBelow} canSwitch={canSwitch} canEdit={editable}
-            busy={busy} onOpenList={(e) => setBelowAt(e.currentTarget)} onMakeProcess={() => setConfirmSwitch(true)} />
+            busy={busy} onOpenList={(e) => setBelowAt(e.currentTarget)} onMakeProcess={() => setConfirmSwitch(true)}
+            onOpenNode={onOpenNode} />
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{primary}</Box>

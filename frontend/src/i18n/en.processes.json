@@ -431,5 +431,8 @@
   "processes.starts.nothing": "Nothing starts this process yet: no trigger, no input data and no inbound outside party.",
   "processes.starts.kind.data": "Data in",
   "processes.starts.kind.party": "From",
-  "processes.dfdList.pick": "Diagram"
+  "processes.dfdList.pick": "Diagram",
+  "processes.panel.saved": "Saved · v{v} · {who} {when}",
+  "processes.guide.list": "{n} processes below",
+  "processes.guide.listOne": "1 process below"
 }

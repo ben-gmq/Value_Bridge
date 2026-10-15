@@ -31,9 +31,9 @@ export function usePerformerText(projectId, node) {
   const apps = useQuery({ queryKey: keys.applications(projectId), queryFn: () => appApi.list(projectId) });
   const text = (() => {
     switch (node.performer_kind) {
-      case 'ORG_UNIT': { const u = (units.data ?? []).find((x) => x.org_unit_id === node.performer_org_unit_id); return u && `${u.org_unit_code} ${u.org_unit_name}`; }
-      case 'ORG_ROLE': { const r = (roles.data ?? []).find((x) => x.org_role_id === node.performer_org_role_id); return r && `${r.org_role_code} ${r.org_role_name}`; }
-      case 'APPLICATION': { const a = (apps.data ?? []).find((x) => x.application_id === node.performer_application_id); return a && `${a.application_code} ${a.application_name}`; }
+      case 'ORG_UNIT': { const u = (units.data ?? []).find((x) => x.org_unit_id === node.performer_org_unit_id); return u?.org_unit_name; }
+      case 'ORG_ROLE': { const r = (roles.data ?? []).find((x) => x.org_role_id === node.performer_org_role_id); return r?.org_role_name; }
+      case 'APPLICATION': { const a = (apps.data ?? []).find((x) => x.application_id === node.performer_application_id); return a?.application_name; }
       case 'AI': return node.performer_label;
       default: return null;
     }

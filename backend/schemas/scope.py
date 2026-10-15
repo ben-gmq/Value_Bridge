@@ -1,5 +1,6 @@
 """Slice 1 request / response shapes. Derived values — numbers, level_no, seq_no, hier_code,
 direction, raci_behaviour, fk_group_no, created_by — appear only in *Out models (VB law 6)."""
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -100,6 +101,16 @@ class BfcNodeOut(Orm):
     warnings: list[str] = []
 
 
+class Stamp(Orm):
+    """Who last saved the row, and when (services/stamp.py) — on single-row reads only."""
+    updated_at: datetime | None = None
+    updated_by_name: str | None = None
+
+
+class BfcNodeDetailOut(BfcNodeOut, Stamp):
+    pass
+
+
 class TreeNodeOut(BfcNodeOut):
     br_number: str | None
     # D-68 (slice 13a): live process rows of a chart whose DFD is on; null elsewhere
@@ -118,6 +129,10 @@ class BrOut(Orm):
     status_code: str
     is_active: bool
     row_version: int
+
+
+class BrDetailOut(BrOut, Stamp):
+    pass
 
 
 class ProcessOut(BaseModel):
