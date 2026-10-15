@@ -287,5 +287,11 @@
   "baselines.view.dfdRule.element.DATA_IN": "Data in",
   "baselines.view.dfdRule.element.DATA_OUT": "Data out",
   "baselines.view.dfdRule.element.EXTERNAL": "Outside party per diagram",
-  "baselines.view.dfdRule.element.ORDER": "Joined to the flow"
+  "baselines.view.dfdRule.element.ORDER": "Joined to the flow",
+  "baselines.notCompared": "{entity}: {fields} are not in the older baseline (frozen before they existed), so changes to them are not compared here.",
+  "baselines.field.runs_per_period": "how often it runs",
+  "baselines.field.volume_period_code": "the period",
+  "baselines.field.transactions_per_run": "transactions per run",
+  "baselines.field.transaction_unit_code": "the transaction unit",
+  "baselines.field.seconds_per_transaction": "time per transaction"
 }
