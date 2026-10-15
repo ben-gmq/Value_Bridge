@@ -179,11 +179,11 @@ function EntityDialog({ projectId, g, draft, layout, onClose, onDone }) {
   const [direction, setDirection] = useState(draft.direction ?? 'O');
   const [error, setError] = useState('');
   const handOff = draft.action === 'HAND_OFF';
-  // A new entity is created once: a retry after a failed link reuses it, never mints a second DE- (sara M1).
+  // A new entity is created once: a retry after a failed link reuses it, never mints a second DE- (sara M1/L2).
   const created = useRef(null);
   const m = useMutation({
     mutationFn: async () => {
-      if (mode === 'new' && (!created.current || created.current.de_name !== name.trim())) {
+      if (mode === 'new' && !created.current) {
         created.current = await dataApi.create(projectId, { de_name: name.trim() });
       }
       const de = mode === 'new' ? created.current : picked;
@@ -221,7 +221,8 @@ function EntityDialog({ projectId, g, draft, layout, onClose, onDone }) {
               renderInput={(params) => <TextField {...params} autoFocus label={t('processes.entity')} />} />
           ) : (
             <TextField autoFocus label={t('processes.draw.newName')} value={name} helperText={t('processes.draw.newHelp')}
-              slotProps={{ htmlInput: { maxLength: 200 } }} onChange={(e) => setName(e.target.value)} />
+              slotProps={{ htmlInput: { maxLength: 200, readOnly: Boolean(created.current) } }}
+              onChange={(e) => setName(e.target.value)} />
           )}
           {!handOff && (
             <SimpleSelect id="draw-dir" label={t('processes.direction')} value={direction} onChange={setDirection}
