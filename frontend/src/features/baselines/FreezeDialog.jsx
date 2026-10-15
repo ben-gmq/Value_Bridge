@@ -18,6 +18,11 @@ export function detailText(err) {
 export function itemText(x) {
   if (typeof x !== 'object' || x === null) return fmtValue(x);
   if (x.hier_code) return x.bfc_set_code ? `${x.hier_code} (${t(`baselines.dlg.chart.${x.bfc_set_code}`)})` : x.hier_code;
+  // D-70: a chart with no saved DFD rule, or a rule whose order lacks its data elements, names the chart
+  if (x.bfc_set_code && !x.hier_code) {
+    return t(x.element_code ? 'baselines.dlg.ruleInvalid' : 'baselines.dlg.ruleMissing',
+      { chart: t(`baselines.dlg.chart.${x.bfc_set_code}`) });
+  }
   return fmtValue(x.label ?? x.component ?? x.de_number ?? x.br_number ?? '');
 }
 

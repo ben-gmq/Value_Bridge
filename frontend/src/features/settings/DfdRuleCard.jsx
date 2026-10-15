@@ -20,7 +20,8 @@ const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
  */
 export function DfdRuleCard({ projectId, isAdmin, onNotice }) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: keys.dfdRule(projectId), queryFn: () => dfdRuleApi.get(projectId) });
+  const q = useQuery({ queryKey: keys.dfdRule(projectId), queryFn: () => dfdRuleApi.get(projectId),
+    refetchOnWindowFocus: false });            // a refetch must not reset the admin's half-made choice (sara L2)
   const [set, setSet] = useState('TO_BE');
   const [wanted, setWanted] = useState(null);
   const [preview, setPreview] = useState(null);

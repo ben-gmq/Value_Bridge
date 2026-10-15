@@ -44,8 +44,8 @@ class Baseline(Base):
     status_category: Mapped[str] = mapped_column(String(40), Computed("'BASELINE_STATUS'", persisted=True))
     hash_spec_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False)
-    # D-70 (slice13_schema §2.6, 0053): the DFD rule each chart passed at the freeze, sorted. Both NULL = frozen
-    # before 13b, i.e. the D-38 rule. Header facts like data_model_depth: frozen by the guard, not in the digest.
+    # D-70 (slice13_schema §2.6, 0053): the DFD rule each chart passed at the freeze, in catalogue order
+    # (dfd_rule.ELEMENTS). Both NULL = frozen before 13b, i.e. the D-38 rule. Header facts like data_model_depth: frozen by the guard, not in the digest.
     dfd_rule_to_be: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
     dfd_rule_as_is: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
     note: Mapped[str | None] = mapped_column(Text)
