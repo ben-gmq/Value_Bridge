@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Handle, MarkerType, Position, useNodesState, useReactFlow, useStore } from '@xyflow/react';
+import { Handle, MarkerType, Position, useNodesInitialized, useNodesState, useReactFlow, useStore } from '@xyflow/react';
 import { Alert, Box, Button, Divider, FormControlLabel, IconButton, Switch, Table, TableBody, TableCell, TableHead, TableRow,
   Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -34,9 +34,37 @@ const STORE = { w: 184, h: 52 };
 const PARTY = { w: 156, h: 64 };
 const TRIG = 56;
 const LABEL_W = 170;
-const COL_W = 290;
 const LANE_PAD = 22;
 const ROW_H = STEP.h + 28;
+// Mockup 02: data stands BETWEEN the process columns, beside the steps that use it, so the diagram reads
+// left to right and stays wide rather than tall. One unit = a data slot, then a process column.
+const SLOT = STORE.w;
+const GAP_X = 56;
+const UNIT = SLOT + GAP_X + STEP.w + GAP_X;
+const slotX = (k) => LABEL_W + 24 + k * UNIT;
+const stepX = (rank) => slotX(rank) + SLOT + GAP_X;
+const SLOT_GAP_Y = 20;
+// Open at a zoom where box text reads as in mockup 02: a diagram too wide for that opens at its left edge
+// and pans, rather than shrinking to fit.
+const READABLE = 0.75;
+
+/** Inside the canvas: once the boxes are measured, fit the diagram — or, if fitting would shrink it below
+ * READABLE, show it from its top-left corner at READABLE. Runs per diagram, never after a drag. */
+function ReadableFit({ scope }) {
+  const rf = useReactFlow();
+  const ready = useNodesInitialized();
+  useEffect(() => {
+    if (!ready) return;
+    Promise.resolve(rf.fitView({ padding: 0.06, maxZoom: 1 })).then(() => {
+      if (rf.getViewport().zoom >= READABLE) return;
+      const all = rf.getNodes();             // lanes included: their names (who performs) stay in view
+      const left = Math.min(...all.map((n) => n.position.x));
+      const top = Math.min(...all.map((n) => n.position.y));
+      rf.setViewport({ x: 24 - left * READABLE, y: 24 - top * READABLE, zoom: READABLE });
+    });
+  }, [ready, scope, rf]);
+  return null;
+}
 const DIAGRAM = 'DFD';
 const stepNode = (id) => `s${id}`;
 const storeNode = (id) => `d${id}`;
@@ -184,7 +212,7 @@ const farNode = (f) => ({ STORE: storeNode(f.data_entity_id), EXTERNAL: partyNod
 const flowId = (f, i) => `f${i}-${f.kind}-${f.bfc_node_id}-${f.direction}`;
 
 const laneTitle = (lane) => (lane.kind === 'UNASSIGNED' ? t('processes.laneUnassigned')
-  : lane.code ? `${lane.code} ${lane.name ?? ''}`.trim() : lane.name);
+  : lane.name ?? lane.code);
 
 // One list per element of the chart's DFD rule (D-70); a list whose element is off the rule is empty.
 const RULE_GAPS = ['missing_input', 'missing_data_in', 'missing_output', 'missing_order'];
@@ -198,16 +226,17 @@ function gapsOf(g) {
   return out;
 }
 
-/** Graph → React Flow nodes and edges. Lanes are bands; a process stands at (its lane, its rank);
- * stores, parties and triggers stand in the band below, each under the steps it touches. Saved
- * positions win (D-30); every other box is pushed clear of them (§14.6). Edge colour is applied
- * later, by the page, so selecting a box restyles lines without rebuilding the layout. */
+/** Graph → React Flow nodes and edges. Lanes are bands; a process stands at (its lane, its rank).
+ * Stores, parties and triggers stand in the data slots between the process columns (mockup 02): just
+ * after the first step that writes them, else just before the first step that reads them, level with
+ * the steps they touch. Saved positions win (D-30); every other box is pushed clear of them (§14.6).
+ * Edge colour is applied later, by the page, so selecting a box restyles lines without rebuilding. */
 function buildLayout(g, showOrder) {
   const gap = gapsOf(g);
   const nodes = [];
   let top = 0;
   const bands = [];
-  const xOf = new Map();
+  const placed = new Map();                    // step id → { rank, cy }
   for (const lane of g.lanes) {
     const mine = g.processes.filter((p) => p.lane_key === lane.lane_key).sort((a, b) => a.rank - b.rank || a.hier_code.localeCompare(b.hier_code));
     const rowsAt = new Map();
@@ -216,45 +245,52 @@ function buildLayout(g, showOrder) {
       const r = rowsAt.get(p.rank) ?? 0;
       rowsAt.set(p.rank, r + 1);
       rowsUsed = Math.max(rowsUsed, r + 1);
-      const x = LABEL_W + p.rank * COL_W;
-      xOf.set(p.bfc_node_id, x);
+      const y = top + LANE_PAD + r * ROW_H;
+      placed.set(p.bfc_node_id, { rank: p.rank, cy: y + STEP.h / 2 });
       nodes.push({ id: stepNode(p.bfc_node_id), type: 'step', data: { node: p, gap: gap.get(p.bfc_node_id),
         object: { object_type: 'STEP', object_id: p.bfc_node_id } }, size: STEP,
-        position: { x, y: top + LANE_PAD + r * ROW_H } });
+        position: { x: stepX(p.rank), y } });
     }
     const height = rowsUsed * ROW_H + LANE_PAD * 2 - (ROW_H - STEP.h);
     bands.push({ lane, top, height });
     top += height;
   }
-  // The data band: each store, party and trigger under the mean column of the steps it touches.
-  const touches = new Map();
+  // Each far end's slot and wanted height, from the steps it touches.
+  const ends = new Map();
   for (const f of g.flows) {
     const k = farNode(f);
-    touches.set(k, [...(touches.get(k) ?? []), xOf.get(f.bfc_node_id) ?? LABEL_W]);
+    const s = placed.get(f.bfc_node_id);
+    if (!s) continue;
+    const e = ends.get(k) ?? { writers: [], readers: [], ys: [] };
+    (f.direction === 'O' ? e.writers : e.readers).push(s.rank);
+    e.ys.push(s.cy);
+    ends.set(k, e);
   }
-  const at = (k) => { const xs = touches.get(k) ?? [LABEL_W]; return xs.reduce((a, b) => a + b, 0) / xs.length; };
-  const dataTop = top + 40;
+  const want = (k) => {
+    const e = ends.get(k);
+    if (!e) return { slot: 0, cy: top + 40 };
+    const slot = e.writers.length ? Math.min(...e.writers) + 1 : Math.min(...e.readers);
+    return { slot, cy: e.ys.reduce((a, b) => a + b, 0) / e.ys.length };
+  };
   const data = [
     ...g.triggers.map((x) => ({ id: trigNode(x.process_trigger_id), type: 'trigger', data: { trigger: x }, size: { w: TRIG, h: TRIG },
-      object: { object_type: 'TRIGGER', object_id: x.process_trigger_id }, x: at(trigNode(x.process_trigger_id)) - TRIG - 30 })),
+      object: { object_type: 'TRIGGER', object_id: x.process_trigger_id } })),
     ...g.externals.map((x) => ({ id: partyNode(x.external_entity_id), type: 'party', data: { party: x }, size: PARTY,
-      object: { object_type: 'EXTERNAL', object_id: x.external_entity_id }, x: at(partyNode(x.external_entity_id)) })),
+      object: { object_type: 'EXTERNAL', object_id: x.external_entity_id } })),
     ...g.stores.map((s) => ({ id: storeNode(s.data_entity_id), type: 'store', data: { store: s, crossArea: g.cross_area.includes(s.data_entity_id) },
-      size: STORE, object: { object_type: 'ENTITY', object_id: s.data_entity_id }, x: at(storeNode(s.data_entity_id)) })),
-  ];
-  // Pack the band into rows: each box keeps its wanted column but drops to the first row where it fits, so
-  // eight stores under two steps stack instead of stretching the diagram out of readable zoom (UAT 9).
-  const rowEnds = [];
-  const ROW_GAP = 24;
-  const rowH = Math.max(STORE.h, PARTY.h, TRIG) + ROW_GAP;
-  for (const d of [...data].sort((a, b) => a.x - b.x)) {
-    const x = Math.max(LABEL_W, d.x);
-    let row = rowEnds.findIndex((end) => end + 16 <= x);
-    if (row < 0) { row = rowEnds.length; rowEnds.push(-Infinity); }
-    const left = Math.max(x, rowEnds[row] + 16);
-    rowEnds[row] = left + d.size.w;
-    nodes.push({ id: d.id, type: d.type, data: { ...d.data, object: d.object }, size: d.size,
-      position: { x: left, y: dataTop + row * rowH } });
+      size: STORE, object: { object_type: 'ENTITY', object_id: s.data_entity_id } })),
+  ].map((d) => ({ ...d, ...want(d.id) }));
+  // Stack each slot top to bottom in wanted order: a box keeps its height unless the one above is in the way.
+  const bySlot = new Map();
+  for (const d of data) bySlot.set(d.slot, [...(bySlot.get(d.slot) ?? []), d]);
+  for (const [slot, list] of bySlot) {
+    let bottom = -Infinity;
+    for (const d of list.sort((a, b) => a.cy - b.cy)) {
+      const y = Math.max(Math.round(d.cy - d.size.h / 2), bottom + SLOT_GAP_Y, 0);
+      bottom = y + d.size.h;
+      nodes.push({ id: d.id, type: d.type, data: { ...d.data, object: d.object }, size: d.size,
+        position: { x: slotX(slot) + (SLOT - d.size.w) / 2, y } });
+    }
   }
   const saved = new Map(g.layout.map((p) => [`${p.object_type}:${p.object_id}`, p]));
   const clear = pushClear(nodes.map((n) => {
@@ -272,7 +308,7 @@ function buildLayout(g, showOrder) {
   const edges = g.flows.map((f, i) => {
     const into = f.direction === 'I';
     return {
-      id: flowId(f, i), type: 'labelled', data: { flow: f }, interactionWidth: 16,
+      id: flowId(f, i), type: 'curved', data: { flow: f }, interactionWidth: 16,
       source: into ? farNode(f) : stepNode(f.bfc_node_id), sourceHandle: 's-R',
       target: into ? stepNode(f.bfc_node_id) : farNode(f), targetHandle: 't-L',
       label: f.kind === 'TRIGGER' ? undefined : f.label ?? undefined,
@@ -624,11 +660,13 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
             </CanvasHeader>
             {view === 'diagram' ? (
               <DrawContext.Provider value={canDraw}>
-                <ModelCanvas kind="dfd" bare nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} height="max(480px, 68vh)"
+                <ModelCanvas kind="dfd" bare nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} height="max(520px, calc(100vh - 330px))"
+                  controlsPosition="bottom-right"
                   draggable={canEdit} onNodesChange={handleNodesChange} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
                   onNodeDoubleClick={onNodeDoubleClick} ariaLabel={title} connectable={canDraw}
                   onConnectEnd={canDraw ? draw.onConnectEnd : undefined} onEdgeClick={canDraw ? draw.onEdgeClick : undefined}>
                   <FlowPoint into={flowPoint} />
+                  <ReadableFit scope={nodeId} />
                 </ModelCanvas>
               </DrawContext.Provider>
             ) : <Box sx={{ p: 1 }}><DfdTable g={g} /></Box>}

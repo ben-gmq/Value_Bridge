@@ -1,5 +1,6 @@
 """Slice 1 request / response shapes. Derived values — numbers, level_no, seq_no, hier_code,
 direction, raci_behaviour, fk_group_no, created_by — appear only in *Out models (VB law 6)."""
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -100,6 +101,16 @@ class BfcNodeOut(Orm):
     warnings: list[str] = []
 
 
+class Stamp(Orm):
+    """Who last saved the row, and when (services/stamp.py) — on single-row reads only."""
+    updated_at: datetime | None = None
+    updated_by_name: str | None = None
+
+
+class BfcNodeDetailOut(BfcNodeOut, Stamp):
+    pass
+
+
 class TreeNodeOut(BfcNodeOut):
     br_number: str | None
     # D-68 (slice 13a): live process rows of a chart whose DFD is on; null elsewhere
@@ -119,6 +130,10 @@ class BrOut(Orm):
     status_code: str
     is_active: bool
     row_version: int
+
+
+class BrDetailOut(BrOut, Stamp):
+    pass
 
 
 class ProcessOut(BaseModel):
@@ -379,3 +394,35 @@ class OrgRoleOut(Orm):
     headcount: int | None
     is_active: bool
     row_version: int
+
+
+class ScopeAreaOut(BaseModel):
+    hier_code: str
+    name: str
+    processes: int
+    brs: int
+    confirmed: int
+    with_fr: int
+    with_solution: int
+    frs: int
+    effort_days: float
+
+
+class ScopeTotalsOut(BaseModel):
+    processes: int
+    brs: int
+    confirmed: int
+    with_fr: int
+    with_solution: int
+    frs: int
+    frs_traced: int                   # distinct FRs reached from any area — the table's total row
+    frs_without_br: int
+    effort_days: float                # every live FR
+    traced_effort_days: float         # distinct traced FRs — the table's total row
+    untraced_effort_days: float
+
+
+class ScopeSummaryOut(BaseModel):
+    """The project dashboard's scope figures per level-1 area (services/scope_summary.py)."""
+    areas: list[ScopeAreaOut]
+    totals: ScopeTotalsOut

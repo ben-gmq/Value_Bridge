@@ -285,6 +285,11 @@ export const volumeApi = {
   summary: (projectId) => d(http.get(`${P(projectId)}/volume-summary`)),
 };
 
+// The project dashboard's scope figures per level-1 area (services/scope_summary.py). Read-only.
+export const scopeSummaryApi = {
+  get: (projectId) => d(http.get(`${P(projectId)}/scope-summary`)),
+};
+
 // Slice 8 (docs/slice8_schema.md §5). Read-only apart from freeze and approve; the version, status and
 // digest of the stored baseline are the server's (VB law 6). The freeze sends back the preview's digest, so
 // it freezes exactly what the person reviewed (DR8-P2).

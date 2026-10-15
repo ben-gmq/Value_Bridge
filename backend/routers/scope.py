@@ -17,7 +17,7 @@ from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolutio
                     Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
-from schemas.scope import (BfcNodeIn, BfcNodeOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
+from schemas.scope import (ScopeSummaryOut, BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
                            DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
@@ -36,8 +36,8 @@ from schemas.function_requirement import (BrFrIn, BrFrOut, BrFrPatch, BrFrSoluti
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
-from services import components, external_entity as ext_service, lifecycle, raci, render, step_io, step_retire
-from services import effort as effort_service, interface as iface_service
+from services import components, external_entity as ext_service, lifecycle, raci, render, stamp, step_io, step_retire
+from services import effort as effort_service, interface as iface_service, scope_summary as summary_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
@@ -107,9 +107,9 @@ def create_node(project_id: int, body: BfcNodeIn, user: AppUser = Depends(curren
                            body.is_process, body.purpose_desc, body.bfc_set)
 
 
-@router.get("/bfc-nodes/{id}", response_model=BfcNodeOut, **_node_r.route)
-def read_node(id: int, node: BfcNode = Depends(_node_r.dep)):
-    return node
+@router.get("/bfc-nodes/{id}", response_model=BfcNodeDetailOut, **_node_r.route)
+def read_node(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    return {**BfcNodeOut.model_validate(node).model_dump(), **stamp.of(db, node)}
 
 
 @router.patch("/bfc-nodes/{id}", response_model=BfcNodeOut, **_node_w.route)
@@ -231,9 +231,9 @@ def list_brs(project_id: int, include_retired: bool = False, db: Session = Depen
     return br_service.list_brs(db, project_id, include_retired)
 
 
-@router.get("/business-requirements/{id}", response_model=BrOut, **_br_r.route)
-def read_br(id: int, br: BusinessRequirement = Depends(_br_r.dep)):
-    return br
+@router.get("/business-requirements/{id}", response_model=BrDetailOut, **_br_r.route)
+def read_br(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    return {**BrOut.model_validate(br).model_dump(), **stamp.of(db, br)}
 
 
 @router.patch("/business-requirements/{id}", response_model=BrOut, **_br_w.route)
@@ -495,6 +495,11 @@ def maintain_rate_card(project_id: int, body: RateCardIn, user: AppUser = Depend
 def rate_function_requirement(id: int, body: ComplexityIn, fr: FunctionRequirement = Depends(_fr_effort_w.dep),
                               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return effort_service.rate_fr(db, _uid(user), fr, body.row_version, body.complexity_code)
+
+
+@router.get("/projects/{project_id}/scope-summary", response_model=ScopeSummaryOut, **_read.route)
+def scope_summary(project_id: int, db: Session = Depends(get_db)):
+    return summary_service.summary(db, project_id)
 
 
 @router.get("/projects/{project_id}/effort-summary", response_model=EffortSummaryOut, **_read.route)

@@ -280,7 +280,7 @@
   "processes.dfdInspectHelp": "Click a box to see its details here; double-click a step to open it in the chart, where its data is edited. Drag a box to place it; the position is saved.",
   "processes.dfdInspectHelpReadOnly": "Click a box to see its details here; double-click a step to open it in the chart. Your role on the project does not allow moving boxes.",
   "processes.dfdList.title": "Data flow diagrams",
-  "processes.dfdList.subtitle": "One diagram for each function whose children are processes. Pick one on the left; wider diagrams of a higher level open from the function chart.",
+  "processes.dfdList.subtitle": "Drawn from the processes, the data they read and write, and who performs them. Wider diagrams of a higher level open from the function chart.",
   "processes.dfdList.heading": "{n} diagrams",
   "processes.dfdList.headingOne": "1 diagram",
   "processes.dfdList.filter": "Search code or name",
@@ -501,5 +501,9 @@
   "processes.vsum.reason.NAME_ELSEWHERE": "Same name under {code} on the other chart — probably reordered",
   "processes.vsum.reason.ONLY_AS_IS": "Only on the as-is chart",
   "processes.vsum.reason.ONLY_TO_BE": "Only on the to-be chart",
-  "processes.vsum.hours": "{h} h / yr"
+  "processes.vsum.hours": "{h} h / yr",
+  "processes.dfdList.pick": "Diagram",
+  "processes.panel.saved": "Saved · v{v} · {who} {when}",
+  "processes.guide.list": "{n} processes below",
+  "processes.guide.listOne": "1 process below"
 }

@@ -1,13 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, InputAdornment, Link, TextField, Tooltip, Typography } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
+import { Autocomplete, Box, Link, TextField, Tooltip, Typography } from '@mui/material';
 import { errorText } from '../../api/client';
 import { bfcApi, chartApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
-import { Card, Code, ListRow, Segmented, Tag } from '../../components/kit';
+import { Card, Code, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DfdView } from './DfdPage';
@@ -40,24 +39,29 @@ function dfdsOf(rows) {
     .map((r) => ({ ...r, processes: count.get(r.bfc_node_id) ?? 0, lights: lights.get(r.bfc_node_id) ?? null }));
 }
 
-function DfdRow({ projectId, dfd, bfcSet, selected, noParty }) {
+/** Q-6 / Q-16: under a rule with EXTERNAL, each diagram needs an outside party — shown on the diagram, never in a light. */
+function NoPartyTag() {
   return (
-    <ListRow component={RouterLink} to={links.dfds(projectId, dfd.bfc_node_id, bfcSet)} selected={selected}
-      aria-current={selected ? 'page' : undefined} sx={{ py: 1, gap: 1, flexShrink: 0 }}>
-      <Code tone={selected ? 'purple' : 'muted'} sx={{ fontSize: 12, flex: 'none', alignSelf: 'flex-start', mt: '2px' }}>{dfd.hier_code}</Code>
+    <Tooltip title={t('processes.dfdList.noPartyHelp')}>
+      <Box component="span" tabIndex={0} sx={{ alignSelf: 'flex-start', display: 'inline-flex', borderRadius: 999 }}>
+        <Tag tone="escalate" size="lg">{t('processes.dfdList.noParty')}</Tag></Box>
+    </Tooltip>
+  );
+}
+
+/** One diagram in the picker: its code and name, how many processes, their readiness lights, a missing party. */
+function DfdOption({ dfd, noParty }) {
+  return (
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', width: '100%', minWidth: 0 }}>
+      <Code tone="muted" sx={{ fontSize: 12, flex: 'none', mt: '2px' }}>{dfd.hier_code}</Code>
       <Box sx={{ minWidth: 0, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-        <Typography noWrap sx={{ fontSize: 13.5, fontWeight: selected ? 700 : 500 }}>{dfd.node_name}</Typography>
+        <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 600 }}>{dfd.node_name}</Typography>
         {dfd.lights && <LightCounts counts={dfd.lights} />}
-        {/* Q-6 / Q-16: under a rule with EXTERNAL, each diagram needs an outside party — shown here only, never in a light */}
-        {noParty && (
-          <Tooltip title={t('processes.dfdList.noPartyHelp')}>
-            <Box component="span" tabIndex={0} sx={{ alignSelf: 'flex-start', display: 'inline-flex', borderRadius: 999 }}>
-              <Tag tone="escalate" size="lg">{t('processes.dfdList.noParty')}</Tag></Box>
-          </Tooltip>)}
+        {noParty && <NoPartyTag />}
       </Box>
-      <Box component="span" sx={(th) => ({ flex: 'none', alignSelf: 'flex-start', mt: '2px', fontSize: 12, color: th.vars.palette.brand.muted, whiteSpace: 'nowrap' })}>
+      <Box component="span" sx={(th) => ({ flex: 'none', mt: '2px', fontSize: 12, color: th.vars.palette.brand.muted, whiteSpace: 'nowrap' })}>
         {t(dfd.processes === 1 ? 'processes.dfdList.countOne' : 'processes.dfdList.count', { n: dfd.processes })}</Box>
-    </ListRow>
+    </Box>
   );
 }
 
@@ -69,7 +73,6 @@ export default function DfdListPage() {
   // The same chart rule as the function chart's DFD button (D-37, D-47): to-be needs TO_BE_DFD, as-is needs AS_IS.
   const sets = [isOn('TO_BE_DFD') && 'TO_BE', isOn('AS_IS') && 'AS_IS'].filter(Boolean);
   const bfcSet = params.get('set') === 'AS_IS' && sets.includes('AS_IS') ? 'AS_IS' : (sets[0] ?? 'TO_BE');
-  const [filter, setFilter] = useState('');
 
   // The function chart's own query, so the two screens share one cache entry.
   const treeQ = useQuery({ queryKey: [...keys.tree(projectId), { retired: false, set: bfcSet }],
@@ -78,67 +81,61 @@ export default function DfdListPage() {
   // The process panel's completeness read (same cache entry): which diagrams lack an outside party (D-70, Q-16).
   const gapsQ = useQuery({ queryKey: [...keys.flowGaps(projectId), bfcSet], queryFn: () => chartApi.completeness(projectId, bfcSet) });
   const noParty = useMemo(() => new Set((gapsQ.data?.diagram_missing_external ?? []).map((r) => r.bfc_node_id)), [gapsQ.data]);
-  const shown = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    return q ? dfds.filter((d) => d.hier_code.toLowerCase().includes(q) || d.node_name.toLowerCase().includes(q)) : dfds;
-  }, [dfds, filter]);
   const selected = dfds.find((d) => String(d.bfc_node_id) === params.get('node')) ?? dfds[0] ?? null;
 
   const chooseSet = (v) => { const next = new URLSearchParams(); if (v === 'AS_IS') next.set('set', 'AS_IS'); setParams(next); };
   const empty = !treeQ.isLoading && !treeQ.error && dfds.length === 0;
 
-  return (
-    <Page title={t('processes.dfdList.title')} subtitle={t('processes.dfdList.subtitle')}
-      crumb={selected ? `${selected.hier_code} ${selected.node_name}` : undefined}
-      error={treeQ.error && errorText(treeQ.error)}
-      actions={sets.length > 1 && (
+  const pick = (d) => {
+    if (!d) return;
+    const next = new URLSearchParams();
+    if (bfcSet === 'AS_IS') next.set('set', 'AS_IS');
+    next.set('node', String(d.bfc_node_id));
+    setParams(next);
+  };
+  // Mockup 02: the diagram is the page — its title, a picker in the header, the canvas full width.
+  const header = (
+    <>
+      {dfds.length > 0 && (
+        <Autocomplete id="dfd-pick" size="small" disableClearable options={dfds} value={selected ?? undefined}
+          onChange={(_, d) => pick(d)} sx={{ width: 340 }}
+          isOptionEqualToValue={(a, b) => a.bfc_node_id === b.bfc_node_id}
+          getOptionLabel={(d) => `${d.hier_code}  ${d.node_name}`}
+          renderOption={({ key, ...props }, d) => <Box component="li" key={key} {...props}><DfdOption dfd={d} noParty={noParty.has(d.bfc_node_id)} /></Box>}
+          renderInput={(params) => <TextField {...params} label={t('processes.dfdList.pick')} />} />)}
+      {sets.length > 1 && (
         <Segmented label={t('processes.chart.label')} value={bfcSet} onChange={chooseSet}
-          options={sets.map((v) => ({ value: v, label: t(`processes.chart.${v}`) }))} />)}>
-      {empty ? (
-        <Card>
-          <Typography sx={{ color: 'text.secondary' }}>
-            {t(bfcSet === 'AS_IS' ? 'processes.dfdList.emptyAsIs' : 'processes.dfdList.empty')}</Typography>
-          <Link component={RouterLink} to={links.processes(projectId, bfcSet)} sx={{ alignSelf: 'flex-start' }}>
-            {t('processes.dfdList.goChart')}</Link>
-        </Card>
-      ) : (
-        <Box sx={{ display: 'grid', gap: 2, alignItems: 'start',
-          gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(260px,300px) minmax(0,1fr)' } }}>
-          <Card title={t(dfds.length === 1 ? 'processes.dfdList.headingOne' : 'processes.dfdList.heading', { n: dfds.length })}
-            bodySx={{ gap: 1.25, px: 1.5 }} sx={{ position: { lg: 'sticky' }, top: { lg: 16 } }}>
-            <Box sx={{ px: 1 }}>
-              <TextField fullWidth size="small" id="dfd-filter" placeholder={t('processes.dfdList.filter')} value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                slotProps={{ htmlInput: { 'aria-label': t('processes.dfdList.filter') },
-                  input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-            </Box>
-            {treeQ.isLoading && <Typography sx={{ color: 'text.secondary', px: 1 }}>{t('processes.loading')}</Typography>}
-            {dfds.length > 0 && shown.length === 0 && (
-              <Typography sx={{ color: 'text.secondary', px: 1, py: 1 }}>{t('processes.dfdList.noMatch')}</Typography>)}
-            <Box component="nav" aria-label={t('processes.dfdList.listLabel')}
-              sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, overflowY: 'auto', maxHeight: { xs: 300, lg: 'calc(100vh - 260px)' } }}>
-              {shown.map((d) => (
-                <DfdRow key={d.bfc_node_id} projectId={projectId} dfd={d} bfcSet={bfcSet} noParty={noParty.has(d.bfc_node_id)}
-                  selected={d.bfc_node_id === selected?.bfc_node_id} />))}
-            </Box>
-          </Card>
-          {selected && (
-            <DfdView key={selected.bfc_node_id} projectId={projectId} nodeId={String(selected.bfc_node_id)} chartLabel={t('processes.dfdList.openInChart')} container
-              frame={(f) => (
-                <Box component="section" aria-label={f.title} sx={{ minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
-                    <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-                      {f.eyebrow && <Box sx={{ mb: 0.5 }}>{f.eyebrow}</Box>}
-                      <Typography variant="h6" component="h2" sx={{ wordBreak: 'break-word' }}>{f.title}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'center' }}>{f.actions}</Box>
-                  </Box>
-                  {f.error && <Alert severity="error" sx={{ mb: 2 }}>{f.error}</Alert>}
-                  {f.content}
-                </Box>)} />
-          )}
-        </Box>
-      )}
-    </Page>
+          options={sets.map((v) => ({ value: v, label: t(`processes.chart.${v}`) }))} />)}
+    </>);
+
+  if (!selected) {
+    return (
+      <Page title={t('processes.dfdList.title')} subtitle={t('processes.dfdList.subtitle')}
+        error={treeQ.error && errorText(treeQ.error)} actions={header}>
+        {treeQ.isLoading && <Typography sx={{ color: 'text.secondary' }}>{t('processes.loading')}</Typography>}
+        {empty && (
+          <Card>
+            <Typography sx={{ color: 'text.secondary' }}>
+              {t(bfcSet === 'AS_IS' ? 'processes.dfdList.emptyAsIs' : 'processes.dfdList.empty')}</Typography>
+            <Link component={RouterLink} to={links.processes(projectId, bfcSet)} sx={{ alignSelf: 'flex-start' }}>
+              {t('processes.dfdList.goChart')}</Link>
+          </Card>)}
+      </Page>
+    );
+  }
+  return (
+    <DfdView key={selected.bfc_node_id} projectId={projectId} nodeId={String(selected.bfc_node_id)}
+      chartLabel={t('processes.dfdList.openInChart')} container
+      frame={(f) => (
+        <Page title={f.title} subtitle={t('processes.dfdList.subtitle')}
+          eyebrow={noParty.has(selected.bfc_node_id)
+            ? <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>{f.eyebrow}<NoPartyTag /></Box>
+            : f.eyebrow}
+          crumb={`${selected.hier_code} ${selected.node_name}`} error={f.error || (treeQ.error && errorText(treeQ.error))}
+          actions={header}>
+          <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
+            {f.actions}</Box>
+          {f.content}
+        </Page>)} />
   );
 }
