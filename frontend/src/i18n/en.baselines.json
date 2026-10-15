@@ -272,5 +272,13 @@
   "baselines.untraced": "{n} man-days sit on function requirements not linked to any business requirement.",
   "baselines.unassigned": "{n} man-days sit on function requirements with no solution (information — a solution is optional).",
   "baselines.derivedSides": "{labels} predates direct requirement ↔ function requirement links; its links are derived from its solutions.",
-  "baselines.entity.br_function_requirement": "Requirement ↔ function requirement"
+  "baselines.entity.br_function_requirement": "Requirement ↔ function requirement",
+  "baselines.view.dfdRule.TO_BE": "DFD rule, to-be",
+  "baselines.view.dfdRule.AS_IS": "DFD rule, as-is",
+  "baselines.view.dfdRule.d38": "D-38 rule (something starts each process, and it outputs data)",
+  "baselines.view.dfdRule.element.STARTED": "Something starts it",
+  "baselines.view.dfdRule.element.DATA_IN": "Data in",
+  "baselines.view.dfdRule.element.DATA_OUT": "Data out",
+  "baselines.view.dfdRule.element.EXTERNAL": "Outside party per diagram",
+  "baselines.view.dfdRule.element.ORDER": "Joined to the flow"
 }
