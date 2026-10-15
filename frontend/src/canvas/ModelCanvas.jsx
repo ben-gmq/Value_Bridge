@@ -11,7 +11,8 @@ import { EDGE_TYPES } from './edges';
 
 export function ModelCanvas({ kind, nodes, edges, nodeTypes, edgeTypes, onNodesChange, onNodeDragStop, onConnect,
   onConnectEnd, onReconnectEnd, onNodeClick, onNodeDoubleClick, onPaneClick, onEdgeClick, connectable = false, draggable = true,
-  minimap = false, minimapNodeColor, ariaLabel, height = '70vh', bare = false, children }) {
+  minimap = false, minimapNodeColor, ariaLabel, height = '70vh', bare = false, fitViewOptions,
+  controlsPosition = 'bottom-left', children }) {
   const { mode, systemMode } = useColorScheme();
   const colorMode = (mode === 'system' ? systemMode : mode) === 'dark' ? 'dark' : 'light';
   const theme = useTheme();
@@ -53,10 +54,10 @@ export function ModelCanvas({ kind, nodes, edges, nodeTypes, edgeTypes, onNodesC
           onReconnectEnd={onReconnectEnd} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick} zoomOnDoubleClick={!onNodeDoubleClick} onEdgeClick={onEdgeClick} edgesReconnectable={connectable && Boolean(onReconnectEnd)} reconnectRadius={16}
           connectionLineType={ConnectionLineType.SmoothStep} connectionLineStyle={drawing} nodesConnectable={connectable}
-          onlyRenderVisibleElements colorMode={colorMode} deleteKeyCode={null} fitView minZoom={0.1}
+          onlyRenderVisibleElements colorMode={colorMode} deleteKeyCode={null} fitView fitViewOptions={fitViewOptions} minZoom={0.1}
           connectionRadius={36}>
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color={theme.vars.palette.brand.lineStrong} />
-          <Controls showInteractive={false} orientation="horizontal" />
+          <Controls showInteractive={false} orientation="horizontal" position={controlsPosition} />
           {minimap && (
             <MiniMap pannable zoomable nodeColor={minimapNodeColor ?? theme.vars.palette.brand.teal}
               maskColor={theme.vars.palette.action.hover} bgColor={theme.vars.palette.background.paper} />)}
