@@ -344,6 +344,13 @@ export default function ProcessesPage() {
     return out;
   }, [selected, rowById]);
   const hasChildren = Boolean(selected && rows.some((r) => r.is_active && r.parent_bfc_node_id === selected.bfc_node_id));
+  // D-57: the live processes anywhere below a function, in chart order, for its "Open a process below".
+  const processesBelow = useMemo(() => {
+    if (!selected || selected.is_process) return [];
+    const under = (r) => { for (let p = rowById.get(String(r.parent_bfc_node_id)); p; p = rowById.get(String(p.parent_bfc_node_id))) {
+      if (p.bfc_node_id === selected.bfc_node_id) return true; } return false; };
+    return rows.filter((r) => r.is_active && r.is_process && under(r));
+  }, [selected, rows, rowById]);
   // "Save & next process": the next live process in chart order (rows arrive ordered by hier_code).
   const nextProcess = selected ? rows.slice(rows.findIndex((r) => r.bfc_node_id === selected.bfc_node_id) + 1)
     .find((r) => r.is_process && r.is_active) : null;
@@ -450,7 +457,8 @@ export default function ProcessesPage() {
             {selected ? (
               <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id} wide={wide}
-                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [] }} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
+                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [] }} hasChildren={hasChildren} processesBelow={processesBelow}
+                  onOpenNode={(id) => select(String(id))} showRetired={showRetired} guardRef={guardRef}
                   onNext={nextProcess ? () => selectNow(String(nextProcess.bfc_node_id)) : null}
                   onNotice={setNotice} onGone={() => selectNow(null)} />
               </Box>

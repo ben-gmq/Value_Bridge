@@ -98,7 +98,7 @@ export default function ApplicationsPage() {
   ];
 
   return (
-    <Page title={t('applications.title')} subtitle={t('applications.subtitle')} crumb={t('applications.title')} error={q.error && errorText(q.error)}
+    <Page title={t('applications.title')} subtitle={t('applications.subtitle')} error={q.error && errorText(q.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('applications.add')}</Button>)}>
       {!q.error && q.data && (

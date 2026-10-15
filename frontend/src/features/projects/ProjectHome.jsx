@@ -42,7 +42,7 @@ export default function ProjectHome() {
               <KV k={t('project.start')} v={p.start_date ?? '—'} mono />
               <KV k={t('project.end')} v={p.end_date ?? '—'} mono />
               <KV k={t('admin.restricted')} v={(
-                <Status tone={p.is_restricted ? 'caution' : 'ok'} size="sm">
+                <Status tone={p.is_restricted ? 'ok' : 'caution'} size="sm">
                   {p.is_restricted ? t('settings.acc.restricted') : t('settings.acc.open')}</Status>)} />
             </Card>
           )}

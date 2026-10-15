@@ -9,7 +9,7 @@ import { FactTile, GroupHeader } from '../../components/kit';
 import { t } from '../../i18n/t';
 import { FORM_SAVE, RaciPanel } from './chartKit';
 import { PerformerPanel, TriggerPanel, usePerformerText } from './StepDfd';
-import { StepData, StepDataNotOnBr, stepKey } from './StepSections';
+import { OtherStarts, StepData, StepDataNotOnBr, stepKey, useOtherStarts } from './StepSections';
 import { BrRaci } from '../requirements/BrRaci';
 import { CrudGrid, brDataKey } from '../requirements/CrudGrid';
 import { DfdMark } from './DfdLight';
@@ -67,16 +67,20 @@ function useDataFact(nodeId, br) {
   return { inN: count('I'), outN: count('O'), dfdOnly, loading: stepQ.isLoading || (Boolean(br) && brQ.isLoading), brRows: brQ.data };
 }
 
-function useTriggerFact(nodeId, enabled) {
+/** "Started by": the time/event triggers first, then the other starts (input data, inbound parties — D-49, 10c),
+ * so the tile is empty only when nothing at all starts the process — the same test as the light's STARTED mark. */
+function useTriggerFact(projectId, nodeId, enabled) {
   const q = useQuery({ queryKey: keys.stepTriggers(nodeId), queryFn: () => bfcApi.triggers(nodeId), enabled });
-  const names = (q.data ?? []).map((r) => r.trigger_row.trigger_name);
-  return { first: names[0] ?? null, more: names.length - 1, loading: q.isLoading };
+  const others = useOtherStarts(projectId, nodeId, enabled);
+  const names = [...(q.data ?? []).map((r) => r.trigger_row.trigger_name),
+    ...others.items.map((i) => `${t(`processes.starts.kind.${i.kind}`)} · ${i.label}`)];
+  return { first: names[0] ?? null, more: names.length - 1, triggers: (q.data ?? []).length, loading: q.isLoading || others.loading };
 }
 
 /**
  * "How it runs — saves as you go" (D-63): the four facts a consultant sets after the requirement, as tiles
- * that open the existing editors full width below, one at a time. Performer and trigger are written only
- * where the chart's DFD is on (10c widens the performer). D-64: a to-be process has one RACI — its
+ * that open the existing editors full width below, one at a time. The performer shows and edits whatever the
+ * DFD setting (S10c-2, Ben 2026-10-14); the trigger only where the chart's DFD is on. D-64: a to-be process has one RACI — its
  * requirement's — and its data is the CRUD grid; an as-is process keeps the step's roles and data.
  */
 export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, dfd, onDraftChange }) {
@@ -96,7 +100,7 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
   useEffect(() => { onDraftChange?.(anyDraft); }, [anyDraft, onDraftChange]);
   const flash = useSavedFlash();
   const performer = usePerformerText(projectId, node);
-  const trigger = useTriggerFact(nodeId, dfdOn);
+  const trigger = useTriggerFact(projectId, nodeId, dfdOn);
   const raci = useRaciFact(projectId, hasBr ? [...keys.br(br.br_id), 'roles'] : stepKey(nodeId, 'roles'),
     hasBr ? () => brApi.roles(br.br_id) : () => bfcApi.roles(nodeId), asIs || hasBr);
   const data = useDataFact(nodeId, hasBr ? br : null);
@@ -105,13 +109,18 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
   const emptyText = t(factsEditable ? 'processes.run.notSetSet' : 'processes.run.notSet');
 
   const tiles = [
-    dfdOn && { key: 'performer', label: t('processes.run.performer'), value: performer.text,
-      empty: !node.performer_kind,
+    // S10c-2: the performer shows and saves whatever the DFD setting; triggers stay with the DFD
+    { key: 'performer', label: t('processes.run.performer'), value: performer.text,
+      empty: !node.performer_kind, emptyText: t(editable ? 'processes.run.notAssignedSet' : 'processes.run.notAssigned'),
       editor: <PerformerPanel projectId={projectId} node={node} disabled={!editable} onDraftChange={onPerformerDraft} /> },
     // D-69: one STARTED mark on "Started by" (a trigger, a data input or an inbound party all meet it — DR13-D1)
     dfdOn && { key: 'trigger', label: t('processes.run.trigger'), mark: <DfdMark dfd={dfd} element="STARTED" />, value: trigger.first,
       note: trigger.more > 0 ? t('processes.run.more', { n: trigger.more }) : null, empty: !trigger.loading && !trigger.first,
-      editor: <TriggerPanel projectId={projectId} node={node} disabled={!editable} onDraftChange={onTriggerDraft} /> },
+      editor: (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}>
+          <TriggerPanel projectId={projectId} node={node} disabled={!editable} onDraftChange={onTriggerDraft} />
+          <OtherStarts projectId={projectId} node={node} triggerCount={trigger.triggers} />
+        </Box>) },
     (asIs || hasBr) && { key: 'accountable', label: t('processes.run.accountable'), value: raci.name, note: raci.note,
       empty: !raci.loading && !raci.name,
       editor: hasBr ? <BrRaci projectId={projectId} br={br} disabled={!brEditable} />
@@ -158,7 +167,7 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
         <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: 'minmax(0,1fr)',
           '@container (min-width: 420px)': { gridTemplateColumns: 'repeat(2, minmax(0,1fr))' } }}>
           {tiles.map((x) => (
-            <FactTile key={x.key} label={x.mark ? <>{x.label}{x.mark}</> : x.label} value={x.value} empty={x.empty} emptyText={emptyText}
+            <FactTile key={x.key} label={x.mark ? <>{x.label}{x.mark}</> : x.label} value={x.value} empty={x.empty} emptyText={x.emptyText ?? emptyText}
               note={drafts[x.key] && open !== x.key ? t('processes.run.draft') : x.note}
               selected={open === x.key} controls={mounted.has(x.key) ? editorId(x.key) : undefined} onClick={() => toggle(x.key)} />
           ))}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Autocomplete, Avatar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
   InputLabel, MenuItem, Select, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField,
@@ -85,6 +85,7 @@ export default function AccessPage() {
   const [confirmRemove, setConfirmRemove] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const created = Boolean(useLocation().state?.created);       // DR10c-P3: arrived here from "Create project"
   const refresh = () => { qc.invalidateQueries({ queryKey: keys.projectAccess(projectId) });
     qc.invalidateQueries({ queryKey: keys.project(projectId) }); };
   const fail = (err) => setError(errorText(err, t('access.failed')));
@@ -116,6 +117,8 @@ export default function AccessPage() {
         <Button variant="contained" color="warning" disabled={restrict.isPending}
           onClick={() => restrict.mutate({ value: !data.is_restricted })}>
           {data.is_restricted ? t('access.unrestrict') : t('access.restrict')}</Button>)}>
+      {created && data?.is_restricted && data.members.length === 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>{t('access.createdNote')}</Alert>)}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '400px minmax(0, 1fr)' }, alignItems: 'start' }}>
         <Card title={t('settings.acc.project')} bodySx={{ gap: 1.25 }}>
           {proj.data && (
@@ -129,7 +132,7 @@ export default function AccessPage() {
           {data && (
             <>
               <SectionLabel sx={{ mt: 1 }}>{t('admin.restricted')}</SectionLabel>
-              <Status tone={data.is_restricted ? 'caution' : 'ok'} size="sm">
+              <Status tone={data.is_restricted ? 'ok' : 'caution'} size="sm">
                 {data.is_restricted ? t('settings.acc.restricted') : t('settings.acc.open')}</Status>
               <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                 {data.is_restricted ? t('access.restricted')
@@ -205,9 +208,15 @@ export default function AccessPage() {
                   <Typography sx={{ fontWeight: 600 }}>{t('access.keeps')}</Typography>
                   {preview.keeps.length === 0 && <Typography sx={{ color: 'text.secondary' }}>{t('access.noMembers')}</Typography>}
                   {preview.keeps.map((k) => (
-                    <Typography key={k.project_member_id} variant="body2">
-                      {k.display_name} — {t(`access.level.${k.effective_level}`)}{k.member_note ? ` · ${k.member_note}` : ''}
-                    </Typography>))}
+                    <Box key={k.project_member_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Typography variant="body2">
+                        {k.display_name} — {t(`access.level.${k.effective_level}`)}{k.member_note ? ` · ${k.member_note}` : ''}
+                      </Typography>
+                      {/* DR10c-S1: the server flags a kept member who can edit today and only read once restricted */}
+                      {k.level_drops && <Tag tone="caution">{t('access.levelDrops')}</Tag>}
+                    </Box>))}
+                  {preview.keeps.some((k) => k.level_drops) && (
+                    <Alert severity="warning">{t('access.levelDropsNote')}</Alert>)}
                 </>
               )}
               {!preview.changed && <Typography>{t('access.nobody')}</Typography>}

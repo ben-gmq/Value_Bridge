@@ -204,7 +204,14 @@ def set_restriction(db: Session, actor: AppUser, project: Project, restricted: b
     def plan() -> dict:
         members = {m.app_user_id: m for m in _live_members(db, project.project_id)}
         staff = _staff(db)
-        keeps = [{**_member_row(db, members[u.app_user_id])} for u in staff if u.app_user_id in members]
+        # DR10c-S1: a kept member whose level is lower behind the wall than in the open (a USER kept at VIEW,
+        # e.g. copied from an old grant) is flagged, so the admin raises it before or after confirming.
+        def drops(row: dict) -> bool:
+            open_level = access.KIND_CAP[row["user_kind"]]
+            return (restricted and not project.is_restricted
+                    and access.LEVEL_RANK[row["effective_level"]] < access.LEVEL_RANK[open_level])
+        keeps = [{**row, "level_drops": drops(row)} for row in
+                 (_member_row(db, members[u.app_user_id]) for u in staff if u.app_user_id in members)]
         others = [_person(u) for u in staff if u.app_user_id not in members]
         return {"restricted": restricted, "changed": restricted != project.is_restricted,
                 "loses": others if restricted and not project.is_restricted else [],

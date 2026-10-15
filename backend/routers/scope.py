@@ -82,11 +82,7 @@ def _retire_and_restore(prefix: str, model, out, on_restore=None, component=None
 
 
 # ---- the function chart (§7.2) ------------------------------------------------------------
-def node_set_component(node: BfcNode) -> str | None:
-    """Resolver: a node of the as-is chart needs AS_IS on (D-47); the to-be chart is always on."""
-    return "AS_IS" if node.bfc_set_code == "AS_IS" else None
-
-
+node_set_component = components.node_set_component      # the chart's own component (D-47)
 node_dfd_component = components.node_dfd_component      # one resolver (sara 7c L4)
 
 

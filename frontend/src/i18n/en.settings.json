@@ -72,7 +72,7 @@
   "settings.componentsWhat": "Which parts of the model this project uses, and how fully data entities are defined",
   "settings.acc.project": "Project",
   "settings.acc.people": "{n} people",
-  "settings.acc.restricted": "Restricted",
+  "settings.acc.restricted": "Assigned consultants only",
   "settings.acc.open": "Open to all staff",
   "settings.acc.adminWhat": "See and change every project, and decide who has access.",
   "settings.acc.editWhat": "Opens the project and creates and changes its scope.",
