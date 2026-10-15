@@ -1931,8 +1931,8 @@ reordering is not a scope change); `line_kind_code_id` (`BR_LINE_KIND`) and null
 (`BR_PRIORITY`), each with the category-in-key pattern; `line_text text NOT NULL`, non-blank. These are per-BR
 ordinals, not one of the ten project series. The BR's priority is the highest of its live lines, derived.
 `business_logic` and `output_expectation` stay on `BUSINESS_REQUIREMENT` untouched (so its shadow and hash list
-do not move) and are read-only; each live BR's non-blank text is copied once, by the migration that creates the
-table, into one RULE and one OUTPUT line.
+do not move) and are read-only; each live BR's non-blank text is copied once, by the seed command `seeds.backfill_br_lines` run after `seed_code_master` (a migration cannot reach the seeded line kinds),
+into one RULE and one OUTPUT line.
 
 **BR_DATA_FIELD** *(D-60b, S11-1)* — one row per (BR, data attribute, C / R / U). PK `br_data_field_id`; UK
 `(br_id, data_field_id, crud_code)` full; `CHECK (crud_code IN ('C','R','U'))` — Delete is entity-level only.
@@ -5967,7 +5967,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `ORG_UNIT_LEVEL` | `DEPARTMENT`, `DIVISION`, `SECTION` | `ORG_UNIT.unit_level_code` |
 | `RACI_TYPE` | `R`, `A`, `C`, `I` — **project-editable**; each code carries a **behaviour** ∈ `RESPONSIBLE` / `ACCOUNTABLE` / `CONSULTED` / `INFORMED` / `SUPPORT` / `OTHER` (Q7). Seeded R → RESPONSIBLE, A → ACCOUNTABLE, C → CONSULTED, I → INFORMED. RASCI adds `S` → SUPPORT. RAPID is a **mapping**, not a vocabulary: Perform → RESPONSIBLE, Decide → ACCOUNTABLE, Input → CONSULTED, Recommend / Agree → OTHER | `BR_ORG_ROLE` (a to-be process's roles) and `BFC_NODE_ORG_ROLE` (an as-is process's roles, D-64), both via `raci_behaviour`, FK-verified. Configurable because clients use RASCI / RAPID / house variants. **The single Accountable per BR and per step reads the behaviour, never the letter** (R2-D9). Several RESPONSIBLE roles are legal; the lane is the performer, not a RACI role (D-46). A project holds exactly one live code per load-bearing behaviour, RESPONSIBLE and ACCOUNTABLE: a second is refused when the code is saved (A-60). A behaviour is immutable once referenced, as for `FR_TYPE`; a project override of a global code must carry the global's behaviour |
 | `TRANSACTION_UNIT` | `INVOICE`, `ORDER`, `CASE`, `DOCUMENT`, `RECORD`, `CALL`, `PAYMENT`, `EMPLOYEE`, `OTHER` — library + project override | `BFC_NODE.transaction_unit_code` — **D-67**, what one transaction of a process is. Optional; never branched on (slice 13c) |
-| `BR_LINE_KIND` | `RULE`, `CALCULATION`, `VALIDATION`, `OUTPUT`, `CONTROL` — project-editable, each with an identical behaviour code | `BR_REQUIREMENT_LINE.line_kind_code` — **D-59** (slice 11) |
+| `BR_LINE_KIND` | `RULE`, `CALCULATION`, `VALIDATION`, `OUTPUT`, `CONTROL` — project-editable; no behaviour code (nothing branches on a line kind) | `BR_REQUIREMENT_LINE.line_kind_code` — **D-59** (slice 11) |
 | `BR_PRIORITY` | `MUST`, `SHOULD`, `COULD`, `WONT` (MoSCoW) | `BR_REQUIREMENT_LINE.priority_code`, nullable = not yet prioritised. The BR's own priority is the highest of its live lines, derived, never stored — **D-59** (slice 11) |
 | `BR_STATUS` | `DRAFT`, `CONFIRMED`, `BASELINED`, `SUPERSEDED` | `BUSINESS_REQUIREMENT.status_code`. `BASELINED` / `SUPERSEDED` are set only by the baseline freeze (S1-8) |
 | `FR_FULFILMENT_STATUS` | `SPECIFIED`, `ACCEPTED_BY_VENDOR`, `BUILT`, `TESTED`, `DEFERRED` | `FUNCTION_REQUIREMENT.fulfilment_status_code` — **the vendor boundary is this column, not a table** |
