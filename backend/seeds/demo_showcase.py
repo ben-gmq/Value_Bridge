@@ -52,7 +52,7 @@ CHART = [
     ("Sales", [
         ("Order management", [
             ("Receive order", "ORDER_CLERK", "SALES_MGR",
-             [("Customer", "R"), ("Product", "R"), ("Sales order", "C"), ("Order line", "C")],
+             [("Customer", "R"), ("Product", "R"), ("Price list", "R"), ("Sales order", "C"), ("Order line", "C")],
              "Register every customer order the day it arrives, whatever the channel",
              "Orders arrive by EDI, e-mail or phone. The clerk checks the customer is active and every product "
              "is orderable; an unknown product is held and returned to Sales within one working day.",
@@ -108,7 +108,7 @@ CHART = [
         ]),
         ("Supplier management", [
             ("Onboard supplier", "BUYER", "PROC_MGR",
-             [("Supplier", "C")],
+             [("Product", "R"), ("Supplier", "C")],
              "Register a new supplier only after the due-diligence checks pass",
              "Bank details are confirmed by a call-back to a known number before first payment.",
              "An active supplier record", False),
