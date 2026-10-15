@@ -16,9 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **Slice 11 [Q-11a]** — now that a flow has a kind (S11-2): is a **migration** flow covered by an interface-behaviour
-  FR (as an integration flow is), or by a batch-behaviour FR? Recommendation: either — any FR of the same BR whose
-  interface carries the entity between the same two systems, whatever its behaviour. `docs/slice11_schema.md` §3.3.
+Nothing open.
 
 ---
 
@@ -475,6 +473,8 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | # | Decision | Supersedes / answers |
 |---|---|---|
 | S11-2 | **[Q-11] Both.** Ben chose option (a): "Integration and migration, each flow tagged." A BR system-to-system flow carries a kind, `INTEGRATION` (ongoing) or `MIGRATION` (one-off data migration), CHECK-listed because coverage branches on it; built into slice 11's own migration, not added later. The kind joins the flow's grain. One sub-point opens: [Q-11a] (§1) | slice11_schema §3.3, §8 |
+| S11-4 | **[Q-11a] A migration flow is covered by any FR of the same BR whose interface carries the entity between the same two systems, whatever the FR's behaviour (batch included).** Ben: "Not sure what is Migration Flow" — explained as the one-off copy at go-live; every flow defaults to Integration, Migration is an option; the recommendation taken | slice11_schema §3.3 |
+| S12-1 | **Slice 12 KPI list approved as drafted** (`docs/slice12_kpis.md`). Ben: "let's go with that, I do not want too many in the beginning." Slice 12 adds only S7–S11 from the list; the Project-management view stays a card on the dashboard until it has more than one tile (the list's question 2) | D-58 |
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 

@@ -1,4 +1,4 @@
-# Slice 12 — dashboard KPI list (draft for Ben, 2026-10-15)
+# Slice 12 — dashboard KPI list (approved by Ben 2026-10-16, S12-1)
 
 D-58 asks for two dashboards — **Scope** and **Project management** — and says the KPI list goes to Ben before
 build. Every tile shows a number the app already holds; a tile whose data does not exist yet is left out, never

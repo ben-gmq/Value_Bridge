@@ -1947,8 +1947,8 @@ attribute belongs to that entity. `usage_note text NULL`. Step-owned through the
 ('INTEGRATION','MIGRATION'))` (CHECK-listed: coverage branches on it); UK on those five, full; composite FKs to `BUSINESS_REQUIREMENT`, `DATA_ENTITY` and twice to
 `APPLICATION`; `CHECK (source_application_id <> target_application_id)`; `flow_note text NULL`. To-be only,
 as its BR. Gated by APPLICATION. **No pointer to an FR**: coverage by an interface FR is derived (same BR, same
-source and target, the entity carried); whether a migration flow can also be covered by a batch-behaviour FR is
-open ([Q-11a], design history §1). A data entity names no master system (S11-3).
+source and target, the entity carried), whatever the FR's behaviour — a migration flow is often covered by a batch
+FR (S11-4). Every flow starts as `INTEGRATION`. A data entity names no master system (S11-3).
 
 #### Function Requirement (area 4)
 
@@ -7009,8 +7009,8 @@ exist because the model must be built in dependency order. **The wave line is Be
 | 1 | 13b | The DFD rule per chart: light, marks, warnings and the freeze driven by it; chart-order fallback (D-70, S13-1, S13-2) | built |
 | 1 | 13c | Process volume and FTE; hash spec 3 (D-67, S13-1) | built |
 | 1 | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | built |
-| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows with a kind; hash spec 4 (D-59, D-60b, D-61, S11-1…S11-3) | next; one sub-point open ([Q-11a], design history §1) |
-| 1 | 12 | Two dashboards — Scope and Project management (D-58). Each tile appears when its wave lands; the KPI list goes to Ben before build | to specify |
+| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows with a kind; hash spec 4 (D-59, D-60b, D-61, S11-1…S11-4) | next |
+| 1 | 12 | The Scope dashboard's remaining KPIs S7–S11 and the Project-management card (D-58, S12-1, `docs/slice12_kpis.md`). Each tile appears when its wave lands | after 11; S1–S6 and M1 built with the 2026-10-16 screen work |
 | **Next** | — | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) and the control rules and control panel (D-19): right after slice 12, opening the next wave (SC-9) | — |
 | **1e** | — | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
 | **1f** | — | Reports, program roll-ups and PDF export (D-42) | — |

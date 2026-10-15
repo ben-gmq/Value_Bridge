@@ -1,6 +1,6 @@
 # Slice 11 — structured BR, attribute usage, system-to-system flows (D-59, D-60b, D-61): schema
 
-**Accepted by Ben 2026-10-14 (S11-1); [Q-11] and [Q-17] answered 2026-10-16 (S11-2: both flow kinds; S11-3: the master list only).** One sub-point, [Q-11a], is open (`VB_design_history.md` §1)
+**Accepted by Ben 2026-10-14 (S11-1); [Q-11] and [Q-17] answered 2026-10-16 (S11-2: both flow kinds; S11-3: the master list only).** [Q-11a] answered the same day (S11-4: any FR whose interface carries the entity between the two systems)
 and are modelled in §3.3 so that either answer is a later additive change. Nothing in this slice depends on them.
 
 Author: `apple` · proposal 2026-10-12, refreshed for build 2026-10-15 · source of truth: `docs/VB_design.md`
@@ -241,7 +241,7 @@ branch exists.
 
 ### 3.3 The two open questions, modelled so either answer is additive later
 
-**[Q-11] DECIDED 2026-10-16 (S11-2): both.** The `flow_kind_code` column below is built into slice 11's own migration (0055–0057), not added later. Open sub-point [Q-11a]: is a MIGRATION flow covered by an interface FR or a batch-behaviour FR?
+**[Q-11] DECIDED 2026-10-16 (S11-2): both.** The `flow_kind_code` column below is built into slice 11's own migration (0055–0057), not added later. [Q-11a] (S11-4): a MIGRATION flow is covered by any FR of the BR whose interface carries the entity between the same two systems, whatever its behaviour.
 
 *The options as they were put:*
 
@@ -444,7 +444,7 @@ process; relink restores. 16. Frozen from the next hash spec, now **spec 4**; ol
 
 **Still open (VB_design_history.md §1):**
 
-- **[Q-11] DECIDED (S11-2), both kinds; [Q-11a] open on coverage of a migration flow.** Was: is "copy from which system to which system" ongoing **integration** only, or does it include
+- **[Q-11] DECIDED (S11-2), both kinds; [Q-11a] DECIDED (S11-4), any FR carrying it.** Was: is "copy from which system to which system" ongoing **integration** only, or does it include
   one-off **data migration**? If both, each flow gets a kind (Integration / Migration), added later as in §3.3.
   Built now either way: flows to or from an as-is-only system are allowed and shown as information.
 - **[Q-17] DECIDED (S11-3), the master list only.** Was: "the system has to be like a master": one master list that flows pick from (built), or also a
