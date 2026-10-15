@@ -1,6 +1,6 @@
 # Slice 11 — structured BR, attribute usage, system-to-system flows (D-59, D-60b, D-61): schema
 
-**Accepted by Ben 2026-10-14 (S11-1) except [Q-11], [Q-17].** Those two stay open (`VB_design_history.md` §1)
+**Accepted by Ben 2026-10-14 (S11-1); [Q-11] and [Q-17] answered 2026-10-16 (S11-2: both flow kinds; S11-3: the master list only).** One sub-point, [Q-11a], is open (`VB_design_history.md` §1)
 and are modelled in §3.3 so that either answer is a later additive change. Nothing in this slice depends on them.
 
 Author: `apple` · proposal 2026-10-12, refreshed for build 2026-10-15 · source of truth: `docs/VB_design.md`
@@ -241,7 +241,9 @@ branch exists.
 
 ### 3.3 The two open questions, modelled so either answer is additive later
 
-**[Q-11] OPEN — flow kind: ongoing integration only, or also one-off data migration?**
+**[Q-11] DECIDED 2026-10-16 (S11-2): both.** The `flow_kind_code` column below is built into slice 11's own migration (0055–0057), not added later. Open sub-point [Q-11a]: is a MIGRATION flow covered by an interface FR or a batch-behaviour FR?
+
+*The options as they were put:*
 
 | Answer | Schema now | Later change |
 |---|---|---|
@@ -251,8 +253,9 @@ branch exists.
 Why no column now: neither answer needs it, the later add is non-destructive, and a column that one answer makes
 permanently constant would cost a frozen shadow column that can never be removed.
 
-**[Q-17] OPEN — "the system has to be like a master": the master list only, or also a master system per data
-entity?**
+**[Q-17] DECIDED 2026-10-16 (S11-3): the master list only.** No column; the second row below is not built.
+
+*The options as they were put:*
 
 | Answer | Schema now | Later change |
 |---|---|---|
@@ -441,9 +444,9 @@ process; relink restores. 16. Frozen from the next hash spec, now **spec 4**; ol
 
 **Still open (VB_design_history.md §1):**
 
-- **[Q-11] OPEN.** Is "copy from which system to which system" ongoing **integration** only, or does it include
+- **[Q-11] DECIDED (S11-2), both kinds; [Q-11a] open on coverage of a migration flow.** Was: is "copy from which system to which system" ongoing **integration** only, or does it include
   one-off **data migration**? If both, each flow gets a kind (Integration / Migration), added later as in §3.3.
   Built now either way: flows to or from an as-is-only system are allowed and shown as information.
-- **[Q-17] OPEN.** "The system has to be like a master": one master list that flows pick from (built), or also a
+- **[Q-17] DECIDED (S11-3), the master list only.** Was: "the system has to be like a master": one master list that flows pick from (built), or also a
   **master system (system of record) per data entity**, which the From system would default to? The latter is one
   later optional column on the data entity (§3.3).

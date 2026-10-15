@@ -16,10 +16,9 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **Slice 11 [Q-11]** — are BR system-to-system flows ongoing integration only, or also one-off data migration? (If
-  both, each flow gets a kind: Integration / Migration.) `docs/slice11_schema.md` §8.
-- **Slice 11 [Q-17]** — "the system has to be like a master": one master list of systems (as modelled), or also a
-  master system (system of record) per data entity? `docs/slice11_schema.md` §8.
+- **Slice 11 [Q-11a]** — now that a flow has a kind (S11-2): is a **migration** flow covered by an interface-behaviour
+  FR (as an integration flow is), or by a batch-behaviour FR? Recommendation: either — any FR of the same BR whose
+  interface carries the entity between the same two systems, whatever its behaviour. `docs/slice11_schema.md` §3.3.
 
 ---
 
@@ -470,6 +469,13 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | S10c-2 | **10c Q-1…Q-3**: the performer can be recorded whatever the DFD setting (performer gated by the function chart; triggers stay with the DFD); every live project switches to assigned-only after its team is checked; Lilly keeps the inventory (`slice10c_spec.md` §12) and an admin confirms each switch on its Access screen | slice10c_spec §11 |
 | S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, frozen from the next hash spec — spec 4, since slice 13c takes spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
 | S-T | "Trailer" in Ben's 2026-10-12 note means **trigger** | D-56…D-62 note |
+
+### Ben's rulings, 2026-10-16 — the two slice 11 questions left open by S11-1
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| S11-2 | **[Q-11] Both.** Ben chose option (a): "Integration and migration, each flow tagged." A BR system-to-system flow carries a kind, `INTEGRATION` (ongoing) or `MIGRATION` (one-off data migration), CHECK-listed because coverage branches on it; built into slice 11's own migration, not added later. The kind joins the flow's grain. One sub-point opens: [Q-11a] (§1) | slice11_schema §3.3, §8 |
+| S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
