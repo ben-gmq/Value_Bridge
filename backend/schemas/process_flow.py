@@ -283,3 +283,57 @@ class VolumeOut(BaseModel):
     annual_hours: Decimal | None          # derived on read, never stored (law 6)
     fte: Decimal | None
     incomplete: list[str]
+
+
+class FteBasisIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    row_version: int
+    working_days_per_year: int
+    hours_per_working_day: Decimal
+
+
+class FteBasisOut(Orm):
+    project_id: int
+    row_version: int
+    working_days_per_year: int
+    hours_per_working_day: Decimal
+
+
+class AreaTotalsOut(BaseModel):
+    processes: int
+    complete: int
+    incomplete: list[dict]
+    annual_hours: Decimal
+    fte: Decimal
+
+
+class AreaMatchOut(BaseModel):
+    hier_code: str
+    as_is_name: str
+    to_be_name: str
+    as_is: AreaTotalsOut
+    to_be: AreaTotalsOut
+    saved_hours: Decimal
+    saved_fte: Decimal
+
+
+class AreaUnmatchedOut(BaseModel):
+    chart: str
+    hier_code: str
+    name: str
+    reason: Literal["CODE_SAME_NAME_DIFFERS", "NAME_ELSEWHERE", "ONLY_AS_IS", "ONLY_TO_BE"]
+    other_code: str | None
+    totals: AreaTotalsOut
+
+
+class VolumeLevelOut(BaseModel):
+    level: int
+    matched: list[AreaMatchOut]
+    unmatched: list[AreaUnmatchedOut]
+
+
+class VolumeSummaryOut(BaseModel):
+    working_days_per_year: int
+    hours_per_working_day: Decimal
+    has_as_is: bool
+    levels: list[VolumeLevelOut]

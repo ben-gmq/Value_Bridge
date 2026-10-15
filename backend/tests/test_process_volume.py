@@ -202,3 +202,105 @@ def test_a_process_with_volume_cannot_go_back_to_a_plain_box(client, ed, db):
     from services import bfc
     node = db.get(BfcNode, s)
     assert "the volume figures" in bfc._step_blockers(db, node)
+
+
+# ---- 13c-2: the FTE basis (Q-7, C4) and as-is beside to-be (Q-9, Q-28, C7, C9) ------------------------------
+
+from tests.test_scope_api import node  # noqa: E402
+
+
+def basis(client, headers, p, expect=200, **body):
+    cur = client.get(f"{API}/projects/{p}", headers=headers).json()
+    r = client.put(f"{API}/projects/{p}/fte-basis", headers=headers, json={"row_version": cur["row_version"], **body})
+    assert r.status_code == expect, r.text
+    return r.json()
+
+
+def test_only_an_admin_sets_the_basis_and_it_is_audited(client, ed, world, db):
+    s = scope(client, ed)["s1"]["bfc_node_id"]
+    vol(client, ed, s, **MANUAL)
+    basis(client, ed["h"], ed["p"], expect=403, working_days_per_year=200, hours_per_working_day="7.5")
+    basis(client, world["admin"], ed["p"], expect=422, working_days_per_year=0, hours_per_working_day=8)
+    basis(client, world["admin"], ed["p"], expect=422, working_days_per_year=200, hours_per_working_day="7.555")
+    out = basis(client, world["admin"], ed["p"], working_days_per_year=200, hours_per_working_day="7.5")
+    assert (out["working_days_per_year"], Decimal(out["hours_per_working_day"])) == (200, Decimal("7.5"))
+    v = client.get(f"{API}/bfc-nodes/{s}/volume", headers=ed["h"]).json()
+    assert Decimal(v["fte"]) == Decimal(624) / Decimal(1500)                       # C4, through the route
+    ev = db.execute(text("SELECT detail FROM audit_event WHERE event_type = 'PROJECT_FTE_BASIS_CHANGED' "
+                         "ORDER BY audit_event_id DESC LIMIT 1")).scalar()
+    assert ev["from"]["working_days_per_year"] == 240 and ev["to"]["hours_per_working_day"] == "7.50"
+    p = client.get(f"{API}/projects/{ed['p']}", headers=ed["h"]).json()
+    assert (p["working_days_per_year"], p["hours_per_working_day"]) == (200, 7.5)
+
+
+def _two_charts(client, ed):
+    """Sales (one complete process) and Finance (one incomplete), copied to the as-is chart with their volume."""
+    sales = node(client, ed, "Sales")
+    orders = node(client, ed, "Orders", sales["bfc_node_id"])
+    take = node(client, ed, "Take order", orders["bfc_node_id"], is_process=True)
+    fin = node(client, ed, "Finance")
+    billing = node(client, ed, "Billing", fin["bfc_node_id"])
+    bill = node(client, ed, "Bill order", billing["bfc_node_id"], is_process=True)
+    vol(client, ed, take["bfc_node_id"], **MANUAL)                                  # 624 h
+    vol(client, ed, bill["bfc_node_id"], runs_per_period=1, volume_period_code="DAY")    # incomplete
+    url = f"{API}/projects/{ed['p']}/bfc-sets/AS_IS/copy-from/TO_BE"
+    prev = client.post(url, headers=ed["h"], json={}).json()
+    assert client.post(url, headers=ed["h"], json={"confirm_hash": prev["confirm_hash"]}).status_code == 200
+    vol(client, ed, take["bfc_node_id"], seconds_per_transaction=180)              # the change halves the time: 312 h
+    return {"sales": sales, "fin": fin, "take": take}
+
+
+def summary(client, ed):
+    r = client.get(f"{API}/projects/{ed['p']}/volume-summary", headers=ed["rv"])     # a reviewer reads it
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_the_summary_pairs_areas_and_lists_incomplete_processes(client, ed):
+    _two_charts(client, ed)
+    s = summary(client, ed)
+    assert s["has_as_is"] is True
+    l1 = {m["hier_code"]: m for m in s["levels"][0]["matched"]}
+    assert set(l1) == {"01", "02"} and s["levels"][0]["unmatched"] == []
+    sales = l1["01"]
+    assert (Decimal(sales["as_is"]["annual_hours"]), Decimal(sales["to_be"]["annual_hours"])) == (624, 312)
+    assert Decimal(sales["saved_hours"]) == 312                                       # C7: the time saved per area
+    fin = l1["02"]
+    assert fin["to_be"]["complete"] == 0 and len(fin["to_be"]["incomplete"]) == 1     # counted and listed, not guessed
+    assert fin["to_be"]["incomplete"][0]["missing"] == ["transactions_per_run", "seconds_per_transaction"]
+    assert Decimal(fin["saved_hours"]) == 0
+    assert {m["hier_code"] for m in s["levels"][1]["matched"]} == {"01.01", "02.01"}
+
+
+def test_a_reordered_area_is_listed_never_summed(client, ed):
+    c = _two_charts(client, ed)
+    fin = client.get(f"{API}/bfc-nodes/{c['fin']['bfc_node_id']}", headers=ed["h"]).json()
+    r = client.patch(f"{API}/bfc-nodes/{fin['bfc_node_id']}/reorder", headers=ed["h"],
+                     json={"row_version": fin["row_version"], "new_seq_no": 1})                # to-be: Finance 01, Sales 02
+    assert r.status_code == 200, r.text
+    lvl = summary(client, ed)["levels"][0]
+    assert lvl["matched"] == []                                                       # C9: codes agree, names do not
+    got = {(u["chart"], u["hier_code"], u["name"], u["reason"], u["other_code"]) for u in lvl["unmatched"]}
+    assert got == {("AS_IS", "01", "Sales", "NAME_ELSEWHERE", "02"), ("TO_BE", "01", "Finance", "NAME_ELSEWHERE", "02"),
+                   ("AS_IS", "02", "Finance", "NAME_ELSEWHERE", "01"), ("TO_BE", "02", "Sales", "NAME_ELSEWHERE", "01")}
+
+
+def test_a_renamed_area_reads_code_same_name_differs(client, ed):
+    c = _two_charts(client, ed)
+    sales = client.get(f"{API}/bfc-nodes/{c['sales']['bfc_node_id']}", headers=ed["h"]).json()
+    r = client.patch(f"{API}/bfc-nodes/{sales['bfc_node_id']}", headers=ed["h"],
+                     json={"row_version": sales["row_version"], "node_name": "Commercial"})
+    assert r.status_code == 200, r.text
+    lvl = summary(client, ed)["levels"][0]
+    assert [m["hier_code"] for m in lvl["matched"]] == ["02"]
+    assert {(u["chart"], u["reason"]) for u in lvl["unmatched"]} == {("AS_IS", "CODE_SAME_NAME_DIFFERS"),
+                                                                     ("TO_BE", "CODE_SAME_NAME_DIFFERS")}
+
+
+def test_a_chart_copy_carries_the_volume(client, ed):
+    c = _two_charts(client, ed)
+    as_is = client.get(f"{API}/projects/{ed['p']}/bfc-tree", headers=ed["h"], params={"bfc_set": "AS_IS"}).json()
+    copied = next(n for n in as_is if n["is_process"] and n["node_name"] == "Take order")
+    v = client.get(f"{API}/bfc-nodes/{copied['bfc_node_id']}/volume", headers=ed["h"]).json()
+    assert Decimal(v["seconds_per_transaction"]) == 360 and Decimal(v["annual_hours"]) == 624   # Q-23
+    assert c["take"]["bfc_node_id"] != copied["bfc_node_id"]

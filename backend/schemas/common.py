@@ -143,6 +143,8 @@ class ProjectOut(Orm):
     end_date: date | None
     data_model_depth: str
     is_restricted: bool
+    working_days_per_year: int = 240                  # D-67: the FTE basis (slice 13c)
+    hours_per_working_day: float = 8.0
     row_version: int
     my_access_level: str | None = None   # VIEW / EDIT / ADMIN, on the single-project read (§8.6)
 

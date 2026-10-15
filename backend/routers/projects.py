@@ -11,7 +11,8 @@ from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, Componen
                             EffectiveAccessOut, MemberAddOut, MemberIn, MemberOut, MemberPatch,
                             ProgramIn, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
                             RestrictionIn, RestrictionOut, TemplateOut)
-from services import access, code_master, components, dfd_rule
+from schemas.process_flow import FteBasisIn, FteBasisOut, VolumeSummaryOut
+from services import access, code_master, components, dfd_rule, process_volume
 from services import program as program_service
 from services import project as project_service
 
@@ -92,6 +93,20 @@ def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_auth.dep
               db: Session = Depends(get_db)):
     return components.set_depth(db, actor, project_service.get_project(db, project_id),
                                 body.data_model_depth, body.row_version)
+
+
+# ---- the FTE basis and the volume summary (D-67, slice 13c): a project ADMIN (platform admin, Q-7) sets the basis;
+# everyone who sees the project reads the summary. A project setting, not a component write: no component=.
+@router.put("/projects/{project_id}/fte-basis", response_model=FteBasisOut, **_proj_admin.route)
+def set_fte_basis(project_id: int, body: FteBasisIn, actor: AppUser = Depends(_auth.dep),
+                  db: Session = Depends(get_db)):
+    return process_volume.set_basis(db, actor.app_user_id, project_service.get_project(db, project_id),
+                                    body.row_version, body.working_days_per_year, body.hours_per_working_day)
+
+
+@router.get("/projects/{project_id}/volume-summary", response_model=VolumeSummaryOut, **_reader.route)
+def volume_summary(project_id: int, db: Session = Depends(get_db)):
+    return process_volume.summary(db, project_service.get_project(db, project_id))
 
 
 # ---- the DFD rule (D-70; slice13_schema §2.5): everyone sees it, a project ADMIN (platform admin, Q-5) changes it.

@@ -278,6 +278,13 @@ export const effortApi = {
   summary: (projectId) => d(http.get(`${P(projectId)}/effort-summary`)),
 };
 
+// D-67 (slice 13c): the FTE basis (a project ADMIN setting) and the as-is / to-be time per area. Hours and FTE are
+// derived by the server, never sent (law 6).
+export const volumeApi = {
+  setBasis: (projectId, body) => d(http.put(`${P(projectId)}/fte-basis`, body)),
+  summary: (projectId) => d(http.get(`${P(projectId)}/volume-summary`)),
+};
+
 // Slice 8 (docs/slice8_schema.md §5). Read-only apart from freeze and approve; the version, status and
 // digest of the stored baseline are the server's (VB law 6). The freeze sends back the preview's digest, so
 // it freezes exactly what the person reviewed (DR8-P2).

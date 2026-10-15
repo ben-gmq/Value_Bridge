@@ -127,3 +127,94 @@ def set_volume(db: Session, actor_id: int, node: BfcNode, row_version: int, sent
     db.commit()
     db.refresh(node)
     return node
+
+
+# ---- the project's FTE basis (set_fte_basis, Q-7) ------------------------------------------------------------
+
+def set_basis(db: Session, actor_id: int, project: Project, row_version: int, working_days_per_year: int,
+              hours_per_working_day: Decimal) -> Project:
+    """A project ADMIN setting (the route's guard), audited PROJECT_FTE_BASIS_CHANGED {from, to}. No process row
+    changes: every FTE re-derives on its next read (C4). Ranges are the CHECKs' (422 before the database)."""
+    if project.row_version != row_version:
+        raise HTTPException(409, "Updated by another user. Please refresh.")
+    if not 1 <= working_days_per_year <= 366:
+        raise HTTPException(422, "Working days per year must be between 1 and 366")
+    h = Decimal(str(hours_per_working_day))
+    if not Decimal("0.25") <= h <= Decimal(24) or h != h.quantize(Decimal("0.01")):
+        raise HTTPException(422, "Hours per working day must be between 0.25 and 24, to two decimals")
+    before = {"working_days_per_year": project.working_days_per_year,
+              "hours_per_working_day": str(project.hours_per_working_day)}
+    after = {"working_days_per_year": working_days_per_year, "hours_per_working_day": str(h.quantize(Decimal("0.01")))}
+    if before != after:
+        project.working_days_per_year, project.hours_per_working_day = working_days_per_year, h
+        project.updated_by = actor_id
+        db.flush()
+        audit.record(db, "PROJECT_FTE_BASIS_CHANGED", actor_id=actor_id, project_id=project.project_id,
+                     target_table="project", target_id=project.project_id, detail={"from": before, "to": after})
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+# ---- as-is beside to-be (volume_summary, Q-9, Q-28; slice13_schema §3.8) -----------------------------------
+
+SETS = ("AS_IS", "TO_BE")
+_norm = lambda s: (s or "").strip().lower()      # noqa: E731 — the live-name rule, lower(btrim(...)) (S1-6)
+
+
+def _totals(processes: list[BfcNode], days: int, hpd: Decimal) -> dict:
+    hours = Decimal(0)
+    complete, incomplete = 0, []
+    for p in processes:
+        d = derive(figures(p), days, hpd)
+        if d["annual_hours"] is None:
+            incomplete.append({"bfc_node_id": p.bfc_node_id, "hier_code": p.hier_code, "node_name": p.node_name,
+                               "missing": d["incomplete"]})
+        else:
+            hours += d["annual_hours"]
+            complete += 1
+    return {"processes": len(processes), "complete": complete, "incomplete": incomplete,
+            "annual_hours": hours, "fte": hours / (Decimal(days) * hpd)}
+
+
+def summary(db: Session, project: Project) -> dict:
+    """Per chart, annual hours and FTE per L1 and L2 area, summed over the processes below each area that have
+    complete figures; the rest are counted and listed, never guessed (C7). As-is and to-be areas are paired only
+    when level, chart code AND normalised name agree; anything else is listed unmatched with its reason and is
+    never summed against the other side (Q-28, C9)."""
+    from sqlalchemy import select
+    days, hpd = project.working_days_per_year, project.hours_per_working_day
+    nodes = db.scalars(select(BfcNode).where(BfcNode.project_id == project.project_id, BfcNode.is_active)).all()
+    by_set = {s: [n for n in nodes if n.bfc_set_code == s] for s in SETS}
+    areas = {}                                         # (set, level) → {hier_code: (area node, totals)}
+    for s, ns in by_set.items():
+        procs = [n for n in ns if n.is_process]
+        for level in (1, 2):
+            areas[(s, level)] = {
+                a.hier_code: (a, _totals([p for p in procs if p.hier_code.startswith(a.hier_code + ".")], days, hpd))
+                for a in ns if a.level_no == level and not a.is_process}
+    out_levels = []
+    for level in (1, 2):
+        asis, tobe = areas[("AS_IS", level)], areas[("TO_BE", level)]
+        matched, unmatched = [], []
+        names = {s: {_norm(a.node_name): code for code, (a, _) in areas[(s, level)].items()} for s in SETS}
+        for code in sorted(asis.keys() | tobe.keys()):
+            a, b = asis.get(code), tobe.get(code)
+            if a and b and _norm(a[0].node_name) == _norm(b[0].node_name):
+                matched.append({"hier_code": code, "as_is_name": a[0].node_name, "to_be_name": b[0].node_name,
+                                "as_is": a[1], "to_be": b[1],
+                                "saved_hours": a[1]["annual_hours"] - b[1]["annual_hours"],
+                                "saved_fte": a[1]["fte"] - b[1]["fte"]})
+                continue
+            for chart, side, other in (("AS_IS", a, "TO_BE"), ("TO_BE", b, "AS_IS")):
+                if side is None:
+                    continue
+                elsewhere = names[other].get(_norm(side[0].node_name))
+                # a reorder that swapped two areas reads "probably reordered", not "renamed"
+                reason = ("NAME_ELSEWHERE" if elsewhere and elsewhere != code else
+                          "CODE_SAME_NAME_DIFFERS" if (a and b) else f"ONLY_{chart}")
+                unmatched.append({"chart": chart, "hier_code": code, "name": side[0].node_name, "reason": reason,
+                                  "other_code": elsewhere if reason == "NAME_ELSEWHERE" else None, "totals": side[1]})
+        out_levels.append({"level": level, "matched": matched, "unmatched": unmatched})
+    return {"working_days_per_year": days, "hours_per_working_day": hpd, "levels": out_levels,
+            "has_as_is": bool(by_set["AS_IS"])}

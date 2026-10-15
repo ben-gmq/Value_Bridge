@@ -12,6 +12,7 @@ import { Card, ListRow, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DfdRuleCard } from './DfdRuleCard';
+import { FteBasisCard } from './FteBasisCard';
 
 // Settings → Components (D-37, D-39). Everyone sees what the project uses; only a platform admin
 // changes it, through a preview that names what a dependency adds and what blocks a switch-off
@@ -98,6 +99,8 @@ export default function ComponentsPage() {
           </Card>
           {/* D-70: the project's DFD rule, per chart — next to the other "how complete" setting, the depth */}
           <DfdRuleCard projectId={projectId} isAdmin={isAdmin} onNotice={setNotice} />
+          {/* D-67: the FTE basis every process's hours divide by */}
+          <FteBasisCard projectId={projectId} isAdmin={isAdmin} onNotice={setNotice} />
         </Stack>
       </Box>
 

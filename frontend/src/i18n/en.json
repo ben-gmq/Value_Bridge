@@ -190,5 +190,6 @@
   "nav.systems": "Systems",
   "access.levelDrops": "Can edit today → read only",
   "access.levelDropsNote": "Marked members keep only read access once the project is limited. If they should keep editing, set their level to Can edit in the member list.",
-  "access.createdNote": "Project created. Only its assigned consultants can open it, and it has none yet — add them below."
+  "access.createdNote": "Project created. Only its assigned consultants can open it, and it has none yet — add them below.",
+  "nav.volume": "Time & FTE"
 }

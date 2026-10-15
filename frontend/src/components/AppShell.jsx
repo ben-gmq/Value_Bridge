@@ -21,6 +21,7 @@ import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
 import SyncAltOutlined from '@mui/icons-material/SyncAltOutlined';
 import TimerOutlined from '@mui/icons-material/TimerOutlined';
+import SpeedOutlined from '@mui/icons-material/SpeedOutlined';
 import UnfoldMoreRounded from '@mui/icons-material/UnfoldMoreRounded';
 import ViewQuiltOutlined from '@mui/icons-material/ViewQuiltOutlined';
 import { useAuth } from '../app/AuthContext';
@@ -50,6 +51,7 @@ export const NAV = [
   ] },
   { group: 'nav.group.control', items: [
     ['nav.effort', 'br-fr/effort', TimerOutlined, ['EFFORT']],
+    ['nav.volume', 'volume', SpeedOutlined],                              // D-67: as-is vs to-be time
     ['nav.baselines', 'baselines', LayersOutlined],
   ] },
   { group: 'nav.group.admin', items: [
