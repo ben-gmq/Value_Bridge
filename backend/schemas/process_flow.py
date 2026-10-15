@@ -116,6 +116,10 @@ class DfdFlow(BaseModel):
     external_entity_id: int | None
     process_trigger_id: int | None
     label: str | None                      # DE name, else flow_label, else the trigger's name
+    # D-65 (13d): the ONE row behind the flow — step I/O, external flow or trigger link — so the canvas
+    # can remove it through that row's existing unlink route (DR13-P3). Derived order has none.
+    link_id: int
+    row_version: int
 
 
 class DfdOrder(BaseModel):
@@ -236,3 +240,4 @@ class SetCopyOut(BaseModel):
     applied: bool
 
     model_config = {"populate_by_name": True, "serialize_by_alias": True}
+
