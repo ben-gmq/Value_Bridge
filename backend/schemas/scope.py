@@ -148,6 +148,18 @@ class StepIoOut(Orm):
     row_version: int
 
 
+class HandOffIn(BaseModel):
+    """D-65 (13d): process A hands one data entity to process B. Nothing derived is accepted (VB law 6)."""
+    to_bfc_node_id: int
+    data_entity_id: int
+
+
+class HandOffOut(BaseModel):
+    output: StepIoOut                      # A's output row
+    input: StepIoOut                       # B's input row
+    already: bool                          # both were already live: nothing was written
+
+
 class BrDataEntityIn(BaseModel):
     data_entity_id: int
     crud_code: Literal["C", "R", "U", "D"]

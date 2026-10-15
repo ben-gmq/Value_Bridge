@@ -6,6 +6,8 @@ import { useColorScheme, useTheme } from '@mui/material/styles';
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined';
 import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOutlined';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined';
+import DnsOutlined from '@mui/icons-material/DnsOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import GroupOutlined from '@mui/icons-material/GroupOutlined';
@@ -42,6 +44,9 @@ export const NAV = [
     ['nav.solutions', 'br-fr', LightbulbOutlined, ['SOLUTION', 'FUNCTION_REQUIREMENT']],
     ['nav.frs', 'br-fr/frs', ViewQuiltOutlined, ['FUNCTION_REQUIREMENT']],
     ['nav.interfaces', 'interfaces', SyncAltOutlined, ['APPLICATION']],
+    // D-56: the client's organisation and its systems, one click from the rail (they were Settings tabs)
+    ['nav.organisation', 'organisation', CorporateFareOutlined],
+    ['nav.systems', 'systems', DnsOutlined, ['APPLICATION']],
   ] },
   { group: 'nav.group.control', items: [
     ['nav.effort', 'br-fr/effort', TimerOutlined, ['EFFORT']],

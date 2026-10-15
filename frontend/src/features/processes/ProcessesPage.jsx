@@ -232,9 +232,12 @@ export default function ProcessesPage() {
   const treeBoxRef = useRef(null);
 
   // Every way off the open panel goes through here: unsaved text or a half-filled tile form asks first.
+  // A name still being typed in a tile editor saves when its field loses focus (SP-1), and every in-page way off
+  // the panel (a tree click, Save & next) blurs it first — so only typed panel text asks here (10g UAT check 4).
+  // Browser Back/Forward and closing the tab can leave without a blur, so those still count the typed name.
   const guarded = (go) => {
     const state = guardRef.current?.get();
-    if (state && (state.count > 0 || state.draft)) setLeave({ state, go });
+    if (state && state.count > 0) setLeave({ state: { ...state, draft: false }, go });
     else go();
   };
 
@@ -342,6 +345,13 @@ export default function ProcessesPage() {
     return out;
   }, [selected, rowById]);
   const hasChildren = Boolean(selected && rows.some((r) => r.is_active && r.parent_bfc_node_id === selected.bfc_node_id));
+  // D-57: the live processes anywhere below a function, in chart order, for its "Open a process below".
+  const processesBelow = useMemo(() => {
+    if (!selected || selected.is_process) return [];
+    const under = (r) => { for (let p = rowById.get(String(r.parent_bfc_node_id)); p; p = rowById.get(String(p.parent_bfc_node_id))) {
+      if (p.bfc_node_id === selected.bfc_node_id) return true; } return false; };
+    return rows.filter((r) => r.is_active && r.is_process && under(r));
+  }, [selected, rows, rowById]);
   // "Save & next process": the next live process in chart order (rows arrive ordered by hier_code).
   const nextProcess = selected ? rows.slice(rows.findIndex((r) => r.bfc_node_id === selected.bfc_node_id) + 1)
     .find((r) => r.is_process && r.is_active) : null;
@@ -448,7 +458,8 @@ export default function ProcessesPage() {
             {selected ? (
               <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id} wide={wide}
-                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [], advised: selected.dfd_advised ?? [], rule: ruleFor(bfcSet) ?? [] }} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
+                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [], advised: selected.dfd_advised ?? [], rule: ruleFor(bfcSet) ?? [] }} hasChildren={hasChildren} processesBelow={processesBelow}
+                  onOpenNode={(id) => select(String(id))} showRetired={showRetired} guardRef={guardRef}
                   onNext={nextProcess ? () => selectNow(String(nextProcess.bfc_node_id)) : null}
                   onNotice={setNotice} onGone={() => selectNow(null)} />
               </Box>

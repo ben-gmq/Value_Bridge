@@ -250,7 +250,7 @@ def _same_stamp_links(db: Session, rows: list, at: datetime) -> list:
 def restore_plain(db: Session, actor_id: int, node: BfcNode) -> BfcNode:
     """PATCH /bfc-nodes/{id}/restore. Refused for a step whose latest retire took its
     dependents with it, so the undo key is never thrown away (spec §4, SR-1)."""
-    # sara 7c L1: a performer coming back live needs its chart's DFD on (DR7-P2).
+    # sara 7c L1: a step coming back live needs its chart on (DR7-P2); its performer needs nothing more (S10c-2).
     components.require_on(db, node.project_id, components.needed_for_rows([node], node.bfc_set_code))
     if _retired_with_dependents(db, node) is not None:
         raise HTTPException(409, "This step was retired with its requirement and flows. "

@@ -227,3 +227,58 @@ export function StepDataNotOnBr({ projectId, node, brRows }) {
     </Box>
   );
 }
+
+/**
+ * D-49 / DR10c-D1: what else starts a process besides its time/event triggers — its input data entities and the
+ * outside parties that send it something — from the same step reads the DFD uses (VIEW-guarded, no new route).
+ * The DFD light's STARTED mark counts the same three (D-69). Each start is labelled by its kind.
+ */
+export function useOtherStarts(projectId, nodeId, enabled = true) {
+  const dataQ = useQuery({ queryKey: stepKey(nodeId, 'data'), queryFn: () => bfcApi.stepData(nodeId), enabled });
+  const flowsQ = useQuery({ queryKey: stepKey(nodeId, 'flows'), queryFn: () => bfcApi.flows(nodeId), enabled });
+  const partiesQ = useQuery({ queryKey: keys.parties(projectId), queryFn: () => partyApi.list(projectId), enabled });
+  const entities = useEntities(projectId);
+  return useMemo(() => {
+    const items = [];
+    const seen = new Set();
+    for (const r of dataQ.data ?? []) {
+      if (r.direction !== 'I' || seen.has(`de${r.data_entity_id}`)) continue;
+      seen.add(`de${r.data_entity_id}`);
+      const de = entities.byId.get(r.data_entity_id);
+      items.push({ key: `de${r.data_entity_id}`, kind: 'data', label: de ? entityLabel(de) : `#${r.data_entity_id}` });
+    }
+    const partyById = new Map((partiesQ.data ?? []).map((p) => [p.external_entity_id, p]));
+    for (const f of flowsQ.data ?? []) {
+      if (f.direction !== 'I' || seen.has(`ext${f.external_entity_id}`)) continue;
+      seen.add(`ext${f.external_entity_id}`);
+      const p = partyById.get(f.external_entity_id);
+      items.push({ key: `ext${f.external_entity_id}`, kind: 'party', label: p ? `${p.ext_number} ${p.ext_name}` : `#${f.external_entity_id}` });
+    }
+    return { items, loading: dataQ.isLoading || flowsQ.isLoading, error: dataQ.error || flowsQ.error || partiesQ.error || entities.error };
+  }, [dataQ.data, dataQ.isLoading, dataQ.error, flowsQ.data, flowsQ.isLoading, flowsQ.error, partiesQ.data, partiesQ.error, entities.byId, entities.error]);
+}
+
+/** The read-only line under the trigger editor: the process's other starts, or "Nothing starts this process". */
+export function OtherStarts({ projectId, node, triggerCount }) {
+  const o = useOtherStarts(projectId, node.bfc_node_id);
+  if (o.loading) return null;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+        <Typography component="h4" sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary' }}>{t('processes.starts.others')}</Typography>
+        <InfoTip title={t('processes.starts.where')} />
+      </Box>
+      <LoadError errors={[o.error]} />
+      {o.items.length === 0 ? (
+        <Typography sx={{ fontSize: 13, color: triggerCount === 0 ? 'warning.main' : 'text.secondary' }}>
+          {t(triggerCount === 0 ? 'processes.starts.nothing' : 'processes.starts.none')}</Typography>
+      ) : (
+        <Stack direction="row" useFlexGap sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+          {o.items.map((i) => (
+            <Tag key={i.key} tone={i.kind === 'data' ? 'teal' : 'neutral'} sx={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t(`processes.starts.kind.${i.kind}`)} · {i.label}</Tag>))}
+        </Stack>
+      )}
+    </Box>
+  );
+}

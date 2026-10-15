@@ -461,16 +461,19 @@ def generate_dfd(db: Session, node: BfcNode) -> dict:
     covered = {(x.bfc_node_id, x.data_entity_id, x.direction) for x in ext_rows if x.data_entity_id}
     flows = [{"kind": "STORE", "bfc_node_id": r.bfc_node_id, "direction": r.direction,
               "data_entity_id": r.data_entity_id, "external_entity_id": None, "process_trigger_id": None,
-              "label": des[r.data_entity_id].de_name}
+              "label": des[r.data_entity_id].de_name,
+              "link_id": r.bfc_node_data_entity_id, "row_version": r.row_version}
              for r in io if (r.bfc_node_id, r.data_entity_id, r.direction) not in covered]
     flows += [{"kind": "EXTERNAL", "bfc_node_id": x.bfc_node_id, "direction": x.direction,
                "data_entity_id": x.data_entity_id, "external_entity_id": x.external_entity_id,
                "process_trigger_id": None,
-               "label": des[x.data_entity_id].de_name if x.data_entity_id else x.flow_label}
+               "label": des[x.data_entity_id].de_name if x.data_entity_id else x.flow_label,
+               "link_id": x.bfc_node_external_flow_id, "row_version": x.row_version}
               for x in ext_rows]
     flows += [{"kind": "TRIGGER", "bfc_node_id": t.bfc_node_id, "direction": "I", "data_entity_id": None,
                "external_entity_id": None, "process_trigger_id": t.process_trigger_id,
-               "label": trigs[t.process_trigger_id].trigger_name} for t in trig_rows]
+               "label": trigs[t.process_trigger_id].trigger_name,
+               "link_id": t.bfc_node_trigger_id, "row_version": t.row_version} for t in trig_rows]
     return {
         "scope": _ref(node),
         "lanes": lanes,

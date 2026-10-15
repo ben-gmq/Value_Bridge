@@ -45,7 +45,8 @@ export default function HomePage() {
                 tags={(
                   <>
                     {p.program_id && <Tag tone="navy">{t('home.inProgram')}</Tag>}
-                    {p.is_restricted && <Tag tone="caution">{t('settings.acc.restricted')}</Tag>}
+                    {/* D-62: assigned-only is the rule, so the tag marks the exception — a project open to all staff */}
+                    {!p.is_restricted && <Tag tone="caution">{t('settings.acc.open')}</Tag>}
                   </>)} />))}
           </Box>
         </Box>

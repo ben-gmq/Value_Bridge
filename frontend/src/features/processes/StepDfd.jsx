@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Chip, Stack, TextField, Tooltip, Typography } from '@mui/material';
@@ -10,6 +10,7 @@ import { keys, links } from '../../app/links';
 import { t } from '../../i18n/t';
 import { Mono, SectionTitle, SimpleSelect, blankToNull } from './chartKit';
 import { LoadError } from './StepSections';
+import { Segmented } from '../../components/kit';
 
 const KINDS = ['ORG_UNIT', 'ORG_ROLE', 'APPLICATION', 'AI'];
 
@@ -41,66 +42,81 @@ export function usePerformerText(projectId, node) {
 }
 
 /** Who or what performs the step — the step's lane on the DFD (D-46): a department, a position,
- * an IT system (chosen by code) or an AI (named). One per step. */
-export function PerformerPanel({ projectId, node, disabled, startEditing = false, onDraftChange }) {
+ * an IT system (chosen by code) or an AI (named). One per step.
+ * SP-1 (Ben, 2026-10-14) — one save model: a choice saves the moment it is made, the AI's name on Enter or on
+ * leaving the field. No Save or Cancel here; the editor's Done only closes. */
+export function PerformerPanel({ projectId, node, disabled, onDraftChange }) {
   const refresh = useRefresh(projectId, node.bfc_node_id);
   const { text: current, units, roles, apps } = usePerformerText(projectId, node);
-  // Opened from an empty tile (10d), an editor goes straight to the picker.
-  const [editing, setEditing] = useState(startEditing && !disabled && !node.performer_kind);
-  const [kind, setKind] = useState(node.performer_kind ?? '');
-  const [code, setCode] = useState('');
+  const saved = node.performer_kind ?? '';
+  const savedLabel = (node.performer_label ?? '').trim();
+  const [kind, setKind] = useState(saved);
   const [label, setLabel] = useState(node.performer_label ?? '');
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
+  // What is stored wins: after a save (or on another step) the pickers show the server's row.
+  useEffect(() => { setKind(node.performer_kind ?? ''); setLabel(node.performer_label ?? ''); },
+    [node.bfc_node_id, node.row_version, node.performer_kind, node.performer_label]);
 
+  const savedCode = {
+    ORG_UNIT: (units.data ?? []).find((u) => u.org_unit_id === node.performer_org_unit_id)?.org_unit_code,
+    ORG_ROLE: (roles.data ?? []).find((r) => r.org_role_id === node.performer_org_role_id)?.org_role_code,
+    APPLICATION: (apps.data ?? []).find((a) => a.application_id === node.performer_application_id)?.application_code,
+  }[saved] ?? '';
+  // Active rows, plus the stored one even if it was retired since, so the picker can show it.
+  const live = (rows, code) => (rows ?? []).filter((r) => r.is_active || (r[code] === savedCode && savedCode));
   const options = {
-    ORG_UNIT: (units.data ?? []).filter((u) => u.is_active).map((u) => ({ value: u.org_unit_code, label: `${u.org_unit_code} ${u.org_unit_name}` })),
-    ORG_ROLE: (roles.data ?? []).filter((r) => r.is_active).map((r) => ({ value: r.org_role_code, label: `${r.org_role_code} ${r.org_role_name}` })),
-    APPLICATION: (apps.data ?? []).filter((a) => a.is_active).map((a) => ({ value: a.application_code, label: `${a.application_code} ${a.application_name}` })),
+    ORG_UNIT: live(units.data, 'org_unit_code').map((u) => ({ value: u.org_unit_code, label: `${u.org_unit_code} ${u.org_unit_name}` })),
+    ORG_ROLE: live(roles.data, 'org_role_code').map((r) => ({ value: r.org_role_code, label: `${r.org_role_code} ${r.org_role_name}` })),
+    APPLICATION: live(apps.data, 'application_code').map((a) => ({ value: a.application_code, label: `${a.application_code} ${a.application_name}` })),
   };
   const m = useMutation({
-    mutationFn: () => bfcApi.setPerformer(node.bfc_node_id, { row_version: node.row_version,
-      performer_kind: kind || null, code: kind && kind !== 'AI' ? code : null, performer_label: kind === 'AI' ? blankToNull(label) : null }),
-    onSuccess: (row) => { setEditing(false); setError('');
+    mutationFn: (body) => bfcApi.setPerformer(node.bfc_node_id, { row_version: node.row_version, ...body }),
+    onSuccess: (row) => { setError('');
       setWarning(row.warnings?.includes('TO_BE_APPLICATION_PERFORMS_AS_IS') ? t('processes.performer.toBeWarning') : '');
       refresh(); },
     onError: (err) => setError(errorText(err, t('common.saveFailed'))),
   });
-  const ready = kind === '' || (kind === 'AI' ? label.trim() : code);
-  // An open picker with a choice not yet saved is a draft: the panel must not drop it silently (DR 10d-2).
-  const draft = editing && (kind !== (node.performer_kind ?? '') || Boolean(code)
-    || (kind === 'AI' && label !== (node.performer_label ?? '')));
+  const save = (k, c, l) => { if (m.isPending) return; setError('');
+    m.mutate({ performer_kind: k || null, code: k && k !== 'AI' ? c : null, performer_label: k === 'AI' ? blankToNull(l) : null }); };
+  // "Nobody yet" saves at once; a department, position or IT system saves when its code is chosen; an AI when named.
+  const onKind = (v) => { setKind(v); setError(''); if (v === '' && saved !== '') save('', null, null); };
+  const onCode = (c) => { if (c && (kind !== saved || c !== savedCode)) save(kind, c, null); };
+  const aiDraft = kind === 'AI' && Boolean(label.trim()) && !(saved === 'AI' && label.trim() === savedLabel);
+  const commitLabel = () => { if (aiDraft) save('AI', null, label); };
+  // Only a typed AI name not yet saved is a draft (SP-1: typed text); the panel's leave guard counts it.
+  const draft = aiDraft && !m.isPending;
   useEffect(() => { onDraftChange?.(draft); }, [draft, onDraftChange]);
   useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   return (
     <Box>
-      <SectionTitle action={!disabled && !editing && (
-        <Button size="small" onClick={() => { setEditing(true); setKind(node.performer_kind ?? ''); setCode(''); }}>
-          {t('processes.performer.change')}</Button>)} info={t('processes.performer.help')}>{null}</SectionTitle>
+      <SectionTitle info={t('processes.performer.help')}>{null}</SectionTitle>
       <LoadError errors={[units.error, roles.error, apps.error]} />
       {warning && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setWarning('')}>{warning}</Alert>}
-      {!editing && (node.performer_kind
+      {disabled && (node.performer_kind
         ? <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Chip size="small" label={t(`processes.performer.kind.${node.performer_kind}`)} />
             <Typography sx={{ fontWeight: 600 }}>{current ?? '…'}</Typography>
           </Stack>
         : <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>{t('processes.performer.none')}</Typography>)}
-      {editing && (
+      {!disabled && (
         <Stack spacing={1.5}>
           {error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{error}</Alert>}
-          <SimpleSelect id="performer-kind" label={t('processes.performer.kindLabel')} value={kind} allowEmpty
-            emptyLabel={t('processes.performer.unassigned')} onChange={(v) => { setKind(v); setCode(''); }}
+          <SimpleSelect id={`performer-kind-${node.bfc_node_id}`} label={t('processes.performer.kindLabel')} value={kind} allowEmpty
+            emptyLabel={t('processes.performer.unassigned')} onChange={onKind} disabled={m.isPending}
             options={KINDS.map((k) => ({ value: k, label: t(`processes.performer.kind.${k}`) }))} />
           {kind && kind !== 'AI' && (
-            <SimpleSelect id="performer-code" label={t(`processes.performer.kind.${kind}`)} value={code}
-              onChange={setCode} options={options[kind]} />)}
+            <SimpleSelect id={`performer-code-${node.bfc_node_id}`} label={t(`processes.performer.kind.${kind}`)}
+              value={kind === saved ? savedCode : ''} onChange={onCode} options={options[kind]} disabled={m.isPending} />)}
           {kind === 'AI' && (
-            <TextField id="performer-label" size="small" label={t('processes.performer.aiLabel')} value={label}
-              onChange={(e) => setLabel(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />)}
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" size="small" disabled={!ready || m.isPending} onClick={() => m.mutate()}>{t('common.save')}</Button>
-            <Button size="small" onClick={() => { setEditing(false); setError(''); }}>{t('common.cancel')}</Button>
-          </Stack>
+            <TextField id={`performer-label-${node.bfc_node_id}`} size="small" label={t('processes.performer.aiLabel')} value={label}
+              autoFocus={saved !== 'AI'} disabled={m.isPending} helperText={t('processes.performer.aiHint')}
+              onChange={(e) => setLabel(e.target.value)} onBlur={commitLabel}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitLabel(); }
+                if (e.key === 'Escape') { e.stopPropagation(); setLabel(node.performer_label ?? ''); }
+              }}
+              slotProps={{ htmlInput: { maxLength: 200 } }} />)}
         </Stack>
       )}
     </Box>
@@ -108,34 +124,50 @@ export function PerformerPanel({ projectId, node, disabled, startEditing = false
 }
 
 /** The time or event triggers that start the step (D-49): picked from the project's catalogue, or
- * added to it here. A trigger counts as the step's input. */
+ * added to it here. A trigger counts as the step's input.
+ * SP-1 (Ben, 2026-10-14): picking a trigger adds it at once; a new trigger saves on Enter or when focus leaves
+ * its little form (Esc discards it). A name already in the catalogue links that trigger — never a second copy. */
 export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
   const qc = useQueryClient();
   const refresh = useRefresh(projectId, node.bfc_node_id);
   const linkKey = keys.stepTriggers(node.bfc_node_id);
   const links_ = useQuery({ queryKey: linkKey, queryFn: () => bfcApi.triggers(node.bfc_node_id) });
   const cat = useQuery({ queryKey: keys.triggers(projectId), queryFn: () => triggerApi.list(projectId) });
-  const [pick, setPick] = useState('');
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState('EVENT');
   const [schedule, setSchedule] = useState('');
   const [error, setError] = useState('');
+  const busy = useRef(false);                       // Enter then blur must create one trigger, not two
+  const nameRef = useRef('');                        // read at commit, so Esc's reset wins over a late blur
   const done = () => { setError(''); qc.invalidateQueries({ queryKey: linkKey }); qc.invalidateQueries({ queryKey: keys.triggers(projectId) }); refresh(); };
   const fail = (err) => setError(errorText(err, t('common.saveFailed')));
+  const linked = new Set((links_.data ?? []).map((r) => r.process_trigger_id));
   const link = useMutation({ mutationFn: (id) => bfcApi.linkTrigger(node.bfc_node_id, { process_trigger_id: id }),
-    onSuccess: () => { setPick(''); done(); }, onError: fail });
+    onSuccess: done, onError: fail });
+  const typeName = (v) => { nameRef.current = v; setName(v); };
+  const reset = () => { nameRef.current = ''; setAdding(false); setName(''); setSchedule(''); setKind('EVENT'); };
   const create = useMutation({
-    mutationFn: async () => {
-      const row = await triggerApi.create(projectId, { trigger_name: name.trim(), trigger_kind: kind,
-        schedule_note: kind === 'TIME' ? blankToNull(schedule) : null });
-      return bfcApi.linkTrigger(node.bfc_node_id, { process_trigger_id: row.process_trigger_id });
+    mutationFn: async (body) => {
+      const same = (cat.data ?? []).find((c) => c.trigger_name.trim().toLowerCase() === body.trigger_name.toLowerCase());
+      const id = same ? same.process_trigger_id : (await triggerApi.create(projectId, body)).process_trigger_id;
+      return linked.has(id) ? null : bfcApi.linkTrigger(node.bfc_node_id, { process_trigger_id: id });
     },
-    onSuccess: () => { setAdding(false); setName(''); setSchedule(''); done(); }, onError: fail });
+    onSuccess: () => { reset(); done(); }, onError: fail, onSettled: () => { busy.current = false; } });
   const unlink = useMutation({ mutationFn: (row) => bfcApi.unlinkTrigger(node.bfc_node_id, row.bfc_node_trigger_id, row.row_version),
     onSuccess: done, onError: fail });
-  const linked = new Set((links_.data ?? []).map((r) => r.process_trigger_id));
-  const draft = Boolean(pick) || (adding && Boolean(name.trim() || schedule.trim()));
+  const commit = () => {
+    const n = nameRef.current.trim();
+    if (!n || busy.current) return;
+    busy.current = true;
+    create.mutate({ trigger_name: n, trigger_kind: kind, schedule_note: kind === 'TIME' ? blankToNull(schedule) : null });
+  };
+  const keyDown = (e) => {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.stopPropagation(); reset(); }
+  };
+  // Only a typed name not yet saved is a draft (SP-1: typed text); the panel's leave guard counts it.
+  const draft = adding && Boolean(name.trim()) && !create.isPending;
   useEffect(() => { onDraftChange?.(draft); }, [draft, onDraftChange]);
   useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   const free = (cat.data ?? []).filter((c) => !linked.has(c.process_trigger_id));
@@ -151,39 +183,34 @@ export function TriggerPanel({ projectId, node, disabled, onDraftChange }) {
           <Chip key={r.bfc_node_trigger_id} variant="outlined" sx={{ maxWidth: '100%' }}
             label={`${r.trigger_row.trigger_name} · ${t(`processes.trigger.kind.${r.trigger_row.trigger_kind}`)}`
               + (r.trigger_row.schedule_note ? ` (${r.trigger_row.schedule_note})` : '')}
-            onDelete={disabled ? undefined : () => unlink.mutate(r)}
+            onDelete={disabled || unlink.isPending ? undefined : () => unlink.mutate(r)}
             deleteIcon={<Tooltip title={t('processes.trigger.remove')}><CloseIcon /></Tooltip>} />
         ))}
       </Stack>
       {!disabled && !adding && (
-        // 10e (VB-005 UAT 10a): the picker shrinks first and the buttons never do, so nothing passes the panel's edge
+        // 10e (VB-005 UAT 10a): the picker shrinks first and the button never does, so nothing passes the panel's edge
         <Stack direction="row" useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, minWidth: 0 }}>
           <Box sx={{ flex: '1 1 180px', minWidth: 0, maxWidth: 360 }}>
-            <SimpleSelect id="trigger-pick" label={t('processes.trigger.pick')} value={pick} onChange={setPick}
+            <SimpleSelect id={`trigger-pick-${node.bfc_node_id}`} label={t('processes.trigger.pick')} value=""
+              disabled={link.isPending} onChange={(id) => id && link.mutate(id)}
               options={free.map((c) => ({ value: c.process_trigger_id, label: c.trigger_name }))} />
           </Box>
-          <Stack direction="row" spacing={1} sx={{ flex: 'none', alignItems: 'center' }}>
-            <Button size="small" variant="outlined" disabled={!pick || link.isPending} onClick={() => link.mutate(pick)}>
-              {t('processes.trigger.link')}</Button>
-            <Button size="small" startIcon={<AddRounded />} sx={{ whiteSpace: 'nowrap' }} onClick={() => setAdding(true)}>
-              {t('processes.trigger.new')}</Button>
-          </Stack>
+          <Button size="small" startIcon={<AddRounded />} sx={{ flex: 'none', whiteSpace: 'nowrap' }} onClick={() => setAdding(true)}>
+            {t('processes.trigger.new')}</Button>
         </Stack>
       )}
       {!disabled && adding && (
-        <Stack spacing={1.5} sx={{ mt: 1 }}>
-          <TextField id="trigger-name" size="small" label={t('processes.trigger.name')} value={name}
-            onChange={(e) => setName(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />
-          <SimpleSelect id="trigger-kind" label={t('processes.trigger.kindLabel')} value={kind} onChange={setKind}
+        // Focus leaving this group (Done, another tile, the tree) saves the typed trigger; moving inside it does not.
+        <Stack spacing={1.5} sx={{ mt: 1 }} onKeyDown={keyDown}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) commit(); }}>
+          <TextField id={`trigger-name-${node.bfc_node_id}`} size="small" label={t('processes.trigger.name')} value={name} autoFocus
+            disabled={create.isPending} onChange={(e) => typeName(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />
+          <Segmented size="sm" label={t('processes.trigger.kindLabel')} value={kind} onChange={setKind}
             options={['EVENT', 'TIME'].map((k) => ({ value: k, label: t(`processes.trigger.kind.${k}`) }))} />
           {kind === 'TIME' && (
-            <TextField id="trigger-schedule" size="small" label={t('processes.trigger.schedule')} value={schedule}
-              onChange={(e) => setSchedule(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />)}
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" size="small" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>
-              {t('processes.trigger.addAndLink')}</Button>
-            <Button size="small" onClick={() => setAdding(false)}>{t('common.cancel')}</Button>
-          </Stack>
+            <TextField id={`trigger-schedule-${node.bfc_node_id}`} size="small" label={t('processes.trigger.schedule')} value={schedule}
+              disabled={create.isPending} onChange={(e) => setSchedule(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} />)}
+          <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('processes.trigger.newHint')}</Typography>
         </Stack>
       )}
     </Box>

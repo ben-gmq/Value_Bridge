@@ -78,5 +78,14 @@
   "requirements.frs.created": "{fr} created and linked",
   "requirements.frs.stale": "Someone else changed this link or function requirement. The list has been refreshed — try again.",
   "requirements.frs.warn.fr_solution_outside_its_brs": "{frs}: its solution now answers none of the requirements it serves. Nothing was changed — choose a fix.",
-  "requirements.frs.warn.no_br": "{frs}: no longer linked to any business requirement (untraced)."
+  "requirements.frs.warn.no_br": "{frs}: no longer linked to any business requirement (untraced).",
+  "requirements.attr.title": "Attributes",
+  "requirements.attr.show": "Show the attributes of {entity}",
+  "requirements.attr.hide": "Hide the attributes of {entity}",
+  "requirements.attr.loading": "Loading attributes…",
+  "requirements.attr.none": "No attributes recorded",
+  "requirements.attr.pk": "Key",
+  "requirements.attr.fk": "Foreign key",
+  "requirements.attr.mandatory": "Mandatory: {value}",
+  "requirements.attr.keysOnly": "Keys only — no other attributes yet"
 }

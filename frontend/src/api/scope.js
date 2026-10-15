@@ -169,6 +169,8 @@ export const dfdApi = {
   graph: (nodeId) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd`)),
   mermaid: (nodeId, order = false) => d(http.get(`${V}/bfc-nodes/${nodeId}/dfd/export`,
     { params: { format: 'mermaid', order }, ...asText })),
+  // D-65 (13d): process A hands a data entity to process B — A's output and B's input in one write.
+  handOff: (fromNodeId, body) => d(http.post(`${V}/bfc-nodes/${fromNodeId}/hand-offs`, body)),
 };
 
 // Saved diagram positions (D-30). PUT upserts only what it lists; DELETE resets one diagram.

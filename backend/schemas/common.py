@@ -264,6 +264,10 @@ class MemberOut(BaseModel):
     row_version: int
 
 
+class KeptMemberOut(MemberOut):
+    level_drops: bool = False            # DR10c-S1: restricting lowers this member's level (e.g. a USER kept at VIEW)
+
+
 class MemberAddOut(MemberOut):
     warnings: list[str] = []
 
@@ -291,7 +295,7 @@ class RestrictionOut(BaseModel):
     changed: bool
     loses: list[PersonOut]
     gains: list[PersonOut]
-    keeps: list[MemberOut]               # DR7-D2: who keeps access, and why
+    keeps: list[KeptMemberOut]           # DR7-D2: who keeps access, and why
     confirm_hash: str
     applied: bool
 

@@ -51,13 +51,43 @@ function Field({ id, label, info, children }) {
 const textBox = (size) => ({ '& .MuiInputBase-input': { fontSize: size, lineHeight: 1.5 } });
 
 /**
+ * D-57: what a box that is not a process is, in plain words, and the two ways on — open one of the processes below
+ * it, or make this box a process (only where the switch is allowed: level 3 or deeper, nothing below it). "Make this
+ * a process" opens the confirmation that says what it creates (DR10c-P2). Viewers read the text only.
+ */
+function FunctionGuide({ name, level, below, canSwitch, canEdit, busy, onOpenList, onMakeProcess }) {
+  const lines = [t('processes.guide.what', { name })];
+  if (below.length) lines.push(t('processes.guide.below', { n: below.length }));
+  else if (level < FIRST_PROCESS_LEVEL) lines.push(t('processes.guide.tooHigh', { n: FIRST_PROCESS_LEVEL }));
+  else if (!canSwitch && canEdit) lines.push(t('processes.guide.noneBelow'));
+  if (canSwitch) lines.push(t('processes.guide.make'));
+  const showOpen = canEdit && below.length > 0;
+  return (
+    <Box role="note" sx={(th) => ({ display: 'flex', flexDirection: 'column', gap: 1.25, p: 2, borderRadius: '14px',
+      bgcolor: th.vars.palette.background.subtle, border: `1px solid ${th.vars.palette.divider}` })}>
+      {lines.map((l, i) => <Typography key={i} sx={{ fontSize: 14, lineHeight: 1.5 }}>{l}</Typography>)}
+      {(showOpen || (canEdit && canSwitch)) && (
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {showOpen && (
+            <Button variant="outlined" size="small" aria-haspopup="menu" onClick={onOpenList}>
+              {t('processes.guide.openBelow')}</Button>)}
+          {canEdit && canSwitch && (
+            <Button variant={showOpen ? 'text' : 'outlined'} size="small" disabled={busy} onClick={onMakeProcess}>
+              {t('processes.guide.makeButton')}</Button>)}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
  * One function of the chart, ranked (D-63): the sticky header names it; the requirement leads; "How it runs"
  * shows performer, trigger, Accountable and data as tiles; the rest sits in collapsed sections. Text fields
  * (the name, the requirement, purpose) wait for one Save; everything else saves as it is changed.
  * `guardRef` lets the chart ask before a switch would drop unsaved text (DR 10d-1).
  */
-export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showRetired, wide, guardRef, onNext,
-  onNotice, onGone }) {
+export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, processesBelow = [], onOpenNode, showRetired, wide,
+  guardRef, onNext, onNotice, onGone }) {
   const { isOn } = useComponents(projectId);
   const qc = useQueryClient();
   const canEdit = useCanEdit();
@@ -73,6 +103,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
   const [nodeRefused, setNodeRefused] = useState(false);
   const [retiringStep, setRetiringStep] = useState(false);
   const [menuAt, setMenuAt] = useState(null);
+  const [belowAt, setBelowAt] = useState(null);                  // the "Open a process below" list (D-57)
   const [draft, setDraft] = useState(false);                     // a half-filled performer or trigger form
   const [saveNote, setSaveNote] = useState('');
   // Which restore fits a retired step is the server's call (SR-1): a step is offered the
@@ -354,6 +385,11 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
           </Box>
         )}
 
+        {!node.is_process && live && (
+          <FunctionGuide name={node.node_name} level={node.level_no} below={processesBelow} canSwitch={canSwitch} canEdit={editable}
+            busy={busy} onOpenList={(e) => setBelowAt(e.currentTarget)} onMakeProcess={() => setConfirmSwitch(true)} />
+        )}
+
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{primary}</Box>
 
         {node.is_process && (
@@ -443,6 +479,14 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
           <MenuItem key={m.key} onClick={() => { setMenuAt(null); m.run(); }}
             sx={m.warn ? { color: 'warning.main' } : undefined}><ListItemText>{m.label}</ListItemText></MenuItem>
         )))}
+      </Menu>
+      <Menu anchorEl={belowAt} open={Boolean(belowAt)} onClose={() => setBelowAt(null)}
+        slotProps={{ paper: { sx: { maxHeight: 360, maxWidth: 420 } } }}>
+        {processesBelow.map((p) => (
+          <MenuItem key={p.bfc_node_id} onClick={() => { setBelowAt(null); onOpenNode?.(p.bfc_node_id); }}>
+            <ListItemText primary={<><Code tone="muted" sx={{ fontSize: 12.5, mr: 1 }}>{p.hier_code}</Code>{p.node_name}</>}
+              slotProps={{ primary: { sx: { whiteSpace: 'normal', fontSize: 14 } } }} />
+          </MenuItem>))}
       </Menu>
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       {showBr && brEd.dialogs}

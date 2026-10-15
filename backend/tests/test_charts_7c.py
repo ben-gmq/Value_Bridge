@@ -282,15 +282,60 @@ def test_0041_backfills_performers_from_responsible_and_0045_retires_arrows(clie
 
 # ---- sara 7c review --------------------------------------------------------------------------------------------
 def test_copy_refuses_to_make_rows_live_in_an_off_component(client, world, ed):
-    """M1 (DR7-P2): an as-is → to-be copy carrying a performer needs TO_BE_DFD on."""
+    """M1 (DR7-P2): an as-is → to-be copy carrying a trigger link needs TO_BE_DFD on. A performer alone
+    does not (S10c-2, Ben 2026-10-14): it is the function chart's, whatever the DFD setting."""
     _a, _b, s = step_in(client, ed, "AS_IS")
     perform(client, ed, s, "AI", label="Bot")
+    t = client.post(f"{API}/projects/{ed['p']}/process-triggers", headers=ed["h"],
+                    json={"trigger_name": "Month-end", "trigger_kind": "TIME"}).json()
+    assert client.post(f"{API}/bfc-nodes/{s['bfc_node_id']}/triggers", headers=ed["h"],
+                       json={"process_trigger_id": t["process_trigger_id"]}).status_code == 201
     switch(client, world, ed["p"], ["SOLUTION", "FUNCTION_REQUIREMENT", "EFFORT", "APPLICATION", "AS_IS"])
     url = f"{API}/projects/{ed['p']}/bfc-sets/TO_BE/copy-from/AS_IS"
     prev = client.post(url, headers=ed["h"], json={}).json()
     r = client.post(url, headers=ed["h"], json={"confirm_hash": prev["confirm_hash"]})
     assert r.status_code == 409 and r.headers["X-VB-Error"] == "COMPONENT_OFF"
     assert client.get(f"{API}/projects/{ed['p']}/bfc-tree", headers=ed["h"]).json() == []
+
+
+def test_a_copy_carrying_only_a_performer_needs_no_dfd(client, world, ed):
+    """S10c-2: the performer travels with its chart; the to-be DFD being off does not stop the copy."""
+    _a, _b, s = step_in(client, ed, "AS_IS")
+    perform(client, ed, s, "AI", label="Bot")
+    switch(client, world, ed["p"], ["SOLUTION", "FUNCTION_REQUIREMENT", "EFFORT", "APPLICATION", "AS_IS"])
+    url = f"{API}/projects/{ed['p']}/bfc-sets/TO_BE/copy-from/AS_IS"
+    prev = client.post(url, headers=ed["h"], json={}).json()
+    r = client.post(url, headers=ed["h"], json={"confirm_hash": prev["confirm_hash"]})
+    assert r.status_code == 200, r.text
+    steps = [n for n in client.get(f"{API}/projects/{ed['p']}/bfc-tree", headers=ed["h"]).json() if n["is_process"]]
+    assert [(n["performer_kind"], n["performer_label"]) for n in steps] == [("AI", "Bot")]
+
+
+def test_the_performer_is_recorded_whatever_the_dfd_setting(client, world, ed, db):
+    """S10c-2 (slice10c §11 Q-1, Ben 2026-10-14): the performer is gated by the function chart, not the DFD.
+    A performer does not block switching the DFD off, can be written while it is off, and is no freeze
+    inconsistency; a trigger link still needs the DFD (409 COMPONENT_OFF)."""
+    from services import components
+    _a, _b, s = step_in(client, ed)
+    perform(client, ed, s, "AI", label="Bot")
+    t = client.post(f"{API}/projects/{ed['p']}/process-triggers", headers=ed["h"],
+                    json={"trigger_name": "Month-end", "trigger_kind": "TIME"}).json()
+    switch(client, world, ed["p"], ["SOLUTION", "FUNCTION_REQUIREMENT", "EFFORT", "APPLICATION", "AS_IS"])
+    _u, role = org(client, ed)
+    out = perform(client, ed, s, "ORG_ROLE", "CLERK")                          # TO_BE_DFD off: allowed
+    assert (out["performer_kind"], out["performer_org_role_id"]) == ("ORG_ROLE", role["org_role_id"])
+    perform(client, ed, s, None)                                               # and cleared
+    perform(client, ed, s, "AI", label="Bot")
+    r = client.post(f"{API}/bfc-nodes/{s['bfc_node_id']}/triggers", headers=ed["h"],
+                    json={"process_trigger_id": t["process_trigger_id"]})
+    assert r.status_code == 409 and r.headers["X-VB-Error"] == "COMPONENT_OFF"  # triggers stay with the DFD
+    assert components.rows_in_off_component(db, ed["p"]) == []                 # nothing blocks a freeze
+    prev = client.get(f"{API}/bfc-nodes/{s['bfc_node_id']}/retire-preview", headers=ed["h"]).json()
+    assert client.post(f"{API}/bfc-nodes/{s['bfc_node_id']}/retire-with-dependents", headers=ed["h"],
+                       json={"confirm_hash": prev["confirm_hash"]}).status_code == 204
+    r = client.post(f"{API}/bfc-nodes/{s['bfc_node_id']}/restore-with-dependents", headers=ed["h"])
+    assert r.status_code == 200, r.text                                        # its performer comes back with it
+    assert fresh(client, ed, s)["performer_label"] == "Bot"
 
 
 def test_the_trigger_catalogue_blocks_switching_both_dfds_off_and_needs_one_on(client, world, ed):

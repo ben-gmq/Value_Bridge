@@ -106,9 +106,11 @@ ROUTE_COMPONENTS = (
     ("/bfc-nodes/{id}/applications", "AS_IS"),
     ("/copy-from/", "AS_IS"),
 )
-# 7c (DR7-D1): these depend on the node's chart, so they must declare the DFD resolver.
-ROUTE_RESOLVERS = (("/external-flows", "<node_dfd_component>"), ("/performer", "<node_dfd_component>"),
-                   ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"))
+# 7c (DR7-D1): these depend on the node's chart, so they must declare the DFD resolver. The performer
+# declares only its chart's own resolver, whatever the DFD setting (S10c-2, Ben 2026-10-14).
+ROUTE_RESOLVERS = (("/external-flows", "<node_dfd_component>"), ("/performer", "<node_set_component>"),
+                   ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"),
+                   ("/hand-offs", "<node_dfd_component>"))                      # D-65 (13d)
 
 
 def test_every_component_write_declares_its_component():
@@ -125,6 +127,27 @@ def test_every_component_write_declares_its_component():
             if fragment in r.path and resolver not in declared:
                 bad.append(f"{sorted(r.methods)} {r.path}: needs {resolver}, declares {sorted(declared)}")
     assert bad == []
+
+
+def test_the_performer_write_is_not_gated_by_the_dfd():
+    """S10c-2 (Ben 2026-10-14): the performer is recorded whatever the DFD setting; trigger links stay with it."""
+    from types import SimpleNamespace
+    from services import components
+    assert components.node_set_component(SimpleNamespace(bfc_set_code="AS_IS")) == "AS_IS"     # as-is still needs its chart
+    assert components.node_set_component(SimpleNamespace(bfc_set_code="TO_BE")) is None
+    perf = trig = 0
+    for r in _routes():
+        if r.methods <= {"GET", "HEAD"}:
+            continue
+        declared = r.openapi_extra[GUARD_KEY].get("component")
+        declared = set(declared) if isinstance(declared, list) else {declared} if declared else set()
+        if r.path.endswith("/performer"):
+            assert declared == {"<node_set_component>"}, (r.path, declared)
+            perf += 1
+        if "/bfc-nodes/{id}/triggers" in r.path:
+            assert declared == {"<node_dfd_component>"}, (r.path, declared)
+            trig += 1
+    assert perf == 1 and trig >= 1
 
 
 def test_br_fr_link_writes_do_not_need_solution():

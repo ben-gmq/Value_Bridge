@@ -2,8 +2,8 @@
 
 **App:** Value Bridge (VB) · **For:** Fortience Consulting Inc. — Strategic PMO practice
 **Scope of this spec:** MVP — Scope Management & Control
-**Status:** the current, integrated spec. Signed off by Ben 2026-09-28; every decision since (D-37…D-64 and the slice rulings) is folded in. **What changed and why** — every decision, review and ruling with its date — is in [`VB_design_history.md`](VB_design_history.md); items raised but not yet decided are listed there too, not here.
-**Last integrated:** 2026-10-13 (through S10d-1). Builds on `docs/ASSESSMENT_BRIEF.md`.
+**Status:** the current, integrated spec. Signed off by Ben 2026-09-28; every decision since (D-37…D-70 and the slice rulings) is folded in. **What changed and why** — every decision, review and ruling with its date — is in [`VB_design_history.md`](VB_design_history.md); items raised but not yet decided are listed there too, not here.
+**Last integrated:** 2026-10-14 (through S13-2, SC-1…SC-11, SP-1, S10c-2, S11-1, S-T, S-P). Builds on `docs/ASSESSMENT_BRIEF.md`.
 
 ---
 
@@ -85,10 +85,11 @@ Grain of every other table, one sentence each:
 |---|---|
 | `CLIENT` | client organization FTC has engaged with |
 | `PROGRAM` | named group of related projects for one client (D-32) — a **roll-up grouping, not a data layer and not an access scope** (D-40): it holds no scope of its own and is never baselined |
-| `PROJECT` | transformation project — the scoping key on every business table. Nothing is shared between projects, even within one program (D-32). Carries `is_restricted` (OR-6, D-62) and `data_model_depth` (D-39) |
+| `PROJECT` | transformation project — the scoping key on every business table. Nothing is shared between projects, even within one program (D-32). Carries `is_restricted` (OR-6, D-62), `data_model_depth` (D-39) and the FTE basis — working days per year and hours per working day, 240 × 8 by default (D-67, S13-1) |
+| `PROJECT_DFD_RULE` | (project × chart × required DFD element) — what makes a process's DFD complete in that chart; a live row means required, a retired row not (D-70, S13-1) |
 | `PROJECT_COMPONENT` | (project × component) switched on for that project — a live row means on, a retired row off (D-37) |
 | `PROJECT_TEMPLATE_COMPONENT` | (project template × component) — a global starting set, copied once into `PROJECT_COMPONENT` at project creation (OR-3) |
-| `BFC_NODE` | business function at one level (1–5) in one chart (`TO_BE` / `AS_IS`, D-47) of one project. `is_process` marks the lowest node of a branch — a **process node** (L3–L5, D-23), which has no children. A process carries **one performer** (org unit, org role, application or AI, or none yet) as columns on the row (D-46) |
+| `BFC_NODE` | business function at one level (1–5) in one chart (`TO_BE` / `AS_IS`, D-47) of one project. `is_process` marks the lowest node of a branch — a **process node** (L3–L5, D-23), which has no children. A process carries **one performer** (org unit, org role, application or AI, or none yet) and its optional **volume figures** (runs per period, transactions per run with a unit, seconds per transaction, D-67) as columns on the row (D-46) |
 | `BFC_NODE_DATA_ENTITY` | (process node × data entity × direction) — *that* data flows into or out of a step. **The one record of a step's I/O** (D-24): the DFD, the flow file and BR CRUD all read it |
 | `BFC_NODE_ORG_ROLE` | (**as-is** process node × org role × RACI code) — who does what on an as-is step. A to-be process's roles are its BR's (`BR_ORG_ROLE`, D-64). The code's **behaviour** (RESPONSIBLE, ACCOUNTABLE …) is copied onto the row and FK-verified (Q7) |
 | `BFC_NODE_FLOW` | **retired** (D-38): SELECT-only history, no new rows. Order between processes is derived from their inputs and outputs |
@@ -101,11 +102,14 @@ Grain of every other table, one sentence each:
 | `DATA_FIELD` | logical field within one data entity. A partial list (keys and key attributes) is normal; type optional (D-26); how much is expected follows the project's data model depth (D-39). FK fields are grouped into relationships by `fk_group_no` |
 | `BR_DATA_ENTITY` | (BR × data entity × CRUD) — *what is done* to that data. Direction is generated from CRUD, and the row must be licensed by a matching step I/O row on the BR's node (D-24) |
 | `BR_ORG_ROLE` | (BR × org role × RACI code) — the RACI of a to-be process (D-64); behaviour copied as on `BFC_NODE_ORG_ROLE` |
+| `BR_REQUIREMENT_LINE` | numbered requirement statement within one BR (`BR-0043.3`), with a kind and an optional MoSCoW priority (D-59, S11-1) |
+| `BR_DATA_FIELD` | (BR × data attribute × CRUD) — which attributes the BR uses and how, licensed by the BR's entity-level CRUD row (D-60b, S11-1) |
+| `BR_SYSTEM_FLOW` | (BR × data entity × from-application × to-application) — data the BR needs copied from one system to another, as a business statement (D-61, S11-1) |
 | `SOLUTION` | transformation answer within one project, in one of five categories |
 | `BR_SOLUTION` | (BR × solution) pairing — which answers address which requirement |
 | `FUNCTION_REQUIREMENT` | system function to be built within one project, of one FR type, carrying **zero or one** solution tag (D-27, D-28, D-52) |
 | `BR_FUNCTION_REQUIREMENT` | (BR × FR) pairing — which function requirements serve which requirement. **The primary BR → FR mapping** (D-52) |
-| `FR_BFC_NODE` | (FR × BFC node) pairing — coverage *not* expressed through a BR. Designed, not built |
+| `FR_BFC_NODE` | **retired, never built** (SC-3): the BR ↔ FR link (D-52) carries that coverage. No table |
 | `FR_INTERFACE` | interface-type FR (behaviour INTERFACE) — its source and target application, pattern, method, frequency. 1:0..1 with the FR; identity is the FR number |
 | `FR_INTERFACE_DATA_ENTITY` | (interface FR × data entity) — what one interface carries |
 | `APPLICATION` | application or technology in one project's landscape (as-is / to-be / both) |
@@ -127,7 +131,7 @@ Grain of every other table, one sentence each:
 | `SOLUTION_PHASE` | (solution × phase) assignment |
 | `SOLUTION_DEPENDENCY` | (solution × prerequisite solution) |
 | `WBS_ITEM` | one imported MS Project task line in one project, keyed by its MS Project Unique ID (D-33, Q13). Schedule fields are owned by MS Project; VB edits only the Phase / Solution links and records progress against it (D-41). **Not baselined** |
-| *WBS progress update* | one dated progress record against one WBS line — % complete, actual start and finish, status, comment (D-41). Never overwritten <!-- CHECK: D-41 decides the entity but no slice has named or modelled the table yet (wave 2); name it when §4.15 is specced --> |
+| *WBS progress update* | one dated progress record against one WBS line — % complete, actual start and finish, status, comment (D-41). Never overwritten. Named and modelled by `apple` when the WBS wave is specced (SC-4) |
 | `CONTROL_RULE` | (project × analysis) → threshold, owning role, escalation path |
 | `BASELINE` | frozen version of one project's scope at one point in time |
 | `DIAGRAM_LAYOUT` | (project × diagram type × scope × diagram object) → saved position and size, for the ERD and the DFD. Presentation, **not scope — not baselined** |
@@ -163,8 +167,12 @@ the org chart, external entities, stakeholders.
 | `create_bfc_node` | `BFC_NODE` | R | Read parent + siblings to compute `seq_no` and the hierarchical code |
 | `generate_bfc_code` | `BFC_NODE` | R | Walk ancestors, zero-pad each `seq_no` to 2 → dotted code `01.02.03.04.05`, unique per chart. **Computed at save, stored** (§9.8) |
 | `reorder_bfc_node` | `BFC_NODE` | U | Re-sequence siblings, then recompute code for every shifted sibling **and all their descendants** in one transaction, in two phases (S1-2) |
-| `mark_process` | `BFC_NODE`, `BUSINESS_REQUIREMENT` | U/C | **D-23.** Promote a childless L3–L5 node to a process; **a to-be node gets its BR in the same transaction** (S7-2). Demote one. **Demotion is refused with 409 naming every blocker** — an active BR, step I/O, step roles, external flows, as-is applications, triggers, the performer, or a data-processing description. **VB never retires them itself** (R2-P5, Q4); the consultant retires each, then demotes. Every step-level fact is also guarded in the DB (§5.4.7) |
-| `describe_process` | `BFC_NODE` | U | Process nodes only. Store the data-processing description, written system-agnostic. Reject on a non-process node |
+| `mark_process` | `BFC_NODE`, `BUSINESS_REQUIREMENT` | U/C | **D-23.** Promote a childless L3–L5 node to a process; **a to-be node gets its BR in the same transaction** (S7-2). Demote one. **Demotion is refused with 409 naming every blocker** — an active BR, step I/O, step roles, external flows, as-is applications, triggers, the performer, a data-processing description, or volume figures (S13-1). **VB never retires them itself** (R2-P5, Q4); the consultant retires each, then demotes. Every step-level fact is also guarded in the DB (§5.4.7) |
+| `describe_process` | `BFC_NODE` | U | Process nodes only. Store the data-processing description, written system-agnostic. Reject on a non-process node. A box's own description (`purpose_desc`) is shown as its **Purpose** on L1–L4 boxes; on a process, Purpose and Data processing sit together in the panel's collapsed Description section (S-P) |
+| `set_process_volume` | `BFC_NODE` | U | **D-67, S13-1.** EDIT, process nodes only (422 otherwise), either chart (an as-is node needs AS_IS). All optional: how often it runs (`runs_per_period` + period DAY / WEEK / MONTH / QUARTER / YEAR, both or neither), transactions per run (`transactions_per_run`, with an optional unit from `TRANSACTION_UNIT`, sent as a code), and handling time per transaction in **seconds** (`seconds_per_transaction`, to the millisecond, so an automated 0.3 s step and a manual 6-minute one both fit; the screen accepts minutes or seconds). Each figure ≥ 0 and under a service cap (1,000,000 runs per period, 100,000,000 transactions per run, 86,400 s); more decimals than stored → 422. `row_version` checked. **A body carrying hours or FTE → 422** (VB law 6). Audit `PROCESS_VOLUME_SET {from, to}`. No component of its own (Q-10) |
+| `derive_volume` | `BFC_NODE`, `PROJECT` | R | **D-67.** On every read of a process, never stored: `annual_hours = runs × periods_per_year × transactions × seconds / 3600`, `fte = annual_hours / (working_days_per_year × hours_per_working_day)`. DAY counts the project's working days (240 by default), WEEK 52, MONTH 12, QUARTER 4, YEAR 1. Any input missing → both `null` with the missing fields named, never guessed |
+| `set_fte_basis` | `PROJECT`, `AUDIT_EVENT` | U | **D-67, Q-7.** Platform admin (`project_ctx("ADMIN")`). Working days per year (1–366, default 240) and hours per working day (0.25–24, default 8.00); 240 × 8 = 1,920 hours per FTE. `row_version` checked; audit `PROJECT_FTE_BASIS_CHANGED {from, to}`. No process row changes |
+| `volume_summary` | `BFC_NODE` | R | **D-67, Q-9, Q-28.** VIEW. Per chart, annual hours and FTE per L1 and L2 area, as-is beside to-be — the time saved per area. **Areas match when both chart code and normalised name agree**; anything else is listed unmatched with its reason (`CODE_SAME_NAME_DIFFERS`, `NAME_ELSEWHERE` — "probably reordered", `ONLY_AS_IS`, `ONLY_TO_BE`) and never summed against the other side. Processes with incomplete volume are counted and listed per area, never guessed |
 | `link_bfc_data_entity` | `BFC_NODE_DATA_ENTITY` | C/D | Process nodes only. Attach 0..N input and 0..N output data entities — the node states *that* data flows; the BR states *what is done to it* (§5.4.2). **The one record of a step's I/O** — the DFD, the flow file and the BR all read it (D-24). Written only through `step_io.ensure_step_io`. **Delete refused (409) while a BR CRUD or an external flow depends on the row, naming each** (R2-D13) |
 | `link_bfc_external_flow` | `BFC_NODE_EXTERNAL_FLOW` | C/D | **D-24a.** Component: the chart's DFD (TO_BE_DFD or AS_IS). A process step exchanges data with an external party: (step × external entity × direction × data entity, optional). **When a data entity is named, the matching step I/O is ensured in the same transaction through the same `ensure_step_io` helper as BR CRUD** (R2-D13) — an inbound flow needs a step input, an outbound one a step output |
 | `create_external_entity` | `EXTERNAL_ENTITY` | C/U/D | Next per-project sequence → `EXT-0001`. Name (unique among live parties, S1-6), kind (CUSTOMER / SUPPLIER / BANK / REGULATOR / PARTNER / OTHER), description |
@@ -174,11 +182,12 @@ the org chart, external entities, stakeholders.
 | `retire_step_with_dependents` | the process node + its owned set | U | **S3-SR — the one cascade in VB.** Preview lists the owned set (the step's BR and that BR's CRUD, roles, solution links and FR links; the step's I/O, roles, external flows, as-is applications and trigger links) and every other blocker, with a `confirm_hash`. Confirm retires them all in one transaction with one `deleted_at` and one `STEP_RETIRED_WITH_DEPENDENTS` audit event, which is the undo key. Restore brings back exactly that set, all or nothing, refusing while any other parent is still inactive (A-SR-5) (`docs/step_retire_spec.md`, S5-1, S6b-1, slice10b Q-12) |
 | `(manual)` workshop capture | — | — | Consultant elicits the L1–L5 chart with the client in workshop; VB is the system of record afterwards, not during |
 
-### 4.1a The DFD — the one process diagram (D-31, D-38, D-46, D-47, D-49, D-54, D-55)
+### 4.1a The DFD — the one process diagram (D-31, D-38, D-46, D-47, D-49, D-54, D-55, D-65, D-68…D-70)
 
 **There is no separate business process flow: every process is shown in the DFD** (D-38). The DFD
-is generated from the BFC, the step I/O, external flows, triggers and performers — never drawn
-(D-31). A project may hold two charts, each with its own DFD: a **to-be** chart, and an optional
+is generated from the BFC, the step I/O, external flows, triggers and performers (D-31). An editor may
+also **draw a connection on the canvas**; it writes the same step I/O, external-flow or trigger row the panel
+writes, through the same writer, so the diagram stays generated from one record (D-65). A project may hold two charts, each with its own DFD: a **to-be** chart, and an optional
 **as-is** chart (D-47). The data-entity catalogue, external entities, triggers, the org chart and
 applications are shared by both, so as-is and to-be compare on the same `DE-` numbers. Component:
 TO_BE_DFD for the to-be chart, AS_IS for the as-is chart and its DFD.
@@ -186,23 +195,55 @@ TO_BE_DFD for the to-be chart, AS_IS for the as-is chart and its DFD.
 **Order is derived from data, never stored** (D-38). Process B follows A when B reads a data entity
 A writes. A branch is two different outputs ("Approved order" / "Rejected order") feeding different
 processes; a loop is a later process writing what an earlier one reads. Explicit order arrows would
-duplicate what the inputs and outputs already say. `BFC_NODE_FLOW` is retired: SELECT-only history,
-no new rows, never read by any diagram or report.
+duplicate what the inputs and outputs already say. When a diagram has no derived order (a project whose
+rule drops the data elements, or a diagram with no data yet), its processes are ranked in **chart order** —
+`seq_no` under each parent, in `hier_code` order — drawn without arrows (D-70, Q-3 option A). `BFC_NODE_FLOW` is
+retired: SELECT-only history, no new rows, never read by any diagram or report.
+
+**Each chart's DFD rule decides what makes a process complete** (D-70, S13-1). The elements are a fixed,
+code-defined list:
+
+| Element | Met when the process has… |
+|---|---|
+| `STARTED` | a live step input, a live inbound external flow or a live trigger link (D-49). **Always required** — a process nothing starts cannot be placed |
+| `DATA_IN` | a live step input (a data entity) |
+| `DATA_OUT` | a live step output (a data entity) |
+| `ORDER` | a derived order link to at least one other process of its chart (it reads what another writes, or writes what another reads); a one-process chart passes. Selectable only with `DATA_IN` and `DATA_OUT`, because order is data |
+| `EXTERNAL` | checked **per diagram**, not per process: the diagram has at least one outside party. Off by default; it never changes a process's light and shows on the DFD index only (Q-6, Q-16) |
+
+One rule **per chart** (Q-15), so a rough as-is chart never blocks the to-be freeze. A new project starts with
+the recommended set — to-be: `STARTED`, `DATA_IN`, `DATA_OUT`, `ORDER`; as-is: `STARTED`. **A chart with no live
+rule rows reads as `STARTED` + `DATA_OUT` — never as "nothing required"** (fails closed), and the consistency line
+`project_without_dfd_rule` refuses the freeze until an admin saves one. A requirement for a trigger as such is not
+an element: `STARTED` covers it (Q-14).
+
+**The readiness light** (D-68, Q-13) on every process of a chart whose DFD component is on: **red** — a rule
+element is missing, so the process **blocks the freeze**; **yellow** — the rule is met but a recommended element
+is missing; **green** — complete. Always colour **plus** icon **plus** text ("Ready", "Partly", "Not ready"),
+never colour alone (D-50). The fields the rule needs carry a "DFD" mark (D-69), drawn from the rule's element
+list, so the marks change when the rule changes.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `copy_bfc_set` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `APPLICATION_BFC_NODE` | C | **D-47, Q-24.** Start one chart by copying the other, whole tree, **into an empty chart only** (409 otherwise). Component AS_IS. Preview → confirm by hash. Copies nodes (fresh ids, same `hier_code`), performers, step I/O, external flows and trigger links. Roles move with the change of home: as-is step roles → the new to-be BR's roles; to-be BR roles → the new as-is step roles (D-64). Supporting systems copy to-be → as-is only. **As-is → to-be mints a new DRAFT BR per process** (numbers at save); BR CRUD, solutions and FRs are never copied. One `BFC_SET_COPIED` audit event holds the old → new id map; no provenance column. Every row made live passes its component check |
-| `set_performer` | `BFC_NODE` | U | **D-46.** One performer per process: `ORG_UNIT` (a department), `ORG_ROLE` (a position), `APPLICATION` (an IT system) or `AI` (with a label). The body sends codes, never ids. Refuses a retired target. A `TO_BE` application performing an as-is process warns and is allowed. **Zero is legal**: the process is drawn in the "unassigned" lane and listed as `no_performer`, a warning that does not block the freeze. Retiring an org unit, role or application that performs a live process → 409 naming the processes. Audit `PERFORMER_SET`. Component: the chart's DFD |
+| `set_performer` | `BFC_NODE` | U | **D-46.** One performer per process: `ORG_UNIT` (a department), `ORG_ROLE` (a position), `APPLICATION` (an IT system) or `AI` (with a label). The body sends codes, never ids. Refuses a retired target. A `TO_BE` application performing an as-is process warns and is allowed. **Zero is legal**: the process is drawn in the "unassigned" lane and listed as `no_performer`, a warning that does not block the freeze. Retiring an org unit, role or application that performs a live process → 409 naming the processes. Audit `PERFORMER_SET`. **Recordable whatever the DFD setting** (S10c-2): gated by the chart itself (AS_IS for the as-is chart, none for the to-be chart), never by TO_BE_DFD |
 | `maintain_process_trigger` | `PROCESS_TRIGGER` | C/U/D | **D-49.** Project-wide catalogue: name (unique among live triggers), kind `TIME` / `EVENT`, `schedule_note` (TIME only), description. No number series. Writable when either DFD component is on. Retire with live links → 409 naming the processes; restore checks the name is free |
 | `link_process_trigger` | `BFC_NODE_TRIGGER` | C/D | Process nodes only. This trigger starts this process. Relinking restores the old row (S1-7). Owned by the step (retires and restores with it). Component: the chart's DFD |
-| `generate_dfd` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER`, `DATA_ENTITY`, `EXTERNAL_ENTITY`, `BUSINESS_REQUIREMENT`, `APPLICATION`, `DIAGRAM_LAYOUT` | R | **Returns a graph, not a picture** (D-21). Given any live non-process node of either chart: its process descendants in the same chart; **one swimlane per performer** (org units, then roles, then applications, then AI, then unassigned); data stores; external parties; triggers as start symbols; flows of kind STORE, EXTERNAL and TRIGGER; **`order`** derived as above; a left-to-right **rank** from the strongly connected components of `order`, so loops are legal and layout terminates; **boundary** stubs for stores written or read by a process of the same chart outside scope; cross-area stores; the completeness gaps of the processes in scope; saved positions. **`systems`** on a process box: as-is ← `APPLICATION_BFC_NODE`; to-be ← BR → `BR_SOLUTION` → `APPLICATION_SOLUTION`, only when SOLUTION and APPLICATION are on (OR-2), otherwise empty. A performer of kind APPLICATION is the lane, not a box entry |
-| `dfd_index` | `BFC_NODE` | R | **D-54.** The DFD screen: one DFD per **direct parent of processes** (in a five-level chart, the L4s), listed flat with code, name and process count, searchable, no tree; selecting one draws it. Wider roll-up diagrams (an L2 or L3 with every process below) open from the function chart |
+| `generate_dfd` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER`, `DATA_ENTITY`, `EXTERNAL_ENTITY`, `BUSINESS_REQUIREMENT`, `APPLICATION`, `DIAGRAM_LAYOUT` | R | **Returns a graph, not a picture** (D-21). Given any live non-process node of either chart: its process descendants in the same chart; **one swimlane per performer** (org units, then roles, then applications, then AI, then unassigned); data stores; external parties; triggers as start symbols; flows of kind STORE, EXTERNAL and TRIGGER; **`order`** derived as above; a left-to-right **rank** from the strongly connected components of `order`, so loops are legal and layout terminates — or, when `order` in scope is empty, from chart order (Q-3 option A); **boundary** stubs for stores written or read by a process of the same chart outside scope; cross-area stores; the completeness gaps of the processes in scope; saved positions. **`systems`** on a process box: as-is ← `APPLICATION_BFC_NODE`; to-be ← BR → `BR_SOLUTION` → `APPLICATION_SOLUTION`, only when SOLUTION and APPLICATION are on (OR-2), otherwise empty. A performer of kind APPLICATION is the lane, not a box entry |
+| `dfd_index` | `BFC_NODE` | R | **D-54.** The DFD screen: one DFD per **direct parent of processes** (in a five-level chart, the L4s), listed flat with code, name, process count and readiness counts ("12 ready · 3 partly · 1 not", D-68), plus the per-diagram `EXTERNAL` check when the rule holds it; searchable, no tree; selecting one draws it. Wider roll-up diagrams (an L2 or L3 with every process below) open from the function chart |
 | `export_dfd` | — | R | The DFD graph as Mermaid text: one subgraph per lane, triggers as start nodes, `order` drawn dashed only on request. **Every label goes through `escape_mermaid()`**, and `_guard` ends the exporter (R2-S7, §7.12b) |
-| `process_completeness` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `BUSINESS_REQUIREMENT` | R | **D-38, D-49.** Every process needs **an input** — a step input, an inbound external flow (with or without a data entity) or a trigger — **and an output data entity** (a step output). A gap is a warning on the editing screens and **blocks the baseline freeze** (`FREEZE_BLOCKING_WARNINGS`). **The rule applies only to a chart whose DFD component is on** (S7-3); a requirements-only project is never blocked by it. Also lists `no_performer` (warning), `step_without_br` (to-be only), `crud_without_io` and `ext_without_io` (must be 0), and `live_link_on_retired_step` (must be 0) |
+| `process_completeness` | `BFC_NODE`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `BUSINESS_REQUIREMENT`, `PROJECT_DFD_RULE` | R | **D-38, D-49, D-70.** Every process must meet **its chart's DFD rule** (above). A missing rule element is a warning on the editing screens and **blocks the baseline freeze** (`FREEZE_BLOCKING_WARNINGS`: `process_missing_input` = STARTED, `process_missing_output` = DATA_OUT, `process_missing_data_in`, `process_missing_order`, and the chart-level `diagram_missing_external`); an element outside the rule is never reported as a warning, only as information on the DFD's warnings panel. **The rule applies only to a chart whose DFD component is on** (S7-3); a requirements-only project is never blocked by it. Also lists `no_performer` (warning), `step_without_br` (to-be only), `crud_without_io` and `ext_without_io` (must be 0), `live_link_on_retired_step` (must be 0), and `project_without_dfd_rule` and `dfd_rule_invalid` (must be 0) |
+| `dfd_readiness` | `BFC_NODE`, step links, `PROJECT_DFD_RULE` | R | **D-68.** One owner (`process_flow.readiness`), the same predicates as `process_completeness`, so the light and the freeze never disagree. Per live process of a chart whose DFD is on: each rule element met or missing → the light (red / yellow / green, above) and `dfd_missing` (element codes). Shown on every process row of the function chart, in the process panel header and as counts on the DFD index; a "Not ready only" filter lists every process that is not Ready (red and yellow). A chart with its DFD off has no light. The marks (D-69) read only these codes, never whether a tile looks empty. Every writer of step I/O, external flows, trigger links, BR CRUD, step retire / restore, make-process and component toggles refreshes it |
+| `get_dfd_rule` | `PROJECT_DFD_RULE` | R | **D-70.** VIEW. Per chart: the required elements, whether the rule applies (DFD on), which elements are locked and recommended; the catalogue with plain descriptions |
+| `preview_dfd_rule` | `PROJECT_DFD_RULE`, `BFC_NODE` + step links | R | **D-70.** Platform admin. For a proposed set on one chart: how many processes would be red / yellow / green and how many would **block the next freeze**, with a digest. No write |
+| `set_dfd_rule` | `PROJECT_DFD_RULE`, `PROJECT`, `AUDIT_EVENT` | C/U | **D-70, Q-5.** Platform admin (`project_ctx("ADMIN")`), as the data model depth. Body: chart, element codes, the project's `row_version`, the preview digest (409 if either is stale). `STARTED` cannot be dropped and `ORDER` needs `DATA_IN` and `DATA_OUT` (422). Dropped elements retire their rows; re-added ones restore them (S1-7). Audit `PROJECT_DFD_RULE_CHANGED {bfc_set_code, from, to, would_block}`. No component (a project setting) |
+| `draw_dfd_connection` | `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER` | C | **D-65.** EDIT, on a live diagram of a chart whose DFD is on (the canvas exists only there). Each line keeps its panel route's gate: a step input/output the function chart's (BR CRUD writes the same row), an external flow and a trigger the chart's DFD. Store → process or process → store writes a step input or output through **`step_io.ensure_step_io`**; party ↔ process uses the external-flow writer (asking for a data entity or a flow label); trigger → process uses `trigger.link`. Process → empty canvas opens a picker: an existing data entity, or a **new** one created there with its `DE-` number at save (Q-12). An existing row → "Already on the diagram", no write. Invalid pairs (store → store, party → store, a trigger to anything but a process) are refused in the browser and again by the server. **Drawing never writes BR CRUD** (Q-11): the CRUD grid shows the I/O as "On the diagram, not in the requirement yet — pick C, R, U or D" |
+| `draw_hand_off` | `BFC_NODE_DATA_ENTITY` ×2 | C | **D-65.** Process A → process B: the editor picks the data entity A hands to B; **one transaction** writes A's output and B's input through `ensure_step_io`, and the derived order arrow appears by itself. Both live processes of the same project (404 if not visible) and **the same chart** (422 "Diagrams never cross charts"). The only new write route of D-65 |
+| `remove_dfd_flow` | the three link tables | D (soft) | **D-65.** Only STORE, EXTERNAL and TRIGGER flows are removable, each backed by exactly one row, through the existing unlink route. **Derived order arrows cannot be selected for removal**; they change only when the data behind them changes. A step I/O a BR CRUD or an external flow depends on stays (409 naming them; the canvas links to the requirement). No keyboard delete |
 | `save_diagram_layout` (DFD) | `DIAGRAM_LAYOUT` | C/U | As §4.2: positions of processes, stores, externals and triggers, last write wins per object (D-30). Diagram types are ERD and DFD; a `PROCESS_FLOW` position is refused (S7-5) |
 | `download_flow_schema` | — | R | **D-25.** The JSON Schema for `vb-process-flow/2.0`, a worked example, and the **AI conversion prompt pack**: instructions an AI follows to turn a PowerPoint, BPMN or Visio flow into a valid file. **The pack names the approved services — Claude or Microsoft Copilot, under FTC's own accounts only — and opens with the personal-data removal step** (D-36) |
 | `export_process_flow_json` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER` | R | The processes under one parent node as `vb-process-flow/2.0`: per step its `br_number` (to-be only — its identity, R2-D1), current `hier_code` (a cross-check), `row_version` (R2-D5), name, description, **performer**, **inputs** and **outputs**, **triggers** and **external flows**. **No edges and no lanes** (D-38, D-46). An edited file re-imports as an update and a stale step is caught |
-| `validate_process_flow_json` | `IMPORT_BATCH`, `IMPORT_ROW` | C | **The anchor node and the mode come from the route, chosen in the UI** (R2-P3); the chart is the anchor's. Parse under the JSON caps (§7.12a) and check the format version; a `1.0` file is refused ("re-export from VB"). **Resolve each to-be step by `br_number`** (UPDATE), cross-checking `hier_code` ("moved since export", R2-D1) and `row_version`. A step with neither is **matched by normalised name to an active process child of the anchor** (UPDATE with a warning, R2-P1, Q1); otherwise it is an INSERT. Resolve data entities by `DE-` number or exact name, performers by code, triggers by name, external parties to `EXT-` rows. In replace mode, stage a **RETIRE** row per omitted step I/O and trigger link, and a **KEPT** row with a warning for I/O a BR CRUD or external flow depends on (R2-P4). **Warn and still import (D-55):** a process with no input/trigger or no output, an unconnected process, an unknown data entity name (created as a new entity, listed in the preview), an unknown trigger (added to the catalogue), an unknown performer (left blank), missing descriptions. **Errors block only what would damage data:** an unreadable file, a wrong format version, a file for a different anchor or mode than chosen, a stale `row_version`. **Nothing written to a business table** |
+| `validate_process_flow_json` | `IMPORT_BATCH`, `IMPORT_ROW` | C | **The anchor node and the mode come from the route, chosen in the UI** (R2-P3); the chart is the anchor's. Parse under the JSON caps (§7.12a) and check the format version; a `1.0` file is refused ("re-export from VB"). **Resolve each to-be step by `br_number`** (UPDATE), cross-checking `hier_code` ("moved since export", R2-D1) and `row_version`. A step with neither — and every as-is step, which has no BR number — is **matched by normalised name to an active process child of the anchor** (UPDATE with a warning, R2-P1, Q1, SC-6); otherwise it is an INSERT. Resolve data entities by `DE-` number or exact name, performers by code, triggers by name, external parties to `EXT-` rows. In replace mode, stage a **RETIRE** row per omitted step I/O and trigger link, and a **KEPT** row with a warning for I/O a BR CRUD or external flow depends on (R2-P4). **Warn and still import (D-55):** a process with no input/trigger or no output, an unconnected process, an unknown data entity name (created as a new entity, listed in the preview), an unknown trigger (added to the catalogue), an unknown performer (left blank), missing descriptions. **Errors block only what would damage data:** an unreadable file, a wrong format version, a file for a different anchor or mode than chosen, a stale `row_version`, and a step whose identity is wrong (unknown or out-of-scope BR number, moved `hier_code`, `hier_code` without `br_number`, two steps on one process, duplicate names — SC-6). **Nothing written to a business table** |
 | `commit_process_flow_json` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER`, `DATA_ENTITY`, `EXTERNAL_ENTITY` | C/U | One transaction, all-or-nothing, the same six properties as §7.11. Component: the anchor chart's DFD. **Refused unless `acknowledged_inserts` equals the insert count whenever there are inserts, and `acknowledged_retires` equals the retire count whenever there are retirements** (R2-P1, R2-P2). New steps are process nodes; a new to-be step gets its BR (D-2). The file's performer **replaces** the step's performer. `merge` never retires. **`replace` retires only step I/O and trigger links (Q5)** — never steps, BRs, performers, roles, external flows, or I/O a BR CRUD or external flow depends on. The gaps imported stay visible as the DFD's warnings panel; an incomplete DFD can be imported, not frozen (D-55) |
 | `(manual)` AI conversion | — | — | The consultant removes personal data from the source slide or BPMN export, then gives it and the prompt pack to **Claude or Microsoft Copilot under FTC's own account — no other service, no personal account** (D-36, R2-S6), and uploads the JSON it returns. **VB itself never sends client content to an AI service** (A-51) |
 
@@ -223,6 +264,9 @@ no new rows, never read by any diagram or report.
 
 The BR is part of the business function chart: it is read and edited from its process's panel, and
 the BR page remains as a deep link (from FRs, solutions and the diff) under Business functions (D-53).
+A to-be process and its BR are 1:1, so the process's **readiness light** (D-68, §4.1a) is the BR's; the fields
+the chart's DFD rule needs carry the "DFD" mark with the note "Needed to complete the DFD" — on the BR page,
+the CRUD grid header (DATA_OUT, and DATA_IN when the rule holds it) (D-69).
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
@@ -238,8 +282,19 @@ the BR page remains as a deep link (from FRs, solutions and the diff) under Busi
 | `create_fr_from_br` | `FUNCTION_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT` | C | Create an FR and link it to the BR in one transaction (slice10b Q-20) |
 | `br_coverage_report` | `BUSINESS_REQUIREMENT`, `BR_DATA_ENTITY`, `BR_SOLUTION`, `BR_FUNCTION_REQUIREMENT`, `FUNCTION_REQUIREMENT` | R | BRs with no output DE; BRs with no solution; BRs with no FR (information — legal); **FRs with no BR link (warning, D-28 re-based on D-52)**; FRs with no solution (information); FRs whose tag answers none of their BRs (`fr_solution_outside_its_brs`, warning); FRs whose tag answers a BR they are not linked to (`solution_reach_without_link`, information — a hint, never a write); DEs referenced by no BR → the scope-gap list |
 
-Structured requirement lines (D-59), per-attribute CRUD (D-60b) and system-to-system data flows on a BR
-(D-61) are decided in direction; their model is specified in Slice 11 before they enter this grid.
+**The structured BR** (D-59, D-60b, D-61, S11-1; slice 11, `docs/slice11_schema.md`):
+
+| Function | Entity | Use | Business logic → output data |
+|---|---|---|---|
+| `maintain_br_lines` | `BR_REQUIREMENT_LINE` | C/U/D | **D-59.** Numbered requirement lines under each BR — `BR-0043.3` — each with a kind (`BR_LINE_KIND`: Rule, Calculation, Validation, Output, Control; project-editable) and an optional MoSCoW priority (`BR_PRIORITY`; blank = not yet prioritised). **The line number is minted by the service at save** (max + 1 over all the BR's lines, retired included), kept for life and never reused or sent; display order (`seq_no`) is changed by dragging and is not a scope change. The BR's own priority is the highest of its live lines — derived, never stored. No component (a BR always exists). Owned by the BR: retires and restores with its step |
+| `update_br` (structured) | `BUSINESS_REQUIREMENT` | U | `br_statement` stays editable as the BR's one-line headline. `business_logic` and `output_expectation` are **read-only legacy**: copied once, word for word, into one Rule line and one Output line per BR (priority blank, audit `BR_LINES_BACKFILLED`), never cleared or dropped; the panel shows non-blank legacy text collapsed as "Earlier free text" |
+| `tick_br_attributes` | `BR_DATA_FIELD` | C/D | **D-60(b).** Which attributes the BR uses and how: one row per (BR × attribute × C / R / U) — **Delete stays entity-level**. **Licensed by the BR's entity-level CRUD row** (same BR, entity and CRUD, live), held by a composite FK, so an attribute tick can never outlive its entity tick. The CRUD grid saves entity and attribute ticks in **one request**; unticking an entity's action unticks its attributes on screen before Save. Unlinking an entity row that still has live attribute ticks any other way → 409 naming the attributes. Optional always: under `FULL` an entity row with no attribute ticked is information (`br_entity_without_attributes`), never a warning; under `KEYS_ONLY` nothing is shown. Retiring a data field a live BR uses → 409 naming the BRs. Relinking restores the old row (S1-7) |
+| `state_br_system_flow` | `BR_SYSTEM_FLOW` | C/D | **D-61.** Component APPLICATION. "What data entity we copy from which system to which system": (BR × data entity × from-application × to-application), with a note; both ends from the Applications master list (D-56), never free text, and different. A flow of an entity the BR does not otherwise use is allowed, as information (`flow_entity_not_used_by_br`). Retiring an application or entity a live flow uses → 409 naming the BRs. Whether a flow also covers one-off data migration (a flow kind) is an open question in the design history §1 |
+| `flow_coverage` | `BR_SYSTEM_FLOW`, `BR_FUNCTION_REQUIREMENT`, `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY` | R | **Derived, never stored:** a flow is covered when the same BR links a live interface-behaviour FR with the same source and target that carries the entity. The panel shows "covered by FR-0031" or "no interface yet"; coverage reports list uncovered flows as information, as a warning when FUNCTION_REQUIREMENT is on, never a freeze block |
+| `create_interface_fr_from_flows` | `FUNCTION_REQUIREMENT`, `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY`, `BR_FUNCTION_REQUIREMENT` | C | Components FUNCTION_REQUIREMENT and APPLICATION. From one or more of a BR's flows **with the same source and target**: one transaction creates the interface FR, its interface detail, one carried entity per flow entity and the BR ↔ FR link; numbers minted at save |
+
+Whether each data entity also names a master system (system of record) is an open question in the design
+history §1.
 
 ### 4.4 Solution, Function Requirement and Applications (scope area 4, D-7/D-8/D-52)
 
@@ -251,11 +306,11 @@ Structured requirement lines (D-59), per-attribute CRUD (D-60b) and system-to-sy
 | `maintain_fr_types` | `CODE_MASTER` (`FR_TYPE`) | C/U | Per-project types, at EDIT. Each carries a **behaviour** ∈ FORM / INTERFACE / REPORT / BATCH / OTHER, which decides which detail panel the FR form shows and whether the FR appears on the interface list. A new type needs rate-card rows before its FRs can be priced (D-13). **When a project overrides a global type, the project's `EFFORT_RATE` rows and FRs are re-pointed to the override code in the same transaction**, so the rate-card lookup never silently misses (A-16). **A global type's behaviour is immutable once any FR or rate row references it → 409** (R2-D8, Q6): add a new type instead |
 | `describe_interface` | `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY` | C/U/D | Components FUNCTION_REQUIREMENT and APPLICATION. FRs whose type behaviour is INTERFACE only. Source application, target application (different, same project), pattern (PUSH / PULL / BIDIRECTIONAL), method (API / FILE / DB / MESSAGE / MANUAL), frequency, volume note, and the data entities carried, each with a note. One save covers the carried set and bumps the detail's `row_version`. Retiring an FR with live interface detail is refused until the detail is removed (S6b-3) |
 | `interface_list` | `v_interface_list` | R | **D-27. Generated, never typed:** one row per interface FR — FR number, name, source → target, pattern, method, frequency, data entities and their notes, solution, BR(s) (through `BR_FUNCTION_REQUIREMENT`), status, effort. **Complete = source, target, method and at least one carried entity**; pattern and frequency optional (S6b2-1). Incomplete interfaces are listed as incomplete, not hidden. The pair filter matches direction as stored, BIDIRECTIONAL either way, and counts the interfaces it cannot match (S6b2-2, S6b2-3). Exportable to `.xlsx` |
-| `link_fr_to_bfc_node` | `FR_BFC_NODE` | C/D | For coverage no BR expresses — an FR on a non-process node, or a process node whose requirement is not mapped yet. **Rejected if the node is already reachable through `BR_SOLUTION`** (§5.4.3 override). Designed, not built; when built it carries the to-be guard (S7-2) <!-- CHECK: the reachability guard reads BR_SOLUTION (D-7 path); D-52 made BR_FUNCTION_REQUIREMENT the primary mapping and no ruling restates which path the guard should read --> |
+| `link_fr_to_bfc_node` | `FR_BFC_NODE` | — | **Retired, never built** (SC-3). An FR reaches the chart through the BRs it serves (D-52); an FR for a whole area is linked to the BRs of that area's processes |
 | `create_application` | `APPLICATION` | C | Component APPLICATION (needs no other component, S7-4). The project's application/technology catalogue. `lifecycle_code` ∈ AS_IS / TO_BE / BOTH. Codes upper-case, A–Z 0–9 `.` `_` `-`, unique and editable until a baseline freezes them; a code freed by a rename may be taken by another application; live names unique (S6b-2, S6b-6, S6b-7) |
 | `link_application_solution` | `APPLICATION_SOLUTION` | C/D | Components APPLICATION and SOLUTION. **To-be allocation** — what delivers this solution. Rejected if the application's lifecycle is `AS_IS` |
 | `solution_matrix` | `SOLUTION`, `BR_SOLUTION`, `BUSINESS_REQUIREMENT` | R | Solutions by category × BFC L1 area → *is this transformation actually balanced, or is it five technology answers and no org change?* |
-| `application_gap_report` | `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION`, `BFC_NODE` | R | Process steps with an as-is application but no to-be allocation → the migration backlog. **The reason both links exist.** A `TO_BE` application linked as today's support does not count as today's support; it is listed on the informational line `as_is_support_by_to_be` (S6b-5) |
+| `application_gap_report` | `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION`, `BFC_NODE` | R | Per area, as-is support with no to-be allocation → the migration backlog. **The two charts are matched by area** — L1 / L2 chart code and normalised name agreeing, as the volume summary; unmatched areas are listed apart (SC-5). **The reason both links exist.** A `TO_BE` application linked as today's support does not count as today's support; it is listed on the informational line `as_is_support_by_to_be` (S6b-5) |
 | `fr_traceability_matrix` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT`, `FUNCTION_REQUIREMENT`, `SOLUTION`, `APPLICATION` | R | Process step → BR → FR (through the direct link), grouped by FR type → the vendor-facing scope list. The Solution column is the FR's tag (blank allowed, flagged when it answers none of the FR's BRs); Application is the tag's live `APPLICATION_SOLUTION`. Untraced FRs listed in their own group at the end |
 
 ### 4.5 Issue Management (scope area 5)
@@ -290,17 +345,19 @@ and BR: none; FR: FUNCTION_REQUIREMENT; WBS: WBS; flow file: the anchor chart's 
 ### 4.6 Version control / baselines (scope area 6)
 
 The freeze set is the tables in `FREEZE_SET` (`services/freeze_set.py`) whose component gate is open
-for the project (D-37, S8-1); BR ↔ FR links join it under hash spec 2 (slice10b Q-14). Freeze and client
+for the project (D-37, S8-1); BR ↔ FR links join it under hash spec 2 (slice10b Q-14); the process volume
+figures join `bfc_node`'s hashed list under **hash spec 3** (slice 13c, D-67); and the structured BR — requirement
+lines, attribute usage and system flows — joins under **hash spec 4** (slice 11, S11-1). Freeze and client
 approval are at EDIT. Baselines are always on: no component gates the routes.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `preview_freeze` | every frozen table | R | Next version label, the typed confirmation text, errors, freeze-blocking warnings, warnings, row counts per entity, the baseline it will supersede (and whether that one still awaits sign-off), and a `preview_digest` over the live set. Writes nothing |
-| `freeze_baseline` | `BASELINE` | C | One transaction, **opened at REPEATABLE READ from its first statement, with `consistency_check` inside it** (R2-P6), so the check and the snapshot see the same data. The body carries the typed confirmation (project code + version) and the `preview_digest`; a changed digest → 409 "The scope changed since you opened this freeze". **Refused on consistency errors and on `FREEZE_BLOCKING_WARNINGS`** (missing input/output in a chart whose DFD is on, live rows in an off component); WARNINGS are returned and audited. Version label auto-increments (minor v1.0 → v1.1, or major). `frozen_by_user_id` from JWT. Status FROZEN. Copies `data_model_depth` onto the header |
+| `freeze_baseline` | `BASELINE` | C | One transaction, **opened at REPEATABLE READ from its first statement, with `consistency_check` inside it** (R2-P6), so the check and the snapshot see the same data. The body carries the typed confirmation (project code + version) and the `preview_digest`; a changed digest → 409 "The scope changed since you opened this freeze". **Refused on consistency errors and on `FREEZE_BLOCKING_WARNINGS`** (a process missing an element of its chart's DFD rule in a chart whose DFD is on, D-70; live rows in an off component); WARNINGS are returned and audited. Version label auto-increments (minor v1.0 → v1.1, or major). `frozen_by_user_id` from JWT. Status FROZEN. Copies `data_model_depth`, **each chart's DFD rule** (`dfd_rule_to_be`, `dfd_rule_as_is`, D-70) and **the FTE basis** (`fte_working_days`, `fte_hours_per_day`, D-67) onto the header, so a baseline says which rule it passed and re-derives its FTE as frozen. None of the three is in `content_digest` or ever a diff row: they are settings, protected by the header guard |
 | `freeze_baseline` | every gated live table | R | Read the whole live set for the project, `is_active = TRUE` only, filtered by the components on |
 | `freeze_baseline` | `baseline_*` | C | Copy each live row into its generated snapshot table, retaining `source_id`, code **and** label, and a `content_hash` computed in SQL; the header records a `content_digest` over every entity → the immutable baseline |
 | `freeze_baseline` | `BUSINESS_REQUIREMENT`, `BASELINE` | U | **After** the snapshot, every live BR becomes BASELINED (so the frozen row keeps DRAFT/CONFIRMED), and the prior baseline becomes SUPERSEDED. Audit `BASELINE_FROZEN` with the components, counts and warnings |
-| `diff_baseline` | `baseline_*` | R | **Any two baselines of one project, or a baseline against the live working set.** Per entity, full outer join on `source_id` → ADDED / CHANGED / REMOVED, with the changed field list, and **MOVED** when only a position column differs (D-10); CHANGED wins and carries `moved: true`. Each side reports which components were on. An entity whose hashed column list differs between the two sides' hash specs reports `SCHEMA_VERSION_MISMATCH`. A side frozen before BR ↔ FR links existed derives them from its frozen solutions (slice10b §5.3). Runs read-only at REPEATABLE READ. Refused (409) for a baseline that fails its integrity check. Its screen shows counts per area with colour, text and icon, drill-down to before/after per row, and the diagrams highlighted (D-50) |
+| `diff_baseline` | `baseline_*` | R | **Any two baselines of one project, or a baseline against the live working set.** Per entity, full outer join on `source_id` → ADDED / CHANGED / REMOVED, with the changed field list, and **MOVED** when only a position column differs (D-10); CHANGED wins and carries `moved: true`. Each side reports which components were on. **Across hash specs** (Q-22): an entity whose hashed list grew between the two sides' specs (each later list extends the earlier one) is compared field by field **on the older list**, and the entry names what was not compared (`compared_on_spec`, `not_compared`) — "Volume is not in v1.2"; against a pre-13c baseline no process is CHANGED merely because volume exists. A side frozen before an entity joined the set shows its rows as ADDED, with a banner when the entity is the structured BR ("vX.Y predates requirement lines"). `SCHEMA_VERSION_MISMATCH` is kept for a list that does not extend the older one, which the freeze set's own assertion makes impossible. A side frozen before BR ↔ FR links existed derives them from its frozen solutions (slice10b §5.3). Runs read-only at REPEATABLE READ. Refused (409) for a baseline that fails its integrity check. Its screen shows counts per area with colour, text and icon, drill-down to before/after per row, and the diagrams highlighted (D-50) |
 | `(manual)` client sign-off | `BASELINE` | U | Consultant records the client's approval against a frozen baseline. VB records the decision; it does not route it |
 | `approve_baseline` | `BASELINE` | U | Records the client's sign-off — approver name, date (between the freeze date and today), note, optional `approval_reference` — on a **FROZEN or SUPERSEDED** baseline. FROZEN → APPROVED; a SUPERSEDED one keeps its status and gains the approval. Never undone, and no approval column changes once set. **The agreed baseline is the newest one with a recorded approval** (`is_agreed`). The next freeze supersedes an APPROVED baseline and keeps its approval facts (DR8-P1) |
 | `reopen_baseline` | `BASELINE` | — | **Not offered.** A frozen baseline is immutable; scope moves forward by freezing v1.1 |
@@ -320,7 +377,7 @@ Levels rank `VIEW` < `EDIT` < `ADMIN`; only platform admins reach ADMIN.
 | `login` | `AUDIT_EVENT` | C | Log success/failure with timestamp and outcome |
 | `create_user` | `APP_USER` | C | Platform admin only. `user_kind` (USER / VIEWER) required in the body. Store hash in `password_hash`; the plaintext is never persisted or logged. An address outside FTC's domains is refused until client logins exist (D-11, D-43) |
 | `change_user_kind` · `set_platform_admin` | `APP_USER`, `AUDIT_EVENT` | U | Platform admin only. Audited (`USER_KIND_CHANGED`). Removing the admin flag requires the kind the user falls back to (DR7-S6) |
-| `create_project` | `PROJECT`, `PROJECT_COMPONENT` | C | **Platform admin only.** Under a client, optionally in a program of the same client. Body names the component list (closed under its dependencies, else 422 naming the missing one), the template it started from (audit only), the data model depth, and **`is_restricted` explicitly** — the form preselects "Assigned consultants only" (D-62). Seeds **all ten number series** (DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT — R2-D14), the rate card, the control rules and the component rows in one transaction. A restricted project starts with no members; the admin lands on its Access screen |
+| `create_project` | `PROJECT`, `PROJECT_COMPONENT`, `PROJECT_DFD_RULE` | C | **Platform admin only.** Under a client, optionally in a program of the same client. Body names the component list (closed under its dependencies, else 422 naming the missing one), the template it started from (audit only), the data model depth, and **`is_restricted` explicitly** — the form preselects "Assigned consultants only" (D-62). Seeds **all ten number series** (DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT — R2-D14), the rate card, the control rules, the component rows and **each chart's recommended DFD rule** (D-70) in one transaction; the FTE basis starts at 240 × 8 (D-67). A restricted project starts with no members; the admin lands on its Access screen |
 | `set_components` | `PROJECT_COMPONENT`, `AUDIT_EVENT` | C/U | **D-37, platform admin.** The body is the whole wanted set. Preview: what turns on (incl. what is added by dependency, OR-2), what turns off, and blockers — **a component cannot be switched off while live rows exist in it, or while a component that stays on needs it** (OR-1, named as `soft_delete` does). Confirm by hash; one `PROJECT_COMPONENTS_CHANGED` audit event. Switching back on restores the same row |
 | `set_data_model_depth` | `PROJECT` | U | **D-39, platform admin.** `KEYS_ONLY` / `FULL`, audited, `row_version` checked |
 | `set_restriction` | `PROJECT`, `AUDIT_EVENT` | U | **OR-6, platform admin.** Preview names everyone who **loses** access (restricting) or **gains** it (unrestricting), and who **keeps** it with each member's note, flagging kept members whose level drops; confirm by hash. One `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED` audit event with the member list. Read per request, so it applies on the next request. Existing open projects are switched one by one by an admin after their members are checked, never by a migration (D-62) |
@@ -378,7 +435,7 @@ Component CHANGE_REQUEST (needs EFFORT).
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `raise_change_request` | `CHANGE_REQUEST` | C | Next per-project sequence → `CR-0001`. Raised against a baseline that is **FROZEN or APPROVED — never SUPERSEDED, never the working set** (Q8), with a stated rationale and origin <!-- CHECK: Q8 targets FROZEN or APPROVED, not SUPERSEDED; DR8-P1 (slice 8) lets a SUPERSEDED baseline carry the client approval and says "the agreed baseline is the newest with a recorded approval — wave 2's CR targets it", which may be SUPERSEDED. Settle in the wave-2 CR spec --> |
+| `raise_change_request` | `CHANGE_REQUEST` | C | Next per-project sequence → `CR-0001`. Raised against an agreed baseline — **FROZEN or APPROVED, or a SUPERSEDED one that carries the agreed client approval** (the newest baseline with a recorded approval, DR8-P1); **never the working set, never a SUPERSEDED baseline without that approval** (Q8, SC-2) — with a stated rationale and origin |
 | `analyse_cr_impact` | `CR_IMPACT` | C | Trace the proposed change through BR → FR (direct links) and BR → Solution → Application → Data Entity → Phase. **An FR is accepted as a seed** as well as a BR, because an untraced FR cannot be reached from any BR. Every touched object becomes a row. **The blast radius is computed, not typed** |
 | `price_cr` | `CHANGE_REQUEST` | U | Sum `effort_days` across impacted FRs (D-13); sum benefit delta across impacted benefits (D-14); flag impacted phases and dependencies |
 | `decide_cr` | `CHANGE_REQUEST`, `DECISION` | U/C | APPROVED / REJECTED / DEFERRED, with `decided_by_user_id` and `displaces_cr_id` — **an approval of net-positive effort must name what it displaces, or record an explicit budget increase** |
@@ -423,7 +480,7 @@ every row below is either a program header or a read assembled from per-project 
 | `move_project_program` | `PROJECT`, `AUDIT_EVENT` | U | **Platform admin only** (Q10). Two steps: a **preview** showing the roll-up change, then a commit that must quote the preview's hash over from/to — if it changed in between, 409. Moving a project changes roll-ups, not access. Audited (R2-S3) |
 | `program_dashboard` | every per-project report | R | **Every staff user.** For each project in `visible_project_ids(user) ∩ program.projects`: BR / FR / issue counts, control-panel status, effort summary, and WBS plan-vs-actual where a WBS is imported. **Built by calling the per-project report once per project — never new cross-project SQL** (R2-S2). A restricted project the caller is not on is omitted silently; a program whose every project is hidden from the caller is hidden too |
 | `program_counts` · `program_interfaces` · `program_effort` · `program_control_status` | the same per-project reports | R | The same rule: a list of `{project, result}` pairs, one per visible project. Nothing is stored at program level |
-| `(manual)` cross-project hand-off | — | — | Not a shared entity: each project records its own side <!-- CHECK: the hand-off was drawn as a HANDOFF edge (BFC_NODE_FLOW), retired by D-38; the DFD's boundary stubs stay within one chart of one project, and no ruling says how a hand-off to another project is now shown --> |
+| `(manual)` cross-project hand-off | — | — | Not a shared entity: each project records its own side. The other project is an **outside party** on the DFD boundary — an `EXTERNAL_ENTITY` named "Project: X", with external flows like any other party (SC-1). No new table |
 
 ### 4.15 WBS import and progress (D-33, D-41)
 
@@ -532,6 +589,7 @@ erDiagram
     PROJECT ||--o{ BASELINE : "freezes"
     PROJECT ||--|{ PROJECT_SEQUENCE : "numbers"
     PROJECT ||--o{ PROJECT_COMPONENT : "switches on (D-37)"
+    PROJECT ||--|{ PROJECT_DFD_RULE : "requires, per chart (live row = required - D-70)"
     CODE_MASTER ||--o{ PROJECT_COMPONENT : "names the component"
     CODE_MASTER ||--o{ PROJECT_TEMPLATE_COMPONENT : "template x component (OR-3)"
 
@@ -552,6 +610,7 @@ erDiagram
     PROCESS_TRIGGER ||--o{ BFC_NODE_TRIGGER : "starts (D-49)"
     BFC_NODE ||--o{ BFC_NODE_TRIGGER : "is started by"
     BFC_NODE ||--o{ BFC_NODE_FLOW : "flowed to (retired - D-38, history only)"
+    CODE_MASTER |o--o{ BFC_NODE : "TRANSACTION_UNIT of the volume figures (D-67)"
 
     %% ---------- data entities ----------
     DATA_ENTITY ||--|{ DATA_FIELD : "is composed of"
@@ -591,6 +650,14 @@ erDiagram
     DATA_ENTITY ||--o{ BR_DATA_ENTITY : "is used by"
     BUSINESS_REQUIREMENT ||--|{ BR_ORG_ROLE : "is owned via (to-be RACI - D-64)"
     ORG_ROLE ||--o{ BR_ORG_ROLE : "is accountable in"
+    BUSINESS_REQUIREMENT ||--o{ BR_REQUIREMENT_LINE : "is detailed by (D-59)"
+    CODE_MASTER ||--o{ BR_REQUIREMENT_LINE : "types kind and priority"
+    BR_DATA_ENTITY ||--o{ BR_DATA_FIELD : "licenses (same BR, entity, CRUD; live - D-60b)"
+    DATA_FIELD ||--o{ BR_DATA_FIELD : "is used as"
+    BUSINESS_REQUIREMENT ||--o{ BR_SYSTEM_FLOW : "states (D-61)"
+    DATA_ENTITY ||--o{ BR_SYSTEM_FLOW : "flows"
+    APPLICATION ||--o{ BR_SYSTEM_FLOW : "is the from system of"
+    APPLICATION ||--o{ BR_SYSTEM_FLOW : "is the to system of"
 
     %% ---------- solution and function requirement (D-7, D-52) ----------
     BUSINESS_REQUIREMENT ||--o{ BR_SOLUTION : "is answered by"
@@ -606,10 +673,6 @@ erDiagram
     APPLICATION ||--o{ APPLICATION_BFC_NODE : "supports today (as-is processes)"
     BFC_NODE ||--o{ APPLICATION_BFC_NODE : "is supported today by"
     CODE_MASTER ||--o{ APPLICATION : "types lifecycle and kind"
-
-    %% ---------- function requirement ----------
-    FUNCTION_REQUIREMENT ||--o{ FR_BFC_NODE : "supports (designed, not built)"
-    BFC_NODE ||--o{ FR_BFC_NODE : "is supported by"
 
     %% ---------- stakeholders and issues ----------
     ORG_UNIT ||--o{ STAKEHOLDER : "employs"
@@ -710,6 +773,14 @@ erDiagram
         bigint status_code_id FK
         varchar data_model_depth "KEYS_ONLY | FULL - D-39"
         bool is_restricted "OR-6, D-62"
+        smallint working_days_per_year "FTE basis, default 240 - D-67"
+        numeric hours_per_working_day "FTE basis, default 8.00 - D-67"
+    }
+    PROJECT_DFD_RULE {
+        bigint project_dfd_rule_id PK
+        bigint project_id FK "UK (project_id, bfc_set_code, element_code)"
+        varchar bfc_set_code "TO_BE | AS_IS"
+        varchar element_code "STARTED | DATA_IN | DATA_OUT | EXTERNAL | ORDER; STARTED never retired"
     }
     PROJECT_COMPONENT {
         bigint project_component_id PK
@@ -776,6 +847,11 @@ erDiagram
         bigint performer_org_role_id FK
         bigint performer_application_id FK
         varchar performer_label "AI only"
+        numeric runs_per_period "process only - D-67"
+        varchar volume_period_code "DAY | WEEK | MONTH | QUARTER | YEAR"
+        numeric transactions_per_run
+        bigint transaction_unit_code_id FK "TRANSACTION_UNIT"
+        numeric seconds_per_transaction
     }
     BFC_NODE_DATA_ENTITY {
         bigint bfc_node_data_entity_id PK
@@ -860,9 +936,37 @@ erDiagram
         varchar node_bfc_set FK "generated: TO_BE - S7-2"
         varchar br_number
         text br_statement
-        text business_logic
-        text output_expectation
+        text business_logic "legacy, read-only - S11-1"
+        text output_expectation "legacy, read-only - S11-1"
         bigint status_code_id FK
+    }
+    BR_REQUIREMENT_LINE {
+        bigint br_requirement_line_id PK
+        bigint project_id FK
+        bigint br_id FK "UK (br_id, line_no)"
+        smallint line_no "minted, never reused"
+        smallint seq_no "display order"
+        bigint line_kind_code_id FK "BR_LINE_KIND"
+        bigint priority_code_id FK "BR_PRIORITY, nullable"
+        text line_text
+    }
+    BR_DATA_FIELD {
+        bigint br_data_field_id PK
+        bigint project_id FK
+        bigint br_id FK "UK (br_id, data_field_id, crud_code)"
+        bigint data_entity_id FK
+        char crud_code "C R U"
+        bigint data_field_id FK
+        text usage_note
+    }
+    BR_SYSTEM_FLOW {
+        bigint br_system_flow_id PK
+        bigint project_id FK
+        bigint br_id FK "UK (br, entity, from, to)"
+        bigint data_entity_id FK
+        bigint source_application_id FK
+        bigint target_application_id FK
+        text flow_note
     }
     BR_DATA_ENTITY {
         bigint br_data_entity_id PK
@@ -959,11 +1063,6 @@ erDiagram
         varchar email
         bool is_bpo
     }
-    FR_BFC_NODE {
-        bigint fr_id PK
-        bigint bfc_node_id PK
-        bigint project_id FK
-    }
     EXTERNAL_ENTITY {
         bigint external_entity_id PK
         bigint project_id FK
@@ -1050,6 +1149,10 @@ erDiagram
         bigint status_code_id FK
         smallint hash_spec_version
         varchar data_model_depth "copied from the project"
+        varchar_array dfd_rule_to_be "the to-be rule passed; NULL before 13b = D-38 rule"
+        varchar_array dfd_rule_as_is "the as-is rule passed"
+        smallint fte_working_days "FTE basis at the freeze; NULL before 13c"
+        numeric fte_hours_per_day
         text note
         bigint prior_baseline_id FK
         timestamptz frozen_at
@@ -1308,7 +1411,8 @@ design key is shown as a `UK (…)` note.
 
 **Build status.** The tables of the later waves — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `BENEFIT`,
 `BENEFIT_SOLUTION`, `RISK`, `CHANGE_REQUEST`, `CR_IMPACT`, `DECISION`, `PHASE`, `SOLUTION_PHASE`,
-`SOLUTION_DEPENDENCY`, `WBS_ITEM`, `CONTROL_RULE` — and `FR_BFC_NODE` are designed and not yet built.
+`SOLUTION_DEPENDENCY`, `WBS_ITEM`, `CONTROL_RULE` — are designed and not yet built. `FR_BFC_NODE` is retired
+and never built (SC-3); it is not drawn.
 The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is designed and being built. `BFC_NODE_FLOW` (D-38) and
 `USER_ACCESS_GRANT` (D-40) are retired: the tables hold history and take no new rows.
 
@@ -1362,6 +1466,24 @@ retired `USER_ACCESS_GRANT`).
 - **`data_model_depth varchar(10) NOT NULL DEFAULT 'FULL'`**, `CHECK (data_model_depth IN ('KEYS_ONLY',
   'FULL'))` (D-39). A CHECK-listed column, not a `code_master` FK, because the code branches on it. Read
   only through `components.depth()`.
+- **The FTE basis (D-67, S13-1):** `working_days_per_year smallint NOT NULL DEFAULT 240` (`BETWEEN 1 AND 366`)
+  and `hours_per_working_day numeric(4,2) NOT NULL DEFAULT 8.00` (`BETWEEN 0.25 AND 24`); 240 × 8 = 1,920 hours
+  per FTE. Written only by `set_fte_basis` (platform admin, audited); copied onto each baseline header.
+
+**PROJECT_DFD_RULE** *(D-70, S13-1)* — one row per (project, chart, required DFD element). PK
+`project_dfd_rule_id`; FK `project_id`; `bfc_set_code varchar(10)` (`TO_BE` / `AS_IS`, CHECK-listed);
+`element_code varchar(12)`, CHECK-listed `('STARTED','DATA_IN','DATA_OUT','EXTERNAL','ORDER')` (§8). UK
+`(project_id, bfc_set_code, element_code)` **full**: re-adding an element restores its row (S1-7). **A live row
+means "required", a retired row "not required"**, as `PROJECT_COMPONENT`. `ck_pdr_started_locked CHECK
+(element_code <> 'STARTED' OR is_active)`: STARTED is always required. ORDER needs DATA_IN and DATA_OUT on the
+same chart — a cross-row rule, held by `dfd_rule.set` (422) and re-proved at freeze by the must-be-empty line
+`dfd_rule_invalid`. **One reader**, `dfd_rule.codes(project, chart)`: no live row → `STARTED` + `DATA_OUT`
+(fails closed), and `project_without_dfd_rule` refuses the freeze until an admin saves a rule. Changed only by
+`dfd_rule.set` (not `RESTORABLE`); concurrency token: the project's `row_version`. **Not shadowed, not in the
+freeze set** (a setting, not scope); not step-owned. Every project existing when the table is created gets
+`STARTED` + `DATA_OUT` on both charts, whatever its `is_active`, by the migration that creates it (the table is
+born empty and must equal the fixed rule), with one `PROJECT_DFD_RULE_BACKFILLED` audit event per project; a
+new project starts with the recommended set (to-be: STARTED, DATA_IN, DATA_OUT, ORDER; as-is: STARTED).
 
 **PROJECT_COMPONENT** *(D-37)* — one row per component switched on for one project. PK
 `project_component_id` (the stable `source_id` for its baseline shadow); FK `project_id`,
@@ -1569,6 +1691,19 @@ it is frozen with the process and diffs as a CHANGED field:
   `APPLICATION_BFC_NODE` row (as-is) or comes through the BR's solutions (to-be).
 - Zero performers is legal while drafting. The process is drawn in the "unassigned" lane and listed by
   `process_completeness.no_performer` as a warning that does not block the freeze.
+
+**The volume figures: optional, per process (D-67, S13-1).** Columns on the process row, like the performer,
+so they are frozen with the process and diff as CHANGED fields; hashed from **hash spec 3**:
+- `runs_per_period numeric(11,2)` with `volume_period_code varchar(10)` (CHECK-listed `DAY` / `WEEK` / `MONTH` /
+  `QUARTER` / `YEAR`), both or neither (`ck_bfc_volume_run_pair`) — "3" means nothing without "a week".
+- `transactions_per_run numeric(14,2)`, with an optional `transaction_unit_code_id` (`TRANSACTION_UNIT`,
+  category-in-key FK, library or project override) that needs a count (`ck_bfc_volume_unit`).
+- `seconds_per_transaction numeric(12,3)` — seconds to the millisecond, so a 0.3 s automated step and a
+  6-minute manual one fit the same type; a shadow column's type never changes, so the types hold both ends.
+- `ck_bfc_volume_nonneg` (each ≥ 0); `ck_bfc_volume_process` (a non-process row holds none, as
+  `ck_bfc_desc_process_only`). Caps are service constants, not CHECKs. **No hours or FTE column exists**:
+  both are derived on read from these figures and the project's FTE basis (VB law 6). Written only by
+  `process_volume.set`; a chart copy carries them; demoting a process with volume is refused.
 
 **A single self-referencing table, not five typed tables.** Every read is a tree read (breadcrumb,
 drilldown, full-chart export); with five tables each becomes a five-way join with a hand-written UNION for
@@ -1788,7 +1923,31 @@ See §5.4.2 (D-24 note) for the cost.
 letter `A`: `raci_code_id` is an FK and the letter lives on another table (R2-D11), and a client's
 Accountable letter need not be `A`. See §5.4.5.
 
-Structured BR lines, attribute usage and system-to-system flows (D-59, D-60b, D-61) are being modelled in docs/slice11_schema.md and are not yet part of this model.
+**BR_REQUIREMENT_LINE** *(D-59, S11-1)* — one row per numbered requirement statement within one BR. PK
+`br_requirement_line_id`; FK `(br_id, project_id) → BUSINESS_REQUIREMENT`; `line_no smallint` (≥ 1), **minted
+by the service** as max + 1 over all the BR's lines, retired ones included — never reused, never from a body —
+UK `(br_id, line_no)` full; `seq_no smallint`, the display order, unique among live lines (a position column:
+reordering is not a scope change); `line_kind_code_id` (`BR_LINE_KIND`) and nullable `priority_code_id`
+(`BR_PRIORITY`), each with the category-in-key pattern; `line_text text NOT NULL`, non-blank. These are per-BR
+ordinals, not one of the ten project series. The BR's priority is the highest of its live lines, derived.
+`business_logic` and `output_expectation` stay on `BUSINESS_REQUIREMENT` untouched (so its shadow and hash list
+do not move) and are read-only; each live BR's non-blank text is copied once, by the seed command `seeds.backfill_br_lines` run after `seed_code_master` (a migration cannot reach the seeded line kinds),
+into one RULE and one OUTPUT line.
+
+**BR_DATA_FIELD** *(D-60b, S11-1)* — one row per (BR, data attribute, C / R / U). PK `br_data_field_id`; UK
+`(br_id, data_field_id, crud_code)` full; `CHECK (crud_code IN ('C','R','U'))` — Delete is entity-level only.
+**The licence chain, one level down:** `brde_is_active` GENERATED and `fk_brdf_licence (br_id, data_entity_id,
+crud_code, brde_is_active) → BR_DATA_ENTITY` (needs the additive UK `uq_brde_live_licence`), so a live attribute
+row needs a live entity row with the same CRUD; `(data_field_id, data_entity_id) → DATA_FIELD` proves the
+attribute belongs to that entity. `usage_note text NULL`. Step-owned through the BR, in a tier ahead of
+`BR_DATA_ENTITY`, so it retires before and restores after its licence.
+
+**BR_SYSTEM_FLOW** *(D-61, S11-1)* — one row per (BR, data entity, from-application, to-application). PK
+`br_system_flow_id`; UK on those four, full; composite FKs to `BUSINESS_REQUIREMENT`, `DATA_ENTITY` and twice to
+`APPLICATION`; `CHECK (source_application_id <> target_application_id)`; `flow_note text NULL`. To-be only,
+as its BR. Gated by APPLICATION. **No pointer to an FR**: coverage by an interface FR is derived (same BR, same
+source and target, the entity carried). Whether a flow carries a kind (integration or one-off migration) and
+whether a data entity names a master system are open questions in the design history §1.
 
 #### Function Requirement (area 4)
 
@@ -1876,11 +2035,8 @@ today's support warns and is allowed, and is not counted as today's support in `
 contract. It is the raiser of an issue, and carries interview and workshop provenance in later increments.
 Not baselined (a person is not scope).
 
-**FR_BFC_NODE** — one row per (FR, BFC node) direct link, for coverage no BR expresses. PK `(fr_id,
-bfc_node_id)`. See §3.3. **Not built**, and not in the freeze set until it is; when built it carries the
-generated `'TO_BE'` guard, as the BR does (S7-2).
-
-<!-- CHECK: FR_BFC_NODE was never built and S8-1 dropped it from the freeze set as "never built"; slice7 §9.2 still names "a future fr_bfc_node". Whether D-52 (direct BR↔FR) leaves it in force is not stated by any ruling. -->
+**FR_BFC_NODE** — **retired, never built** (SC-3). The direct BR ↔ FR link (D-52) carries that coverage; there
+is no table and no shadow.
 
 **FR_INTERFACE** *(D-27)* — **one row per interface-type FR** (1:0..1). It holds what only an
 interface has. PK and FK `fr_id`; FK `project_id`. Columns: `source_application_id NOT NULL`,
@@ -2039,14 +2195,16 @@ project_id)`), `origin_code_id`, `status_code_id`, `displaces_cr_id` (nullable s
 `decision_id`. UK `(project_id, cr_number)` → `CR-0001`. `effort_delta_days` and `benefit_delta_value` are
 **computed from `CR_IMPACT`, never typed** — a change priced by the person requesting it is not priced.
 
-**Which baselines a CR may target (Q8, R2-D11): FROZEN or APPROVED, never SUPERSEDED, and the
-mechanism is not a CHECK.** A CHECK sees one row of one table, and the status lives on `BASELINE` as a code
+**Which baselines a CR may target (Q8, DR8-P1, SC-2, R2-D11): FROZEN or APPROVED, or a SUPERSEDED baseline
+that carries the agreed client approval (the newest baseline with a recorded approval); never another
+SUPERSEDED baseline — and the mechanism is not a CHECK.** A CHECK sees one row of one table, and the status lives on `BASELINE` as a code
 FK. It is also a **point-in-time** rule: a CR raised against v1.0 while it was APPROVED stays valid when
 v1.1 supersedes v1.0, so a declarative guard that refused superseding a baseline with CRs against it would
 be wrong. The mechanism is:
 
 1. `raise_cr` and any retarget read the baseline `SELECT … FOR SHARE`, and check its status code ∈
-   {`FROZEN`, `APPROVED`} inside that lock (§7.13 `raise_change_request`).
+   {`FROZEN`, `APPROVED`}, or that it is the SUPERSEDED baseline carrying the agreed approval, inside that
+   lock (§7.13 `raise_change_request`).
 2. `freeze`'s transition of the prior baseline to SUPERSEDED takes that row `FOR UPDATE`, so the two
    serialize. A CR cannot slip in against a baseline in the instant it is superseded.
 3. `BASELINE_STATUS` is a system category, because code compares its codes. `DRAFT` is seeded and never
@@ -2112,8 +2270,8 @@ plan, the two links consultants own, and — separately — progress recorded in
   start and finish, a status (on track / at risk / late), a comment, and the update's date — is a **new
   dated row**, never an overwrite, so progress over time is kept. VB progress updates are the reporting
   source and are never overwritten by a re-import; the imported actuals above are kept beside them, and the
-  progress report flags lines where the two disagree.
-  <!-- CHECK: D-41 decides "each update is a new dated row" but no schema slice has modelled the progress-update entity yet; it is not drawn in §5.2. -->
+  progress report flags lines where the two disagree. The progress-update table is named and modelled by
+  `apple` when the WBS wave is specced (SC-4); it is not drawn in §5.2 until then.
 - **Links (VB-edited, Q13).** `phase_id` and `solution_id`, each nullable (a line may link to either,
   both or neither), with composite FKs `(phase_id, project_id) → PHASE` and `(solution_id, project_id) →
   SOLUTION`, so a link cannot cross projects. A link to a solution not scheduled in the linked phase is a
@@ -2222,7 +2380,11 @@ SUPERSEDED), `frozen_by_user_id`, `prior_baseline_id`.
   `UNIQUE (project_id) WHERE prior_baseline_id IS NULL`; `CHECK ((prior_baseline_id IS NULL) = (major_no =
   1 AND minor_no = 0))`. Two simultaneous freezes produce one baseline and one 409 (criterion 37).
 - `hash_spec_version smallint NOT NULL` (the hash spec the baseline was frozen under, finding D5);
-  `data_model_depth` copied from the project; `content_digest char(64) NOT NULL`, the digest over every
+  `data_model_depth` copied from the project; **`dfd_rule_to_be`, `dfd_rule_as_is varchar(12)[]`** — the rule
+  each chart passed, both or neither, NULL on a baseline frozen before the per-chart rule ("D-38 rule", D-70);
+  **`fte_working_days smallint`, `fte_hours_per_day numeric(4,2)`** — the FTE basis at the freeze, both or
+  neither, required from hash spec 3 (D-67). All four are in the header guard's frozen list, outside
+  `content_digest`, like the depth; `content_digest char(64) NOT NULL`, the digest over every
   entity's hashes; `note` (non-blank if present); `frozen_at`, `frozen_by_user_id` — the created pair.
 - **Client approval set:** `client_approver_name`, `client_approved_on`, `approved_at`,
   `approved_by_user_id`, all set together or none (`CHECK (num_nonnulls(…) IN (0, 4))`); `approval_note`
@@ -2351,7 +2513,8 @@ DELETE (§6.6).
 varchar(255) NOT NULL` — bcrypt/argon2 output, never logged, never serialized by any Pydantic response
 model. Access has three kinds of user (D-40), both columns read from the row on every request:
 - **`is_platform_admin boolean NOT NULL DEFAULT false`**: every project plus the admin functions
-  (users, projects, programs, house rate card, global codes). It overrides `user_kind`.
+  (users, projects, programs, global codes). It overrides `user_kind`. The FTC default rate card is a fixed
+  default in code, not an admin function, until a client needs another (SC-10).
 - **`user_kind varchar(20) NOT NULL DEFAULT 'VIEWER'`**, `CHECK (user_kind IN ('USER','VIEWER'))`: USER
   reads and edits, VIEWER reads only. `create_user` requires it in the body; the DB default is the least
   privilege. Changing it is platform-admin only and audited `USER_KIND_CHANGED`.
@@ -2541,13 +2704,9 @@ count the same man-days once per BR.
 5. An FR with no solution tag has no inherited application (A-27). An interface FR still states its
    endpoints in `FR_INTERFACE`, which is a different fact from the delivering application.
 
-**`FR_BFC_NODE` is for coverage that is not expressed through a BR**: an FR attached to a non-process
-node ("a dashboard for the whole of Order Management") or to a process whose BR is not written yet.
-It is not a second path to the same fact. When an FR is linked to a BR, the BR's own node is not
-also written into `FR_BFC_NODE` (service guard, §7.5). "Effective BFC coverage" is a view: the
-UNION of the direct node links and the links derived through the BR. `FR_BFC_NODE` is designed but
-not yet built (S8-1). When it is built it carries the generated `'TO_BE'` set guard, as the BR does
-(S7-2).
+**There is no FR ↔ node link** (SC-3). `FR_BFC_NODE` (an FR linked straight to a node) is retired and
+never built: an FR reaches the chart only through the BRs it serves, and an FR for a whole area
+("a dashboard for the whole of Order Management") is linked to the BRs of that area's processes.
 
 **ISSUE ↔ BR is many-to-many.** One issue ("the source system has no customer credit field") can
 block six requirements, and one requirement can have several open issues. A 1:N model would force
@@ -2689,7 +2848,7 @@ mandatory child; service-guaranteed and reported, §5.4.1a).
 **Tables carrying the process guard:** `business_requirement`, `bfc_node_data_entity`,
 `bfc_node_org_role`, `bfc_node_external_flow`, `bfc_node_trigger`, `application_bfc_node`, and the
 parent guard on `bfc_node` itself. `bfc_node_flow` keeps its guards but is retired (D-38, §5.4.14).
-**Not guarded, deliberately:** `fr_bfc_node` (coverage at any level, §5.4.3), `risk.bfc_node_id` (a
+**Not guarded, deliberately:** `risk.bfc_node_id` (a
 risk may sit on a whole area) and `diagram_layout.scope_bfc_node_id` (a diagram is drawn *for* a
 non-process node).
 
@@ -2853,7 +3012,6 @@ defect, but it is governed by the `code_master` rule above, not by `FK_LIVENESS`
 | `br_function_requirement` | `br_id`, `fr_id` | — |
 | `fr_interface` | `fr_id`, `source_application_id`, `target_application_id`; codes | — *(behaviour guard checks type, not liveness)* |
 | `fr_interface_data_entity` | `data_entity_id` | `fr_id` → `fr_interface` (`interface_is_active`) |
-| `fr_bfc_node` *(not built)* | `fr_id`, `bfc_node_id` | — |
 | `application_solution` | `application_id`, `solution_id` | — |
 | `application_bfc_node` | `application_id`, `bfc_node_id` | — |
 | `effort_rate` | `fr_type_code_id`, `complexity_code_id` | — |
@@ -3064,8 +3222,8 @@ the stated condition of that deferral.
 `program_id`, so no FK path runs from one project's scope into another's, and the composite
 `(id, project_id)` FKs keep a cross-project reference unstorable. A program dashboard is a set of
 per-project report calls, each passing the same guard, never a query over a shared table (R2-S2).
-The cost is that "the same Customer entity in two projects" is two DEs.
-<!-- CHECK: the original paragraph said a cross-project hand-off is "a HANDOFF edge to an end event labelled with the other project (D-32)". HANDOFF edges were retired with bfc_node_flow (D-38); slice7_schema §9.8 replaces them with boundary stubs computed within one set of one project. No decided replacement for a cross-project hand-off was found. -->
+The cost is that "the same Customer entity in two projects" is two DEs. A hand-off to another project is
+drawn as an outside party on the DFD boundary, "Project: X", recorded by each project on its own side (SC-1).
 
 **The BFC is one table, so the UI is one tree component.** Drilldown, breadcrumb, drag-to-reorder,
 full-chart export and cross-level search all hit `bfc_node`. The to-be and as-is charts are two
@@ -3076,8 +3234,8 @@ is no level conditional anywhere (D-23; a grep for `level_no = 5` is a pre-merge
 UI consequences: "Add child" is disabled on a process node (the database would refuse it anyway),
 and demoting a process is refused with a 409 naming every live step fact until each is retired
 (R2-P5, §5.4.7). `renumber_subtree` is the most dangerous function in the codebase, and
-`mark_process` is the second.
-<!-- CHECK: the original described "Split into sub-steps" as a guided action that previews, retires the BR/I/O/roles/edges, demotes, then creates children. R2-P5 (and bfc.mark_process as built) says demotion is refused with 409 and VB never retires step facts itself. Kept R2-P5; the guided split action is dropped. Confirm whether a guided split is still wanted. -->
+`mark_process` is the second. **Splitting a process into sub-steps keeps this rule** (SC-8): the demotion is
+refused with the list of its facts until the consultant clears them; VB offers no guided split that retires them.
 
 **The BR sits at the centre of the process.** It has inbound references from every direction:
 issues, solutions, function requirements, RACI and the DE grid. It is read and edited inside its
@@ -3169,14 +3327,15 @@ are designed and arrive with their wave (§12).
 |---|---|---|---|---|---|
 | 1 | `client` | Tenancy | — | — | ✓ |
 | 2 | `program` | Tenancy (D-32) | — (carries `client_id`) | ✗ — roll-up grouping only; no program freeze | ✓ |
-| 3 | `project` | Tenancy | (is the key); `program_id` nullable; `data_model_depth` (D-39); `is_restricted` (OR-6, D-62) | — (`data_model_depth` is copied onto the baseline header) | ✓ |
+| 3 | `project` | Tenancy | (is the key); `program_id` nullable; `data_model_depth` (D-39); `is_restricted` (OR-6, D-62); FTE basis `working_days_per_year`, `hours_per_working_day` (D-67, slice 13c) | — (`data_model_depth` and the FTE basis are copied onto the baseline header) | ✓ (FTE basis: 13c) |
 | 3a | `project_component` | Tenancy (D-37) | ✓ | ✓ always — the live rows *are* the components on at the freeze | ✓ |
 | 3b | `project_template_component` | Tenancy (D-37, OR-3) | — (global) | ✗ — a starting point, copied once at `create_project` | ✓ |
+| 3c | `project_dfd_rule` | Tenancy — the DFD rule per chart (D-70) | ✓ | ✗ — a setting, not scope; the rule each chart passed is copied onto the baseline header | — (13b) |
 | 4 | `code_master` | Shared | nullable (global / override) | ✗ — code **and** label are copied into each shadow instead | ✓ |
 | 5 | `project_sequence` | Shared | ✓ (PK part) | ✗ | ✓ |
 | 6 | `org_unit` | Client org | ✓ | ✓ always *(D-12)* | ✓ |
 | 7 | `org_role` | Client org | ✓ | ✓ always *(D-12)* | ✓ |
-| 8 | `bfc_node` | BFC (D-23, D-46, D-47) | ✓ | ✓ to-be rows always; as-is rows ⇐ `AS_IS` | ✓ |
+| 8 | `bfc_node` | BFC (D-23, D-46, D-47; volume figures D-67) | ✓ | ✓ to-be rows always; as-is rows ⇐ `AS_IS`; the volume figures hashed from spec 3 | ✓ (volume: 13c) |
 | 9 | `bfc_node_data_entity` | BFC (D-24) | ✓ | ✓ to-be steps always; as-is steps ⇐ `AS_IS` | ✓ |
 | 10 | `bfc_node_org_role` | BFC — **as-is steps only** (D-64) | ✓ | ✓ as-is steps ⇐ `AS_IS` | ✓ |
 | 11 | `bfc_node_flow` | BFC — **retired** (D-38) | ✓ | ✗ — never shadowed; read-only history, no new rows (§6.6) | ✓ (retired) |
@@ -3189,13 +3348,16 @@ are designed and arrive with their wave (§12).
 | 16 | `business_requirement` | BR — **to-be processes only** (S7-2) | ✓ | ✓ always | ✓ |
 | 17 | `br_data_entity` | BR | ✓ | ✓ always | ✓ |
 | 18 | `br_org_role` | BR — the RACI of a to-be process (D-64) | ✓ | ✓ always | ✓ |
+| 18a | `br_requirement_line` | BR — structured lines (D-59) | ✓ | ✓ always (joins at hash spec 4) | — (11) |
+| 18b | `br_data_field` | BR — attribute usage (D-60b) | ✓ | ✓ always (joins at hash spec 4) | — (11) |
+| 18c | `br_system_flow` | BR — system-to-system flows (D-61) | ✓ | ✓ ⇐ `APPLICATION` (joins at hash spec 4) | — (11) |
 | 19 | `solution` | Solution (D-7) | ✓ | ✓ ⇐ `SOLUTION` | ✓ |
 | 20 | `br_solution` | Solution (D-7) | ✓ | ✓ ⇐ `SOLUTION` | ✓ |
 | 21 | `function_requirement` | FR | ✓ | ✓ ⇐ `FUNCTION_REQUIREMENT` *(D-3)* | ✓ |
 | 21a | `br_function_requirement` | FR — the BR ↔ FR mapping (D-52) | ✓ | ✓ ⇐ `FUNCTION_REQUIREMENT` (joined at hash spec 2) | ✓ |
 | 22 | `fr_interface` | FR (D-27) | ✓ | ✓ ⇐ `FUNCTION_REQUIREMENT` ∧ `APPLICATION` | ✓ |
 | 23 | `fr_interface_data_entity` | FR (D-27) | ✓ | ✓ ⇐ `FUNCTION_REQUIREMENT` ∧ `APPLICATION` | ✓ |
-| 24 | `fr_bfc_node` | FR | ✓ | ✓ when built; carries the generated `'TO_BE'` guard (S7-2) | — |
+| 24 | `fr_bfc_node` | FR — **retired, never built** (SC-3) | — | — | — (no table) |
 | 25 | `application` | Landscape (D-8) | ✓ | ✓ ⇐ `APPLICATION` | ✓ |
 | 26 | `application_solution` | Landscape (D-8) | ✓ | ✓ ⇐ `APPLICATION` ∧ `SOLUTION` | ✓ |
 | 27 | `application_bfc_node` | Landscape (D-8) — supporting systems of as-is processes (S7 Q-23) | ✓ | ✓ ⇐ `APPLICATION`; as-is rows also ⇐ `AS_IS` | ✓ |
@@ -3233,8 +3395,8 @@ listed in `models/baseline.SHADOWED` and `services/freeze_set.FREEZE_SET` (a mod
 `business_requirement`, `br_data_entity`, `br_org_role`, `application`, `solution`, `br_solution`,
 `function_requirement`, `br_function_requirement`, `fr_interface`, `fr_interface_data_entity`,
 `application_solution`, `application_bfc_node`, `effort_rate`, `project_component`. The designed tables
-`issue`, `issue_br`, `benefit`, `benefit_solution`, `phase`, `solution_phase`, `solution_dependency` and
-`fr_bfc_node` join when they are built; **a new entity joining the set bumps `CURRENT_HASH_SPEC` and registers
+`br_requirement_line`, `br_data_field` and `br_system_flow` (slice 11, hash spec 4), and `issue`, `issue_br`,
+`benefit`, `benefit_solution`, `phase`, `solution_phase` and `solution_dependency` join when they are built; **a new entity joining the set bumps `CURRENT_HASH_SPEC` and registers
 its hashed columns under the new version** (S10b-1, slice10b Q-14), so older baselines still verify.
 
 **Every shadow is generated, never hand-written** (`services/baseline_shadow.py`, VB law 2):
@@ -3318,10 +3480,14 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | **partial `uq_br_one_per_node (bfc_node_id) WHERE is_active`** | `business_requirement` | **D-2 / S7-2 — exactly one live BR per to-be process.** Partial, so a soft-deleted BR never permanently occupies the key and leaves the node requirement-less (P5). Dropping this index is the entire cost of reversing D-2 (§5.4.1a) |
 | `uq_br_node_carrier UNIQUE (br_id, project_id, bfc_node_id)` | `business_requirement` | the D-24 carrier of the BR's node; also makes `bfc_node_id` effectively immutable once CRUD exists (immutability is service-enforced, S1-7) |
 | `ck_bfc_performer_kind CHECK (performer_kind IS NULL OR performer_kind IN ('ORG_UNIT','ORG_ROLE','APPLICATION','AI'))`; `ck_bfc_performer_arc` (exactly the one id column of the kind, none for `AI` or NULL); `ck_bfc_performer_label CHECK (performer_label IS NULL OR (performer_kind = 'AI' AND btrim(performer_label) <> ''))`; `ck_bfc_performer_ai_label CHECK (performer_kind IS DISTINCT FROM 'AI' OR performer_label IS NOT NULL)`; `ck_bfc_performer_process CHECK (performer_kind IS NULL OR is_process)`; composite FKs `fk_bfc_perf_unit` / `fk_bfc_perf_role` / `fk_bfc_perf_app` | `bfc_node` | **D-46 — one performer per process** (department, position, IT system or a named AI), in-project, only on a process. Zero is legal (the "unassigned" lane). A process with a performer cannot be demoted |
+| `ck_bfc_volume_period` (CHECK-listed `DAY`…`YEAR`); `ck_bfc_volume_nonneg`; `ck_bfc_volume_run_pair ((runs_per_period IS NULL) = (volume_period_code IS NULL))`; `ck_bfc_volume_unit` (a unit needs a count); `ck_bfc_volume_process` (a non-process row holds no volume); `fk_bfc_txn_unit (transaction_unit_code_id, transaction_unit_category) → code_master` | `bfc_node` | **D-67** — volume belongs to a process, comes in meaningful pairs, and is never negative; caps and decimals are service-checked (422), hours and FTE have no column (law 6) |
 | `ck_ptrg_kind CHECK (trigger_kind IN ('TIME','EVENT'))`; `ck_ptrg_schedule_time_only CHECK (schedule_note IS NULL OR trigger_kind = 'TIME')`; `ck_ptrg_name_not_blank`; partial `uq_ptrg_name_live (project_id, lower(btrim(trigger_name))) WHERE is_active`; `uq_ptrg_project (process_trigger_id, project_id)` | `process_trigger` | **D-49** — a named, project-wide time or event trigger; no number series |
 | `uq_bntr_grain UNIQUE (bfc_node_id, process_trigger_id)` (full); process guard; `fk_bntr_trigger (process_trigger_id, project_id) → process_trigger` | `bfc_node_trigger` | D-49 — a trigger starts a process step of the same project; re-linking restores |
 | `uq_bnde_grain UNIQUE (bfc_node_id, data_entity_id, direction)` (full); `uq_bnde_live_target UNIQUE (bfc_node_id, data_entity_id, direction, is_active)`; `ck_bnde_direction CHECK (direction IN ('I','O'))` | `bfc_node_data_entity` | D-24 — one step I/O row per (step × entity × direction); the live target is the licence FK target, with `is_active` in it so a soft delete is a key change |
 | `crud_code CHECK (… IN ('C','R','U','D'))` + GENERATED `direction` (`'I'` for R, else `'O'`); `bfc_node_id` copied + `fk_brde_br (br_id, project_id, bfc_node_id) → business_requirement (uq_br_node_carrier)`; `io_is_active` GENERATED + `fk_brde_io_licence (bfc_node_id, data_entity_id, direction, io_is_active) → bfc_node_data_entity (uq_bnde_live_target)`; `uq_brde_grain (br_id, data_entity_id, crud_code)` | `br_data_entity` | **D-24 — R needs a step input, C/U/D a step output**, by construction; no `(R, OUTPUT)` contradiction (§5.4.2). Retiring an I/O row a BR CRUD depends on is refused |
+| `ck_brdf_crud CHECK (crud_code IN ('C','R','U'))`; GENERATED `brde_is_active` + `fk_brdf_licence (br_id, data_entity_id, crud_code, brde_is_active) → br_data_entity (uq_brde_live_licence)`; `(data_field_id, data_entity_id) → data_field (uq_data_field_entity)`; UK `uq_brdf_grain (br_id, data_field_id, crud_code)` full | `br_data_field` *(slice 11)* | **D-60b** — an attribute tick never outlives the entity-level CRUD that licenses it, and the attribute belongs to that entity |
+| UK `uq_brl_line_no (br_id, line_no)` full; partial `uq_brl_seq_live (br_id, seq_no) WHERE is_active`; `CHECK (line_no >= 1)`; non-blank `line_text`; category-in-key FKs to `BR_LINE_KIND` and `BR_PRIORITY` | `br_requirement_line` *(slice 11)* | **D-59** — a line number is never reused; display order is unique among live lines |
+| UK `uq_brsf_grain (br_id, data_entity_id, source_application_id, target_application_id)` full; `CHECK (source_application_id <> target_application_id)`; composite FKs to the BR, the entity and both applications | `br_system_flow` *(slice 11)* | **D-61** — a flow names two different systems from the master list |
 | `ext_number` minted, `uq_ext_number UNIQUE (project_id, ext_number)`; partial `uq_ext_name_live (project_id, lower(btrim(ext_name))) WHERE is_active` | `external_entity` | D-24a — business key never reused; no two live parties with one name |
 | `uq_bnef_grain UNIQUE NULLS NOT DISTINCT (bfc_node_id, external_entity_id, direction, data_entity_id)`; `ck_bnef_direction CHECK (direction IN ('I','O'))`; process guard; when a DE is named, `fk_bnef_io_licence (bfc_node_id, data_entity_id, direction, io_is_active) → bfc_node_data_entity (uq_bnde_live_target)` | `bfc_node_external_flow` | D-24a, R2-D13 — one exchange per (step × party × direction × DE), only on process steps, never contradicting the step's own I/O. A flow with no DE carries a `flow_label` |
 | `node_live_set GENERATED ('AS_IS' if active, else NULL)` + FK `(bfc_node_id, project_id, node_live_set) → bfc_node (uq_bfc_node_set)` ON UPDATE NO ACTION | `bfc_node_org_role` | **D-64, S10d-1 — one RACI per process:** a to-be process's roles live on its BR (`br_org_role`); a live step role exists only on an as-is step. Retired rows are unchecked history |
@@ -3350,6 +3516,8 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `uq_project_component UNIQUE (project_id, component_code_id)` (full); `fk_pc_component (component_code_id, component_category) → code_master` | `project_component` | **D-37 — a live row means the component is on; switching back on restores the same row.** The vocabulary `PROJECT_COMPONENT` is `is_system`, global only |
 | `uq_ptc_grain UNIQUE (template_code_id, component_code_id)`; category FKs to `PROJECT_TEMPLATE` and `PROJECT_COMPONENT` | `project_template_component` | OR-3 — templates are data, copied once at `create_project` |
 | `ck_project_depth CHECK (data_model_depth IN ('KEYS_ONLY','FULL'))` | `project` | D-39 — how much of a data entity a project expects |
+| `ck_project_fte_days CHECK (working_days_per_year BETWEEN 1 AND 366)`; `ck_project_fte_hours CHECK (hours_per_working_day BETWEEN 0.25 AND 24)` | `project` | **D-67** — the FTE basis is always usable |
+| `ck_pdr_set` (`TO_BE` / `AS_IS`); `ck_pdr_element` (CHECK-listed elements); `ck_pdr_started_locked CHECK (element_code <> 'STARTED' OR is_active)`; UK `uq_project_dfd_rule (project_id, bfc_set_code, element_code)` full. **Service-enforced:** ORDER needs DATA_IN and DATA_OUT (422), re-proved by `dfd_rule_invalid`; a chart with no live row reads as STARTED + DATA_OUT and `project_without_dfd_rule` refuses the freeze | `project_dfd_rule` | **D-70** — a rule can never be empty in effect, and never requires order without the data it is derived from |
 | `UNIQUE (client_id, program_code)`; partial `uq_program_name_live (client_id, lower(program_name)) WHERE is_active`; `uq_program_client`, `uq_program_client_live`, `uq_program_live` as FK targets | `program` | D-32 — program identity within a client; targets for the same-client and live-program FKs |
 | `fk_project_program_client (program_id, client_id) → program`; `program_is_active GENERATED` + `fk_project_program_live (program_id, client_id, program_is_active) → program` ON UPDATE NO ACTION; `uq_project_live UNIQUE (project_id, is_active)` | `project` | **D-32 — a program's projects share its client; an active project sits only in a live program; a program with live projects cannot be retired (Q4).** Moving a project between programs is platform-admin only and audited (service) |
 | `ck_app_user_kind CHECK (user_kind IN ('USER','VIEWER'))`; `uq_app_user_email (lower(email))` | `app_user` | **D-40** — staff are USER (edit) or VIEWER (read); `is_platform_admin` overrides the kind |
@@ -3364,6 +3532,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `uq_baseline_version UNIQUE (project_id, major_no, minor_no)`; `version_label GENERATED ('v' ‖ major_no ‖ '.' ‖ minor_no)` + `uq_baseline_label`; `ck_baseline_major`, `ck_baseline_minor` | `baseline` | P9 — version identity is two integers; the label is rendered from them and can never disagree |
 | `uq_baseline_prior UNIQUE (prior_baseline_id)`; partial `uq_baseline_first (project_id) WHERE prior_baseline_id IS NULL`; `ck_baseline_prior CHECK ((prior_baseline_id IS NULL) = (major_no = 1 AND minor_no = 0))` | `baseline` | A-8 — a straight line of versions, declaratively; two simultaneous freezes give one baseline and one 409 (criterion 37) |
 | `ck_baseline_approval_set CHECK (num_nonnulls(client_approver_name, client_approved_on, approved_at, approved_by_user_id) IN (0, 4))`; `ck_baseline_approval_reference`; `ck_baseline_depth`; `ck_baseline_hash_spec`; `content_digest char(64) NOT NULL` | `baseline` | §4.6, DR8-P1, DR8-S1 — an approval is recorded whole or not at all; the header carries the digest of everything it froze |
+| `ck_baseline_dfd_rule_pair CHECK (num_nonnulls(dfd_rule_to_be, dfd_rule_as_is) IN (0, 2))`; `ck_baseline_dfd_rule_vals` (each non-empty, within the element list); `ck_baseline_fte_pair CHECK (num_nonnulls(fte_working_days, fte_hours_per_day) IN (0, 2))`; `ck_baseline_fte_from_spec_3` and `ck_baseline_dfd_rule_from_spec_3 CHECK (hash_spec_version < 3 OR … IS NOT NULL)`; all four columns in `fn_baseline_header_guard()`'s frozen list | `baseline` | **D-70, D-67** — a baseline says which DFD rule each chart passed and the FTE basis it was priced on, and never changes either |
 | `baseline` is **exempt from soft delete** — no `is_active`, no `deleted_*`; `fn_baseline_header_guard()` `BEFORE UPDATE OR DELETE` rejects DELETE, any change to a frozen column, and any change to an approval once recorded | `baseline` | P6 — a baseline is either frozen or it does not exist; only status and a first approval may be written (§6.6) |
 | `uq_baseline_<t>_source (baseline_id, source_id)`; `source_id` FK **ON DELETE NO ACTION** | every `baseline_*` | one snapshot row per live row per baseline; a frozen baseline cannot be shredded by a cascade |
 | `BEFORE UPDATE OR DELETE` reject trigger (`fn_reject_modification()`) **and** the statement-level `AFTER INSERT` guard (`fn_shadow_insert_guard()`: rows only into a baseline whose header was written in the same transaction) | every `baseline_*` | immutability at the database, not by convention (A-7); nothing is ever appended to an existing baseline (DR8-S1). No TRUNCATE trigger (S8-2) |
@@ -3371,7 +3540,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | partial `UNIQUE (project_id, lower(btrim(stakeholder_name))) WHERE is_active` | `stakeholder` *(when built)* | D6 — the importer matches people by name, so the lookup must return at most one row |
 | `accountable_org_role_id NOT NULL` | `benefit` *(when built)* | D-14 — a benefit with no owner is a hope, not a benefit |
 | `exposure_score` derived from probability × impact at save | `risk` *(when built)* | D-15 — the score cannot be argued down independently of its inputs |
-| `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN or APPROVED; `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8** — a CR challenges something agreed and still in force, never a SUPERSEDED baseline. Point-in-time: an existing CR keeps its target when that baseline is later superseded <!-- CHECK: Q8 (a CR may target FROZEN or APPROVED, never SUPERSEDED) vs DR8-P1 (slice8 §13: the agreed baseline is the newest with a recorded approval, which may be a SUPERSEDED one, and "wave 2's CR targets it"). Kept Q8 here; the CR slice must settle which wins. --> |
+| `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN, APPROVED, or the SUPERSEDED one carrying the agreed approval (SC-2); `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8, SC-2** — a CR challenges something agreed: a baseline in force, or the superseded one that still carries the agreed client approval (DR8-P1). Point-in-time: an existing CR keeps its target when that baseline is later superseded |
 | `effort_delta_days` / `benefit_delta_value` writable **only** by `price_cr` | `change_request` *(when built)* | D-16 — a change priced by its requester is not priced |
 | topological check on insert; a cycle is rejected | `solution_dependency` *(when built)* | D-18 — a dependency cycle makes the phase plan unsolvable and is silent until someone tries to schedule |
 | `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NULL OR owner_org_role_id IS NOT NULL)` | `control_rule` *(when built)* | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; **an analysis without a named owner is a report nobody acts on** (relaxed on the house tier, which precedes the client's org chart) |
@@ -3546,7 +3715,11 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `link_bfc_data_entity` | `step_io.link` / `step_io.unlink` (writer: `step_io.ensure_step_io`) | §7.3 (unlink refused while a BR CRUD or an external flow depends on it, D-24, R2-D13) |
 | `link_bfc_external_flow` · `create_external_entity` | `bfc.link_external_flow` · `external_entity.create_party` | §7.3 (ensures step I/O, R2-D13) |
 | `generate_dfd` · `export_dfd` | `process_flow.generate_dfd` / `render.export_dfd` | §7.2a (D-31, D-38) |
-| `process_completeness` | `process_flow.process_completeness` | §7.2a (D-38, D-49, S7-3) |
+| `process_completeness` | `process_flow.process_completeness` | §7.2a (D-38, D-49, S7-3; the chart's rule, D-70) |
+| `dfd_readiness` | `process_flow.readiness` | §7.2a (D-68, D-69) |
+| `get_dfd_rule` · `preview_dfd_rule` · `set_dfd_rule` | `dfd_rule.codes` / `preview` / `set` | §7.2a (D-70) |
+| `draw_dfd_connection` · `draw_hand_off` · `remove_dfd_flow` | the existing writers (`step_io.ensure_step_io`, `bfc.link_external_flow`, `trigger.link`, the unlink routes) · `process_flow.hand_off` | §7.14 (D-65) |
+| `set_process_volume` · `derive_volume` · `set_fte_basis` · `volume_summary` | `process_volume.set` / `derive` / `project.set_fte_basis` / `process_volume.summary` | §7.2a (D-67) |
 | `download_flow_schema` · `export_process_flow_json` | `flow_import.schema` / `flow_import.export` | §7.2b (D-25) |
 | `validate_process_flow_json` · `commit_process_flow_json` | `flow_import.validate` / `flow_import.commit` | §7.2b (D-25, D-55, on the §7.11 pipeline) |
 | `generate_erd` · `export_erd` | `data_entity.generate_erd` / `render.export_erd` | §7.4 (D-29) |
@@ -3558,6 +3731,8 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `create_br` | `business_requirement.create_br` (never from a router) | §7.3 |
 | `link_br_data_entity` | `business_requirement.link_data_entity` | §7.3 |
 | `update_br` | `business_requirement.update_br` | §7.3 |
+| `maintain_br_lines` · `tick_br_attributes` · `state_br_system_flow` | `br_line.*` · `business_requirement.save_crud_grid` · `br_system_flow.*` | §7.3 (D-59, D-60b, D-61; slice 11) |
+| `flow_coverage` · `create_interface_fr_from_flows` | `br_system_flow.coverage` · `br_system_flow.seed_interface_fr` | §7.3 (D-61) |
 | `link_br_role` | `raci.link` (`br_org_role` — the RACI of a to-be process) | §7.0 (generic) (D-64) |
 | `link_br_solution` | `solution.link` / `edit_note` / `unlink` | §7.5 (S5-3) |
 | `link_br_function_requirement` | `function_requirement.link_fr` / `edit_link_note` / `unlink_fr` | §7.5 (D-52) |
@@ -3577,7 +3752,7 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `retire_step` · `restore_step` | `step_retire.preview` / `retire` / `restore` | §7.12 (S3-SR) |
 | `br_coverage_report` | `reports.coverage` | §7.9 |
 | `create_function_requirement` | `function_requirement.create_fr` | §7.5 |
-| `link_fr_to_bfc_node` | `function_requirement.link_node` *(when built)* | §7.5 |
+| `link_fr_to_bfc_node` | — **retired, never built** (SC-3) | — |
 | `maintain_fr_types` | `code_master.maintain` (category `FR_TYPE`, with behaviour) | §7.12 (D-27) |
 | `describe_interface` | `interface.describe_interface` / `remove_interface` | §7.5 (D-27) |
 | `interface_list` | `interface.interface_list` (over `v_interface_list`) | §7.5 / §7.9 (D-27) |
@@ -3728,11 +3903,10 @@ copy_set(project_id, to_set, from_set, confirm_hash):  # D-47, S7 Q-24; project_
 Output data: one BFC node row with a stable dotted code per chart, and a re-coded subtree on reorder; on
 `mark_process`, the process flag and, for a to-be process, its single BR.
 
-### 7.2a `services/process_flow.py` — the DFD (D-31, D-38, D-46, D-47, D-49)
+### 7.2a `services/process_flow.py` — the DFD (D-31, D-38, D-46, D-47, D-49, D-65, D-67…D-70)
 
-
-**There is one process diagram: the DFD (D-38).** It is generated, never drawn (D-31), from the rows the BFC
-already holds: process steps, their inputs and outputs (`bfc_node_data_entity`, D-24), external flows (D-24a),
+**There is one process diagram: the DFD (D-38).** It is generated (D-31) — a connection drawn on the canvas writes
+the same row the panel writes (D-65, §7.14) — from the rows the BFC already holds: process steps, their inputs and outputs (`bfc_node_data_entity`, D-24), external flows (D-24a),
 triggers (D-49) and performers (D-46). **Order is derived from data, never stored:** B follows A when B reads a
 data entity A writes; a branch is two outputs feeding different processes; a loop is a later process writing
 what an earlier one reads. Each chart (to-be, and the optional as-is, D-47) has its own DFDs; nothing crosses
@@ -3741,8 +3915,8 @@ charts. **`bfc_node_flow` (explicit order arrows) is retired:** never read, neve
 and can be opened for any non-process node.
 
 ```
-set_performer(node, row_version, kind, code | label):   # D-46; object_guard(BfcNode, "EDIT", component=dfd_component)
-    # dfd_component(node) = "AS_IS" for an as-is node, else "TO_BE_DFD"
+set_performer(node, row_version, kind, code | label):   # D-46; object_guard(BfcNode, "EDIT", component=node_set_component)
+    # node_set_component(node) = "AS_IS" for an as-is node, else none: recordable whatever the DFD setting (S10c-2)
     node is a live process; locks the node and the target FOR SHARE
     kind ORG_UNIT / ORG_ROLE / APPLICATION → the live row with that CODE in this project (codes, never ids),
          a retired target → 409;  AI → a non-blank label;  None → clears it
@@ -3756,20 +3930,67 @@ trigger catalogue (process_trigger):      # D-49; writable while EITHER DFD comp
 trigger.link(node, process_trigger_id, note) / unlink:   # step-owned (step_retire.OWNED_BY_STEP)
     the link pattern (§7.0), process steps only, component = dfd_component(node)
 
+dfd_rule.codes(project_id, bfc_set) -> tuple:     # D-70; THE one reader of the rule
+    live = sorted(element_code of live project_dfd_rule rows for (project, chart))
+    if not live: return ("DATA_OUT", "STARTED")       # fails closed: the fixed rule, never "nothing required"
+    return sorted(set(live) | {"STARTED"})
+
+ELEMENTS = {   # code → predicate over one live process (EXISTS sub-selects, one SQL pass)
+  STARTED:  a live step input OR a live inbound external flow (with or without a DE) OR a live trigger link
+  DATA_IN:  a live step input (a data entity)
+  DATA_OUT: a live step output (an outbound external flow with only a flow_label is not a data entity)
+  ORDER:    joined to another process of its chart by the derived order (generate_dfd's pairs); one process passes
+  EXTERNAL: per DIAGRAM (the DFD listed for a direct parent of processes, D-54): at least one outside party —
+            never part of a process's light (Q-6, Q-16)
+}
+RECOMMENDED = {"TO_BE": {STARTED, DATA_IN, DATA_OUT, ORDER}, "AS_IS": {STARTED}}   # code constants; create_project
+
+readiness(db, project_id, bfc_set, node_ids=None):   # D-68; one owner — the light, the marks, completeness, freeze
+    if the chart's DFD component is off: return {rule_applies: False}            # S7-3
+    rule = dfd_rule.codes(project_id, bfc_set)
+    per live process: missing = [e for e in rule if not ELEMENTS[e](p)]
+                      light = RED if missing                        # blocks the freeze (Q-13)
+                              else YELLOW if RECOMMENDED[bfc_set] − rule has an unmet element
+                              else GREEN
+    return {rule_applies, rule, processes: {node_id: {light, dfd_missing}}}
+    # exposed on bfc.tree (dfd_light, dfd_missing per process row) and on process-completeness (readiness)
+
 process_completeness(project_id, bfc_set):    # GET /projects/{id}/process-completeness
-    input  = a live step input  OR  a live inbound external flow (with or without a DE)  OR  a live trigger link
-    output = a live step output (an outbound external flow with only a flow_label is not a data entity)
-    applies only to a chart whose DFD component is on: to-be ⇐ TO_BE_DFD, as-is ⇐ AS_IS        # S7-3
+    r = readiness(project_id, bfc_set)
     return {
       "rule_applies":  …,
-      "missing_input", "missing_output":   live processes lacking one   # FREEZE_BLOCKING_WARNINGS (D-38)
+      "missing_input" (STARTED), "missing_output" (DATA_OUT), "missing_data_in", "missing_order",
+      "diagram_missing_external":          only the elements in the chart's rule; FREEZE_BLOCKING_WARNINGS
       "no_performer":                      warning only, never blocks the freeze (D-46)
       "step_without_br":                   to-be only (S7-2)
       "crud_without_io", "ext_without_io": must be empty (criteria 93, 148; D-24, R2-D13)
       "live_link_on_retired_step":         must be empty (step retire §4)
+      "readiness":                         r.processes
     }
     # FREEZE_BLOCKING_WARNINGS are amber while editing and a refusal at freeze (§7.7). A requirements-only
-    # project has no DFD component on and is never blocked by them.
+    # project has no DFD component on and is never blocked by them. consistency_check adds the error lines
+    # project_without_dfd_rule and dfd_rule_invalid (ORDER without DATA_IN and DATA_OUT).
+
+dfd_rule.validate(codes): STARTED always present; ORDER requires DATA_IN and DATA_OUT; unknown code → 422
+dfd_rule.preview(project, bfc_set, codes) → {ready, partly, not_ready, would_block, preview_digest}
+dfd_rule.set(actor, project, bfc_set, codes, row_version, preview_digest):      # project_ctx("ADMIN")
+    lock the project FOR UPDATE; 409 on a stale row_version or a changed digest; validate → 422
+    restore / insert added rows, retire dropped rows (S1-7); project.row_version bumps (never from the body)
+    AUDIT PROJECT_DFD_RULE_CHANGED {bfc_set_code, from, to, would_block}
+
+process_volume.set(actor, node, row_version, fields):   # D-67; object_guard(BfcNode, "EDIT", node_set_component)
+    node live and is_process (422); unit resolved by code_master.resolve(project, 'TRANSACTION_UNIT') (send codes)
+    each figure ≥ 0 and ≤ CAPS (runs 1,000,000 · transactions 100,000,000 · seconds 86,400); more decimals → 422
+    body is extra="forbid": annual_hours / fte → 422 (law 6);  AUDIT PROCESS_VOLUME_SET {from, to}
+process_volume.derive(node, basis):    # on every read; Decimal; never stored
+    PERIODS_PER_YEAR = {DAY: basis.working_days_per_year, WEEK: 52, MONTH: 12, QUARTER: 4, YEAR: 1}
+    annual_hours = runs × PERIODS_PER_YEAR[period] × transactions × seconds / 3600
+    fte          = annual_hours / (basis.working_days_per_year × basis.hours_per_working_day)
+    any input missing → {annual_hours: null, fte: null, incomplete: [fields]}
+process_volume.summary(project):        # per chart, per L1 / L2 area
+    Σ hours, Σ FTE, n complete, n incomplete; as-is beside to-be where the areas MATCH — same level, same
+    hier_code AND same lower(btrim(node_name)); otherwise unmatched with a reason (CODE_SAME_NAME_DIFFERS,
+    NAME_ELSEWHERE, ONLY_AS_IS, ONLY_TO_BE), never summed against the other side            # Q-28
 
 steps_under(node):        # live process descendants of a node, in the node's own set (hier_code prefix)
 
@@ -3793,9 +4014,11 @@ generate_dfd(node):       # GET /bfc-nodes/{id}/dfd; object_guard(BfcNode, "VIEW
       "order":      derived pairs {from, to, data_entity_ids} for A ≠ B where A outputs and B inputs a DE,
       "rank":       per process: Tarjan SCC condensation, then longest path from a source component, so loops
                     are legal and layout terminates                                   # S7 Q-33
+                    — when "order" in scope is empty: chart order (seq_no under each parent, hier_code order),
+                    no arrows, labelled "chart order"                                 # D-70, Q-3 option A
       "boundary":   in = stores read in scope and written by a process of the same chart outside it;
                     out = the reverse; drawn as stubs, never across charts,
-      "completeness": {missing_input, missing_output, no_performer} for the processes in scope,
+      "completeness": the rule's gaps, no_performer, and each process's light, for the processes in scope,
       "cross_area": stores written in one L1 area and read in another, counted across the whole chart,
       "layout":     DIAGRAM_LAYOUT rows for ('DFD', node), triggers included          # D-30
     }
@@ -3855,7 +4078,7 @@ Rules the schema and the prompt pack both state — **keys are local to the file
 `DE-`, `EXT-`) and names are how the file meets the database:
 
 1. **A step with a `br_number` updates that BR's process** (R2-D1, to-be anchors only — an as-is process has no
-   BR). The BR number never changes; `hier_code` does, on every reorder (D-10). If the file also carries a
+   BR; **an as-is step is always matched by name within its parent, rule 2**, SC-6). The BR number never changes; `hier_code` does, on every reorder (D-10). If the file also carries a
    `hier_code`, it must equal the node's current one, or the step is an error: "BR-0012 moved since export: now
    01.02.05, file says 01.02.03 — re-export". A `row_version` that is not the node's current one is an error that
    names the current values (R2-D5). **A step with a `hier_code` and no `br_number` is an error** — `hier_code` is
@@ -3884,12 +4107,12 @@ Rules the schema and the prompt pack both state — **keys are local to the file
    by an import. Every RETIRE row is listed in the preview, and the retire count must be acknowledged.
 9. **An imperfect file still imports, with warnings** (D-55): a process with no input or trigger, or no output;
    a process connected to nothing; an unknown data-entity name (created); an unknown performer (left blank);
-   missing descriptions. The gaps stay visible on the diagram's warnings panel and still block a freeze while
-   unresolved (D-38). **A file is rejected, with nothing staged, only for** an unreadable file, a wrong format
+   missing descriptions. The gaps stay visible on the diagram's warnings panel and, where the chart's DFD rule
+   requires the element, still block a freeze while unresolved (D-70). **A file is rejected, with nothing staged, only for** an unreadable file, a wrong format
    version, a different anchor or mode than chosen (R2-P3) or a stale `row_version` (R2-D5); and a step is an
-   error when its identity is wrong (rule 1, or two steps resolving to one process, or two steps with one name).
-   <!-- CHECK: D-55 says only unreadable file, wrong version, anchor/mode mismatch and stale row_version still block; the identity errors of rules 1–2 (unknown or out-of-scope BR number, moved hier_code, hier_code without br_number, two steps on one node, duplicate names) are kept as errors because importing them would write to the wrong process. Confirm with Ben. -->
-   <!-- CHECK: as-is anchors have no BR numbers, so rule 1 cannot identify an existing as-is step and a hier_code alone is an error; as written, as-is steps are matched by name (rule 2). slice7 §9.9 is silent. -->
+   error when its identity is wrong — an unknown or out-of-scope BR number, a moved `hier_code`, a `hier_code`
+   without a `br_number`, two steps resolving to one process, or two steps with one name — because importing it
+   would write to the wrong process (SC-6).
 10. `source_ref` is kept on the staged row so the preview can say *which shape on which slide* a problem came
     from — that is what makes an AI conversion checkable by a human.
 
@@ -4014,6 +4237,37 @@ function chart (D-53).
 Every editable business table takes `update_br`'s shape: `WHERE row_version = :v`, and 409 when no row matched.
 The 409 is in the playbook error table (§7 doctrine); D-6 is what makes it reachable.
 
+**The structured BR (D-59, D-60b, D-61, S11-1; slice 11).**
+```
+update_br(...):   EDITABLE = {br_statement} (+ status); business_logic / output_expectation are read-only legacy
+
+br_line.add(br, kind_code, priority_code | None, text):      # D-59; no component; EDIT
+    BR live; codes through code_master.resolve (BR_LINE_KIND, BR_PRIORITY); text non-blank
+    line_no = max(line_no of ALL the BR's lines, retired included) + 1   # minted at save, never reused, never sent
+    seq_no  = last live + 1
+br_line.update / retire / restore / reorder(seq_no)           # row_version; reorder is a position change only
+br_priority(br) = highest priority among live lines (MUST > SHOULD > COULD > WONT), else none   # derived, never stored
+
+business_requirement.save_crud_grid(br, entity_ticks, attribute_ticks, row_versions):   # D-60b; ONE request
+    entity ticks first (link_data_entity, which ensures the step I/O, D-24)
+    attribute ticks: crud in ('C','R','U'); the licence FK proves the entity row with the same CRUD is live
+    an unticked entity action retires its attribute ticks EXPLICITLY (the user removed them; nothing cascades)
+unlink_data_entity(row): live attribute ticks under it → 409 naming them
+
+br_system_flow.add(br, data_entity_id, source_app_id, target_app_id, note):   # D-61; component APPLICATION
+    both applications live in this project and different; the entity live; relink restores (S1-7)
+    info `flow_entity_not_used_by_br` when the BR has no live CRUD on the entity
+br_system_flow.coverage(flow) = the same BR links a live interface-behaviour FR whose fr_interface has the
+    same source and target and whose carried entities include the flow's entity        # derived, no fr_id stored
+br_system_flow.seed_interface_fr(br, flow_ids):   # components FUNCTION_REQUIREMENT + APPLICATION
+    all flows of this BR, one (source, target) pair, else 422
+    one transaction: FR (an interface-behaviour type) + fr_interface + one fr_interface_data_entity per entity
+                     + br_function_requirement link; numbers minted at save
+```
+All three tables are owned by the BR (`step_retire.OWNED`; `br_data_field` in a tier ahead of `br_data_entity`), are
+soft-deleted only, and are frozen from hash spec 4. A retired data field, application or entity still used by a
+live row → 409 naming the BRs (FK liveness).
+
 ### 7.4 `services/data_entity.py` → `create_entity(...)`, `upsert_field(...)`
 
 ```
@@ -4134,11 +4388,6 @@ The FR form shows the **type-specific panel by behaviour, not by code** — a pr
 change (law 5).
 
 ```
-link_node(fr_id, bfc_node_id):                    # FR_BFC_NODE — designed, not built (§5.4.3)
-    the node is a to-be process (the table carries the generated 'TO_BE' guard, S7-2)
-    if the node is already reachable through the FR's BR links: 422 "Already covered — do not store it twice"
-    the link pattern
-
 create_application(project_id, code, name, vendor, kind_code, lifecycle_code):   # D-8; component APPLICATION
     code: upper-case, A–Z 0–9 . _ -, never duplicated; live names unique (S6b-2)
     validate_required_code("APP_LIFECYCLE", lifecycle_code)   # AS_IS | TO_BE | BOTH (system category)
@@ -4232,15 +4481,21 @@ freeze(user, project_id, note, bump, confirm_text, preview_digest):
         confirm_text == f"{project.project_code} v{major}.{minor}", else 422                       # P6
         report = consistency_check(project_id)                      # SAME transaction (D11)
         errors   = non-empty lines outside INFORMATIONAL ∪ WARNINGS ∪ FREEZE_BLOCKING_WARNINGS
-        blocking = non-empty FREEZE_BLOCKING_WARNINGS lines: process_missing_input, process_missing_output
-                   (charts whose DFD component is on, D-38, S7-3) and rows_in_off_component (D-37)
+        blocking = non-empty FREEZE_BLOCKING_WARNINGS lines: the process_missing_<element> lines of each
+                   chart's DFD rule, read by dfd_rule.codes inside this snapshot (charts whose DFD component is
+                   on, D-70, S7-3), diagram_missing_external when the rule holds it, and rows_in_off_component (D-37)
+        # project_without_dfd_rule and dfd_rule_invalid are error lines: a missing or invalid rule refuses the freeze
         if errors or blocking: 409 {errors, freeze_blocking}        # criteria 35, 46
         on = components.enabled(project_id)
         content_digest = freeze_set.digest(project_id, on)
         if content_digest != preview_digest:
             409 "The scope changed since you opened this freeze. Review it again; nothing was saved."   # DR8-P2
         b = INSERT baseline(status=FROZEN, hash_spec_version=CURRENT_HASH_SPEC, content_digest,
-                            data_model_depth=project.data_model_depth, prior_baseline_id=prior?.id,
+                            data_model_depth=project.data_model_depth,
+                            dfd_rule_to_be=dfd_rule.codes(p, 'TO_BE'), dfd_rule_as_is=dfd_rule.codes(p, 'AS_IS'),
+                            fte_working_days=project.working_days_per_year,
+                            fte_hours_per_day=project.hours_per_working_day,       # D-70, D-67: header facts,
+                            prior_baseline_id=prior?.id,                            # not in content_digest
                             frozen_by_user_id=user, note)            # version_label is GENERATED
         for e in FREEZE_SET:                                         # the 25 shadows of §6.1, in FK order
             if e's gate is closed for `on`: freeze zero rows of it   # D-37; the shadow stays in the set
@@ -4281,10 +4536,15 @@ diff(project_id, a, b):           # GET /projects/{id}/baselines/diff?from=&to={
     for e in FREEZE_SET:
         cols_a, cols_b = e's hashed columns at each side's hash_spec_version
         if one side predates the entity: its rows simply read as ADDED / REMOVED
-        elif cols_a != cols_b: out[e] = SCHEMA_VERSION_MISMATCH; continue        # per entity (D5, S8-1 Q-16)
+        elif cols_a != cols_b:                                                    # Q-22: the list grew
+            older = the shorter list (each later list EXTENDS the earlier one — a freeze_set module assertion)
+            compare on older field by field (the stored hashes cover different lists);
+            entry gains compared_on_spec, not_compared = the newer columns   # "Volume is not in v1.2"
+            # SCHEMA_VERSION_MISMATCH stays only for a list that does not extend the older one: impossible
         FULL OUTER JOIN A to B on source_id:
             only B → ADDED;  only A → REMOVED
-            both, content_hash differs        → CHANGED + the differing hashed columns, before / after
+            both, content_hash differs (or, across specs, a column of the older list) → CHANGED + the differing
+                                                columns, before / after
             both, hash equal, a position column differs → MOVED              # D-10, P4
             # CHANGED wins over MOVED and carries moved: true (S8-1 Q-14)
         out[e] = {area, component_on: {a, b}, rows: [{source_id, change, fields, moved, label}]}
@@ -4309,10 +4569,14 @@ content_hash = hex(sha256(utf8(
                    coalesce(char_length(c2::text) || ':' || c2::text, E'\x1e'), …))))
                -- c1… = FREEZE_SET[t]'s hashed columns at the baseline's hash_spec_version, in order
 ```
-- **An explicit, versioned column list per entity**, stored as `baseline.hash_spec_version` (`CURRENT_HASH_SPEC
-  = 2`). The parity test forces every new live column into its shadow; only a change to an entity's **hashed**
-  list bumps the version, and so does a **new entity joining the set**, which registers its list under the new
-  version (S10b-1). `digest` and `verify` skip entities unknown at a baseline's version, so every older baseline
+- **An explicit, versioned column list per entity**, stored as `baseline.hash_spec_version`. The parity test forces
+  every new live column into its shadow; only a change to an entity's **hashed** list bumps the version, and so
+  does a **new entity joining the set**, which registers its list under the new version (S10b-1). **A later list
+  of an entity always extends its earlier one** (append-only, asserted at import), which is what lets the diff
+  compare across specs. The specs: **1** — the first freeze set; **2** — `br_function_requirement` joins (slice
+  10b); **3** — `bfc_node` adds `runs_per_period`, `volume_period_code`, `transactions_per_run`,
+  `transaction_unit_code` and `seconds_per_transaction` (slice 13c, D-67); **4** — `br_requirement_line`,
+  `br_data_field` and `br_system_flow` join (slice 11, S11-1). `CURRENT_HASH_SPEC` is the highest built. `digest` and `verify` skip entities unknown at a baseline's version, so every older baseline
   still verifies byte for byte.
 - **Canonical text is PostgreSQL's `::text` of the stored type** (booleans `true`/`false`, `numeric` with its
   stored scale, text as stored). Each value is **length-prefixed**, values are separated by `\x1f`, and NULL is the
@@ -4339,8 +4603,8 @@ through it; nothing else decides who can see a project.
 **The access model (D-40, D-62, OR-5, OR-6).** Three kinds of FTC user, and one optional wall per project:
 
 - **Admin:** `app_user.is_platform_admin = true`. Sees every project, restricted or not, plus the admin
-  functions (users, clients, projects, programs, members, restriction, components, house rate card, global
-  codes). Admins are the only holders of level `ADMIN`.
+  functions (users, clients, projects, programs, members, restriction, components, global codes). Admins are
+  the only holders of level `ADMIN`. The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits, no admin functions.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
   the server. `ck_app_user_kind CHECK (user_kind IN ('USER', 'VIEWER'))`; the column default is the least
@@ -4573,7 +4837,6 @@ entity_model_validation(project_id):
 traceability(project_id):                      # the vendor-facing scope list
     BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_FUNCTION_REQUIREMENT
                  ⋈ FUNCTION_REQUIREMENT ⟕ SOLUTION (the FR's tag) ⟕ APPLICATION_SOLUTION ⋈ APPLICATION
-    UNION the direct FR_BFC_NODE coverage (§5.4.3 override)
     order by hier_code, br_number; group by FR type
     → FORM / BATCH / INTERFACE / REPORT, each with its originating BRs, process steps,
       solution tag (blank allowed; flagged when the tag does not answer that BR) and target
@@ -4597,7 +4860,10 @@ application_gap(project_id):                   # D-8 — the migration backlog
       "as_is_support_by_to_be": as-is support links naming a TO_BE application — informational,
                      never counted as today's support (S6b-5)
     }
-    <!-- CHECK: "unallocated"/"unsupported" compare steps across as_is and to_be by node, but D-47 / slice7 §9.1 make the as-is set a separate tree with its own node ids (no provenance column, slice7 Q-24). The step-matching basis for this report is unspecified. -->
+    # The two charts have their own node ids and no provenance (D-47), so as-is and to-be are matched by
+    # AREA — an L1 / L2 area whose chart code and normalised name agree, as volume_summary (Q-28, SC-5).
+    # "unallocated" / "unsupported" are per matched area; unmatched areas are listed apart with their reason.
+    # A process-to-process link is a later, separate design.
 
 issue_dashboard(project_id):
     ISSUE ⋈ ISSUE_BR ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE
@@ -4651,7 +4917,7 @@ effort_summary(project_id):                    # D-13
     # Never an additive "effort by BR": an FR serving three BRs would count three times. If
     # shown at all it is labelled "effort touching this BR" and never summed.
 ```
-<!-- CHECK: S6c-4 defers "effort by L1 area" to the reports slice; the grouping is kept above as the design, not as built. -->
+The L1-area grouping is built with the reports slice (S6c-4, SC-11).
 
 Each of these has a `headline_value`, which is what `control_panel` (§7.13) compares against
 its `CONTROL_RULE`. **That contract is why every analysis returns one number as well as a
@@ -4736,6 +5002,8 @@ create_project(actor, client_id, project_code, project_name, program_id, start, 
             DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT
         seed EFFORT_RATE from the FTC default card (S6c-1)
         insert PROJECT_COMPONENT rows (D-37)
+        insert PROJECT_DFD_RULE rows per chart from dfd_rule.RECOMMENDED (D-70)
+            (to-be: STARTED, DATA_IN, DATA_OUT, ORDER; as-is: STARTED); the FTE basis takes its 240 × 8 defaults
         copy CONTROL_RULE house defaults (§7.13)
     AUDIT_EVENT(event_type='PROJECT_CREATED', project_id=project.id,
                 detail={program_id, template_code, components, data_model_depth, is_restricted})
@@ -4772,8 +5040,9 @@ set_restriction(actor, project, restricted, confirm_hash=None):   # PUT /project
     UPDATE project SET is_restricted = :restricted
     AUDIT_EVENT('PROJECT_RESTRICTED' | 'PROJECT_UNRESTRICTED',
                 detail={members: [...], loses: [...], gains: [...]})
-    # Existing open projects are switched by an admin, one by one, after the member list is
-    # checked — never by a migration or a script (D-62).
+    # Every live open project is switched by an admin, one by one, on its Access screen after its
+    # team is checked — never by a migration or a script (D-62, S10c-2); the inventory of projects,
+    # members and levels is kept with the slice 10c spec until none is left open.
 
 effective_access(project):                             # GET /projects/{id}/access, ADMIN
     admins  = every active platform admin
@@ -5085,7 +5354,8 @@ plan_vs_actual(user, project_id):
     "unlinked": lines with no phase, listed — never dropped
     headline_value = max slip_days across phases     # so a control rule can govern it
 ```
-<!-- CHECK: D-41's progress-update entity is decided but not yet modelled (no slice schema); the function name record_progress and its columns follow D-41's wording only, pending apple. -->
+`record_progress` and its columns follow D-41; `apple` models the progress-update table when the WBS wave is
+specced (SC-4).
 
 **Not baselined** (D-33). The schedule is not agreed scope, and a re-plan is not a scope
 change. Freezing it would put a re-plan in every diff.
@@ -5187,9 +5457,13 @@ consistency_check(project_id | None, db):        # None = across every project (
             interface_under_inactive,
       "project_sequence_missing": number series of the ten with no PROJECT_SEQUENCE row,  # R2-D14
       "as_is_allocated":  active APPLICATION_SOLUTION rows on an AS_IS application,       # §6.2
-      "process_missing_input":  processes of a set whose DFD is on with no input data
-                                entity, inbound external flow or trigger,   # D-38, D-49, S7-3
-      "process_missing_output": processes of a set whose DFD is on with no output data entity,
+      # each chart's DFD rule (dfd_rule.codes, D-70), for a chart whose DFD is on (S7-3); a line whose
+      # element is not in that chart's rule lists nothing:
+      "process_missing_input":  processes lacking STARTED (an input DE, inbound external flow or trigger),
+      "process_missing_output": processes lacking DATA_OUT (an output data entity),
+      "process_missing_data_in", "process_missing_order",  "diagram_missing_external",
+      "project_without_dfd_rule": (project, chart) pairs with no live rule row,          # error, fails closed
+      "dfd_rule_invalid":        charts whose live rule holds ORDER without DATA_IN and DATA_OUT,   # error
       "rows_in_off_component":  live rows in a component that is off,     # D-37
       # warnings — shown, a freeze warns, never refuses:
       "entities_without_fields", "entities_keys_only",                    # D-39, S4-12
@@ -5199,7 +5473,7 @@ consistency_check(project_id | None, db):        # None = across every project (
       "as_is_support_by_to_be", "as_is_support_on_to_be",                 # S6b-5, D-47
     }
     # Severity classes: INFORMATIONAL and WARNINGS never refuse; FREEZE_BLOCKING_WARNINGS
-    # (process_missing_input, process_missing_output, rows_in_off_component) are amber while
+    # (the process_missing_<element> lines, diagram_missing_external, rows_in_off_component) are amber while
     # editing and a refusal at freeze; every other line must be empty.
     # The mitigation for storing derived hier_code and level_no (§5.5). It is a PRECONDITION
     # OF FREEZE (§7.7), run INSIDE the freeze transaction (R2-P6), because freeze is the
@@ -5257,11 +5531,11 @@ enforce_json_limits(file):
     reject if the body exceeds 2 MB — enforced at ingress, before a byte reaches the handler (§7.12b)
     parse with the stdlib json module under a nesting-depth cap of 32
     reject NaN / Infinity (parse_constant), duplicate object keys (object_pairs_hook)
-    reject if steps > 500, flows > 2,000, data_entities > 500, any string > 4,000 chars
+    reject if steps > 500, inputs + outputs + external flows + triggers > 2,000 combined (SC-6),
+           data_entities > 500, any string > 4,000 chars
     key and source_ref lengths are capped by the published JSON Schema (S4-8)
     every free-text value is stored as text and rendered escaped — never as HTML (S5)
 ```
-<!-- CHECK: the "flows > 2,000" cap predates vb-process-flow/2.0, which carries no edges (D-38, slice7 §9.9); it presumably now bounds inputs/outputs/external flows/triggers, but no source restates it. -->
 500 steps per file sits well inside A-35's 2,000 process nodes per project: one file is one
 parent node's flow, not a whole chart.
 
@@ -5447,9 +5721,10 @@ promote_risk_to_issue(risk_id, description):
 raise_change_request(project_id, baseline_id, title, rationale, origin_code):   # Q8
     access.require_project(user, project_id, EDIT, component='CHANGE_REQUEST')
     bl = BASELINE(baseline_id); if bl is None or bl.project_id != project_id: raise 404
-    if bl.status_code not in ('FROZEN', 'APPROVED'):
-        raise 422 "A change request is raised against an agreed baseline — FROZEN or "
-                  "APPROVED. A superseded baseline is history; raise it against the latest"
+    agreed = newest baseline of the project with a recorded client approval   # DR8-P1
+    if bl.status_code not in ('FROZEN', 'APPROVED') and bl.baseline_id != agreed.baseline_id:   # SC-2
+        raise 422 "A change request is raised against an agreed baseline — FROZEN, "
+                  "APPROVED, or the superseded one carrying the client's approval"
     validate_required_code("CR_ORIGIN", origin_code)
     cr_number = numbering.next_number(db, project_id, "CR", "CR", 4)
     insert CHANGE_REQUEST(..., baseline_id, status_code='DRAFT',
@@ -5552,7 +5827,7 @@ control_panel(project_id):
     # and the action agreed at mobilisation — so the response is not reinvented under
     # pressure, and the thresholds belong to the client rather than to this spec.
 ```
-<!-- CHECK: D-40's capability mapping (slice7 §8.6 Q-17) moves "control-rule thresholds" and every other OWNER-only project operation to EDIT, but does not name decide_cr or reset_project_rules_to_house_default; both are shown at EDIT here because ADMIN is reserved to the admin functions D-40 lists. -->
+`decide_cr` and `reset_project_rules_to_house_default` run at **EDIT** — project editors, and admins always (SC-7).
 
 **Seeded control rules.** `create_project` seeds the registry below with FTC defaults, which
 the client then negotiates. These thresholds are starting points, not doctrine:
@@ -5572,7 +5847,7 @@ the client then negotiates. These thresholds are starting points, not doctrine:
 
 ---
 
-### 7.14 The diagram canvas — DFD and ERD (D-29, D-30, D-31, D-38)
+### 7.14 The diagram canvas — DFD and ERD (D-29, D-30, D-31, D-38, D-65)
 
 **One canvas component for every diagram** (VB law 8): `<ModelCanvas kind="dfd" | "erd">`
 (`frontend/src/canvas/ModelCanvas.jsx`), built on React Flow (`@xyflow/react`, MIT) with `elkjs` for
@@ -5608,8 +5883,9 @@ refuses new ones (S7-5).
 - **Export.** PNG and SVG for decks, Mermaid `erDiagram` text for documents (§7.12b), and PDF
   (D-42).
 
-**What the DFD looks like** (the process diagram, as-is and to-be, D-38, D-47). It is **generated, not
-drawn** (D-31): every element comes from the process records (`generate_dfd`, §7.2a):
+**What the DFD looks like** (the process diagram, as-is and to-be, D-38, D-47). It is **generated** (D-31):
+every element comes from the process records (`generate_dfd`, §7.2a), and a connection drawn on it writes one of
+those records (D-65):
 
 - **Lanes are performers** (D-46): one lane per org unit, org role, application or AI performing a
   process in scope, plus an "Unassigned" lane. Supporting systems show inside the process box.
@@ -5618,14 +5894,29 @@ drawn** (D-31): every element comes from the process records (`generate_dfd`, §
 - **Flows** between processes and stores, external entities and triggers, from step I/O
   (D-24), external flows (D-24a) and trigger links. **Order is derived, never stored**: B follows A
   when B reads what A writes; it drives the left-to-right layout and is drawn, dashed, only as an
-  optional overlay. Stores read or written outside the scope are boundary stubs.
+  optional overlay. A diagram with no derived order lays its processes out in chart order, without arrows,
+  labelled "chart order" (D-70). Stores read or written outside the scope are boundary stubs.
+- **Readiness** (D-68): each process box carries its light — colour, icon and text — and the DFD index
+  counts ready / partly / not ready per diagram.
 - **Interaction.** Processes, stores, parties and triggers can be dragged, and the position is saved
-  (D-30). **Connections are not drawn on the canvas** (`connectable` off): a flow is changed by
-  editing the process's inputs, outputs, external flows or triggers in its panel, so the diagram
-  always stays a picture of one record.
-- **Gaps stay visible** as a warnings panel on the diagram: processes with no input or trigger, with
-  no output data entity (these block the freeze while the set's DFD is on, S7-3), or with no performer
-  (D-55).
+  (D-30). **Drawn connections write the same record** (D-65): `connectable` is on for an editor on a live
+  diagram (off for viewers, a baseline view, and a chart whose DFD is off). `onConnect` classifies the two
+  ends and calls the matching writer through `api/scope.js` — store ↔ process: a step input or output
+  (`step_io.ensure_step_io`); party ↔ process: an external flow, with a small form for the data entity or a
+  flow label; trigger → process: a trigger link; process → process: a **hand-off**, where the editor picks
+  the data entity and one transaction writes both sides (`POST /bfc-nodes/{id}/hand-offs`), so the derived
+  order arrow then appears by itself. A drag to empty canvas opens the data-entity picker, which can also
+  create a new entity (Q-12). Invalid pairs (store → store, party → store, a trigger to anything but a
+  process, anything across charts) are refused in the browser before any call and again by the server; an
+  existing row → "Already on the diagram". A store or party that appears because of a new connection is placed
+  where it was dropped (`useLayoutSave`). Clicking a STORE, EXTERNAL or TRIGGER flow offers "Remove this
+  flow" (the existing unlink route; a step I/O a BR CRUD or external flow depends on stays, with a link to the
+  requirement); **derived order arrows are not selectable for removal**. No keyboard delete. Drawing never
+  writes BR CRUD (Q-11). Every row drawn is identical to the row the panel writes, so the diagram always stays
+  a picture of one record.
+- **Gaps stay visible** as a warnings panel on the diagram: processes missing an element of the chart's DFD
+  rule (these block the freeze while the set's DFD is on, D-70, S7-3), elements outside the rule as
+  information, and processes with no performer (D-55).
 - **Export.** PNG, SVG, Mermaid (one subgraph per lane, triggers as start nodes, §7.12b) and PDF (D-42).
 
 **JSON import** (the flow file, §7.2b) opens a preview diagram over the staged batch before commit,
@@ -5675,10 +5966,13 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `ISSUE_STATUS` | `OPEN`, `IN_PROGRESS`, `RESOLVED`, `DEFERRED`, `CLOSED` | `ISSUE.status_code` |
 | `ORG_UNIT_LEVEL` | `DEPARTMENT`, `DIVISION`, `SECTION` | `ORG_UNIT.unit_level_code` |
 | `RACI_TYPE` | `R`, `A`, `C`, `I` — **project-editable**; each code carries a **behaviour** ∈ `RESPONSIBLE` / `ACCOUNTABLE` / `CONSULTED` / `INFORMED` / `SUPPORT` / `OTHER` (Q7). Seeded R → RESPONSIBLE, A → ACCOUNTABLE, C → CONSULTED, I → INFORMED. RASCI adds `S` → SUPPORT. RAPID is a **mapping**, not a vocabulary: Perform → RESPONSIBLE, Decide → ACCOUNTABLE, Input → CONSULTED, Recommend / Agree → OTHER | `BR_ORG_ROLE` (a to-be process's roles) and `BFC_NODE_ORG_ROLE` (an as-is process's roles, D-64), both via `raci_behaviour`, FK-verified. Configurable because clients use RASCI / RAPID / house variants. **The single Accountable per BR and per step reads the behaviour, never the letter** (R2-D9). Several RESPONSIBLE roles are legal; the lane is the performer, not a RACI role (D-46). A project holds exactly one live code per load-bearing behaviour, RESPONSIBLE and ACCOUNTABLE: a second is refused when the code is saved (A-60). A behaviour is immutable once referenced, as for `FR_TYPE`; a project override of a global code must carry the global's behaviour |
+| `TRANSACTION_UNIT` | `INVOICE`, `ORDER`, `CASE`, `DOCUMENT`, `RECORD`, `CALL`, `PAYMENT`, `EMPLOYEE`, `OTHER` — library + project override | `BFC_NODE.transaction_unit_code` — **D-67**, what one transaction of a process is. Optional; never branched on (slice 13c) |
+| `BR_LINE_KIND` | `RULE`, `CALCULATION`, `VALIDATION`, `OUTPUT`, `CONTROL` — project-editable; no behaviour code (nothing branches on a line kind) | `BR_REQUIREMENT_LINE.line_kind_code` — **D-59** (slice 11) |
+| `BR_PRIORITY` | `MUST`, `SHOULD`, `COULD`, `WONT` (MoSCoW) | `BR_REQUIREMENT_LINE.priority_code`, nullable = not yet prioritised. The BR's own priority is the highest of its live lines, derived, never stored — **D-59** (slice 11) |
 | `BR_STATUS` | `DRAFT`, `CONFIRMED`, `BASELINED`, `SUPERSEDED` | `BUSINESS_REQUIREMENT.status_code`. `BASELINED` / `SUPERSEDED` are set only by the baseline freeze (S1-8) |
 | `FR_FULFILMENT_STATUS` | `SPECIFIED`, `ACCEPTED_BY_VENDOR`, `BUILT`, `TESTED`, `DEFERRED` | `FUNCTION_REQUIREMENT.fulfilment_status_code` — **the vendor boundary is this column, not a table** |
 | `PROJECT_STATUS` | `PLANNING`, `ACTIVE`, `ON_HOLD`, `CLOSED` | `PROJECT.status_code` |
-| `BASELINE_STATUS` | `DRAFT`, `FROZEN`, `APPROVED`, `SUPERSEDED` — **`is_system`, not project-editable** | `BASELINE.status_code`. Code compares the values: a CR may target only FROZEN or APPROVED (Q8, §5.3 CHANGE_REQUEST) |
+| `BASELINE_STATUS` | `DRAFT`, `FROZEN`, `APPROVED`, `SUPERSEDED` — **`is_system`, not project-editable** | `BASELINE.status_code`. Code compares the values: a CR may target FROZEN or APPROVED, or the SUPERSEDED baseline carrying the agreed approval (Q8, SC-2, §5.3 CHANGE_REQUEST) |
 | `FIELD_DATA_TYPE` | `STRING`, `INTEGER`, `DECIMAL`, `DATE`, `DATETIME`, `BOOLEAN`, `TEXT`, `UUID` | `DATA_FIELD.data_type_code` (optional, D-26) |
 | `PROJECT_COMPONENT` | `SOLUTION`, `FUNCTION_REQUIREMENT`, `APPLICATION`, `EFFORT`, `ISSUE`, `TO_BE_DFD`, `AS_IS`, `WBS`, `BENEFIT`, `RISK`, `CHANGE_REQUEST` — **`is_system`, global only** | `PROJECT_COMPONENT.component_code` — **D-37**. Code branches on these codes; that is the same recorded exemption from VB law 5 as `SOLUTION_CATEGORY` and `APP_LIFECYCLE`, because a system category cannot be renamed or retired by a project. Dependencies (`COMPONENT_REQUIRES`) and live-row tests (`COMPONENT_ROWS`) are code constants in `services/components.py` |
 | `PROJECT_TEMPLATE` | `REQUIREMENTS_ONLY`, `DATA_AND_PROCESS`, `FULL_DELIVERY` — **global only**, labels editable in code maintenance | `PROJECT_TEMPLATE_COMPONENT.template_code` — **OR-3**. A template is a starting point copied into `project_component` at `create_project` and never linked afterwards. Its contents are seeded by `seeds/seed_project_templates.py` |
@@ -5707,10 +6001,16 @@ a `CHECK` — a playbook §9.3 deviation:
 - **`BFC_NODE.bfc_set_code`** (`TO_BE` / `AS_IS`, D-47), **`BFC_NODE.performer_kind`** (`ORG_UNIT` /
   `ORG_ROLE` / `APPLICATION` / `AI`, D-46), **`PROCESS_TRIGGER.trigger_kind`** (`TIME` / `EVENT`, D-49),
   and the retired **`BFC_NODE_FLOW.flow_type`** (S2-1).
+- **`PROJECT_DFD_RULE.element_code`** (`STARTED` / `DATA_IN` / `DATA_OUT` / `EXTERNAL` / `ORDER`, D-70) and
+  **`BFC_NODE.volume_period_code`** (`DAY` / `WEEK` / `MONTH` / `QUARTER` / `YEAR`, D-67): each code is a
+  predicate or a multiplier in the code, so they are fixed lists with their wording in the screen text files
+  (S13-1). They are CHECK-listed rather than `code_master` rows also because the 13b migration backfills the
+  rule in pure SQL, before any seed runs.
 
 `docs/PLAYBOOK_DEVIATIONS.md` records CRUD (deviation 2), `diagram_type` and `behaviour_code` (3),
 `data_model_depth` (7e) and `user_kind` / `access_level` (7f).
-<!-- CHECK: bfc_set_code, performer_kind, trigger_kind (slice7_schema §9.1, §9.4, §9.5) and bfc_node_flow.flow_type (S2-1) are CHECK-listed vocabularies but have no line in docs/PLAYBOOK_DEVIATIONS.md. -->
+`bfc_set_code`, `performer_kind`, `trigger_kind` and `flow_type` each get a deviation line of their own (SC-11),
+as do the slice 13 vocabularies `element_code` and `volume_period_code` (S13-1).
 
 **Scoping:** `code_master.project_id` is nullable — `NULL` is the FTC-wide default library, non-null
 is a per-project override shadowing the global of the same `category + code` (A-16). `is_system`
@@ -5758,13 +6058,13 @@ component names it (`component=`), and criterion 49b fails a write that forgets.
 | `public` | nothing — no JWT | `POST /auth/login`, `GET`/`POST /auth/setup` **only** |
 | `authenticated` | the JWT user; the service filters | `GET /auth/me`, `GET /projects` (via `visible_project_ids`), `GET /programs` (programs with at least one project visible to the caller; admins: all), `GET /project-templates`, `GET /project-components`; later `GET /process-flow-json/schema` |
 | `platform_admin` | `current_user().is_platform_admin`, re-read every request (S4) | `/users*`, `/clients*`, `POST /projects`, `POST /programs`, `POST /programs/{program_id}/projects`, `DELETE /programs/{program_id}/projects/{project_id}`; later `PATCH /programs/{id}`, house control-rule defaults, global code maintenance, `purge` |
-| `project_ctx(level, component=)` | `require_project(user, {project_id}, level, component)` | **every route under `/projects/{project_id}/…`** — `VIEW` for reads and exports; `EDIT` for writes, imports, freeze, client approval, the rate card, project control rules and FR types; `ADMIN` for components, data model depth, effective access, members and restriction |
+| `project_ctx(level, component=)` | `require_project(user, {project_id}, level, component)` | **every route under `/projects/{project_id}/…`** — `VIEW` for reads and exports; `EDIT` for writes, imports, freeze, client approval, the rate card, project control rules and FR types; `ADMIN` for components, data model depth, the DFD rule and the FTE basis, effective access, members and restriction |
 | `object_guard(Model, level, component=)` | the object's owning project, then `require_project`; an object with no project is platform-admin only | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-triggers/{id}` · `/project-members/{id}` · `/baselines/{id}` · `/bulk/batches/{batch_id}` · **each restore route**, one per `RESTORABLE` entity (§7.12); later `/stakeholders`, `/issues`, `/benefits`, `/risks`, `/change-requests`, `/phases`, `/wbs-items` |
 | `program_ctx(level)` | `require_program(user, {program_id}, level)` | `GET /programs/{program_id}`, `GET /programs/{program_id}/projects`; later the roll-ups `/dashboard`, `/counts`, `/interfaces`, `/effort`, `/control-status`, `/plan-vs-actual` |
 
 `component=` on `project_ctx` / `object_guard` is a code, a tuple of codes, or a resolver on the row
-(e.g. a BFC node needs `AS_IS` when it is in the as-is set; external flows, the performer and trigger
-links need the node's DFD component). It applies to writes only, platform admins included. Where the
+(e.g. a BFC node needs `AS_IS` when it is in the as-is set; external flows, trigger links and drawn
+connections need the node's DFD component; the performer needs only the node's chart, S10c-2). It applies to writes only, platform admins included. Where the
 component depends on the body (a node created in a named set, an FR given a solution, an import
 target), the service calls `components.require_on` itself.
 
@@ -5814,7 +6114,7 @@ guard that does not fit its path.**
 | `GET /bfc-nodes/{id}/data-entities` · `POST` · `DELETE …/{link_id}` | object_guard(BfcNode) | data_entity_id, direction | step I/O, written only through `ensure_step_io` (R2-D13). DELETE is 409 while a BR CRUD or an external flow depends on it (D-24) |
 | `GET /bfc-nodes/{id}/external-flows` · `POST` · `DELETE …/{link_id}` | object_guard(BfcNode; writes: DFD resolver) | external_entity_id, direction, data_entity_id, flow_label, note | step ↔ external party flows (D-24a); linking a carried entity adds the step I/O row in the same transaction |
 | `GET /bfc-nodes/{id}/org-roles` · `POST` · `DELETE …/{link_id}` | object_guard(BfcNode) | org_role_id, raci_code | step RACI — **as-is processes only**. A to-be process's roles are recorded on its BR, so a write here on a to-be step is 409 (D-64, S10d-1) |
-| `PUT /bfc-nodes/{id}/performer` | object_guard(BfcNode, EDIT, DFD resolver) | performer_kind, code, performer_label, row_version | the one performer (D-46). The body sends codes (`org_unit_code` / `org_role_code` / `application_code`), never ids; a retired target → 409. `PERFORMER_SET` |
+| `PUT /bfc-nodes/{id}/performer` | object_guard(BfcNode, EDIT, set resolver — the chart's own component, whatever the DFD setting, S10c-2) | performer_kind, code, performer_label, row_version | the one performer (D-46). The body sends codes (`org_unit_code` / `org_role_code` / `application_code`), never ids; a retired target → 409. `PERFORMER_SET` |
 | `GET /bfc-nodes/{id}/applications` · `POST` · `PATCH`/`DELETE …/{link_id}` | object_guard(BfcNode; writes: `APPLICATION` + `AS_IS`) | application_id, note | supporting systems of an **as-is** process (S6b-1, D-47); 422 on a to-be process, whose systems come from BR → Solution → Application (D-22). A TO_BE application warns (S6b-4) |
 | `GET /projects/{project_id}/bfc-sets` | project_ctx(VIEW) | — | node and process counts per set |
 | `POST /projects/{project_id}/bfc-sets/{to_set}/copy-from/{from_set}` | project_ctx(EDIT, `AS_IS`) | confirm_hash (omit for preview) | whole-tree copy into an **empty** set (409 otherwise). To-be → as-is creates no BR; as-is → to-be creates a DRAFT BR per process. RACI moves between step roles and BR roles. `BFC_SET_COPIED` |
@@ -5824,7 +6124,7 @@ guard that does not fit its path.**
 | `GET /bfc-nodes/{id}/triggers` · `POST` · `DELETE …/{link_id}` | object_guard(BfcNode; writes: DFD resolver) | process_trigger_id, note | this trigger starts this process |
 | `GET /bfc-nodes/{id}/dfd` | object_guard(BfcNode, VIEW) | — | the DFD of a non-process node's processes in its own set: lanes (one per performer, plus UNASSIGNED), processes with their supporting systems, stores, externals, triggers, flows, the **derived order** and rank, boundary stubs, completeness, saved layout (§7.14). A process node → 422 |
 | `GET /bfc-nodes/{id}/dfd/export?format=mermaid&order=` | object_guard(BfcNode, VIEW) | — | the same graph as Mermaid text, one subgraph per lane, triggers as start nodes; the derived order is drawn dashed only when asked. Every label through `escape_mermaid()` (R2-S7) |
-| `GET /projects/{project_id}/process-completeness?bfc_set=` | project_ctx(VIEW) | — | `missing_input`, `missing_output` (**block the freeze** where the set's DFD component is on, D-38, S7-3), `no_performer` (warning), `step_without_br` (to-be), `crud_without_io` and `ext_without_io` (always 0), `live_link_on_retired_step` |
+| `GET /projects/{project_id}/process-completeness?bfc_set=` | project_ctx(VIEW) | — | the gaps against the chart's DFD rule — `missing_input` (STARTED), `missing_output` (DATA_OUT), and from slice 13b `missing_data_in`, `missing_order`, `diagram_missing_external` (**block the freeze** where the element is in the rule and the set's DFD component is on, D-70, S7-3), `no_performer` (warning), `step_without_br` (to-be), `crud_without_io` and `ext_without_io` (always 0), `live_link_on_retired_step`; and `readiness` — per process its light and `dfd_missing` codes (D-68). The tree read (`bfc-tree`) carries `dfd_light` and `dfd_missing` on each process row |
 | `GET` · `PUT` · `DELETE /projects/{project_id}/diagram-layouts/{diagram_type}/{scope_key}` | project_ctx(VIEW / EDIT) | [{object, x, y, w, h, collapsed}], at most 2,000 | saved positions (D-30). PUT upserts only the listed objects; DELETE resets the diagram (audited). `diagram_type` is `ERD` or `DFD` |
 | **Business requirements** | | | |
 | `GET /projects/{project_id}/business-requirements?include_retired=` | project_ctx(VIEW) | — | BRs. **There is no create route**: a BR appears with its to-be process (D-2) |
@@ -5880,7 +6180,7 @@ guard that does not fit its path.**
 | `POST /projects/{project_id}/baselines/freeze` | project_ctx(EDIT) | note, `bump: MINOR\|MAJOR`, `confirm_text` (project code + version), preview_digest | a new FROZEN baseline over every `FREEZE_SET` table whose component gate is open (S8-1, S8-3). Typed confirmation; refused while consistency reports errors or freeze-blocking warnings (P6, D11, D-38); warnings are returned and audited. Runs at REPEATABLE READ (R2-P6) |
 | `GET /baselines/{id}` · `GET /baselines/{id}/rows/{entity}?offset=&limit=` | object_guard(Baseline, VIEW) | — | header, components on, counts per entity; the snapshot rows of one frozen entity (labels shown, never code ids). Every read re-verifies the stored digest |
 | `POST /baselines/{id}/approve` | object_guard(Baseline, EDIT) | client_approver_name, client_approved_on, approval_note, approval_reference, row_version | records the client's sign-off once; only a FROZEN baseline; no un-approve, no reopen |
-| `GET /projects/{project_id}/baselines/diff?from={a}&to={b\|live}[&priced=true]` | project_ctx(VIEW) | — | ADDED / CHANGED / REMOVED / **MOVED** per entity, with `component_on` for each side; `SCHEMA_VERSION_MISMATCH` per entity whose hashed list differs. **404 unless both baselines belong to this project** (S3). `priced=true` adds effort deltas (D-13, R2-D3) only where `EFFORT` is on in both sides |
+| `GET /projects/{project_id}/baselines/diff?from={a}&to={b\|live}[&priced=true]` | project_ctx(VIEW) | — | ADDED / CHANGED / REMOVED / **MOVED** per entity, with `component_on` for each side; an entity whose hashed list grew between the two specs is compared on the older list, with `compared_on_spec` and `not_compared` (Q-22, with slice 13c). **404 unless both baselines belong to this project** (S3). `priced=true` adds effort deltas (D-13, R2-D3) only where `EFFORT` is on in both sides |
 
 No `PATCH`, `PUT` or `DELETE` route exists on a baseline or a shadow table.
 
@@ -5889,11 +6189,21 @@ component.
 
 | Method · Path | Guard | Request | Response / rule |
 |---|---|---|---|
+| **Slice 13b–13d — the DFD rule, process volume, drawing on the DFD (D-65, D-67, D-70)** | | | |
+| `GET /projects/{project_id}/dfd-rule` | project_ctx(VIEW) | — | per chart: the required elements, `rule_applies`, locked and recommended flags; the catalogue; the project's `row_version` (D-70) |
+| `POST /projects/{project_id}/dfd-rule/preview` | project_ctx(ADMIN) | bfc_set_code, codes | for that chart: ready / partly / not ready / would block, and `preview_digest`. No write |
+| `PUT /projects/{project_id}/dfd-rule` | project_ctx(ADMIN) | bfc_set_code, codes, row_version, preview_digest | the chart's rule; 409 on a stale `row_version` or digest; 422 if STARTED is dropped or ORDER lacks DATA_IN and DATA_OUT. `PROJECT_DFD_RULE_CHANGED` (D-70, Q-5) |
+| `POST /bfc-nodes/{id}/hand-offs` | object_guard(BfcNode, EDIT, DFD resolver) | to_bfc_node_id, data_entity_id | a hand-off drawn on the canvas: this process's output and the other process's input, in one transaction through `ensure_step_io`. 422 across charts; 404 for a process the caller cannot see (D-65). Every other drawn connection uses the existing step I/O, external-flow and trigger routes |
+| `PATCH /bfc-nodes/{id}/volume` | object_guard(BfcNode, EDIT, set resolver) | runs_per_period, volume_period_code, transactions_per_run, transaction_unit_code, seconds_per_transaction, row_version | the process with its derived `annual_hours`, `fte` and `incomplete`. Hours or FTE in the body → 422 (`extra="forbid"`); a non-process node → 422. `PROCESS_VOLUME_SET` |
+| `PUT /projects/{project_id}/fte-basis` | project_ctx(ADMIN) | working_days_per_year, hours_per_working_day, row_version | the FTE basis (default 240 × 8). `PROJECT_FTE_BASIS_CHANGED` |
+| `GET /projects/{project_id}/volume-summary` | project_ctx(VIEW) | — | per chart, hours and FTE per L1 / L2 area, as-is beside to-be, matched by code and name; unmatched areas with their reason; incomplete processes listed (Q-28) |
+| **Slice 11 — structured BR, attribute usage, system-to-system flows (D-59, D-60b, D-61)** | | | |
+| BR requirement lines · attribute ticks in the CRUD grid · BR system flows · "Create interface FR from these flows" | object_guard(BusinessRequirement, EDIT; flows: `APPLICATION`; the seeding action: `FUNCTION_REQUIREMENT` + `APPLICATION`) | line_kind_code, priority_code, line_text, seq_no · attribute ticks with the entity ticks in one request · data_entity_id, source/target application, flow_note | §4.3. Line numbers, the BR's priority and flow coverage are derived, never sent. `PATCH /business-requirements/{id}` then accepts `br_statement` and status only. Route shapes fixed by the slice 11 build |
 | **Wave 1e — imports 4b–4d** | | | |
 | `POST /projects/{project_id}/bulk/{target}/validate` for `business-requirements`, `function-requirements`, `issues` | project_ctx(EDIT) | as above | BRs keyed by **BR number**, `hier_code` a cross-check (R2-D1); FRs (R2-D6) create BR links from BR numbers (D-52) and never create a SOLUTION; `effort_days` is export-only. FR target needs `FUNCTION_REQUIREMENT` |
 | `GET /process-flow-json/schema` | authenticated | — | the `vb-process-flow/2.0` JSON Schema, an example, and the AI conversion prompt pack. The pack names **Claude or Microsoft Copilot under FTC's own accounts only** and opens with the personal-data removal step (D-25, D-36) |
 | `POST /projects/{project_id}/bulk/process-flow/validate` | project_ctx(EDIT; the anchor's set decides the component) | JSON file, **`anchor_bfc_node_id`, `mode`** (merge \| replace), chosen in the UI | `IMPORT_BATCH` + per-item errors and warnings. Steps carry performer, inputs, outputs, triggers and external flows; **no edges, no lanes**. An imperfect DFD imports with warnings (D-55). **A file whose anchor or mode disagrees with the route → 422, nothing staged** (R2-P3); a `1.0` file is refused. Body cap 2 MB. Commit adds `acknowledged_retires` in replace mode |
-| the flow file's JSON export | object_guard(BfcNode, VIEW) | — | the flow under a node as `vb-process-flow/2.0`, every existing step with `br_number`, `hier_code` and `row_version` (R2-D1, R2-D5), so a flow round-trips |
+| `GET /bfc-nodes/{id}/dfd/export?format=json` | object_guard(BfcNode, VIEW) | — | the flow under a node as `vb-process-flow/2.0`, every existing step with `br_number`, `hier_code` and `row_version` (R2-D1, R2-D5), so a flow round-trips |
 | **Issues and stakeholders (component `ISSUE` for issues)** | | | |
 | `GET/POST /projects/{project_id}/stakeholders` · `PATCH/DELETE /stakeholders/{id}` | project_ctx / object_guard(EDIT) | name, title, org_unit_id, is_bpo | client-side people with no login (D-4) |
 | `GET/POST /projects/{project_id}/issues` · `PATCH /issues/{id}` | project_ctx / object_guard(EDIT, `ISSUE`) | issue fields, br_ids | issue incl. generated `issue_number`; raiser and recorder both required (D8) |
@@ -5914,7 +6224,7 @@ component.
 | **Wave 2 — benefits, change requests, WBS** | | | |
 | `GET/POST /projects/{project_id}/benefits` · `PATCH/DELETE /benefits/{id}` · `POST/DELETE /benefits/{id}/solutions` | `BENEFIT` | benefit fields; solution_id, contribution_pct | benefit incl. `BEN-0001` (D-14) |
 | `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per `measure_unit`** (D-14, R2-D12, Q9) |
-| `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED only (Q8) |
+| `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2) |
 | `POST /change-requests/{id}/analyse` · `GET …/price` · `POST …/decide` | object_guard(ChangeRequest, EDIT) | seed objects · — · outcome, displaces_cr_id, rationale, alternative_rejected | the blast radius (`CR_IMPACT`); effort and benefit delta, phases hit, displacement candidates; the decision. **`decide` refuses net-positive effort with no displacement named (422)** and writes a `DECISION` row |
 | `GET/POST /projects/{project_id}/decisions` | project_ctx(VIEW / EDIT) | decision fields | the decision log (D-17); corrections are new rows |
 | `POST /projects/{project_id}/bulk/wbs/validate` · `GET /projects/{project_id}/wbs` · `PATCH /wbs-items/{id}` | project_ctx / object_guard(EDIT, `WBS`) | `.xlsx`, `import_mode` · filters · phase_id, solution_id, row_version | WBS keyed by MS Project Unique ID (D-33, R2-D15); **links only by PATCH** — any other field → 422 "Change it in MS Project and re-import". Progress updates are new dated rows, never overwritten by an import (D-41, OR-7); the progress report is generated from them |
@@ -5925,9 +6235,8 @@ component.
 | `POST /projects/{project_id}/purge` | platform_admin | reason, `confirm_text` (the project code) | contract-required deletion (Q15, §15.3): deletes live and snapshot rows as `vb_owner` and destroys the project's archive key. The one hard-delete route of business data |
 | client read-only login and the offline viewer file (D-43) | — | — | client viewers see their own project only; the offline file is generated from a frozen baseline at `EDIT`, never `VIEW`, after recorded client consent (OR-9). Routes fixed by that slice's spec |
 
-<!-- CHECK: the process-flow routes were removed with bfc_node_flow (slice7_schema §9.6), including GET /bfc-nodes/{id}/process-flow/export?format=json; the path of the vb-process-flow/2.0 JSON export is not fixed by any decided source and is owed to the wave 1e spec. -->
-<!-- CHECK: D-40 lists "house rate card" among admin functions, but the FTC default card is a seed constant with no house tier in the database (S6c-1, slice7_schema §11 item 10); no admin route exists for it. -->
-<!-- CHECK: the D-40 capability mapping (slice7_schema §8.6) names freeze, rate card, control-rule thresholds and FR types as EDIT; CR decide (formerly OWNER) is not named — shown as EDIT here as "everything not an admin function". -->
+Deciding a change request and resetting a project's control rules to the house defaults are **EDIT** — project
+editors, and admins always (SC-7). The FTC default rate card is a fixed default in code with no admin route (SC-10).
 
 ---
 
@@ -6050,9 +6359,9 @@ Each is observable by someone who did not build it.
 40. **(D2)** Exporting rows, editing one in the app, then re-uploading the export → that
     row is a **validation error naming the current value**. A commit is all or nothing, so
     the other rows commit after the corrected file is re-uploaded (S4-10).
-41. **(D5)** Two baselines with different `hash_spec_version` report
-    `SCHEMA_VERSION_MISMATCH` for each entity whose hashed column list differs, not
-    "everything CHANGED" (S8-3). Emptying a text field reports CHANGED, not unchanged.
+41. **(D5, Q-22)** Two baselines with different `hash_spec_version` never report "everything CHANGED"
+    (S8-3): an entity whose hashed list grew is compared on the older list and names the columns not
+    compared. Emptying a text field reports CHANGED, not unchanged.
 42. **(D6)** An import row whose raiser name matches no stakeholder, or matches two, is a
     validation error. No stakeholder is ever created from a spreadsheet cell.
 43. **(D8)** An issue cannot be created without a raiser; `raised_by_stakeholder_id` and
@@ -6084,9 +6393,9 @@ Each is observable by someone who did not build it.
 49b. **(D-37)** Every non-GET route whose path carries a component's fragment
     (`ROUTE_COMPONENTS` in `tests/test_route_guards.py`: solutions, function requirements, BR ↔ FR
     links, applications, rate card, complexity, interface detail, as-is support, chart copy)
-    declares that component in its guard marker, restore routes included; external flows, the
-    performer and step trigger links declare the node's DFD resolver. A write that forgets
-    fails CI.
+    declares that component in its guard marker, restore routes included; external flows, step
+    trigger links and the drawn hand-off declare the node's DFD resolver, and the performer and the
+    volume figures the node's set resolver (S10c-2). A write that forgets fails CI.
 49c. **(D-37)** A write to a component that is off returns 409 `COMPONENT_OFF` only after
     visibility (404) and level (403) are decided, platform admins included.
 50. **(S3)** `GET /projects/{project_id}/baselines/diff?from={a}&to={b}` returns 404 when either
@@ -6118,8 +6427,9 @@ Each is observable by someone who did not build it.
     POSSIBLE × MODERATE, and the score cannot be edited independently of its inputs.
 62. **(D-15)** Materialising a risk creates an issue, links it, sets the risk to
     MATERIALISED, and **leaves the risk row present** — the evidence it was foreseen.
-63. **(D-16, Q8)** A change request cannot be raised against a working set, nor against a
-    SUPERSEDED baseline (422). Against a FROZEN or an APPROVED baseline it is accepted.
+63. **(D-16, Q8, SC-2)** A change request cannot be raised against a working set, nor against a
+    SUPERSEDED baseline without the agreed approval (422). Against a FROZEN or an APPROVED baseline, or the
+    SUPERSEDED baseline that carries the newest recorded client approval, it is accepted.
 64. **(D-16)** `analyse` on a CR seeded with one BR returns impacted Solutions, FRs,
     Applications, Data Entities and Phases without any of them being typed by hand.
 65. **(D-16)** Approving a CR with a positive effort delta, no `displaces_cr_id` and no
@@ -6376,6 +6686,120 @@ Each is observable by someone who did not build it.
 155. **(Q15, R2-S10)** Every baseline freeze writes one encrypted archive file under the
      project's own key; decrypting it and recomputing the hashes matches the frozen rows.
 
+### The DFD rule, readiness, process volume and drawing (D-65…D-70, slice 13)
+
+156. **(D-66, 13a A1–A2)** On a to-be process with SOLUTION and FUNCTION_REQUIREMENT on, the panel
+     shows "Solutions (n)" then "Function requirements (n)" as two sections, above External parties,
+     Description and Supporting systems. With SOLUTION off, only Function requirements shows, and an FR
+     can still be linked.
+157. **(D-68, 13a A4)** For every process of a project of at least 50 processes, the light is not
+     "Ready" exactly when `process-completeness` lists it as missing a rule element — one source, no
+     disagreement. With the chart's DFD component off, no light and no DFD mark shows.
+158. **(D-68, D-50)** Every light carries text and an icon and reads correctly in greyscale; the DFD
+     index's ready / partly / not-ready counts sum to each diagram's process count.
+159. **(D-69, 13a A10)** A process whose only start is an inbound external party shows the *Started
+     by* mark as met though its trigger list is empty; no data-in mark appears while the chart's rule
+     lacks DATA_IN, and one appears as soon as it holds it.
+160. **(D-68, 13a A11)** Adding an output data entity in the BR's CRUD grid changes that process's
+     light in the tree without a reload; so do a step retire or restore and a DFD component toggle.
+161. **(D-70, Q-4, 13b B1)** Every project existing when the rule arrives, active or not, has exactly
+     STARTED + DATA_OUT on both charts, and a freeze that passed the day before still passes. A new
+     project starts with STARTED, DATA_IN, DATA_OUT and ORDER on the to-be chart and STARTED on the
+     as-is chart.
+162. **(D-70, 13b B2–B3)** Removing DATA_OUT from the to-be rule: a process with a trigger and no data
+     turns green and no longer blocks the freeze, and the audit holds `PROJECT_DFD_RULE_CHANGED` with
+     from, to and the would-block count. Adding DATA_IN: the preview names how many processes would
+     block, and after saving the freeze refuses with that list.
+163. **(D-70, 13b B4–B5)** ORDER without DATA_IN and DATA_OUT returns 422; dropping STARTED returns
+     422. A non-admin `PUT /dfd-rule` returns 403; a non-member of a restricted project gets 404 on the
+     GET.
+164. **(D-70, Q-15)** A stricter as-is rule never changes a to-be light or the to-be freeze check, and
+     with AS_IS off the as-is rule blocks nothing.
+165. **(D-70, 13b B9)** A chart whose rule rows are all retired (or missing) behaves as STARTED +
+     DATA_OUT, appears in `project_without_dfd_rule`, and its freeze is refused until an admin saves a
+     rule.
+166. **(D-70, 13b B8)** With the freeze re-expressed over `readiness()`, an as-is process missing a rule
+     element still refuses the freeze while AS_IS is on (`sara` reviewed).
+167. **(D-70, 13b B6)** A baseline frozen under the per-chart rule shows both charts' rules on its
+     header; one frozen before shows "D-38 rule"; both still verify, and neither rule ever appears as a
+     diff row.
+168. **(Q-13, S13-2)** A process that meets its chart's rule but misses a recommended element is
+     yellow, does not block the freeze, and its tooltip does not say "Blocks the freeze"; a red one
+     does.
+169. **(Q-3, 13b B10)** A diagram with no derived order ranks its processes left to right in chart
+     order (`seq_no`), with no arrows.
+170. **(D-67, 13c C1, C10)** 3 runs a week × 40 invoices × 360 s on the 240 × 8 basis returns 624 hours
+     and 0.33 FTE, computed by the server; 0.3 s per invoice × 40,000 a month stores as `0.300` without
+     rounding and returns 200 hours and 0.10 FTE.
+171. **(D-67, 13c C2–C3)** A body carrying `fte` or `annual_hours` returns 422; so do a non-process
+     node, a negative value, too many decimals and a value above its cap. With any figure empty, FTE is
+     `null` and the response names the missing fields.
+172. **(D-67, 13c C4, C6)** Changing the project's FTE basis changes every process's FTE without
+     touching a process row; a baseline frozen before the change re-derives its own FTE unchanged.
+173. **(D-67, Q-22, 13c C5)** After volume arrives, shadow parity passes, every older baseline still
+     verifies, and a diff of an older baseline against live shows no process CHANGED merely because
+     volume exists — and says which columns were not compared.
+174. **(D-67, Q-28, 13c C7, C9)** The volume summary shows as-is and to-be hours per matched L1 area side
+     by side; after to-be area 02 is reordered to 03, the area is listed unmatched (`NAME_ELSEWHERE`),
+     never paired; processes with incomplete volume are listed and contribute no number.
+175. **(D-67, 13c C8)** Transaction units and periods are sent as codes; a project override label shows
+     on screen and the code is stored. Demoting a process that has volume returns 409.
+176. **(D-65, 13d D1, D6)** Dragging from a data store to a process creates exactly one step input
+     through `step_io.ensure_step_io`, identical to the panel's row; the same drag again writes nothing
+     and says "Already on the diagram".
+177. **(D-65, 13d D2)** Drawing process A → process B and picking DE-0007 writes A's output and B's input
+     in one transaction, and the derived order arrow A → B appears; if B's input fails, A's output is
+     not written.
+178. **(D-65, 13d D3, D7)** Removing a flow a BR's CRUD depends on returns the 409 naming the BR and
+     removes nothing; removing a STORE, EXTERNAL or TRIGGER flow soft-deletes exactly one row; a derived
+     order arrow cannot be selected for removal.
+179. **(D-65, 13d D4–D5)** A viewer, a baseline view and a chart with its DFD off cannot start a
+     connection; a hand-off between an as-is and a to-be process returns 422, and to a process the user
+     cannot see, 404.
+180. **(Q-11, Q-12)** Drawing a store → process writes no BR CRUD, and the CRUD grid shows the I/O as "On
+     the diagram, not in the requirement yet"; drawing to empty canvas can create a new data entity,
+     numbered at save.
+
+### Organisation, systems and the structured BR (D-56, D-57, D-59…D-62, slices 10c and 11)
+
+181. **(D-56)** Organisation and Systems are one click from the rail; the old Settings addresses,
+     including `settings/applications/:appId`, land on the same page and item.
+182. **(S10c-2)** With TO_BE_DFD off, the performer of a to-be process can be set and is audited
+     `PERFORMER_SET`; a trigger link on the same process returns 409 `COMPONENT_OFF`.
+183. **(D-57)** "Make this a process" never fires without a confirmation that says it creates a BR;
+     the button shows only on a childless node at level 3 or below, and never to a viewer.
+184. **(D-62)** A new project created through the form is restricted; a USER not assigned to it does not
+     see it on the home page and gets 404 on its address. The restrict preview flags a kept member whose
+     level drops.
+185. **(D-59, S11-1)** A BR's lines are numbered BR-0043.1, .2, .3; retiring .2 and adding a line gives
+     .4, never .2 again; reordering changes no number and is not a CHANGED row in a diff. The BR's
+     priority shows as the highest of its live lines and is never accepted from a body.
+186. **(D-59, S11-1)** After the structured BR arrives, each BR with business logic and output text has
+     one RULE and one OUTPUT line holding that text word for word; the old fields are read-only and
+     unchanged; a diff against an older baseline shows the lines as ADDED, with the "predates
+     requirement lines" banner, and the older baseline still verifies.
+187. **(D-60b)** An attribute tick without a live entity-level row of the same CRUD is refused by the
+     database; unticking the entity's action in the grid removes its attribute ticks in the same save;
+     a D on an attribute returns 422; retiring a data field a live BR uses returns 409 naming the BR.
+188. **(D-61)** A flow with the same from and to system is refused; with APPLICATION off a flow write
+     returns 409 `COMPONENT_OFF`; a flow shows "covered by FR-…" exactly when the BR links an interface
+     FR with the same source, target and carried entity, and "Create interface FR from these flows"
+     creates that FR, its interface detail and the link in one transaction.
+189. **(S11-1)** Baselines frozen after the structured BR arrives carry hash spec 4 and its three
+     shadows; every earlier baseline still verifies byte for byte.
+
+### Settled rulings (SC-1…SC-11)
+
+190. **(SC-2)** A change request against the SUPERSEDED baseline that carries the newest client approval
+     is accepted; against any other SUPERSEDED baseline it returns 422.
+191. **(SC-6)** A flow file whose step names an unknown BR number, or carries a moved `hier_code`, is a
+     row error and nothing is written for it; an as-is step with no BR number updates the live process
+     of the same name under the anchor; a file with more than 2,000 inputs, outputs, external flows and
+     triggers combined is rejected before anything is staged; `GET /bfc-nodes/{id}/dfd/export?format=json`
+     returns the file.
+192. **(SC-7)** A project editor (EDIT) can decide a change request and reset the project's control rules
+     to the house defaults; a viewer gets 403.
+
 ---
 
 ## 11. Assumptions
@@ -6502,8 +6926,6 @@ decision are recorded in the design history, not here.
   one RESPONSIBLE and one ACCOUNTABLE. The single-Accountable rule resolves "the" code by
   behaviour. A RAPID mapping that sends two codes to RESPONSIBLE is refused when the code is
   saved (→ `code_master` rules, §8).
-- `ASSUMPTION` (D-56…D-62) — **"Trailer" in Ben's UI feedback is read as *trigger*.** To
-  confirm.
 
 ### Programs, WBS and retention
 
@@ -6558,7 +6980,7 @@ decision are recorded in the design history, not here.
 
 ### 12.1 Waves — everything here is mandatory, only the order is a decision
 
-D-13…D-19 and D-37…D-64 are **requirements, not a roadmap**. Nothing below is dropped; the waves
+D-13…D-19 and D-37…D-70 are **requirements, not a roadmap**. Nothing below is dropped; the waves
 exist because the model must be built in dependency order. **The wave line is Ben's to move.**
 
 **Ordering rules:**
@@ -6580,10 +7002,15 @@ exist because the model must be built in dependency order. **The wave line is Be
 | 1 | 9 | Every screen to the mockups: dark-first theme, left rail, the kit (D-51) | built |
 | 1 | 10a | The BR inside the function chart; the DFD screen (D-53, D-54) | built |
 | 1 | 10b | BR ↔ FR direct, solution optional, hash spec 2 (D-52, S10b-1…S10b-3) | built |
-| 1 | 10d | The ranked process panel; one RACI per process (D-63, D-64, S10d-1). Comes before 10c | being built |
-| 1 | 10c | Organisation and Systems in the rail, plain guidance and triggers on the panel, BR attributes (read-only), assigned-only projects (D-56, D-57, D-60a, D-62) | specified |
-| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows (D-59, D-60b, D-61) | schema with `apple`; questions with Ben |
+| 1 | 10d | The ranked process panel; one RACI per process (D-63, D-64, S10d-1) | built |
+| 1 | 10c | Organisation and Systems in the rail, plain guidance and what starts a process on the panel, BR attributes (read-only), the performer recordable whatever the DFD setting, assigned-only projects (D-56, D-57, D-60a, D-62, S10c-2) | built; the one-off switch of existing projects is done project by project by an admin |
+| 1 | 13a | Solutions and Function requirements as two panel sections; the readiness light and the DFD marks (D-66, D-68, D-69). Until 13b the light follows the fixed rule (STARTED + DATA_OUT), under which yellow also blocks the freeze | built |
+| 1 | 13b | The DFD rule per chart: light, marks, warnings and the freeze driven by it; chart-order fallback (D-70, S13-1, S13-2) | next — `apple` schema accepted; `sara` before commit |
+| 1 | 13c | Process volume and FTE; hash spec 3 (D-67, S13-1) | next, after 13b's migration |
+| 1 | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | next; no migration, parallel to 13b / 13c |
+| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows; hash spec 4 (D-59, D-60b, D-61, S11-1) | accepted, after 13c's migration; two points are open questions in the design history §1 |
 | 1 | 12 | Two dashboards — Scope and Project management (D-58). Each tile appears when its wave lands; the KPI list goes to Ben before build | to specify |
+| **Next** | — | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) and the control rules and control panel (D-19): right after slice 12, opening the next wave (SC-9) | — |
 | **1e** | — | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
 | **1f** | — | Reports, program roll-ups and PDF export (D-42) | — |
 | **1g** | — | Code maintenance | — |
@@ -6591,8 +7018,6 @@ exist because the model must be built in dependency order. **The wave line is Be
 | **3** | — | Risks (D-15) · decisions (D-17) · phasing and dependency (D-18) | — |
 | **4** | — | English / Japanese / Thai (D-44) · version comparison screen (D-50) | — |
 | **Before first client use** | — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · baseline archive file and `purge_project` (S8-1) · client read-only login and the offline viewer file (D-43) | — |
-
-<!-- CHECK: the Issue module (D-4, D-5; component ISSUE; slice8_schema §6 "slice TBD") and the control rules / control panel (D-19, originally wave 1) have no named slot in the delivery order (§12.1); Issue import sits in 1e ("4b/4c", slice4a_spec §11) but the Issue screens and routes do not. -->
 
 The canvas (§7.14) is one component for the DFD and the ERD. Program roll-ups are built after the
 per-project reports they are made of (R2-S2).
@@ -6622,6 +7047,12 @@ same platform, not rejected ideas** — §5 is modelled so they attach to this s
   Export is Mermaid text and `vb-process-flow/2.0` JSON, not BPMN XML. **A BPMN diagram can
   still be imported by converting it to the JSON (D-25)**; VB does not read BPMN XML directly.
 - **BFC chart visualization** — the chart is a tree view, not a rendered org-chart graphic.
+- **A full ROI or benefit model from volume** — the volume figures give hours and FTE per process and the
+  time saved per area (D-67); turning them into money is the benefit component's job (D-14). Volume is not
+  in the flow file yet (a format bump later), and as-is and to-be compare by area, not process by process.
+- **Free drawing on the DFD** — drawing writes only step I/O, external flows, trigger links and hand-offs
+  (D-65). Reconnecting an existing flow by dragging its end, and creating processes or parties from the
+  canvas, are not offered; order is never drawn.
 - **Import/export beyond Issue, Data Entity, Data Field, BR, FR, WBS and the flow file.**
   Solution is download-only.
 - **Client-user editing** — client staff may only view their own project, and only with
@@ -6689,7 +7120,10 @@ The uploaded-file lifecycle and the `.xlsx` parser configuration are specified i
   (`models/baseline.SHADOWED`). Migration 0048 froze them as literal DDL, so a migration that adds
   a column to a shadowed live table adds the shadow column **in the same migration**; the parity
   test reads the database. A new frozen table is added to `freeze_set.py` (with its gate and
-  hashed columns) and to `SHADOWED`, and a new entity in the set bumps the hash spec.
+  hashed columns) and to `SHADOWED`, and a new entity in the set bumps the hash spec. So does a new
+  hashed column on a frozen entity, whose new list **extends** the earlier one so the diff can compare
+  across specs (Q-22). Spec 3 is slice 13c's volume figures, spec 4 slice 11's structured BR; 13b and
+  13c add their migrations on `main` one after the other, and slice 11 follows 13c.
 - **No hard delete.** The only hard deletes are `diagram_layout` (D-30), the 90-day
   `import_row` purge (Q14) and `purge_project` (Q15, as `vb_owner`). `vb_app` has no DELETE
   grant elsewhere, so a slip fails at the database.
@@ -6823,28 +7257,75 @@ route in `api/scope.js`. Screens link to each other only through these.
   the breadcrumbs (`<Page crumb=…>` names the item) and the working-set version chip ("Working ·
   after v1.2", or "Viewing v1.2" in a baseline), read from the real baseline list.
 - **Rail items:** *Scope* — Dashboard · Business functions · Data flow diagram · Data entities ·
-  Solutions · Function requirements · Interfaces; *Control* — Effort · Baselines; *Admin* —
-  Settings · Project & access (admins). An item whose component is off is hidden (D-37);
+  Organisation · Systems · Solutions · Function requirements · Interfaces; *Control* — Effort ·
+  Baselines; *Admin* — Settings · Project & access (admins). An item whose component is off is hidden (D-37);
   opening its address shows why instead of its content (`ComponentOff`). Presentation only: the
   guards still refuse.
 - **Business requirements are part of the function chart** (D-53): there is no BR list; a BR is
   read and edited in its process's panel, and the BR page stays as a deep link
   (`/p/:id/requirements/:brId`) crumbed under Business functions.
-- **The process panel is ranked** (D-63): primary — the process name, its path, the
-  requirement statement (largest field), business logic, Draft/Confirmed, BR number; secondary —
-  four tiles (performer, what starts it, Accountable, data in/out), each opening its editor;
-  collapsed with counts — delivery (solutions and FRs), external parties, description,
-  supporting systems; a ⋯ menu for make process, retire, restore and the BR page. It shows **one
-  RACI, the BR's** for a to-be process (D-64). Tree and panel scroll independently, side by side
-  from 1100 px and one at a time below it. Static labels are at least 12.5 px, on a 4-step type
-  scale, with help behind (i).
+- **The process panel is ranked** (D-63, D-66): primary — the process name, its path, the
+  requirement statement (largest field), business logic, Draft/Confirmed, BR number and the
+  **readiness light** (D-68); secondary — four tiles (performer, what starts it, Accountable, data
+  in/out), each opening its editor; then **Solutions** and **Function requirements** as two sections
+  of their own, ranked first and second of the collapsed sections, each with its count and a
+  one-line summary — Solutions when SOLUTION is on, Function requirements when FUNCTION_REQUIREMENT
+  is on, independently of SOLUTION (D-52) — open the first time, then remembered per person; then,
+  collapsed with counts — external parties, **Description**, supporting systems, and the optional
+  **volume** figures with their derived hours and FTE (D-67, 13c); a ⋯ menu for make process,
+  retire, restore and the BR page. It shows **one RACI, the BR's** for a to-be process (D-64). Tree
+  and panel scroll independently, side by side from 1100 px and one at a time below it. Static
+  labels are at least 12.5 px, on a 4-step type scale, with help behind (i).
+- **Purpose and Data processing** (S-P): on an L1–L4 box the description is its **Purpose**; on a
+  process both the Purpose and the Data processing text sit in the collapsed Description section.
+- **One save model on the process panel** (SP-1): typed text (name, statement, logic, descriptions)
+  waits for **Save**, with an unsaved-changes counter and Ctrl+S; everything else — ticks, pickers,
+  status, links — saves the moment it changes. The performer and trigger editors have no Save of
+  their own: **Done** closes them, already saved.
+- **Who performs it and what starts it** (D-56, D-57): the performer heads the panel as "Performed
+  by …" ("Not assigned" when none) and is editable whatever the DFD setting (S10c-2). *Started by*
+  lists the editable time / event triggers (with the DFD) and, read-only beside them, the process's
+  other starts — its input data entities and inbound flows from outside parties — each labelled by
+  kind; "Nothing starts this process" only when all three are empty.
+- **The readiness light and the DFD marks** (D-68, D-69): on every process row of the function
+  chart (always visible) and in the panel header — colour **plus** icon **plus** text ("Ready",
+  "Partly", "Not ready"), never colour alone; the tooltip lists the missing elements, and a red one
+  says it blocks the freeze. A "Not ready only" chart filter (every process not Ready, red and yellow). Each field the chart's DFD rule needs
+  carries a small "DFD" mark with the note "Needed to complete the DFD" — one on *Started by*
+  ("Any one of: a trigger, a data input, or an inbound external party"), one on the out half of
+  the *Data* tile, one on its in half only when the rule holds DATA_IN — met shown by a tick,
+  missing by the amber dot. Met / missing comes only from the server's `dfd_missing` codes, never
+  from whether a tile looks empty. Light colours come from `STATUS_COLOR_MAP` tokens.
+- **The project's DFD rule** (D-70) is a project settings screen: per chart, the elements with
+  plain descriptions, the recommended and locked ones marked; an admin ticks the set, sees the
+  preview (how many processes turn red / yellow / green and how many would block the next freeze),
+  and saves. Everyone else sees it read-only.
 - **The DFD has its own screen** (D-54): a flat, searchable list of DFDs — one per direct parent
-  of processes, with code, name and process count — and the selected diagram on the right.
+  of processes, with code, name, process count and readiness counts (D-68) — and the selected
+  diagram on the right, where an editor may draw connections (D-65, §7.14).
   Wider roll-up diagrams open from the function chart.
-- **Organisation and Systems are rail items under Scope** (D-56; today under Settings), and each
-  process shows "Performed by …" plainly. Non-process boxes carry plain-language guidance with
-  "Open a process below" and "Make this a process", the latter behind a confirmation that says
-  what it creates (D-57).
+- **Organisation and Systems are rail items under Scope** (D-56). Organisation holds the org units
+  and roles; Systems — the Applications master list — shows when APPLICATION is on. The old Settings
+  addresses (`settings/organisation`, `settings/applications`, `settings/applications/:appId`)
+  redirect to them, keeping ids and query. Non-process boxes carry plain-language guidance (D-57):
+  inputs, outputs, roles and parties are recorded on processes, the lowest level — open a process
+  below this function, or turn this function into one, with a button for each: **Open a process
+  below** (lists this function's processes) and **Make this a process**, behind a confirmation that
+  says what it does — a BR is created and numbered, never reused; the box can no longer hold
+  sub-steps; undoing it means retiring that BR; a process missing its DFD rule's elements blocks the
+  next freeze. The button shows only where the switch is allowed (level ≥ 3, no children). Viewers
+  see the text only.
+- **A BR shows the attributes of every data entity it touches** (D-60a): in the CRUD grid each
+  linked entity expands to its live attributes, read-only, with the "keys only" hint under `FULL`.
+  With slice 11 the same grid ticks the attributes the BR uses (C / R / U), and the panel holds the
+  BR's numbered requirement lines and its system-to-system flows, each flow showing "covered by
+  FR-…" or "no interface yet" (§4.3).
+- **New projects are assigned-only** (D-62): the admin "New project" form preselects "Assigned
+  consultants only"; the labels read "Assigned consultants only" / "Open to all staff", and the home
+  page tags the open projects, the exception. After a create the admin lands on the new project's
+  Access screen to add its members. Existing projects are switched one by one by an admin on their
+  Access screen, after the team is checked; the restrict preview flags kept members whose level
+  drops (S10c-2).
 - **Two dashboards** (D-58): Scope (coverage and gaps, open warnings, effort by solution, change
   since the last baseline) and Project management (baselines and approvals, change requests,
   risks, issues, WBS progress). Each tile appears when its wave lands, never with invented
@@ -6920,9 +7401,9 @@ canvas spike returned **GO**, with these rules:
   card fall back to smoothstep until the next arrange.
 - Edges are rebuilt on layout, drag end, collapse and selection — never on every drag frame.
 - Positions save on **drag end**, debounced, through `canvas/useLayoutSave.js` →
-  `PUT /projects/{id}/diagram-layouts/...` (D-30). Connections are not drawn on the canvas:
-  every DFD flow comes from the process's inputs, outputs, external flows and triggers, edited in
-  the panel (D-24, D-31).
+  `PUT /projects/{id}/diagram-layouts/...` (D-30). A connection drawn on the DFD writes the same
+  step I/O, external-flow or trigger row the panel writes, through the same writer (D-24, D-31,
+  D-65); a derived order edge is never a drawable or removable object.
 - The React Flow attribution stays visible; the MIT edition is used, not Pro.
 - **Every diagram has a table view** of the same data, which is the keyboard and
   screen-reader path.

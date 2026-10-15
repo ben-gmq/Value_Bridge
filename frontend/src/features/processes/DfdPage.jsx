@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Handle, MarkerType, Position, useNodesState, useStore } from '@xyflow/react';
+import { Handle, MarkerType, Position, useNodesState, useReactFlow, useStore } from '@xyflow/react';
 import { Alert, Box, Button, Divider, FormControlLabel, IconButton, Switch, Table, TableBody, TableCell, TableHead, TableRow,
   Tooltip, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -10,6 +10,7 @@ import { errorText } from '../../api/client';
 import { dfdApi, layoutApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
+import { useComponents } from '../../app/useComponents';
 import { CanvasHeader, DiagramGrid, LegendSwatch, NodeFlag, nodeFrame, nodeHeader } from '../../canvas/CanvasChrome';
 import { edgeLook } from '../../canvas/edges';
 import { ModelCanvas } from '../../canvas/ModelCanvas';
@@ -20,11 +21,13 @@ import { CopyMermaidButton } from '../../components/CopyMermaidButton';
 import { Card, Code, ListRow, SectionLabel, Segmented, Status, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
+import { DrawNotice, useDfdDraw } from './DfdDraw';
 
 // The DFD of one parent node — the one process diagram (D-38, D-46, D-47, D-49; slice7_schema §9.8).
 // Lanes are performers; a process sits in its lane at the column of its derived rank (order comes
 // from the data: B follows A when B reads what A writes). Stores, parties and triggers sit in a band
-// under the lanes. Nothing is edited here except where boxes stand: a step's facts are edited on the step.
+// under the lanes. An editor may draw a connection (D-65, slice 13d — DfdDraw.jsx), which writes the
+// same row the step panel writes; every other fact of a step is edited on the step.
 // D-51: laid out as mockup 02 — the canvas card with counts and legend, and an inspector at the right.
 const STEP = { w: 210, h: 84 };
 const STORE = { w: 184, h: 52 };
@@ -42,13 +45,17 @@ const trigNode = (id) => `t${id}`;
 
 const useLowZoom = () => useStore((s) => s.transform[2] < LOW_ZOOM);
 
-// Connectors are hidden: nothing is drawn by hand on a DFD. They stay mounted so edges attach.
+// Connectors show only while the user may draw (D-65): an editor, on a chart whose DFD is on. Otherwise
+// they stay mounted, hidden, so edges attach. A trigger only starts a line (it starts a step).
 const HIDDEN = { opacity: 0, pointerEvents: 'none' };
-function Ends() {
+const DrawContext = createContext(false);
+function Ends({ startOnly = false }) {
+  const draw = useContext(DrawContext);
+  const inOk = draw && !startOnly;
   return (
     <>
-      <Handle type="target" position={Position.Left} id="t-L" isConnectable={false} style={HIDDEN} />
-      <Handle type="source" position={Position.Right} id="s-R" isConnectable={false} style={HIDDEN} />
+      <Handle type="target" position={Position.Left} id="t-L" isConnectable={inOk} style={inOk ? undefined : HIDDEN} />
+      <Handle type="source" position={Position.Right} id="s-R" isConnectable={draw} style={draw ? undefined : HIDDEN} />
     </>
   );
 }
@@ -94,7 +101,7 @@ function TriggerDot({ data, selected }) {
         borderColor: selected ? th.vars.palette.brand.ftcViolet : th.vars.palette.text.secondary,
         boxShadow: selected ? `0 0 0 4px ${th.vars.palette.brand.purpleTint}` : 'none',
         bgcolor: th.vars.palette.background.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 0.5 })}>
-        <Ends />
+        <Ends startOnly />
         <Typography sx={{ fontSize: 9.5, fontWeight: 700, textAlign: 'center', lineHeight: 1.1, overflow: 'hidden',
           visibility: low ? 'hidden' : 'visible', maxHeight: TRIG - 12 }}>{data.trigger.trigger_name}</Typography>
       </Box>
@@ -160,6 +167,13 @@ function PartyBox({ data, selected }) {
       </Box>
     </Box>
   );
+}
+
+/** Inside the canvas: hands the page React Flow's screen → diagram converter, for a line's drop point. */
+function FlowPoint({ into }) {
+  const { screenToFlowPosition } = useReactFlow();
+  useEffect(() => { into.current = screenToFlowPosition; }, [into, screenToFlowPosition]);
+  return null;
 }
 
 const NODE_TYPES = { step: StepBox, store: StoreBox, party: PartyBox, trigger: TriggerDot, lane: LaneBand };
@@ -267,7 +281,8 @@ function buildLayout(g, showOrder) {
   if (showOrder) {
     // The derived order (D-38), dashed: never stored, drawn on request.
     g.order.forEach((o, i) => edges.push({ id: `o${i}`, type: 'labelled', source: stepNode(o.from_bfc_node_id), sourceHandle: 's-R',
-      target: stepNode(o.to_bfc_node_id), targetHandle: 't-L', interactionWidth: 8, data: { order: true } }));
+      target: stepNode(o.to_bfc_node_id), targetHandle: 't-L', interactionWidth: 8, data: { order: true },
+      selectable: false, focusable: false }));          // DR13-P3: derived, never removable
   }
   return { nodes: [...lanes, ...nodes], edges };
 }
@@ -331,7 +346,7 @@ function FlowRow({ code, tone, name, direction, onClick }) {
 }
 
 /** The right-hand panel: the selected box's facts, or — with nothing selected — the diagram's summary. */
-function Inspector({ g, sel, onSelect, projectId, canEdit }) {
+function Inspector({ g, sel, onSelect, projectId, canEdit, canDraw }) {
   const navigate = useNavigate();
   const gaps = gapsOf(g);
   const close = <IconButton size="small" aria-label={t('processes.dfdCloseInspector')} onClick={() => onSelect(null)}>
@@ -469,7 +484,7 @@ function Inspector({ g, sel, onSelect, projectId, canEdit }) {
         </Box>)}
       <Divider />
       <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-        {t(canEdit ? 'processes.dfdInspectHelp' : 'processes.dfdInspectHelpReadOnly')}</Typography>
+        {t(canDraw ? 'processes.draw.inspectHelp' : canEdit ? 'processes.dfdInspectHelp' : 'processes.dfdInspectHelpReadOnly')}</Typography>
     </Card>
   );
 }
@@ -484,6 +499,7 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
   const navigate = useNavigate();
   const theme = useTheme();
   const canEdit = useCanEdit();
+  const comps = useComponents(projectId);
   const graphKey = keys.dfdGraph(projectId, nodeId);
   const q = useQuery({ queryKey: graphKey, queryFn: () => dfdApi.graph(nodeId) });
   const g = q.data;
@@ -530,6 +546,16 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
       ? { ...n.data.object, x: Math.round(n.position.x), y: Math.round(n.position.y) } : null),
     onError: (err) => setLayoutError(errorText(err, t('common.saveFailed'))),
   });
+  // D-65 (13d): drawing — an editor, on the diagram view, on a chart whose DFD component is on (§7.4).
+  const canDraw = Boolean(g) && canEdit && view === 'diagram'
+    && comps.isOn(g.scope.bfc_set_code === 'AS_IS' ? 'AS_IS' : 'TO_BE_DFD');
+  const getNodes = useCallback(() => nodesRef.current, []);
+  const flowPoint = useRef(null);
+  const toFlow = useCallback(() => flowPoint.current, []);
+  const draw = useDfdDraw({ projectId, g, canDraw, getNodes, toFlow, layout });
+  const { clearNotice } = draw;
+  useEffect(() => { clearNotice(); }, [nodeId, clearNotice]);
+
   const handleNodesChange = useCallback((changes) => {
     onNodesChange(changes);
     layout.onChanges(changes);
@@ -573,7 +599,8 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
       {layoutError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setLayoutError('')}>{layoutError}</Alert>}
       {g && g.processes.length === 0 && <Alert severity="info">{t('processes.dfdNoSteps')}</Alert>}
       {g && g.processes.length > 0 && g.flows.length === 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>{t('processes.dfdNoFlows')}</Alert>)}
+        <Alert severity="info" sx={{ mb: 2 }}>{t(canDraw ? 'processes.draw.noFlows' : 'processes.dfdNoFlows')}</Alert>)}
+      <DrawNotice notice={draw.notice} onClose={draw.clearNotice} g={g} projectId={projectId} />
       {g && g.processes.length > 0 && (
         <DiagramGrid container={container}>
           <Card bodySx={{ p: 0, gap: 0 }}>
@@ -596,17 +623,23 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
                   control={<Switch size="small" id="dfd-order" checked={showOrder} onChange={(e) => setShowOrder(e.target.checked)} />} />)}
             </CanvasHeader>
             {view === 'diagram' ? (
-              <ModelCanvas kind="dfd" bare nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} height="max(480px, 68vh)"
-                draggable={canEdit} onNodesChange={handleNodesChange} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
-                onNodeDoubleClick={onNodeDoubleClick} ariaLabel={title} />
+              <DrawContext.Provider value={canDraw}>
+                <ModelCanvas kind="dfd" bare nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} height="max(480px, 68vh)"
+                  draggable={canEdit} onNodesChange={handleNodesChange} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
+                  onNodeDoubleClick={onNodeDoubleClick} ariaLabel={title} connectable={canDraw}
+                  onConnectEnd={canDraw ? draw.onConnectEnd : undefined} onEdgeClick={canDraw ? draw.onEdgeClick : undefined}>
+                  <FlowPoint into={flowPoint} />
+                </ModelCanvas>
+              </DrawContext.Provider>
             ) : <Box sx={{ p: 1 }}><DfdTable g={g} /></Box>}
           </Card>
-          <Inspector g={g} sel={sel} onSelect={setSel} projectId={projectId} canEdit={canEdit} />
+          <Inspector g={g} sel={sel} onSelect={setSel} projectId={projectId} canEdit={canEdit} canDraw={canDraw} />
         </DiagramGrid>
       )}
       <ConfirmDialog open={confirmReset} title={t('processes.resetLayoutTitle')} body={t('processes.resetLayoutBody')}
         confirmLabel={t('processes.resetLayout')} busy={reset.isPending}
         onClose={() => setConfirmReset(false)} onConfirm={() => reset.mutate()} />
+      {draw.dialogs}
     </>);
   return frame({ g, title, eyebrow, actions, content, error: q.error ? errorText(q.error) : '' });
 }
