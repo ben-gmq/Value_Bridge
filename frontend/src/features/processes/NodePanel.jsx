@@ -18,6 +18,7 @@ import { CompletenessPanel } from './StepDfd';
 import { RetireStepDialog } from './RetireStepDialog';
 import { StepFlows } from './StepSections';
 import { HowItRuns } from './HowItRuns';
+import { VolumeSection, useVolumeEditor, volumeSummary } from './VolumeSection';
 import { DfdLight } from './DfdLight';
 import { PanelSection, useOpenSections, useSectionFacts } from './PanelSections';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
@@ -96,6 +97,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
   const form = useEditForm(node, pickNode);
   // D-53: the process's requirement is edited in this panel, and one Save covers both (Ben, 2026-10-12).
   const brEd = useBrEditor({ projectId, brId: br?.br_id, onNotice, embedded: true });
+  const volEd = useVolumeEditor({ nodeId, enabled: Boolean(node?.is_process && node?.is_active) });   // D-67
   const sections = useOpenSections();
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
@@ -196,23 +198,28 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
   const showBr = Boolean(node?.is_process && br && brEd.br);
   const nodeSavable = Boolean(ready && live && form.dirty && v.node_name.trim() !== '');
   const brSavable = showBr && brEd.canSave;
-  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending || Boolean(brEd.busy);
-  const dirtyCount = (ready ? form.changed.length : 0) + (showBr ? brEd.changedCount : 0);
+  const busy = save.m.isPending || mark.isPending || retire.isPending || restore.isPending || Boolean(brEd.busy) || volEd.busy;
+  const volSavable = Boolean(node?.is_process && live && volEd.canSave);
+  const dirtyCount = (ready ? form.changed.length : 0) + (showBr ? brEd.changedCount : 0) + (volSavable ? volEd.changedCount : 0);
 
   // One Save: only what is dirty, the function first, then its requirement. Each keeps its own row_version
   // check; a refusal leaves the other saved, keeps the refused edits and shows its own conflict dialog or
   // error. Resolves true only when every dirty part saved (DR 10d-1: Save & next and the leave guard rely on it).
   const saveAll = async () => {
     save.setError(''); setSaveNote('');
-    if (!nodeSavable && !brSavable) return dirtyCount === 0;
+    if (!nodeSavable && !brSavable && !volSavable) return dirtyCount === 0;
     const nodeOk = nodeSavable ? await save.m.mutateAsync().then(() => true, () => false) : true;
     if (nodeSavable) setNodeRefused(!nodeOk);
     const brOk = brSavable ? await brEd.saveNow() : true;
-    if (nodeOk && brOk) onNotice(t(brSavable ? (nodeSavable ? 'processes.savedBoth' : 'requirements.saved') : 'processes.saved'));
-    else if (nodeSavable && brSavable && (nodeOk || brOk)) onNotice(t(nodeOk ? 'processes.savedNodeOnly' : 'processes.savedBrOnly'));
-    return nodeOk && brOk && (form.values.node_name.trim() !== '' || !form.changed.includes('node_name'));
+    // D-67: the volume figures last, on their own route and row_version check; a refusal keeps them typed
+    const volOk = volSavable ? await volEd.saveNow() : true;
+    if (nodeOk && brOk && volOk) {
+      onNotice(t(brSavable ? (nodeSavable ? 'processes.savedBoth' : 'requirements.saved')
+        : nodeSavable ? 'processes.saved' : 'processes.volume.saved'));
+    } else if (nodeSavable && brSavable && (nodeOk || brOk)) onNotice(t(nodeOk ? 'processes.savedNodeOnly' : 'processes.savedBrOnly'));
+    return nodeOk && brOk && volOk && (form.values.node_name.trim() !== '' || !form.changed.includes('node_name'));
   };
-  const discardAll = () => { form.discard(); setNodeRefused(false); setSaveNote(''); if (showBr) brEd.discard(); };
+  const discardAll = () => { form.discard(); setNodeRefused(false); setSaveNote(''); if (showBr) brEd.discard(); volEd.discard(); };
   const saveAndNext = async () => {
     if (draft) { setSaveNote(t('processes.save.draftOpen')); return; }
     if (await saveAll()) onNext?.();
@@ -267,7 +274,8 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
   const labels = { node_name: t('processes.name'), purpose_desc: t(node.is_process ? 'processes.purpose' : 'processes.panel.description'),
     data_processing_desc: t('processes.dataProcessing') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], v[k]]));
-  const refused = (form.dirty && nodeRefused) || (showBr && brEd.refused && brEd.dirty) || Boolean(save.error || (showBr && brEd.saveError));
+  const refused = (form.dirty && nodeRefused) || (showBr && brEd.refused && brEd.dirty) || Boolean(save.error || (showBr && brEd.saveError))
+    || Boolean(volSavable && volEd.error);
   const showFooter = canEdit && (dirtyCount > 0 || refused || Boolean(saveNote));
 
   const menuItems = !canEdit ? [] : [
@@ -428,6 +436,13 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
                 <StepFlows projectId={projectId} node={node} disabled={!editable} bare />
               </PanelSection>
             )}
+            {/* D-67 (13c): volume and FTE, on either chart; no component of its own (Q-10) */}
+            {live && volEd.data && (
+              <PanelSection id="volume" sections={sections} title={t('processes.volume.title')}
+                summary={volumeSummary(volEd.data)}>
+                <VolumeSection projectId={projectId} ed={volEd} disabled={!editable} />
+              </PanelSection>
+            )}
             {showBr && (
               <PanelSection id="description" sections={sections} title={t('processes.sec.description')}
                 summary={facts.description(v.purpose_desc)}>
@@ -461,11 +476,11 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
             {saveNote || (refused ? t('processes.save.refused') : t('processes.save.unsavedN', { n: dirtyCount }))}</Typography>
           <Button disabled={dirtyCount === 0 || busy} onClick={discardAll}>{t('processes.discard')}</Button>
           {node.is_process && onNext && (
-            <Button variant="outlined" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAndNext}>
+            <Button variant="outlined" disabled={(!nodeSavable && !brSavable && !volSavable) || busy} onClick={saveAndNext}>
               {t('processes.save.next')}</Button>)}
           <Tooltip title={t('processes.save.shortcut')}>
             <span>
-              <Button variant="contained" disabled={(!nodeSavable && !brSavable) || busy} onClick={saveAll}>{t('common.save')}</Button>
+              <Button variant="contained" disabled={(!nodeSavable && !brSavable && !volSavable) || busy} onClick={saveAll}>{t('common.save')}</Button>
             </span>
           </Tooltip>
         </Box>

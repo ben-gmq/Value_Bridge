@@ -148,6 +148,8 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
     b = Baseline(content_digest=content_digest, project_id=project_id, major_no=major, minor_no=minor, note=note,
                  status_code_id=_code_id(tx, project_id, "BASELINE_STATUS", "FROZEN"),
                  hash_spec_version=CURRENT_HASH_SPEC, data_model_depth=project.data_model_depth,
+                 # D-67 (C6): the FTE basis at the freeze, so the baseline's FTE re-derives as frozen
+                 fte_working_days=project.working_days_per_year, fte_hours_per_day=project.hours_per_working_day,
                  dfd_rule_to_be=list(rule["TO_BE"]), dfd_rule_as_is=list(rule["AS_IS"]),
                  prior_baseline_id=prior.baseline_id if prior else None, frozen_by_user_id=user.app_user_id)
     tx.add(b)
@@ -286,6 +288,8 @@ def header(db: Session, b: Baseline) -> dict:
             "hash_spec_version": b.hash_spec_version, "data_model_depth": b.data_model_depth, "note": b.note,
             # D-70 [Q-19]: null on both = frozen before 13b, under the D-38 rule
             "dfd_rule_to_be": b.dfd_rule_to_be, "dfd_rule_as_is": b.dfd_rule_as_is,
+            # D-67 [Q-25]: null on both = frozen before 13c (no FTE shown)
+            "fte_working_days": b.fte_working_days, "fte_hours_per_day": b.fte_hours_per_day,
             "prior_baseline_id": b.prior_baseline_id, "frozen_at": b.frozen_at,
             "frozen_by": names.get(b.frozen_by_user_id), "client_approver_name": b.client_approver_name,
             "client_approved_on": b.client_approved_on, "approval_note": b.approval_note,
@@ -463,9 +467,18 @@ def diff(db: Session, project_id: int, a, b) -> dict:
             continue
         if cols_a is None or cols_b is None:      # joined the set later: its rows are ADDED / REMOVED below
             cols_a = cols_b = cols_a or cols_b
+        # slice13_schema §3.7 (F3, Q-22): the entity gained fields between the two sides' specs. The stored hashes
+        # cover different lists, so the two sides are compared field by field on the older (shorter) list, and the
+        # entry names the fields one side never froze ("Volume is not in v1.2"). freeze_set asserts every later
+        # list extends the earlier one; anything else is still a mismatch.
+        by_fields, extra = False, {}
         if cols_a != cols_b:
-            out[e.table] = {**entry, "status": "SCHEMA_VERSION_MISMATCH", "rows": []}
-            continue
+            older, newer = sorted((cols_a, cols_b), key=len)
+            if newer[:len(older)] != older:
+                out[e.table] = {**entry, "status": "SCHEMA_VERSION_MISMATCH", "rows": []}
+                continue
+            cols_a, by_fields = older, True
+            extra = {"compared_on_spec": min(_spec(a), _spec(b)), "not_compared": list(newer[len(older):])}
         A, B = la.rows(e.table), lb.rows(e.table)
         changes = []
         for sid in sorted(A.keys() | B.keys()):
@@ -475,7 +488,8 @@ def diff(db: Session, project_id: int, a, b) -> dict:
                 kind, fields = "ADDED", []
             elif rb is None:
                 kind, fields = "REMOVED", []
-            elif ra["content_hash"] != rb["content_hash"]:
+            elif (any(ra.get(c) != rb.get(c) for c in cols_a) if by_fields
+                  else ra["content_hash"] != rb["content_hash"]):
                 kind, fields = "CHANGED", [c for c in cols_a if ra.get(c) != rb.get(c)]
             elif moved:
                 kind, fields = "MOVED", [c for c in e.position_columns if ra.get(c) != rb.get(c)]
@@ -487,7 +501,7 @@ def diff(db: Session, project_id: int, a, b) -> dict:
                             "before": {c: _shown(ra, c) for c in fields} if ra and fields else {},
                             "after": {c: _shown(rb, c) for c in fields} if rb and fields else {}})
             summary[kind] += 1
-        out[e.table] = {**entry, "status": "OK", "rows": changes}
+        out[e.table] = {**entry, "status": "OK", "rows": changes, **extra}
     return {"from": _label_of(a), "to": _label_of(b), "summary": summary, "entities": out,
             "_rows": (cache_a, cache_b)}
 

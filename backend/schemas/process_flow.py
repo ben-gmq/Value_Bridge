@@ -1,5 +1,6 @@
 """DFD, completeness, performer, trigger and chart-copy shapes (D-38, D-46, D-47, D-49;
 slice7_schema §9). project_id comes from the route, never the body."""
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -251,3 +252,34 @@ class SetCopyOut(BaseModel):
 
     model_config = {"populate_by_name": True, "serialize_by_alias": True}
 
+
+
+# ---- process volume (D-67, slice 13c) ------------------------------------------------------------------------
+class VolumeIn(BaseModel):
+    """PATCH /bfc-nodes/{id}/volume: a figure sent as null clears it, a figure left out keeps its value. Hours and
+    FTE are derived, so a body naming them is refused (extra="forbid" → 422, law 6). Ranges, decimals and the
+    pairs are checked by services/process_volume (422)."""
+    model_config = {"extra": "forbid"}
+    row_version: int
+    runs_per_period: Decimal | None = None
+    volume_period_code: str | None = Field(default=None, max_length=10)
+    transactions_per_run: Decimal | None = None
+    transaction_unit_code: str | None = Field(default=None, max_length=40)    # a code, never a label (C8)
+    seconds_per_transaction: Decimal | None = None
+
+
+class VolumeOut(BaseModel):
+    bfc_node_id: int
+    row_version: int
+    is_process: bool
+    runs_per_period: Decimal | None
+    volume_period_code: str | None
+    transactions_per_run: Decimal | None
+    transaction_unit_code: str | None
+    transaction_unit_label: str | None
+    seconds_per_transaction: Decimal | None
+    working_days_per_year: int
+    hours_per_working_day: Decimal
+    annual_hours: Decimal | None          # derived on read, never stored (law 6)
+    fte: Decimal | None
+    incomplete: list[str]

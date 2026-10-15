@@ -9,7 +9,7 @@ services/baseline.freeze with INSERT … SELECT."""
 from datetime import date, datetime
 
 from sqlalchemy import (ARRAY, CHAR, BigInteger, CheckConstraint, Computed, Date, DateTime, ForeignKey, ForeignKeyConstraint,
-                        Identity, Index, Integer, SmallInteger, String, Text, UniqueConstraint, func, text)
+                        Identity, Index, Integer, Numeric, SmallInteger, String, Text, UniqueConstraint, func, text)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -48,6 +48,10 @@ class Baseline(Base):
     # (dfd_rule.ELEMENTS). Both NULL = frozen before 13b, i.e. the D-38 rule. Header facts like data_model_depth: frozen by the guard, not in the digest.
     dfd_rule_to_be: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
     dfd_rule_as_is: Mapped[list[str] | None] = mapped_column(ARRAY(String(12)))
+    # D-67 (slice13_schema §3.6, 0054): the FTE basis at the freeze, so a baseline's FTE re-derives as frozen (C6).
+    # Both NULL = frozen before 13c. Frozen by the guard, not in the digest, like data_model_depth [Q-25].
+    fte_working_days: Mapped[int | None] = mapped_column(SmallInteger)
+    fte_hours_per_day = mapped_column(Numeric(4, 2))
     note: Mapped[str | None] = mapped_column(Text)
     prior_baseline_id: Mapped[int | None] = mapped_column(BigInteger)
     frozen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -85,6 +89,9 @@ class Baseline(Base):
         CheckConstraint("note IS NULL OR btrim(note) <> ''", name="ck_baseline_note_not_blank"),
         CheckConstraint("num_nonnulls(dfd_rule_to_be, dfd_rule_as_is) IN (0, 2)", name="ck_baseline_dfd_rule_pair"),
         CheckConstraint(DFD_RULE_VALS, name="ck_baseline_dfd_rule_vals"),
+        CheckConstraint("num_nonnulls(fte_working_days, fte_hours_per_day) IN (0, 2)", name="ck_baseline_fte_pair"),
+        CheckConstraint("hash_spec_version < 3 OR fte_working_days IS NOT NULL", name="ck_baseline_fte_from_spec_3"),
+        CheckConstraint("hash_spec_version < 3 OR dfd_rule_to_be IS NOT NULL", name="ck_baseline_dfd_rule_from_spec_3"),
         CheckConstraint("approval_note IS NULL OR btrim(approval_note) <> ''",
                         name="ck_baseline_approval_note_not_blank"),
         CheckConstraint("approval_reference IS NULL OR client_approver_name IS NOT NULL",

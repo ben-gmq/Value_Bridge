@@ -33,6 +33,8 @@ class BaselineOut(BaseModel):
     data_model_depth: str
     dfd_rule_to_be: list[str] | None = None          # D-70 [Q-19]: both null = frozen before 13b (the D-38 rule)
     dfd_rule_as_is: list[str] | None = None
+    fte_working_days: int | None = None              # D-67 [Q-25]: both null = frozen before 13c (no FTE)
+    fte_hours_per_day: float | None = None
     note: str | None
     prior_baseline_id: int | None
     frozen_at: datetime

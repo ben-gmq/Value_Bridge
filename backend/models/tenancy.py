@@ -3,7 +3,7 @@ from datetime import date
 
 from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, Computed, Date, ForeignKey, ForeignKeyConstraint,
-    Identity, Index, String, Text, UniqueConstraint, func, text,
+    Identity, Index, Numeric, SmallInteger, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,6 +64,9 @@ class Project(AuditMixin, Base):
     data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False, server_default="FULL")
     # OR-6: visible only to admins and live project_member rows. Read per request.
     is_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # D-67 (slice 13c): the FTE basis — hours in one FTE = working days × hours per day (240 × 8 = 1,920).
+    working_days_per_year: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="240")
+    hours_per_working_day = mapped_column(Numeric(4, 2), nullable=False, server_default="8.00")
 
     client = relationship("Client")
     program = relationship("Program", viewonly=True,
@@ -71,6 +74,8 @@ class Project(AuditMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("client_id", "project_code", name="uq_project_code"),
+        CheckConstraint("working_days_per_year BETWEEN 1 AND 366", name="ck_project_fte_days"),
+        CheckConstraint("hours_per_working_day BETWEEN 0.25 AND 24", name="ck_project_fte_hours"),
         UniqueConstraint("project_id", "is_active", name="uq_project_live"),
         # A project joins only a program of its own client ...
         ForeignKeyConstraint(["program_id", "client_id"],
