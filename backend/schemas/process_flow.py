@@ -22,27 +22,33 @@ class TableRow(BaseModel):
 
 
 Light = Literal["READY", "PARTIAL", "NOT_READY"]
-RuleElement = Literal["STARTED", "DATA_OUT"]     # 13a: the fixed D-38 rule; 13b widens it (sara L4)
+RuleElement = Literal["STARTED", "DATA_IN", "DATA_OUT", "EXTERNAL", "ORDER"]     # D-70 (services/dfd_rule.ELEMENTS)
 
 
 class ProcessReadiness(BaseModel):
     light: Light
-    missing: list[RuleElement]                  # rule element codes the process does not meet (13a: STARTED, DATA_OUT)
+    missing: list[RuleElement]                  # rule elements the process misses: red, blocks the freeze (Q-13)
+    advised: list[RuleElement] = []             # recommended elements outside the rule it misses: yellow only
 
 
 class ReadinessOut(BaseModel):
-    """D-68 (slice 13a): the light per live process of one chart, against the fixed D-38 rule."""
+    """D-68 / D-70: the light per live process of one chart, against the chart's rule."""
     bfc_set_code: str
     rule_applies: bool                  # false → the chart's DFD is off: no light anywhere (S7-3)
-    rule: list[str]
+    rule: list[RuleElement]
+    recommended: list[RuleElement] = []
     processes: dict[int, ProcessReadiness]
 
 
 class ProcessCompletenessOut(BaseModel):
     bfc_set_code: str
     rule_applies: bool                  # the chart's DFD component is on (S7-3)
-    missing_input: list[StepRef]        # freeze-blocking while the rule applies (D-38)
-    missing_output: list[StepRef]       # freeze-blocking while the rule applies (D-38)
+    # freeze-blocking while the rule applies, one list per element of the chart's rule (D-38, D-70)
+    missing_input: list[StepRef]        # STARTED
+    missing_output: list[StepRef]       # DATA_OUT
+    missing_data_in: list[StepRef] = []     # DATA_IN
+    missing_order: list[StepRef] = []       # ORDER
+    diagram_missing_external: list[StepRef] = []   # EXTERNAL: diagrams (D-54 parents) with no outside party (Q-6, Q-16)
     no_performer: list[StepRef]         # a warning only (D-46)
     step_without_br: list[StepRef]      # to-be only; a warning (SR-3)
     crud_without_io: list[int]          # br_data_entity ids — must be empty
@@ -138,7 +144,10 @@ class DfdBoundary(BaseModel):
 class DfdCompleteness(BaseModel):
     missing_input: list[StepRef]
     missing_output: list[StepRef]
+    missing_data_in: list[StepRef] = []
+    missing_order: list[StepRef] = []
     no_performer: list[StepRef]
+    advised: dict[int, list[RuleElement]] = {}     # recommended elements outside the rule it misses: information only
 
 
 class DfdGraphOut(BaseModel):
@@ -150,6 +159,7 @@ class DfdGraphOut(BaseModel):
     triggers: list[DfdTrigger]
     flows: list[DfdFlow]
     order: list[DfdOrder]                  # derived from data, never stored (D-38)
+    order_source: Literal["DERIVED", "CHART"] = "DERIVED"   # CHART: no derived order, ranked in chart order (DR13-P4)
     boundary: DfdBoundary
     completeness: DfdCompleteness
     cross_area: list[int]                  # data_entity_ids, within the chart

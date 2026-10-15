@@ -9,7 +9,8 @@ must-be-empty lines. Slice 10b adds `brfr_under_inactive` (must be empty) and th
 `fr_solution_outside_its_brs` (D-52, Q-4)."""
 from sqlalchemy.orm import Session
 
-from services import application, components, consistency_data, function_requirement, import_purge, interface, solution
+from services import (application, components, consistency_data, dfd_rule, function_requirement, import_purge,
+                      interface, solution)
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
@@ -23,7 +24,11 @@ WARNINGS = frozenset({"entities_without_fields", "entities_keys_only",   # + D-3
 # input-or-trigger, or no output data entity (slice7_schema §9.7).
 # Slice 8 [Q-12]: live rows in an off component also refuse the freeze, so a component gate never silently
 # leaves a live row out of a baseline (slice8_schema §3.2).
-FREEZE_BLOCKING_WARNINGS = frozenset({"process_missing_input", "process_missing_output", "rows_in_off_component"})
+# Slice 13b (D-70, DR13-P1): the keys are the chart's RULE elements, read through process_flow.readiness — the same
+# reader as the light. A key whose element is off for a chart lists nothing for it.
+FREEZE_BLOCKING_WARNINGS = frozenset({"process_missing_input", "process_missing_output", "rows_in_off_component",
+                                      "process_missing_data_in", "process_missing_order",
+                                      "diagram_missing_external"})
 
 
 def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
@@ -46,13 +51,20 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
         "rows_in_off_component": (components.rows_in_off_component(db, project_id)       # D-37, DR7-P2
                                   if project_id is not None else []),
         **_process_io(db, project_id),
+        # slice 13b, must be empty: a chart with no live rule row (DR13-D3 — the readers fail closed to D-38
+        # meanwhile), and a rule breaking the cross-row ORDER-needs-data rule a CHECK cannot see
+        "project_without_dfd_rule": dfd_rule.without_rule(db, project_id),
+        "dfd_rule_invalid": dfd_rule.invalid(db, project_id),
         "as_is_support_on_to_be": application.support_on_to_be(db, project_id),
     }
 
 
 def _process_io(db: Session, project_id: int | None) -> dict[str, list]:
-    if project_id is None:
-        return {"process_missing_input": [], "process_missing_output": []}
+    """One line per per-process rule element, plus the per-diagram EXTERNAL line, each from the chart's rule."""
     from services import process_flow
+    keys = {f"process_{k}": k for k in process_flow.MISSING_KEYS.values()}
+    if project_id is None:
+        return {**{line: [] for line in keys}, "diagram_missing_external": []}
     gaps = process_flow.missing_io(db, project_id)
-    return {"process_missing_input": gaps["missing_input"], "process_missing_output": gaps["missing_output"]}
+    return {**{line: gaps[k] for line, k in keys.items()},
+            "diagram_missing_external": process_flow.diagrams_missing_external(db, project_id)}

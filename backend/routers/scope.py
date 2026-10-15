@@ -98,7 +98,8 @@ _node_asis_w = _og(BfcNode, "EDIT", ("APPLICATION", "AS_IS"))
 @router.get("/projects/{project_id}/bfc-tree", response_model=list[TreeNodeOut], **_read.route)
 def bfc_tree(project_id: int, include_retired: bool = False, bfc_set: str = "TO_BE", db: Session = Depends(get_db)):
     return [{**BfcNodeOut.model_validate(r["node"]).model_dump(), "br_number": r["br_number"],
-             "dfd_light": r["dfd"] and r["dfd"]["light"], "dfd_missing": r["dfd"] and r["dfd"]["missing"]}
+             "dfd_light": r["dfd"] and r["dfd"]["light"], "dfd_missing": r["dfd"] and r["dfd"]["missing"],
+             "dfd_advised": r["dfd"] and r["dfd"]["advised"]}
             for r in bfc.tree(db, project_id, include_retired, bfc_set)]
 
 

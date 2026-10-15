@@ -105,6 +105,7 @@ class TreeNodeOut(BfcNodeOut):
     # D-68 (slice 13a): live process rows of a chart whose DFD is on; null elsewhere
     dfd_light: Light | None = None
     dfd_missing: list[RuleElement] | None = None
+    dfd_advised: list[RuleElement] | None = None     # Q-13: recommended elements it misses (yellow, never blocking)
 
 
 class BrOut(Orm):

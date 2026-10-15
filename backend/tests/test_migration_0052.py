@@ -56,7 +56,14 @@ def unguard(eng):
 
 
 def migrate():
+    """Back to 0051 and up again. 0053's downgrade (slice 13b) refuses while a baseline records its DFD rule, so a
+    baseline frozen here first becomes what it stands for — one frozen before 13b, with no rule on its header."""
     cfg = _cfg()
+    eng = create_engine(OWNER_URL)
+    x(eng, "ALTER TABLE baseline DISABLE TRIGGER trg_baseline_header_guard; "
+           "UPDATE baseline SET dfd_rule_to_be = NULL, dfd_rule_as_is = NULL WHERE dfd_rule_to_be IS NOT NULL; "
+           "ALTER TABLE baseline ENABLE TRIGGER trg_baseline_header_guard")
+    eng.dispose()
     command.downgrade(cfg, "0051")
     command.upgrade(cfg, "head")
 

@@ -7,15 +7,15 @@ never reads or feeds a process of the other chart.
 
 The arrows of the old process flow (bfc_node_flow) were retired by migration 0045 and are never read.
 """
-from sqlalchemy import and_, exists, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from fastapi import HTTPException
 
 from models import (Application, ApplicationBfcNode, ApplicationSolution, BfcNode, BfcNodeDataEntity,
                     BfcNodeExternalFlow, BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrSolution,
                     BusinessRequirement, DataEntity, ExternalEntity, OrgRole, OrgUnit, ProcessTrigger)
-from services import components, diagram_layout
+from services import components, dfd_rule, diagram_layout
 
 
 def _ref(n: BfcNode) -> dict:
@@ -45,58 +45,131 @@ def sets_with_dfd_on(db: Session, project_id: int) -> list[str]:
     return [s for s, c in (("TO_BE", "TO_BE_DFD"), ("AS_IS", "AS_IS")) if c in on]
 
 
-def missing_io(db: Session, project_id: int, sets: list[str] | None = None,
-               node_ids: list[int] | None = None) -> dict[str, list[dict]]:
-    """Live processes with no input-or-trigger, and with no output data entity. Both are
-    FREEZE_BLOCKING_WARNINGS: amber while editing, a refusal at freeze (D-38)."""
-    sets = sets_with_dfd_on(db, project_id) if sets is None else sets
-    if not sets:
-        return {"missing_input": [], "missing_output": []}
-    q = select(BfcNode, _has_input().label("i"), _has_output().label("o")).where(
-        BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process,
-        BfcNode.bfc_set_code.in_(sets))
-    if node_ids is not None:
-        q = q.where(BfcNode.bfc_node_id.in_(node_ids or [-1]))
-    rows = db.execute(q.order_by(BfcNode.bfc_set_code.desc(), BfcNode.hier_code)).all()
-    return {"missing_input": [_ref(n) for n, i, _o in rows if not i],
-            "missing_output": [_ref(n) for n, _i, o in rows if not o]}
-
-
-# ---- readiness: the red / yellow / green light (D-68, slice13_spec §7.1) -------------------------------
-# 13a reads the fixed D-38 rule through the SAME predicates the freeze gate uses (_has_input / _has_output),
-# so the light and the freeze cannot disagree. It is a new reader only (DR13-P1): missing_io,
-# consistency._process_io and baseline._freeze are untouched until 13b re-expresses them over this.
-STARTED, DATA_OUT = "STARTED", "DATA_OUT"
-FIXED_RULE = (STARTED, DATA_OUT)              # D-38: something starts it, and it outputs a data entity
+# ---- readiness: the red / yellow / green light (D-68, D-70; slice13_spec §7.1) -------------------------------
+# 13b (DR13-P1): ONE reader. The light, the DFD marks, process_completeness, the DFD's gaps, consistency_check and so
+# the freeze gate all read the chart's rule (services/dfd_rule.codes, fail-closed) through these predicates.
+# Q-13 (S13-1, S13-2): red = a RULE element is missing, so the process blocks the freeze; yellow = every rule element
+# is met but a RECOMMENDED one is missing (passes the freeze); green = nothing missing.
+STARTED, DATA_IN, DATA_OUT, EXTERNAL, ORDER = (dfd_rule.STARTED, dfd_rule.DATA_IN, dfd_rule.DATA_OUT,
+                                               dfd_rule.EXTERNAL, dfd_rule.ORDER)
+FIXED_RULE = dfd_rule.FIXED_RULE
 READY, PARTIAL, NOT_READY = "READY", "PARTIAL", "NOT_READY"
-_ELEMENTS = {STARTED: _has_input, DATA_OUT: _has_output}
 
 
-def _light(missing: list[str], rule: tuple[str, ...]) -> str:
-    return READY if not missing else NOT_READY if len(missing) == len(rule) else PARTIAL
+def _has_data_in():
+    return exists().where(BfcNodeDataEntity.bfc_node_id == BfcNode.bfc_node_id, BfcNodeDataEntity.is_active,
+                          BfcNodeDataEntity.direction == "I")
 
 
-def readiness(db: Session, project_id: int, bfc_set: str, node_ids: list[int] | None = None) -> dict:
-    """Per live process of one chart: which rule elements it misses, and its light. A chart whose DFD
-    component is off carries no light (S7-3). Retired processes are never listed. Read-only."""
-    rule = FIXED_RULE
-    applies = bfc_set in sets_with_dfd_on(db, project_id)
-    out = {"bfc_set_code": bfc_set, "rule_applies": applies, "rule": list(rule), "processes": {}}
-    if not applies:
-        return out
-    q = select(BfcNode.bfc_node_id, *(_ELEMENTS[e]().label(e) for e in rule)).where(
+def _has_order():
+    """Joined to another live process of its chart by the derived order (D-38): it reads a data entity another
+    writes, or writes one another reads — the pairs derive_order draws. A one-process chart passes (in _evaluate)."""
+    me, other, o = aliased(BfcNodeDataEntity), aliased(BfcNodeDataEntity), aliased(BfcNode)
+    return exists().where(me.bfc_node_id == BfcNode.bfc_node_id, me.is_active,
+                          other.data_entity_id == me.data_entity_id, other.direction != me.direction,
+                          other.is_active, o.bfc_node_id == other.bfc_node_id, o.bfc_node_id != BfcNode.bfc_node_id,
+                          o.is_active, o.is_process, o.project_id == BfcNode.project_id,
+                          o.bfc_set_code == BfcNode.bfc_set_code)
+
+
+# Per-process elements. EXTERNAL is per diagram (Q-6, Q-16): never in a process's light.
+_ELEMENTS = {STARTED: _has_input, DATA_IN: _has_data_in, DATA_OUT: _has_output, ORDER: _has_order}
+
+
+def _light(missing: list[str], advised: list[str]) -> str:
+    return NOT_READY if missing else PARTIAL if advised else READY
+
+
+def _evaluate(db: Session, project_id: int, bfc_set: str, rule: tuple[str, ...],
+              node_ids: list[int] | None = None) -> list[tuple[BfcNode, list[str], list[str]]]:
+    """(process, rule elements it misses, recommended elements it misses) per live process of one chart, in chart
+    order. One SQL pass, one EXISTS per element."""
+    advise = tuple(e for e in dfd_rule.RECOMMENDED[bfc_set] if e not in rule and e in _ELEMENTS)
+    check = tuple(e for e in dfd_rule.ELEMENTS if e in _ELEMENTS and (e in rule or e in advise))
+    q = select(BfcNode, *(_ELEMENTS[e]().label(e) for e in check)).where(
         BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process, BfcNode.bfc_set_code == bfc_set)
     if node_ids is not None:
         q = q.where(BfcNode.bfc_node_id.in_(node_ids or [-1]))
-    for row in db.execute(q.order_by(BfcNode.hier_code)).mappings():
-        missing = [e for e in rule if not row[e]]
-        out["processes"][row["bfc_node_id"]] = {"light": _light(missing, rule), "missing": missing}
+    rows = db.execute(q.order_by(BfcNode.hier_code)).all()
+    alone = False
+    if ORDER in check:
+        alone = db.scalar(select(func.count()).select_from(BfcNode).where(
+            BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.is_process,
+            BfcNode.bfc_set_code == bfc_set)) == 1
+    out = []
+    for row in rows:
+        met = {e: bool(row._mapping[e]) or (e == ORDER and alone) for e in check}
+        out.append((row[0], [e for e in rule if e in met and not met[e]], [e for e in advise if not met[e]]))
+    return out
+
+
+def readiness(db: Session, project_id: int, bfc_set: str, node_ids: list[int] | None = None,
+              rule: tuple[str, ...] | None = None) -> dict:
+    """Per live process of one chart: the rule elements it misses (red: blocks the freeze), the recommended elements
+    it misses (yellow), and its light. A chart whose DFD component is off carries no light (S7-3). Retired processes
+    are never listed. `rule` overrides the stored rule (the rule preview only). Read-only."""
+    rule = dfd_rule.codes(db, project_id, bfc_set) if rule is None else rule
+    applies = bfc_set in sets_with_dfd_on(db, project_id)
+    out = {"bfc_set_code": bfc_set, "rule_applies": applies, "rule": list(rule),
+           "recommended": list(dfd_rule.RECOMMENDED[bfc_set]), "processes": {}}
+    if not applies:
+        return out
+    for n, missing, advised in _evaluate(db, project_id, bfc_set, rule, node_ids):
+        out["processes"][n.bfc_node_id] = {"light": _light(missing, advised), "missing": missing, "advised": advised}
+    return out
+
+
+# The freeze-blocking report keys, one per per-process element; today's two keep their names (slice13_schema §2.5).
+MISSING_KEYS = {STARTED: "missing_input", DATA_OUT: "missing_output", DATA_IN: "missing_data_in",
+                ORDER: "missing_order"}
+
+
+def missing_io(db: Session, project_id: int, sets: list[str] | None = None,
+               node_ids: list[int] | None = None) -> dict[str, list[dict]]:
+    """Live processes missing an element of their chart's rule, one list per element — re-expressed over the same
+    reader as the light (DR13-P1). Each is a FREEZE_BLOCKING_WARNING: amber while editing, a refusal at freeze
+    (D-38, D-70). An element outside the chart's rule lists nothing."""
+    sets = sets_with_dfd_on(db, project_id) if sets is None else sets
+    out: dict[str, list[dict]] = {k: [] for k in MISSING_KEYS.values()}
+    for s in ("TO_BE", "AS_IS"):
+        if s not in sets:
+            continue
+        for n, missing, _advised in _evaluate(db, project_id, s, dfd_rule.codes(db, project_id, s), node_ids):
+            for e in missing:
+                out[MISSING_KEYS[e]].append(_ref(n))
+    return out
+
+
+def diagrams_missing_external(db: Session, project_id: int, bfc_set: str | None = None,
+                              rule: tuple[str, ...] | None = None) -> list[dict]:
+    """Q-6 / Q-16: under a rule with EXTERNAL, each listed DFD (D-54: a live non-process node with a live process
+    child) must show at least one outside party — a live external flow on any live process below it. Only charts
+    whose DFD is on and whose rule has EXTERNAL (`rule` overrides it for `bfc_set`: the rule preview only). Never
+    changes a process's light; the DFD list shows it."""
+    sets = [s for s in sets_with_dfd_on(db, project_id) if bfc_set is None or s == bfc_set]
+    out = []
+    for s in ("TO_BE", "AS_IS"):
+        if s not in sets or EXTERNAL not in (rule if rule is not None else dfd_rule.codes(db, project_id, s)):
+            continue
+        nodes = list(db.scalars(select(BfcNode).where(BfcNode.project_id == project_id, BfcNode.is_active,
+                                                      BfcNode.bfc_set_code == s).order_by(BfcNode.hier_code)))
+        talks = set(db.scalars(select(BfcNodeExternalFlow.bfc_node_id).where(
+            BfcNodeExternalFlow.project_id == project_id, BfcNodeExternalFlow.is_active)))
+        by_id = {n.bfc_node_id: n for n in nodes}
+        parents = {n.parent_bfc_node_id for n in nodes if n.is_process and n.parent_bfc_node_id in by_id
+                   and not by_id[n.parent_bfc_node_id].is_process}
+        for pid in sorted(parents, key=lambda i: by_id[i].hier_code):
+            d = by_id[pid]
+            below = [n for n in nodes if n.is_process and n.hier_code.startswith(f"{d.hier_code}.")]
+            if not any(n.bfc_node_id in talks for n in below):
+                out.append(_ref(d))
     return out
 
 
 def process_completeness(db: Session, project_id: int, bfc_set: str = "TO_BE") -> dict:
-    """§9.7: the gaps of one chart. `missing_input` / `missing_output` block a freeze while that
-    chart's DFD is on; `no_performer` is a warning only (D-46). `crud_without_io`, `ext_without_io`
+    """§9.7: the gaps of one chart. Each `missing_*` list (one per element of the chart's rule, D-70) and
+    `diagram_missing_external` (diagrams, under a rule with EXTERNAL) block a freeze while that chart's DFD is on;
+    `no_performer` is a warning only (D-46). `crud_without_io`, `ext_without_io`
     and `live_link_on_retired_step` must be 0 (criteria 93, 148; step retire §4). `step_without_br`
     is to-be only — as-is processes carry no BR (S7-2)."""
     steps = list(db.scalars(select(BfcNode).where(
@@ -110,13 +183,14 @@ def process_completeness(db: Session, project_id: int, bfc_set: str = "TO_BE") -
         "bfc_set_code": bfc_set,
         "rule_applies": applies,
         **gaps,
+        "diagram_missing_external": diagrams_missing_external(db, project_id, bfc_set) if applies else [],
         "no_performer": [_ref(s) for s in steps if s.performer_kind is None],
         "step_without_br": [_ref(s) for s in steps if bfc_set == "TO_BE" and s.bfc_node_id not in with_br],
         "crud_without_io": _unlicensed(db, project_id, BrDataEntity, BrDataEntity.br_data_entity_id),
         "ext_without_io": _unlicensed(db, project_id, BfcNodeExternalFlow,
                                       BfcNodeExternalFlow.bfc_node_external_flow_id),
         "live_link_on_retired_step": _live_on_retired(db, project_id),
-        "readiness": readiness(db, project_id, bfc_set),                 # D-68 (13a): the light, per process
+        "readiness": readiness(db, project_id, bfc_set),                 # D-68: the light, per process (one reader)
     }
 
 
@@ -376,7 +450,11 @@ def generate_dfd(db: Session, node: BfcNode) -> dict:
     lanes, lane_of = _lanes(db, steps)
     systems = _systems(db, node, steps)
     order = derive_order(io)
-    ranks = rank(ids, order)
+    # DR13-P4, option A: with no derived order in scope (a rule without the data elements, or no data yet), the
+    # processes stand left to right in CHART order — seq_no under each parent, in hier_code order. Nothing stored,
+    # no arrows drawn; the screen labels it "chart order".
+    order_source = "DERIVED" if order else "CHART"
+    ranks = rank(ids, order) if order else {i: n for n, i in enumerate(ids)}
     gaps = missing_io(db, node.project_id, [node.bfc_set_code], ids)
     performers = {s.bfc_node_id for s in steps if s.performer_kind}
 
@@ -408,8 +486,12 @@ def generate_dfd(db: Session, node: BfcNode) -> dict:
                      for t in sorted(trigs.values(), key=lambda t: t.trigger_name.lower())],
         "flows": flows,
         "order": order,
+        "order_source": order_source,
         "boundary": _boundary(db, node, set(ids), set(des)),
-        "completeness": {**gaps, "no_performer": [_ref(s) for s in steps if s.bfc_node_id not in performers]},
+        "completeness": {**gaps, "no_performer": [_ref(s) for s in steps if s.bfc_node_id not in performers],
+                         # D-70: recommended elements outside the rule — information on the warnings panel, never a gap
+                         "advised": {i: p["advised"] for i, p in readiness(
+                             db, node.project_id, node.bfc_set_code, ids)["processes"].items() if p["advised"]}},
         "cross_area": _cross_area(db, node, set(des)),
         "layout": diagram_layout.positions(db, node.project_id, "DFD", node.bfc_node_id),
     }
