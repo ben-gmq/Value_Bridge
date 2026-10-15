@@ -40,3 +40,9 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 15 | `BRAND` lives in `frontend/src/theme/brand.js`, not at the top of `App.jsx` | scaffold §5 | Tokens for two themes plus the FTC chrome; one module every screen imports. Still the single source of truth | §14.2 |
 | 16 | First-run setup is **off by default** (`ALLOW_FIRST_RUN_SETUP`); cloud environments create the first admin with `python -m seeds.create_admin` | scaffold §1 first-run setup | An anonymous setup endpoint on a fresh Azure database would let the first caller become platform admin (sara H1) | §15.4 |
 | 17 | Platform-admin rights are granted by a separate, audited action with a reason, never by a checkbox on user creation | scaffold §1 two roles | An admin sees every client; the change must be deliberate and on the record (sara M7) | §7.10 |
+
+## Process
+
+| # | Deviation | Playbook / brief rule | Reason | Repaid by |
+|---|---|---|---|---|
+| P1 | **2026-10-15 night batch (Ben: "skip the security review and test after bundle build").** On branches `ui-mockup` and the wave-1 slices built the same night, `sara` and `ui-verifier` run **once over the whole bundle** instead of per slice. pytest, lint and build still run after every slice | Lilly brief: `sara` before any commit touching access/baselines/imports; `ui-verifier` before claiming a screen works | Local-only app, no real data; Ben asked to keep the night moving | One `sara` pass and one `ui-verifier` pass over every commit of the bundle **before any of it merges to `main`**. Not a standard: the next slice reviews per slice again |
