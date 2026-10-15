@@ -174,9 +174,13 @@ def test_a_stale_row_version_or_a_changed_preview_is_409(client, world, ed):
 
 # ---- the baseline header (B6, [Q-19]) -----------------------------------------------------------------------
 
-def test_the_header_records_the_rule_and_is_frozen_for_every_role_and_an_old_baseline_reads_d38(client, world, ed):
+def test_the_header_records_the_rule_and_is_frozen_for_every_role_and_an_old_baseline_reads_d38(client, world, ed,
+                                                                                               monkeypatch):
+    from tests.test_migration_0053 import pre_13c
     scope(client, ed)
-    f = freeze(client, ed)
+    with monkeypatch.context() as m:
+        pre_13c(m)                                     # a pre-13b baseline is pre-13c too: from spec 3 the rule is required
+        f = freeze(client, ed)
     assert (f["baseline"]["dfd_rule_to_be"], f["baseline"]["dfd_rule_as_is"]) == (["STARTED", "DATA_OUT"],) * 2
     with pytest.raises(DBAPIError, match="frozen baseline column cannot change"):
         owner_sql("UPDATE baseline SET dfd_rule_to_be = ARRAY['STARTED']::varchar(12)[] WHERE baseline_id = :b",

@@ -473,8 +473,10 @@ def diff(db: Session, project_id: int, a, b) -> dict:
         # list extends the earlier one; anything else is still a mismatch.
         by_fields, extra = False, {}
         if cols_a != cols_b:
-            older, newer = sorted((cols_a, cols_b), key=len)
-            if newer[:len(older)] != older:
+            # older = the list of the side frozen at the older spec (never "the shorter one": a list that shrank
+            # between specs is not an extension and stays a mismatch)
+            older, newer = (cols_a, cols_b) if _spec(a) <= _spec(b) else (cols_b, cols_a)
+            if len(newer) <= len(older) or newer[:len(older)] != older:
                 out[e.table] = {**entry, "status": "SCHEMA_VERSION_MISMATCH", "rows": []}
                 continue
             cols_a, by_fields = older, True

@@ -60,12 +60,21 @@ def test_the_backfill_gives_every_project_todays_rule_inactive_ones_included(cli
     assert freeze(client, ed)["baseline"]["dfd_rule_to_be"] == ["STARTED", "DATA_OUT"]
 
 
-def test_the_downgrade_refuses_a_chosen_rule_or_a_recorded_one(client, world, ed, owner):
+def pre_13c(monkeypatch):
+    """Freeze as the code before slice 13c did (hash spec 2): 0054's downgrade refuses to drop the volume columns
+    under a spec-3 baseline (Q-26), so a test that steps the chain back below 0054 freezes the way its era did."""
+    from services import freeze_set
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 2)
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 2)
+
+
+def test_the_downgrade_refuses_a_chosen_rule_or_a_recorded_one(client, world, ed, owner, monkeypatch):
     set_rule(client, world, ed["p"], ["STARTED", "DATA_IN", "DATA_OUT"])
     with pytest.raises(Exception, match="0053 downgrade refused: a project chose a DFD rule"):
         command.downgrade(_cfg(), "0052")
     set_rule(client, world, ed["p"], ["STARTED", "DATA_OUT"])
     scope(client, ed)
+    pre_13c(monkeypatch)
     freeze(client, ed)
     with pytest.raises(Exception, match="0053 downgrade refused: a baseline records"):
         command.downgrade(_cfg(), "0052")
