@@ -26,6 +26,8 @@ from services import components
 from services.project import create_client, create_project
 from services.user_admin import check_ftc_address, create_user
 
+from seeds.demo_showcase import build_showcase
+
 SAFE_MARKERS = ("uat", "demo")
 REPO = Path(__file__).resolve().parents[2]
 
@@ -66,10 +68,12 @@ def main() -> None:
                      target_table="app_user", target_id=admin.app_user_id)
         db.commit()
         pid = build_project(db, admin, args.domain, pw)
+        showcase = build_showcase(db, admin, args.domain, pw)
 
-        fh.write(f"project_id={pid}\npassword={pw}\n")
+        fh.write(f"project_id={pid}\nshowcase_project_id={showcase}\npassword={pw}\n")
         for who in ("admin", "editor", "reviewer"):
             fh.write(f"{who}=uat.{who}@{args.domain}\n")
+        fh.write(f"consultant=k.yamada@{args.domain}\n")
     print(f"Demo project {pid} seeded in '{name}'. Sign-in details written to {out}")
 
 
