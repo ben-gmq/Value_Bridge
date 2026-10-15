@@ -88,8 +88,9 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
   const nodeId = node.bfc_node_id;
   const hasBr = !asIs && Boolean(br);
   const [open, setOpen] = useState(null);
-  // Editors stay mounted once opened (hidden when closed), so Done or another tile never drops a half-filled
-  // performer or trigger form (DR 10d-2); the panel's leave guard counts those drafts.
+  // SP-1 (Ben, 2026-10-14): one save model — every editor here saves as it changes, so Done only closes.
+  // Editors stay mounted once opened (hidden when closed); the only draft left is a performer (AI) or trigger
+  // name still being typed, which saves on Enter or blur and which the panel's leave guard counts (DR 10d-2).
   const [mounted, setMounted] = useState(() => new Set());
   const [drafts, setDrafts] = useState({});
   const draftSetter = useCallback((key) => (v) => setDrafts((d) => (Boolean(d[key]) === v ? d : { ...d, [key]: v })), []);
@@ -108,9 +109,10 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
   const emptyText = t(factsEditable ? 'processes.run.notSetSet' : 'processes.run.notSet');
 
   const tiles = [
+    // S10c-2: the performer shows and saves whatever the DFD setting; triggers stay with the DFD
     { key: 'performer', label: t('processes.run.performer'), value: performer.text,
       empty: !node.performer_kind, emptyText: t(editable ? 'processes.run.notAssignedSet' : 'processes.run.notAssigned'),
-      editor: <PerformerPanel projectId={projectId} node={node} disabled={!editable} startEditing onDraftChange={onPerformerDraft} /> },
+      editor: <PerformerPanel projectId={projectId} node={node} disabled={!editable} onDraftChange={onPerformerDraft} /> },
     // D-69: one STARTED mark on "Started by" (a trigger, a data input or an inbound party all meet it — DR13-D1)
     dfdOn && { key: 'trigger', label: t('processes.run.trigger'), mark: <DfdMark dfd={dfd} element="STARTED" />, value: trigger.first,
       note: trigger.more > 0 ? t('processes.run.more', { n: trigger.more }) : null, empty: !trigger.loading && !trigger.first,

@@ -352,3 +352,7 @@ place.
 - UAT 10c-1 · slice 10c, 2026-10-14 · LOW · **A project you cannot see still draws the project shell under "Not found"**
   (rail items, empty Baselines / Program dashboard cards; no name leaks, 404s are correct). Render the plain not-found
   page when the project read is 404. Evidence/2026-10-14/slice-10c/s10c-28*.png.
+- sara L3 · slice 13d pre-merge review, 2026-10-15 · LOW · **Drawing a link another user has just drawn shows a 409**
+  instead of "Already on the diagram" (DfdDraw.jsx). Map that 409 to the same message.
+- sara (out of slice) · slice 13d review, 2026-10-15 · LOW · **`step_io.live_entity` reads the data entity without a lock**,
+  so a link could be saved against an entity retired in the same instant (cf. VB-009). Take `FOR SHARE` on the entity.

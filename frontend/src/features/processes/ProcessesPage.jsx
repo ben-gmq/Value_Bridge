@@ -232,9 +232,12 @@ export default function ProcessesPage() {
   const treeBoxRef = useRef(null);
 
   // Every way off the open panel goes through here: unsaved text or a half-filled tile form asks first.
+  // A name still being typed in a tile editor saves when its field loses focus (SP-1), and every in-page way off
+  // the panel (a tree click, Save & next) blurs it first — so only typed panel text asks here (10g UAT check 4).
+  // Browser Back/Forward and closing the tab can leave without a blur, so those still count the typed name.
   const guarded = (go) => {
     const state = guardRef.current?.get();
-    if (state && (state.count > 0 || state.draft)) setLeave({ state, go });
+    if (state && state.count > 0) setLeave({ state: { ...state, draft: false }, go });
     else go();
   };
 
