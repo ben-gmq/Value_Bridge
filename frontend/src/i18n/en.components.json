@@ -61,5 +61,12 @@
   "components.dfdRule.wouldBlock": "The next freeze would be refused for {n} processes and {d} diagrams until they are completed.",
   "components.dfdRule.blocksNone": "Nothing in this chart would block the next freeze.",
   "components.dfdRule.apply": "Save rule",
-  "components.dfdRule.saved": "DFD rule saved"
+  "components.dfdRule.saved": "DFD rule saved",
+  "components.fte.title": "FTE basis",
+  "components.fte.what": "How many hours one full-time person works in a year. Every process's FTE is its annual hours divided by this. Each baseline keeps the basis it was frozen with.",
+  "components.fte.days": "Working days per year",
+  "components.fte.hours": "Hours per working day",
+  "components.fte.per": "= {h} hours per FTE",
+  "components.fte.save": "Save FTE basis",
+  "components.fte.saved": "FTE basis saved"
 }

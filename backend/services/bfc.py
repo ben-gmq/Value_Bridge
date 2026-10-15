@@ -20,6 +20,10 @@ SETS = ("TO_BE", "AS_IS")          # D-47: the to-be chart (always) and the opti
 PERFORMER_KINDS = ("ORG_UNIT", "ORG_ROLE", "APPLICATION", "AI")           # D-46
 
 
+# D-67: the volume columns of a process (slice 13c), written only by services/process_volume.set_volume.
+VOLUME_FIELDS = ("runs_per_period", "volume_period_code", "transactions_per_run", "transaction_unit_code_id",
+                 "seconds_per_transaction")
+
 def normalise_name(s: str) -> str:
     """Q1 — one definition, shared with the flow import."""
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", s)).strip().casefold()
@@ -185,6 +189,8 @@ def _step_blockers(db: Session, node: BfcNode) -> list[str]:
         out.append("the performer")
     if node.data_processing_desc:
         out.append("the data processing description")
+    if any(getattr(node, f) is not None for f in VOLUME_FIELDS):  # D-67 [Q-24]: cleared on purpose, never dropped
+        out.append("the volume figures")
     return out
 
 

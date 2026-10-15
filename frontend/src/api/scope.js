@@ -38,6 +38,8 @@ export const bfcApi = {
   linkRole: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/org-roles`, body)),
   unlinkRole: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/org-roles/${linkId}`, rowVersion),
   flows: (id) => d(http.get(`${V}/bfc-nodes/${id}/external-flows`)),
+  volume: (id) => d(http.get(`${V}/bfc-nodes/${id}/volume`)),                 // D-67: figures + derived hours/FTE
+  setVolume: (id, body) => d(http.patch(`${V}/bfc-nodes/${id}/volume`, body)),
   linkFlow: (id, body) => d(http.post(`${V}/bfc-nodes/${id}/external-flows`, body)),
   unlinkFlow: (id, linkId, rowVersion) => del(`${V}/bfc-nodes/${id}/external-flows/${linkId}`, rowVersion),
   apps: (id) => d(http.get(`${V}/bfc-nodes/${id}/applications`)),
@@ -274,6 +276,13 @@ export const effortApi = {
   saveCard: (projectId, body) => d(http.put(`${P(projectId)}/rate-card`, body)),
   rate: (frId, body) => d(http.patch(`${V}/function-requirements/${frId}/complexity`, body)),
   summary: (projectId) => d(http.get(`${P(projectId)}/effort-summary`)),
+};
+
+// D-67 (slice 13c): the FTE basis (a project ADMIN setting) and the as-is / to-be time per area. Hours and FTE are
+// derived by the server, never sent (law 6).
+export const volumeApi = {
+  setBasis: (projectId, body) => d(http.put(`${P(projectId)}/fte-basis`, body)),
+  summary: (projectId) => d(http.get(`${P(projectId)}/volume-summary`)),
 };
 
 // Slice 8 (docs/slice8_schema.md §5). Read-only apart from freeze and approve; the version, status and

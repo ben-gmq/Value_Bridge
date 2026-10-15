@@ -110,7 +110,8 @@ ROUTE_COMPONENTS = (
 # declares only its chart's own resolver, whatever the DFD setting (S10c-2, Ben 2026-10-14).
 ROUTE_RESOLVERS = (("/external-flows", "<node_dfd_component>"), ("/performer", "<node_set_component>"),
                    ("/bfc-nodes/{id}/triggers", "<node_dfd_component>"),
-                   ("/hand-offs", "<node_dfd_component>"))                      # D-65 (13d)
+                   ("/hand-offs", "<node_dfd_component>"),                      # D-65 (13d)
+                   ("/volume", "<node_set_component>"))                        # D-67 (13c): no component of its own
 
 
 def test_every_component_write_declares_its_component():

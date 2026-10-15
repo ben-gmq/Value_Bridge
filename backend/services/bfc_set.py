@@ -24,7 +24,10 @@ from services import audit, bfc, business_requirement, components
 MAX_PROCESSES = 2000                                   # A-35, synchronous
 NODE_FIELDS = ("level_no", "seq_no", "hier_code", "node_name", "is_process", "purpose_desc",
                "data_processing_desc", "performer_kind", "performer_org_unit_id", "performer_org_role_id",
-               "performer_application_id", "performer_label")
+               "performer_application_id", "performer_label",
+               # D-67 [Q-23]: the to-be starts as "same as today"; the consultant lowers what the change saves
+               "runs_per_period", "volume_period_code", "transactions_per_run", "transaction_unit_code_id",
+               "seconds_per_transaction")
 
 
 def _live(db: Session, project_id: int, bfc_set: str) -> list[BfcNode]:

@@ -27,6 +27,7 @@ import FrsPage from '../features/frs/FrsPage';
 import FrPage from '../features/frs/FrPage';
 import InterfacesPage from '../features/interfaces/InterfacesPage';
 import EffortPage from '../features/effort/EffortPage';
+import VolumePage from '../features/processes/VolumePage';
 import RateCardPage from '../features/effort/RateCardPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
@@ -48,7 +49,7 @@ const SECTIONS = [   // [path, i18n section key, build slice] — sections not b
 const PAGES = [
   ['processes', ProcessesPage], ['processes/:nodeId/dfd', DfdPage], ['dfd', DfdListPage],
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
-  ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
+  ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['volume', VolumePage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['organisation', OrganisationPage], ['systems', ApplicationsPage], ['systems/:appId', ApplicationPage],
   ['settings', SettingsPage], ['settings/parties', PartiesPage], ['settings/components', ComponentsPage],
   ['settings/rate-card', RateCardPage],

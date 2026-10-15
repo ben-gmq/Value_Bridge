@@ -16,9 +16,10 @@ from database import get_db
 from models import AppUser, BfcNode, BfcNodeTrigger, ProcessTrigger
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.process_flow import (DfdGraphOut, LayoutItem, PerformerIn, ProcessCompletenessOut, SetCopyIn,
-                                  SetCopyOut, StepTriggerIn, StepTriggerOut, TriggerIn, TriggerOut, TriggerPatch)
+                                  SetCopyOut, StepTriggerIn, StepTriggerOut, TriggerIn, TriggerOut, TriggerPatch,
+                                  VolumeIn, VolumeOut)
 from schemas.scope import BfcNodeOut
-from services import bfc, bfc_set, components, diagram_layout, lifecycle, process_flow, render
+from services import bfc, bfc_set, components, diagram_layout, lifecycle, process_flow, process_volume, render
 from services import trigger as trigger_service
 
 router = GuardedRouter(tags=["dfd"])
@@ -89,6 +90,19 @@ def set_performer(id: int, body: PerformerIn, node: BfcNode = Depends(_node_set_
     node, warnings = bfc.set_performer(db, _uid(user), node, body.row_version, body.performer_kind,
                                        body.code, body.performer_label)
     return BfcNodeOut.model_validate(node).model_copy(update={"warnings": warnings})
+
+
+# ---- volume (D-67, slice 13c): figures on the process, hours and FTE derived on read ----------------------
+@router.get("/bfc-nodes/{id}/volume", response_model=VolumeOut, **_node_r.route)
+def read_volume(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    return process_volume.read(db, node)
+
+
+@router.patch("/bfc-nodes/{id}/volume", response_model=VolumeOut, **_node_set_w.route)
+def set_volume(id: int, body: VolumeIn, node: BfcNode = Depends(_node_set_w.dep),
+               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    sent = body.model_dump(exclude_unset=True, exclude={"row_version"})
+    return process_volume.read(db, process_volume.set_volume(db, _uid(user), node, body.row_version, sent))
 
 
 # ---- triggers (D-49): the catalogue and the steps they start ----------------------------------------

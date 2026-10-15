@@ -28,6 +28,10 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                                 ("IN_DELIVERY", "In delivery"), ("DELIVERED", "Delivered"),
                                 ("REJECTED", "Rejected")]),
     ("APP_LIFECYCLE", True, [("AS_IS", "As-is"), ("TO_BE", "To-be"), ("BOTH", "Both")]),
+    # D-67 (slice 13c): what one transaction of a process is. Client vocabulary, never branched on (§3.4).
+    ("TRANSACTION_UNIT", False, [("INVOICE", "Invoice"), ("ORDER", "Order"), ("CASE", "Case"), ("DOCUMENT", "Document"),
+                                 ("RECORD", "Record"), ("CALL", "Call"), ("PAYMENT", "Payment"),
+                                 ("EMPLOYEE", "Employee"), ("OTHER", "Other")]),
     ("APP_KIND", False, [("PACKAGE", "Package"), ("CUSTOM", "Custom"), ("SAAS", "SaaS"),
                          ("PLATFORM", "Platform"), ("RPA", "RPA"), ("INTEGRATION", "Integration"),
                          ("REPORTING", "Reporting")]),

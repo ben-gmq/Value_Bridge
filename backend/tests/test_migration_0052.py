@@ -16,7 +16,6 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
-from services.freeze_set import CURRENT_HASH_SPEC
 from services.raci import TO_BE_STEP
 from tests.conftest import BACKEND, OWNER_URL
 from tests.test_baseline import bid, diff, freeze, scope
@@ -38,6 +37,10 @@ def owner():
     yield eng
     command.upgrade(_cfg(), "head")                      # never leave the shared schema behind head
     eng.dispose()
+
+
+def detail_spec(client, ed, baseline_id):
+    return client.get(f"{API}/baselines/{baseline_id}", headers=ed["h"]).json()["hash_spec_version"]
 
 
 def q(eng, sql, **kw):
@@ -341,7 +344,10 @@ def test_a_rerun_of_a_plain_merge_adds_nothing_twice(client, ed, world, owner):
 
 # ---- baselines (§4, Q-6) --------------------------------------------------------------------------------------
 
-def test_a_pre_10d_baseline_still_verifies_and_its_diff_shows_each_moved_role_once(client, ed, world, owner):
+def test_a_pre_10d_baseline_still_verifies_and_its_diff_shows_each_moved_role_once(client, ed, world, owner,
+                                                                                  monkeypatch):
+    from tests.test_migration_0053 import pre_13c
+    pre_13c(monkeypatch)                                                # a pre-10d baseline is a pre-13c one too
     u, p = world["users"]["editor"], ed["p"]
     w = scope(client, ed)
     cfo, clerk = _org_role(client, ed, "CFO"), _org_role(client, ed, "CLERK")
@@ -355,7 +361,7 @@ def test_a_pre_10d_baseline_still_verifies_and_its_diff_shows_each_moved_role_on
 
     migrate()
 
-    assert CURRENT_HASH_SPEC == 2                                       # no spec bump (§4)
+    assert detail_spec(client, ed, bid(v10)) == 2                       # 0052 bumps no spec (§4)
     detail = client.get(f"{API}/baselines/{bid(v10)}", headers=ed["h"]).json()
     assert detail["intact"] is True and detail["counts"]["bfc_node_org_role"] == 3
     d = diff(client, ed, bid(v10), "live")

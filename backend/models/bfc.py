@@ -2,7 +2,7 @@
 external parties a step exchanges data with (D-24a). All frozen into baselines."""
 from sqlalchemy import (
     CHAR, BigInteger, Boolean, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint,
-    Identity, Index, Integer, SmallInteger, String, Text, UniqueConstraint, func, text,
+    Identity, Index, Integer, Numeric, SmallInteger, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +51,21 @@ class BfcNode(AuditMixin, Base):
     performer_org_role_id: Mapped[int | None] = mapped_column(BigInteger)
     performer_application_id: Mapped[int | None] = mapped_column(BigInteger)
     performer_label: Mapped[str | None] = mapped_column(String(200))
+    # D-67 (slice 13c): volume figures on a process, all optional; hours and FTE are derived on read, never stored
+    # (services/process_volume.py). Types fixed once for both ends — a manual 6 min and an automated 0.3 s step —
+    # because a shadow column's type never changes (DR8-D1, slice13_schema §3.2).
+    runs_per_period = mapped_column(Numeric(11, 2))
+    volume_period_code: Mapped[str | None] = mapped_column(String(10))
+    transactions_per_run = mapped_column(Numeric(14, 2))
+    transaction_unit_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    transaction_unit_category: Mapped[str] = mapped_column(String(40), Computed("'TRANSACTION_UNIT'", persisted=True))
+    seconds_per_transaction = mapped_column(Numeric(12, 3))
+    transaction_unit_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                        primaryjoin="foreign(BfcNode.transaction_unit_code_id) == CodeMaster.code_id")
+
+    @property
+    def transaction_unit_code(self) -> str | None:
+        return self.transaction_unit_row.code if self.transaction_unit_row is not None else None
 
     __table_args__ = (
         UniqueConstraint("bfc_node_id", "project_id", name="uq_bfc_node_project"),
@@ -86,6 +101,17 @@ class BfcNode(AuditMixin, Base):
         CheckConstraint("performer_kind IS DISTINCT FROM 'AI' OR performer_label IS NOT NULL",
                         name="ck_bfc_performer_ai_label"),
         CheckConstraint("performer_kind IS NULL OR is_process", name="ck_bfc_performer_process"),
+        CheckConstraint("volume_period_code IS NULL OR volume_period_code IN ('DAY','WEEK','MONTH','QUARTER','YEAR')",
+                        name="ck_bfc_volume_period"),
+        CheckConstraint("coalesce(runs_per_period, 0) >= 0 AND coalesce(transactions_per_run, 0) >= 0 "
+                        "AND coalesce(seconds_per_transaction, 0) >= 0", name="ck_bfc_volume_nonneg"),
+        CheckConstraint("(runs_per_period IS NULL) = (volume_period_code IS NULL)", name="ck_bfc_volume_run_pair"),
+        CheckConstraint("transaction_unit_code_id IS NULL OR transactions_per_run IS NOT NULL", name="ck_bfc_volume_unit"),
+        CheckConstraint("is_process OR num_nonnulls(runs_per_period, volume_period_code, transactions_per_run, "
+                        "transaction_unit_code_id, seconds_per_transaction) = 0", name="ck_bfc_volume_process"),
+        ForeignKeyConstraint(["transaction_unit_code_id", "transaction_unit_category"],
+                             ["code_master.code_id", "code_master.category"], name="fk_bfc_txn_unit", onupdate="NO ACTION"),
+        Index("ix_bfc_txn_unit", "transaction_unit_code_id", postgresql_where=text("transaction_unit_code_id IS NOT NULL")),
         ForeignKeyConstraint(["performer_org_unit_id", "project_id"], ["org_unit.org_unit_id", "org_unit.project_id"],
                              name="fk_bfc_perf_unit", onupdate="NO ACTION"),
         ForeignKeyConstraint(["performer_org_role_id", "project_id"], ["org_role.org_role_id", "org_role.project_id"],

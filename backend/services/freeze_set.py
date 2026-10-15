@@ -29,7 +29,8 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 2       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 3       # 2: br_function_requirement joined the set (slice 10b, D-52)
+#                             3: bfc_node gained the volume figures (slice 13c, D-67)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -53,12 +54,17 @@ def columns_for(e: FrozenEntity, version: int) -> tuple[str, ...] | None:
     return e.hash_columns[max(keys)] if keys else None
 
 
-def _e(table, area, hashed, position=(), label=(), refs=(), step=None, since=1) -> FrozenEntity:
-    """`since`: the hash spec the entity joined the set at. A new entity bumps CURRENT_HASH_SPEC and passes it."""
-    return FrozenEntity(table, area, {since: tuple(hashed)}, tuple(position), tuple(label), tuple(refs), step,
+def _e(table, area, hashed, position=(), label=(), refs=(), step=None, since=1, more=None) -> FrozenEntity:
+    """`since`: the hash spec the entity joined the set at. A new entity bumps CURRENT_HASH_SPEC and passes it.
+    `more` {spec: list}: a later list for an entity already in the set (slice13_schema §3.7, F4). A later list
+    EXTENDS the earlier one (asserted below), which the cross-spec diff relies on."""
+    return FrozenEntity(table, area, {since: tuple(hashed), **{v: tuple(c) for v, c in (more or {}).items()}},
+                        tuple(position), tuple(label), tuple(refs), step,
                         components.FREEZE_GATES.get(table, components.ALWAYS))
 
 
+_BFC_1 = ("bfc_set_code", "is_process", "node_name", "purpose_desc", "data_processing_desc", "performer_kind",
+          "performer_org_unit_id", "performer_org_role_id", "performer_application_id", "performer_label")
 BFC, DE, BR, SOL, FR, APP, ORG = ("bfc_node", "data_entity", "business_requirement", "solution",
                                   "function_requirement", "application", "org_role")
 FREEZE_SET: tuple[FrozenEntity, ...] = (
@@ -66,10 +72,9 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        ("parent_org_unit_id", "level_no", "seq_no"), ("org_unit_code", "org_unit_name")),
     _e("org_role", "ORG", ("org_unit_id", "org_role_code", "org_role_name", "responsibility_desc", "headcount"),
        label=("org_role_code", "org_role_name")),
-    _e("bfc_node", "BFC", ("bfc_set_code", "is_process", "node_name", "purpose_desc", "data_processing_desc",
-                           "performer_kind", "performer_org_unit_id", "performer_org_role_id",
-                           "performer_application_id", "performer_label"),
-       ("parent_bfc_node_id", "level_no", "seq_no", "hier_code"), ("hier_code", "node_name"), step="bfc_node_id"),
+    _e("bfc_node", "BFC", _BFC_1, ("parent_bfc_node_id", "level_no", "seq_no", "hier_code"), ("hier_code", "node_name"),
+       step="bfc_node_id", more={3: _BFC_1 + ("runs_per_period", "volume_period_code", "transactions_per_run",
+                                             "transaction_unit_code", "seconds_per_transaction")}),
     _e("data_entity", "DATA", ("de_number", "de_name", "description", "business_owner_note"),
        label=("de_number", "de_name")),
     _e("data_field", "DATA", ("data_entity_id", "field_name", "data_type_code", "length_val", "precision_val",
@@ -132,6 +137,14 @@ SPEC_1_ENTITIES = ("org_unit", "org_role", "bfc_node", "data_entity", "data_fiel
 assert tuple(e.table for e in FREEZE_SET if columns_for(e, 1) is not None) == SPEC_1_ENTITIES, \
     "an entity joined the spec-1 set: register it with since=<new spec> and bump CURRENT_HASH_SPEC"
 assert all(columns_for(e, CURRENT_HASH_SPEC) is not None for e in FREEZE_SET), "an entity is newer than the spec"
+assert all(max(e.hash_columns) <= CURRENT_HASH_SPEC for e in FREEZE_SET), "a hashed list is newer than the spec"
+# slice13_schema §3.7: every later list of an entity extends its earlier one, so a cross-spec diff compares two sides
+# on the older (shorter) list and never loses an area to SCHEMA_VERSION_MISMATCH.
+assert all(later[:len(earlier)] == earlier
+           for e in FREEZE_SET
+           for earlier, later in zip([e.hash_columns[v] for v in sorted(e.hash_columns)],
+                                     [e.hash_columns[v] for v in sorted(e.hash_columns)][1:])), \
+    "a later hashed list must extend the earlier one (append only)"
 
 
 def at_spec(version: int) -> tuple[FrozenEntity, ...]:
