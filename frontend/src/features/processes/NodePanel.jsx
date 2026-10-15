@@ -273,7 +273,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, showR
             ...(editable && v.node_name.trim() === '' ? { outline: `1px solid ${th.vars.palette.status.escalate}` } : {}) })} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: 'auto' }}>
           {/* D-68: the process's DFD light, from the tree row the chart already holds (null when the rule is off) */}
-          {liveDfd && <DfdLight light={liveDfd.light} missing={liveDfd.missing} />}
+          {liveDfd && <DfdLight light={liveDfd.light} missing={liveDfd.missing} advised={liveDfd.advised ?? []} />}
           {showBr && (
             <Tooltip title={t('processes.panel.openBr', { br: brEd.br.br_number })}>
               <Link component={RouterLink} to={links.requirement(projectId, br.br_id)} underline="none"

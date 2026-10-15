@@ -53,8 +53,8 @@ function Ends() {
   );
 }
 
-/** Which gap a step has, as the one short text its header shows. */
-const gapText = (gap) => (gap === 'both' ? t('processes.dfdGap') : gap ? t(`processes.gap.${gap}`) : null);
+/** A step's gaps (the rule elements it misses), as the one short text its header shows. */
+const gapText = (kinds) => (!kinds?.length ? null : kinds.length > 1 ? t('processes.dfdGap') : t(`processes.gap.${kinds[0]}`));
 
 // Text is hidden with `visibility`, never `display: none`, so handle positions stay valid (§14.6).
 function StepBox({ data, selected }) {
@@ -172,11 +172,15 @@ const flowId = (f, i) => `f${i}-${f.kind}-${f.bfc_node_id}-${f.direction}`;
 const laneTitle = (lane) => (lane.kind === 'UNASSIGNED' ? t('processes.laneUnassigned')
   : lane.code ? `${lane.code} ${lane.name ?? ''}`.trim() : lane.name);
 
-/** Each step's gap: 'missing_input', 'missing_output', 'both' or absent. */
+// One list per element of the chart's DFD rule (D-70); a list whose element is off the rule is empty.
+const RULE_GAPS = ['missing_input', 'missing_data_in', 'missing_output', 'missing_order'];
+
+/** Each step's gaps: the report keys of the rule elements it misses ('missing_input', …), or absent. */
 function gapsOf(g) {
   const out = new Map();
-  for (const r of g.completeness.missing_input) out.set(r.bfc_node_id, 'missing_input');
-  for (const r of g.completeness.missing_output) out.set(r.bfc_node_id, out.has(r.bfc_node_id) ? 'both' : 'missing_output');
+  for (const k of RULE_GAPS) {
+    for (const r of g.completeness[k] ?? []) out.set(r.bfc_node_id, [...(out.get(r.bfc_node_id) ?? []), k]);
+  }
   return out;
 }
 
@@ -386,8 +390,10 @@ function Inspector({ g, sel, onSelect, projectId, canEdit }) {
         <SectionLabel>{t('processes.dfdChecks')}</SectionLabel>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {!gap && <Status tone="ok" size="sm">{t('processes.dfdChecksOk')}</Status>}
-          {(gap === 'missing_input' || gap === 'both') && <Status tone="caution" size="sm">{t('processes.gap.missing_input')}</Status>}
-          {(gap === 'missing_output' || gap === 'both') && <Status tone="caution" size="sm">{t('processes.gap.missing_output')}</Status>}
+          {(gap ?? []).map((k) => <Status key={k} tone="caution" size="sm">{t(`processes.gap.${k}`)}</Status>)}
+          {/* D-70: a recommended element outside the rule is information here, never a gap */}
+          {(g.completeness.advised?.[step.bfc_node_id] ?? []).map((c) => (
+            <Status key={c} tone="neutral" size="sm" sx={{ whiteSpace: 'normal', height: 'auto', py: 0.25 }}>{t('processes.dfdAdvised', { what: t(`processes.dfdLight.element.${c}`) })}</Status>))}
         </Box>
         <Button variant="contained" fullWidth sx={{ mt: 1 }}
           onClick={() => navigate(links.node(projectId, step.bfc_node_id, step.bfc_set_code))}>{t('processes.dfdOpenStep')}</Button>
@@ -578,7 +584,13 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
               <LegendSwatch shape="trigger" label={t('processes.dfdTrigger')} />
               {showOrder && <LegendSwatch shape="order" label={t('processes.dfdLegendOrder')} />}
             </>)}>
-              {view === 'diagram' && (
+              {/* DR13-P4: with no order in the data, the steps stand in chart order — said, never drawn as arrows */}
+              {view === 'diagram' && g.order_source === 'CHART' && (
+                <Tooltip title={t('processes.dfdChartOrderHelp')}>
+                  <Typography component="span" tabIndex={0} sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    {t('processes.dfdChartOrder')}</Typography>
+                </Tooltip>)}
+              {view === 'diagram' && g.order_source !== 'CHART' && (
                 <FormControlLabel sx={{ mr: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5, color: 'text.secondary' } }}
                   label={t('processes.dfdShowOrder')}
                   control={<Switch size="small" id="dfd-order" checked={showOrder} onChange={(e) => setShowOrder(e.target.checked)} />} />)}

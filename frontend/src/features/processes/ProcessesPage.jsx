@@ -25,7 +25,7 @@ import { t } from '../../i18n/t';
 import { FIRST_PROCESS_LEVEL, ShowRetired, blankToNull } from './chartKit';
 import { NodePanel } from './NodePanel';
 import { CopyChartButton } from './StepDfd';
-import { DfdLight } from './DfdLight';
+import { DfdLight, useDfdRule } from './DfdLight';
 
 // Business function chart (§7.2, mockup 01). The tree arrives flat, ordered by hier_code; it is
 // built here from parent_bfc_node_id. Codes, levels and positions are derived by the server.
@@ -54,8 +54,8 @@ function filterRows(rows, text) {
   return rows.filter((r) => keep.has(r.bfc_node_id));
 }
 
-// D-68 / DR13-P2: every process that is not Ready (yellow and red — under the fixed rule both block the freeze),
-// with its ancestors so it is never shown without its chain.
+// D-68 / Q-13 (S13-2): every process that is not Ready — red (a rule element missing: blocks the freeze) and yellow (a
+// recommended element missing: passes it) — with its ancestors so it is never shown without its chain.
 function notReadyRows(rows) {
   const byId = new Map(rows.map((r) => [r.bfc_node_id, r]));
   const keep = new Set();
@@ -118,7 +118,7 @@ function NodeLabel({ node }) {
       <Box sx={{ flexGrow: 1 }} />
       {/* D-68: always visible on a process row (not hover-only like the BR chip); icon-only so the name keeps the width (10e) */}
       {node.is_process && node.dfd_light && <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
-        <DfdLight light={node.dfd_light} missing={node.dfd_missing} size="icon" /></Box>}
+        <DfdLight light={node.dfd_light} missing={node.dfd_missing} advised={node.dfd_advised ?? []} size="icon" /></Box>}
       {node.below > 0 && <Box component="span" sx={(th) => ({ fontFamily: MONO, fontSize: 12.5, flex: 'none',
         color: th.vars.palette.brand.muted })}>{node.below}</Box>}
     </Stack>
@@ -244,6 +244,7 @@ export default function ProcessesPage() {
   const rows = useMemo(() => treeQ.data ?? [], [treeQ.data]);
   const rowById = useMemo(() => new Map(rows.map((r) => [String(r.bfc_node_id), r])), [rows]);
   const dfdOn = bfcSet === 'AS_IS' ? isOn('AS_IS') : isOn('TO_BE_DFD');     // the chart's DFD component: the light applies
+  const { ruleFor } = useDfdRule(projectId);                                // D-70: which fields carry a DFD mark
   const lightFilter = dfdOn && notReadyOnly;
   const items = useMemo(() => {
     const below = countBelow(rows);
@@ -447,7 +448,7 @@ export default function ProcessesPage() {
             {selected ? (
               <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <NodePanel key={selected.bfc_node_id} projectId={projectId} nodeId={selected.bfc_node_id} wide={wide}
-                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [] }} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
+                  path={path} br={br} dfd={{ light: selected.dfd_light, missing: selected.dfd_missing ?? [], advised: selected.dfd_advised ?? [], rule: ruleFor(bfcSet) ?? [] }} hasChildren={hasChildren} showRetired={showRetired} guardRef={guardRef}
                   onNext={nextProcess ? () => selectNow(String(nextProcess.bfc_node_id)) : null}
                   onNotice={setNotice} onGone={() => selectNow(null)} />
               </Box>

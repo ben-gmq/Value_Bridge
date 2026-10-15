@@ -117,10 +117,13 @@ export function HowItRuns({ projectId, node, br, brEditable, editable, dfdOn, df
         : <RaciPanel projectId={projectId} queryKey={stepKey(nodeId, 'roles')} disabled={!editable}
             list={() => bfcApi.roles(nodeId)} link={(body) => bfcApi.linkRole(nodeId, body)}
             unlink={(id, rv) => bfcApi.unlinkRole(nodeId, id, rv)} linkId="bfc_node_org_role_id" single={SINGLE} /> },
-    // D-69: the DATA_OUT mark sits on the tile's "out" half; no data-in mark under the fixed rule
+    // D-69 / D-70: the marks follow the chart's rule — DATA_IN on the tile's "in" half, DATA_OUT on its "out" half,
+    // ORDER (joined to another process through its data) after them; an element off the rule has no mark (B7)
     (asIs || hasBr) && { key: 'data', label: t('processes.run.data'),
-      mark: dataEmpty ? <DfdMark dfd={dfd} element="DATA_OUT" /> : null,            // an empty tile shows no "out" half
-      value: <>{t('processes.run.dataValue', { in: data.inN, out: data.outN })} <DfdMark dfd={dfd} element="DATA_OUT" /></>,
+      mark: dataEmpty ? <>{['DATA_IN', 'DATA_OUT', 'ORDER'].map((e) => <DfdMark key={e} dfd={dfd} element={e} />)}</> : null,
+      value: <>{t('processes.run.dataIn', { n: data.inN })} <DfdMark dfd={dfd} element="DATA_IN" />
+        {' · '}{t('processes.run.dataOut', { n: data.outN })} <DfdMark dfd={dfd} element="DATA_OUT" />
+        {' '}<DfdMark dfd={dfd} element="ORDER" /></>,
       note: data.dfdOnly > 0 ? t('processes.run.dfdOnlyCount', { n: data.dfdOnly }) : null,
       empty: dataEmpty,
       editor: hasBr ? (
