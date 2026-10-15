@@ -17,7 +17,7 @@ from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolutio
                     Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
-from schemas.scope import (BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
+from schemas.scope import (ScopeSummaryOut, BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
                            DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
@@ -37,7 +37,7 @@ from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, Solu
                              SolutionListOut, SolutionOut, SolutionPatch)
 from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
 from services import components, external_entity as ext_service, lifecycle, raci, render, stamp, step_io, step_retire
-from services import effort as effort_service, interface as iface_service
+from services import effort as effort_service, interface as iface_service, scope_summary as summary_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
 
 router = GuardedRouter(tags=["scope"])
@@ -494,6 +494,11 @@ def maintain_rate_card(project_id: int, body: RateCardIn, user: AppUser = Depend
 def rate_function_requirement(id: int, body: ComplexityIn, fr: FunctionRequirement = Depends(_fr_effort_w.dep),
                               user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     return effort_service.rate_fr(db, _uid(user), fr, body.row_version, body.complexity_code)
+
+
+@router.get("/projects/{project_id}/scope-summary", response_model=ScopeSummaryOut, **_read.route)
+def scope_summary(project_id: int, db: Session = Depends(get_db)):
+    return summary_service.summary(db, project_id)
 
 
 @router.get("/projects/{project_id}/effort-summary", response_model=EffortSummaryOut, **_read.route)

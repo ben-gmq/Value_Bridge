@@ -63,6 +63,7 @@ export const keys = {
   interfaces: (p) => ['interfaces', String(p)],
   rateCard: (p) => ['rate-card', String(p)],
   effortSummary: (p) => ['effort-summary', String(p)],
+  scopeSummary: (p) => ['scope-summary', String(p)],
   frTrace: () => ['fr-trace'],                                                       // FR panels on solution and BR pages
   brFrs: (brId) => ['fr-trace', 'br', String(brId)],                               // under frTrace(): a BR's FR links (D-52)
   frList: (p, filter = 'all', retired = false) => ['frs', String(p), { retired, filter }],    // under frs(p): one register view

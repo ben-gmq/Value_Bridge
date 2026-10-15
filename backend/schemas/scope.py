@@ -393,3 +393,32 @@ class OrgRoleOut(Orm):
     headcount: int | None
     is_active: bool
     row_version: int
+
+
+class ScopeAreaOut(BaseModel):
+    hier_code: str
+    name: str
+    processes: int
+    brs: int
+    confirmed: int
+    with_fr: int
+    with_solution: int
+    frs: int
+    effort_days: float
+
+
+class ScopeTotalsOut(BaseModel):
+    processes: int
+    brs: int
+    confirmed: int
+    with_fr: int
+    with_solution: int
+    frs: int
+    frs_without_br: int
+    effort_days: float
+
+
+class ScopeSummaryOut(BaseModel):
+    """The project dashboard's scope figures per level-1 area (services/scope_summary.py)."""
+    areas: list[ScopeAreaOut]
+    totals: ScopeTotalsOut
