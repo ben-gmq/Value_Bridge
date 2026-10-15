@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField,
@@ -179,9 +179,14 @@ function EntityDialog({ projectId, g, draft, layout, onClose, onDone }) {
   const [direction, setDirection] = useState(draft.direction ?? 'O');
   const [error, setError] = useState('');
   const handOff = draft.action === 'HAND_OFF';
+  // A new entity is created once: a retry after a failed link reuses it, never mints a second DE- (sara M1).
+  const created = useRef(null);
   const m = useMutation({
     mutationFn: async () => {
-      const de = mode === 'new' ? await dataApi.create(projectId, { de_name: name.trim() }) : picked;
+      if (mode === 'new' && (!created.current || created.current.de_name !== name.trim())) {
+        created.current = await dataApi.create(projectId, { de_name: name.trim() });
+      }
+      const de = mode === 'new' ? created.current : picked;
       if (handOff) {
         const r = await dfdApi.handOff(draft.from, { to_bfc_node_id: draft.to, data_entity_id: de.data_entity_id });
         return { already: r.already, steps: [draft.from, draft.to], deId: de.data_entity_id };
