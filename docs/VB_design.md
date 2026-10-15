@@ -104,7 +104,7 @@ Grain of every other table, one sentence each:
 | `BR_ORG_ROLE` | (BR × org role × RACI code) — the RACI of a to-be process (D-64); behaviour copied as on `BFC_NODE_ORG_ROLE` |
 | `BR_REQUIREMENT_LINE` | numbered requirement statement within one BR (`BR-0043.3`), with a kind and an optional MoSCoW priority (D-59, S11-1) |
 | `BR_DATA_FIELD` | (BR × data attribute × CRUD) — which attributes the BR uses and how, licensed by the BR's entity-level CRUD row (D-60b, S11-1) |
-| `BR_SYSTEM_FLOW` | (BR × data entity × from-application × to-application × kind) — data the BR needs copied from one system to another, as a business statement; the kind is ongoing integration or one-off migration (D-61, S11-1, S11-2) |
+| `BR_SYSTEM_FLOW` | (BR × data entity × from-application × to-application) — data the BR needs copied from one system to another, as a business statement; whether it is delivered as an ongoing interface or a one-off data migration is the covering FR's type (D-61, S11-1, S11-5) |
 | `SOLUTION` | transformation answer within one project, in one of five categories |
 | `BR_SOLUTION` | (BR × solution) pairing — which answers address which requirement |
 | `FUNCTION_REQUIREMENT` | system function to be built within one project, of one FR type, carrying **zero or one** solution tag (D-27, D-28, D-52) |
@@ -289,7 +289,7 @@ the CRUD grid header (DATA_OUT, and DATA_IN when the rule holds it) (D-69).
 | `maintain_br_lines` | `BR_REQUIREMENT_LINE` | C/U/D | **D-59.** Numbered requirement lines under each BR — `BR-0043.3` — each with a kind (`BR_LINE_KIND`: Rule, Calculation, Validation, Output, Control; project-editable) and an optional MoSCoW priority (`BR_PRIORITY`; blank = not yet prioritised). **The line number is minted by the service at save** (max + 1 over all the BR's lines, retired included), kept for life and never reused or sent; display order (`seq_no`) is changed by dragging and is not a scope change. The BR's own priority is the highest of its live lines — derived, never stored. No component (a BR always exists). Owned by the BR: retires and restores with its step |
 | `update_br` (structured) | `BUSINESS_REQUIREMENT` | U | `br_statement` stays editable as the BR's one-line headline. `business_logic` and `output_expectation` are **read-only legacy**: copied once, word for word, into one Rule line and one Output line per BR (priority blank, audit `BR_LINES_BACKFILLED`), never cleared or dropped; the panel shows non-blank legacy text collapsed as "Earlier free text" |
 | `tick_br_attributes` | `BR_DATA_FIELD` | C/D | **D-60(b).** Which attributes the BR uses and how: one row per (BR × attribute × C / R / U) — **Delete stays entity-level**. **Licensed by the BR's entity-level CRUD row** (same BR, entity and CRUD, live), held by a composite FK, so an attribute tick can never outlive its entity tick. The CRUD grid saves entity and attribute ticks in **one request**; unticking an entity's action unticks its attributes on screen before Save. Unlinking an entity row that still has live attribute ticks any other way → 409 naming the attributes. Optional always: under `FULL` an entity row with no attribute ticked is information (`br_entity_without_attributes`), never a warning; under `KEYS_ONLY` nothing is shown. Retiring a data field a live BR uses → 409 naming the BRs. Relinking restores the old row (S1-7) |
-| `state_br_system_flow` | `BR_SYSTEM_FLOW` | C/D | **D-61.** Component APPLICATION. "What data entity we copy from which system to which system": (BR × data entity × from-application × to-application), with a note; both ends from the Applications master list (D-56), never free text, and different. A flow of an entity the BR does not otherwise use is allowed, as information (`flow_entity_not_used_by_br`). Retiring an application or entity a live flow uses → 409 naming the BRs. Each flow is `INTEGRATION` (ongoing) or `MIGRATION` (one-off) (S11-2); both ends come from the one master list of systems, with no system of record per entity (S11-3) |
+| `state_br_system_flow` | `BR_SYSTEM_FLOW` | C/D | **D-61.** Component APPLICATION. "What data entity we copy from which system to which system": (BR × data entity × from-application × to-application), with a note; both ends from the Applications master list (D-56), never free text, and different. A flow of an entity the BR does not otherwise use is allowed, as information (`flow_entity_not_used_by_br`). Retiring an application or entity a live flow uses → 409 naming the BRs. Both ends come from the one master list of systems, with no system of record per entity (S11-3); an ongoing interface and a one-off data migration are both FR types that cover a flow (S11-5) |
 | `flow_coverage` | `BR_SYSTEM_FLOW`, `BR_FUNCTION_REQUIREMENT`, `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY` | R | **Derived, never stored:** a flow is covered when the same BR links a live interface-behaviour FR with the same source and target that carries the entity. The panel shows "covered by FR-0031" or "no interface yet"; coverage reports list uncovered flows as information, as a warning when FUNCTION_REQUIREMENT is on, never a freeze block |
 | `create_interface_fr_from_flows` | `FUNCTION_REQUIREMENT`, `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY`, `BR_FUNCTION_REQUIREMENT` | C | Components FUNCTION_REQUIREMENT and APPLICATION. From one or more of a BR's flows **with the same source and target**: one transaction creates the interface FR, its interface detail, one carried entity per flow entity and the BR ↔ FR link; numbers minted at save |
 
@@ -1942,13 +1942,12 @@ row needs a live entity row with the same CRUD; `(data_field_id, data_entity_id)
 attribute belongs to that entity. `usage_note text NULL`. Step-owned through the BR, in a tier ahead of
 `BR_DATA_ENTITY`, so it retires before and restores after its licence.
 
-**BR_SYSTEM_FLOW** *(D-61, S11-1, S11-2)* — one row per (BR, data entity, from-application, to-application, kind). PK
-`br_system_flow_id`; `flow_kind_code varchar(12) NOT NULL DEFAULT 'INTEGRATION'`, `ck_brsf_kind CHECK (flow_kind_code IN
-('INTEGRATION','MIGRATION'))` (CHECK-listed: coverage branches on it); UK on those five, full; composite FKs to `BUSINESS_REQUIREMENT`, `DATA_ENTITY` and twice to
+**BR_SYSTEM_FLOW** *(D-61, S11-1, S11-5)* — one row per (BR, data entity, from-application, to-application). PK
+`br_system_flow_id`; UK on those four, full; composite FKs to `BUSINESS_REQUIREMENT`, `DATA_ENTITY` and twice to
 `APPLICATION`; `CHECK (source_application_id <> target_application_id)`; `flow_note text NULL`. To-be only,
 as its BR. Gated by APPLICATION. **No pointer to an FR**: coverage by an interface FR is derived (same BR, same
-source and target, the entity carried), whatever the FR's behaviour — a migration flow is often covered by a batch
-FR (S11-4). Every flow starts as `INTEGRATION`. A data entity names no master system (S11-3).
+source and target, the entity carried). An interface-behaviour FR is either type `INTERFACE` (ongoing) or `MIGRATION`
+"Data migration" (one-off, S11-5); both cover a flow the same way. A data entity names no master system (S11-3).
 
 #### Function Requirement (area 4)
 
@@ -7009,7 +7008,7 @@ exist because the model must be built in dependency order. **The wave line is Be
 | 1 | 13b | The DFD rule per chart: light, marks, warnings and the freeze driven by it; chart-order fallback (D-70, S13-1, S13-2) | built |
 | 1 | 13c | Process volume and FTE; hash spec 3 (D-67, S13-1) | built |
 | 1 | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | built |
-| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows with a kind; hash spec 4 (D-59, D-60b, D-61, S11-1…S11-4) | next |
+| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows, the Data migration FR type; hash spec 4 (D-59, D-60b, D-61, S11-1, S11-3, S11-5) | next |
 | 1 | 12 | The Scope dashboard's remaining KPIs S7–S11 and the Project-management card (D-58, S12-1, `docs/slice12_kpis.md`). Each tile appears when its wave lands | after 11; S1–S6 and M1 built with the 2026-10-16 screen work |
 | **Next** | — | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) and the control rules and control panel (D-19): right after slice 12, opening the next wave (SC-9) | — |
 | **1e** | — | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
