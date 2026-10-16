@@ -33,10 +33,15 @@ Nothing here is in the spec yet.
   be rated. Which numbers? Proposal: copy each project's own cell of the existing type with the same behaviour; behaviour
   OTHER and a new complexity have no source — FTC to give a default, or leave those cells blank (rating returns 422
   until filled). It also shows as added rate rows in each project's next baseline comparison.
-- **[Q-36] May PROJECT_STATUS be overridden per project?** (raised 2026-10-16, wave 1g round 2.) It is a plain code
-  column on `project`; if yes it joins the re-point, if no it is company-only like PROJECT_TEMPLATE.
-- **[Q-34] A project may hide a company code, and Japanese / Thai labels wait for wave 4** (Ren's working assumptions
-  A2, A3 for 1g) — Ben to confirm.
+- **[Q-37] Project admins and program members — reverses D-40 in part** (raised 2026-10-16 from Ben's Q-32 answer:
+  "If the user is assigned to a program, then the project is editable by the admin of the project", and "the program
+  admin will also add and remove program members, for sure … even if it's risky work, I still have to do it").
+  Proposed: a project member may be Admin; a new program member list (Admin / Editor / Viewer) gives that level on every
+  project of the program, restricted ones included; effective level is the higher of the two, capped by user kind;
+  restriction, components, depth, FTE basis, DFD rule, create and move stay FTC-admin only behind a new PLATFORM level.
+  This reverses D-40 "programs grant nothing" and "only platform admins reach ADMIN". Decision paper
+  `docs/access_v2_decision.md` (11 decisions, design-auditor rounds 1–2), model `docs/access_v2_model.md`.
+  Q-32 is answered by it: a project's code lists go to the project admin.
 
 ---
 
@@ -487,6 +492,13 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | S10c-2 | **10c Q-1…Q-3**: the performer can be recorded whatever the DFD setting (performer gated by the function chart; triggers stay with the DFD); every live project switches to assigned-only after its team is checked; Lilly keeps the inventory (`slice10c_spec.md` §12) and an admin confirms each switch on its Access screen | slice10c_spec §11 |
 | S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, frozen from the next hash spec — spec 4, since slice 13c takes spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
 | S-T | "Trailer" in Ben's 2026-10-12 note means **trigger** | D-56…D-62 note |
+
+### Ben's rulings, 2026-10-16 — wave 1g code lists
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| G-1 | **[Q-34] A project may hide a company code it does not use, and Japanese / Thai labels wait for wave 4.** Ben confirmed Ren's working assumptions A2 and A3. The design text lands with the 1g build | slice1g_spec §11 A2, A3; D-44 |
+| G-2 | **[Q-36] Project statuses stay company-wide.** PROJECT_STATUS is never overridden or hidden per project, like PROJECT_TEMPLATE | slice1g_spec §15 |
 
 ### Ben's rulings, 2026-10-16 — the two slice 11 questions left open by S11-1
 

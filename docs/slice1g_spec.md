@@ -273,3 +273,19 @@ code row (no 500).
 **Cross-check run:** every grid entity is in §5/§6 (`code_master`, `project_code_visibility`, `effort_rate` and
 `function_requirement` are re-pointed only); every grid function has pseudocode or a reused rule in §7; criteria 1–12
 trace to §7.1–7.7; the one new table carries audit columns.
+
+## 16. Status after Ben's answers (2026-10-16)
+
+- **A1 / Q-32: answered by the access paper, which still needs Ben's approval.** A project's lists go to the
+  **project admin** (`project_ctx(ADMIN)`). Project members and program admins can reach that level as set out in
+  `docs/access_v2_decision.md` (history Q-37). Until that is built, ADMIN means platform admins only, so **1g is built
+  after access slice A**, never before it.
+- **A2, A3 / Q-34: confirmed** (history G-1). A project may hide a company code; Japanese / Thai labels wait for wave 4.
+- **Q-36: confirmed** (history G-2). PROJECT_STATUS is company-wide. `project.status_code_id` joins R12's exclusion list
+  ("company-only category — never overridden").
+- **ASSUMPTION Q-33 (yes), waiting for Ben to confirm in this spec:** a relabel moves the project's existing rows to
+  the new label (R1, with R10–R13 and N3).
+- **ASSUMPTION Q-35 (yes), waiting for Ben to confirm in this spec:** a new company FR type or complexity copies each
+  project's own cell for the existing type with the same behaviour, marked unconfirmed. Behaviour OTHER and a new
+  complexity have no source, so their cells stay blank and rating returns 422 until they are filled.
+- **Not built** until Ben approves the access paper and this spec.
