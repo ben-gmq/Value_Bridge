@@ -13,7 +13,7 @@ from models.effort import EffortRate  # noqa: F401
 from models.import_staging import ImportBatch, ImportRow  # noqa: F401
 from models.function_requirement import (BrFunctionRequirement, FrInterface, FrInterfaceDataEntity,  # noqa: F401
                                          FunctionRequirement)
-from models.identity import AppUser, AuditEvent, ProjectMember, UserAccessGrant  # noqa: F401
+from models.identity import AppUser, AuditEvent, ProgramMember, ProjectMember, UserAccessGrant  # noqa: F401
 from models.requirement import (BrDataEntity, BrDataField, BrOrgRole, BrRequirementLine,  # noqa: F401
                                 BrSystemFlow, BusinessRequirement)
 from models.shared import CodeMaster, ProjectCodeVisibility, ProjectSequence  # noqa: F401
