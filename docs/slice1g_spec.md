@@ -1,6 +1,6 @@
 # Wave 1g — code-list maintenance (spec, draft for Ren / Ben, 2026-10-16)
 
-**Status:** DRAFT — not approved. Working assumptions from Ren are tagged **ASSUMPTION** until Ben confirms them.
+**Status:** APPROVED by Ben 2026-10-16 (history G-1…G-5, D-71). One working assumption of mine remains tagged: A5.
 **Source of truth:** `docs/VB_design.md` §4 (`maintain_fr_types`), §5.3 / §5.4.13 (CODE_MASTER, behaviour immutable once
 referenced, Q6, R2-D8), §7.12 (`code_master.maintain`), §8 (the categories). This spec adds the screen, the routes and
 one small table; it does not change any rule those sections already state.
@@ -13,7 +13,7 @@ already uses a code or a code the application itself relies on.
 
 ## 1a. Interface
 - **Input:** a platform admin's edits to the company library; a project admin's edits to one project's lists
-  (ASSUMPTION A1). Typed in the "Code lists" screen; no file import.
+  (A1, confirmed G-5). Typed in the "Code lists" screen; no file import.
 - **Output:** the lists every picker in the app shows, resolved two-tier (project over company) by
   `code_master.resolve`; existing records keep displaying the code they hold.
 - **Validation:** refused before any write — system categories (fully read-only); pinned codes (§7.4: relabel only);
@@ -79,9 +79,8 @@ UPDATE, no DELETE. Migration: one, additive; **downgrade refuses while the table
 
 ### 7.1 Who may do what
 - Company library: platform admin only (`platform_admin` guard).
-- A project's lists: **project admin** — ASSUMPTION A1. In VB the ADMIN level on a project is reached only by platform
-  admins (D-40; project members are EDIT or VIEW), so A1 means **platform admins only** today. If Ben meant "project
-  editors", the guard becomes `project_ctx(EDIT)` and nothing else changes.
+- A project's lists: **project admin** (`project_ctx(ADMIN)`, G-5). Under D-71 that is a project member at Admin,
+  an admin of the project's program, or a platform admin.
 - Reading the lists: anyone who can see the project (`project_ctx(VIEW)`), as today.
 
 ### 7.2 System categories
@@ -97,7 +96,7 @@ maintain_fr_types(project, code, label, behaviour):            # D-27, §7.12
         UPDATE function_requirement SET fr_type_code_id = override, fr_type_behaviour = override.behaviour WHERE …
     behaviour change on a code any FR or rate cell uses → 409 "in use, so its behaviour is fixed — add a new type"
     new project-only type → needs a behaviour; its rate cells are added at the company default for that behaviour
-        (ASSUMPTION A4: the cells copy the INTERFACE/FORM/… company row of the same behaviour, marked unconfirmed)
+        (A4, confirmed G-4: the cells copy the INTERFACE/FORM/… company row of the same behaviour, marked unconfirmed)
 ```
 RACI types follow the same behaviour rule (Q7); no rate cells.
 
@@ -109,7 +108,7 @@ them); plus every code of a system category. Pinned → relabel allowed (company
 (409 naming why). A test greps the services for literal code lookups and fails if one is missing from `PINNED`, so a
 new lookup cannot silently become hideable.
 
-### 7.5 Hide / unhide (ASSUMPTION A2)
+### 7.5 Hide / unhide (A2, confirmed G-1)
 ```
 hide(project, code_id):    company row? else 422 "a project's own code is retired, not hidden"
                            pinned? 409 · system category? 409
@@ -128,7 +127,7 @@ No change: shadows store `<code>_code` and `<code>_label` as frozen text, so a l
 baseline or its digest.
 
 ## 8. `code_master` categories needed
-None new. Japanese / Thai labels wait for wave 4 (ASSUMPTION A3).
+None new. Japanese / Thai labels wait for wave 4 (A3, confirmed G-1).
 
 ## 9. API surface (all under `/api/v1`)
 
@@ -162,12 +161,12 @@ No body ever carries `created_by`, `row_version` increments or a `code_id` to cr
 12. The pinned-code test fails if a service looks up a code by value that is not in `PINNED`.
 
 ## 11. Assumptions
-- **ASSUMPTION A1** (Ren, pending Ben): only the project's admin role changes a project's lists — today that is
-  platform admins only (D-40). *Changes the guard, not the data model.*
-- **ASSUMPTION A2** (Ren, pending Ben): a project may hide a company code it doesn't use. *Changes the data model* — the
+- **A1 — confirmed (G-5):** only the project admin changes a project's lists (D-71). *Changes the guard, not the data
+  model.*
+- **A2 — confirmed (G-1):** a project may hide a company code it doesn't use. *Changes the data model* — the
   `project_code_visibility` table exists only for this.
-- **ASSUMPTION A3** (Ren, pending Ben): Japanese / Thai labels wait for wave 4 (D-44).
-- **ASSUMPTION A4** (mine): a new project-only FR type gets rate cells copied from the company type of the same
+- **A3 — confirmed (G-1):** Japanese / Thai labels wait for wave 4 (D-44).
+- **A4 — confirmed (G-4):** a new project-only FR type gets rate cells copied from the company type of the same
   behaviour, marked unconfirmed — otherwise rating its FRs returns 422 until someone fills four cells by hand.
 - **ASSUMPTION A5** (mine): hiding refuses a *new* pick of a hidden code only through the picker; the API still accepts
   it from a direct call. Refusing it server-side needs the row's previous value on every save — a decision for Ben if
@@ -276,16 +275,15 @@ trace to §7.1–7.7; the one new table carries audit columns.
 
 ## 16. Status after Ben's answers (2026-10-16)
 
-- **A1 / Q-32: answered by the access paper, which still needs Ben's approval.** A project's lists go to the
-  **project admin** (`project_ctx(ADMIN)`). Project members and program admins can reach that level as set out in
-  `docs/access_v2_decision.md` (history Q-37). Until that is built, ADMIN means platform admins only, so **1g is built
-  after access slice A**, never before it.
+- **A1 / Q-32: confirmed** (history G-5, D-71). A project's lists go to the **project admin** (`project_ctx(ADMIN)`),
+  which project members and program admins reach under D-71. Until access slice A is built, ADMIN means platform admins
+  only, so **1g is built after access slice A**, never before it.
 - **A2, A3 / Q-34: confirmed** (history G-1). A project may hide a company code; Japanese / Thai labels wait for wave 4.
 - **Q-36: confirmed** (history G-2). PROJECT_STATUS is company-wide. `project.status_code_id` joins R12's exclusion list
   ("company-only category — never overridden").
-- **ASSUMPTION Q-33 (yes), waiting for Ben to confirm in this spec:** a relabel moves the project's existing rows to
-  the new label (R1, with R10–R13 and N3).
-- **ASSUMPTION Q-35 (yes), waiting for Ben to confirm in this spec:** a new company FR type or complexity copies each
-  project's own cell for the existing type with the same behaviour, marked unconfirmed. Behaviour OTHER and a new
-  complexity have no source, so their cells stay blank and rating returns 422 until they are filled.
-- **Not built** until Ben approves the access paper and this spec.
+- **Q-33: confirmed** (history G-3). A relabel moves the project's existing rows to the new label (R1, with R10–R13
+  and N3).
+- **Q-35: confirmed** (history G-4). A new company FR type or complexity copies each project's own cell for the
+  existing type with the same behaviour, marked unconfirmed. Behaviour OTHER and a new complexity have no source, so
+  their cells stay blank and rating returns 422 until they are filled.
+- **Approved by Ben 2026-10-16** ("yes to all four"); built after access slice A.

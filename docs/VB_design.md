@@ -84,7 +84,7 @@ Grain of every other table, one sentence each:
 | Entity | One row per… |
 |---|---|
 | `CLIENT` | client organization FTC has engaged with |
-| `PROGRAM` | named group of related projects for one client (D-32) — a **roll-up grouping, not a data layer and not an access scope** (D-40): it holds no scope of its own and is never baselined |
+| `PROGRAM` | named group of related projects for one client (D-32) — a **roll-up grouping, not a data layer** (D-32): it holds no scope of its own and is never baselined. Its members reach every live project in it at their program level (D-71) |
 | `PROJECT` | transformation project — the scoping key on every business table. Nothing is shared between projects, even within one program (D-32). Carries `is_restricted` (OR-6, D-62), `data_model_depth` (D-39) and the FTE basis — working days per year and hours per working day, 240 × 8 by default (D-67, S13-1) |
 | `PROJECT_DFD_RULE` | (project × chart × required DFD element) — what makes a process's DFD complete in that chart; a live row means required, a retired row not (D-70, S13-1) |
 | `PROJECT_COMPONENT` | (project × component) switched on for that project — a live row means on, a retired row off (D-37) |
@@ -138,7 +138,8 @@ Grain of every other table, one sentence each:
 | `baseline_*` | one live row as it stood at one baseline freeze, for every table in `FREEZE_SET` whose component gate was open (D-37, S8-1) |
 | `BASELINE_EFFORT_RATE` | one rate-card cell (FR type × complexity → days) as it stood at one freeze — the rate card a baseline was priced on (R2-D7) |
 | `APP_USER` | person who can log into Value Bridge — a platform admin, or staff of kind USER or VIEWER (D-40) |
-| `PROJECT_MEMBER` | one membership period of one user on one project, at EDIT or VIEW. It decides access only while the project is restricted (OR-6, D-62) |
+| `PROJECT_MEMBER` | one membership period of one user on one project, at ADMIN, EDIT or VIEW. An EDIT or VIEW membership decides access only while the project is restricted (OR-6, D-62); an ADMIN membership counts on every project (D-71) |
+| `PROGRAM_MEMBER` | one membership period of one user on one program, at ADMIN, EDIT or VIEW. It gives that level on every live project of the program, restricted ones included (D-71) |
 | `USER_ACCESS_GRANT` | **retired** (D-40): SELECT-only history of the former one-grant model, no new rows |
 | `IMPORT_BATCH` | one uploaded file — an `.xlsx` sheet (incl. an MS Project WBS export) or a `vb-process-flow/2.0` JSON — awaiting validation, review and commit |
 | `IMPORT_ROW` | one staged sheet row or one staged JSON object (step, I/O, performer, trigger, external party, WBS line …), with its verdict, errors and warnings. Purged 90 days after upload (Q14) |
@@ -171,7 +172,7 @@ the org chart, external entities, stakeholders.
 | `describe_process` | `BFC_NODE` | U | Process nodes only. Store the data-processing description, written system-agnostic. Reject on a non-process node. A box's own description (`purpose_desc`) is shown as its **Purpose** on L1–L4 boxes; on a process, Purpose and Data processing sit together in the panel's collapsed Description section (S-P) |
 | `set_process_volume` | `BFC_NODE` | U | **D-67, S13-1.** EDIT, process nodes only (422 otherwise), either chart (an as-is node needs AS_IS). All optional: how often it runs (`runs_per_period` + period DAY / WEEK / MONTH / QUARTER / YEAR, both or neither), transactions per run (`transactions_per_run`, with an optional unit from `TRANSACTION_UNIT`, sent as a code), and handling time per transaction in **seconds** (`seconds_per_transaction`, to the millisecond, so an automated 0.3 s step and a manual 6-minute one both fit; the screen accepts minutes or seconds). Each figure ≥ 0 and under a service cap (1,000,000 runs per period, 100,000,000 transactions per run, 86,400 s); more decimals than stored → 422. `row_version` checked. **A body carrying hours or FTE → 422** (VB law 6). Audit `PROCESS_VOLUME_SET {from, to}`. No component of its own (Q-10) |
 | `derive_volume` | `BFC_NODE`, `PROJECT` | R | **D-67.** On every read of a process, never stored: `annual_hours = runs × periods_per_year × transactions × seconds / 3600`, `fte = annual_hours / (working_days_per_year × hours_per_working_day)`. DAY counts the project's working days (240 by default), WEEK 52, MONTH 12, QUARTER 4, YEAR 1. Any input missing → both `null` with the missing fields named, never guessed |
-| `set_fte_basis` | `PROJECT`, `AUDIT_EVENT` | U | **D-67, Q-7.** Platform admin (`project_ctx("ADMIN")`). Working days per year (1–366, default 240) and hours per working day (0.25–24, default 8.00); 240 × 8 = 1,920 hours per FTE. `row_version` checked; audit `PROJECT_FTE_BASIS_CHANGED {from, to}`. No process row changes |
+| `set_fte_basis` | `PROJECT`, `AUDIT_EVENT` | U | **D-67, Q-7.** Platform admin (`project_ctx("PLATFORM")`, D-71). Working days per year (1–366, default 240) and hours per working day (0.25–24, default 8.00); 240 × 8 = 1,920 hours per FTE. `row_version` checked; audit `PROJECT_FTE_BASIS_CHANGED {from, to}`. No process row changes |
 | `volume_summary` | `BFC_NODE` | R | **D-67, Q-9, Q-28.** VIEW. Per chart, annual hours and FTE per L1 and L2 area, as-is beside to-be — the time saved per area. **Areas match when both chart code and normalised name agree**; anything else is listed unmatched with its reason (`CODE_SAME_NAME_DIFFERS`, `NAME_ELSEWHERE` — "probably reordered", `ONLY_AS_IS`, `ONLY_TO_BE`) and never summed against the other side. Processes with incomplete volume are counted and listed per area, never guessed |
 | `link_bfc_data_entity` | `BFC_NODE_DATA_ENTITY` | C/D | Process nodes only. Attach 0..N input and 0..N output data entities — the node states *that* data flows; the BR states *what is done to it* (§5.4.2). **The one record of a step's I/O** — the DFD, the flow file and the BR all read it (D-24). Written only through `step_io.ensure_step_io`. **Delete refused (409) while a BR CRUD or an external flow depends on the row, naming each** (R2-D13) |
 | `link_bfc_external_flow` | `BFC_NODE_EXTERNAL_FLOW` | C/D | **D-24a.** Component: the chart's DFD (TO_BE_DFD or AS_IS). A process step exchanges data with an external party: (step × external entity × direction × data entity, optional). **When a data entity is named, the matching step I/O is ensured in the same transaction through the same `ensure_step_io` helper as BR CRUD** (R2-D13) — an inbound flow needs a step input, an outbound one a step output |
@@ -236,7 +237,7 @@ list, so the marks change when the rule changes.
 | `dfd_readiness` | `BFC_NODE`, step links, `PROJECT_DFD_RULE` | R | **D-68.** One owner (`process_flow.readiness`), the same predicates as `process_completeness`, so the light and the freeze never disagree. Per live process of a chart whose DFD is on: each rule element met or missing → the light (red / yellow / green, above) and `dfd_missing` (element codes). Shown on every process row of the function chart, in the process panel header and as counts on the DFD index; a "Not ready only" filter lists every process that is not Ready (red and yellow). A chart with its DFD off has no light. The marks (D-69) read only these codes, never whether a tile looks empty. Every writer of step I/O, external flows, trigger links, BR CRUD, step retire / restore, make-process and component toggles refreshes it |
 | `get_dfd_rule` | `PROJECT_DFD_RULE` | R | **D-70.** VIEW. Per chart: the required elements, whether the rule applies (DFD on), which elements are locked and recommended; the catalogue with plain descriptions |
 | `preview_dfd_rule` | `PROJECT_DFD_RULE`, `BFC_NODE` + step links | R | **D-70.** Platform admin. For a proposed set on one chart: how many processes would be red / yellow / green and how many would **block the next freeze**, with a digest. No write |
-| `set_dfd_rule` | `PROJECT_DFD_RULE`, `PROJECT`, `AUDIT_EVENT` | C/U | **D-70, Q-5.** Platform admin (`project_ctx("ADMIN")`), as the data model depth. Body: chart, element codes, the project's `row_version`, the preview digest (409 if either is stale). `STARTED` cannot be dropped and `ORDER` needs `DATA_IN` and `DATA_OUT` (422). Dropped elements retire their rows; re-added ones restore them (S1-7). Audit `PROJECT_DFD_RULE_CHANGED {bfc_set_code, from, to, would_block}`. No component (a project setting) |
+| `set_dfd_rule` | `PROJECT_DFD_RULE`, `PROJECT`, `AUDIT_EVENT` | C/U | **D-70, Q-5.** Platform admin (`project_ctx("PLATFORM")`, D-71), as the data model depth. Body: chart, element codes, the project's `row_version`, the preview digest (409 if either is stale). `STARTED` cannot be dropped and `ORDER` needs `DATA_IN` and `DATA_OUT` (422). Dropped elements retire their rows; re-added ones restore them (S1-7). Audit `PROJECT_DFD_RULE_CHANGED {bfc_set_code, from, to, would_block}`. No component (a project setting) |
 | `draw_dfd_connection` | `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER` | C | **D-65.** EDIT, on a live diagram of a chart whose DFD is on (the canvas exists only there). Each line keeps its panel route's gate: a step input/output the function chart's (BR CRUD writes the same row), an external flow and a trigger the chart's DFD. Store → process or process → store writes a step input or output through **`step_io.ensure_step_io`**; party ↔ process uses the external-flow writer (asking for a data entity or a flow label); trigger → process uses `trigger.link`. Process → empty canvas opens a picker: an existing data entity, or a **new** one created there with its `DE-` number at save (Q-12). An existing row → "Already on the diagram", no write. Invalid pairs (store → store, party → store, a trigger to anything but a process) are refused in the browser and again by the server. **Drawing never writes BR CRUD** (Q-11): the CRUD grid shows the I/O as "On the diagram, not in the requirement yet — pick C, R, U or D" |
 | `draw_hand_off` | `BFC_NODE_DATA_ENTITY` ×2 | C | **D-65.** Process A → process B: the editor picks the data entity A hands to B; **one transaction** writes A's output and B's input through `ensure_step_io`, and the derived order arrow appears by itself. Both live processes of the same project (404 if not visible) and **the same chart** (422 "Diagrams never cross charts"). The only new write route of D-65 |
 | `remove_dfd_flow` | the three link tables | D (soft) | **D-65.** Only STORE, EXTERNAL and TRIGGER flows are removable, each backed by exactly one row, through the existing unlink route. **Derived order arrows cannot be selected for removal**; they change only when the data behind them changes. A step I/O a BR CRUD or an external flow depends on stays (409 naming them; the canvas links to the requirement). No keyboard delete |
@@ -303,7 +304,7 @@ history §1.
 | `create_solution` | `SOLUTION` | C | Component SOLUTION. Next per-project sequence → `SOL-0001`; name unique among live solutions. `category_code` from the system category `SOLUTION_CATEGORY` (projects cannot rename or retire it, S5-4): **ORG_AND_RULES / PEOPLE / PROCESS / DATA / TECHNOLOGY**. Starts PROPOSED |
 | `create_function_requirement` | `FUNCTION_REQUIREMENT` | C | Component FUNCTION_REQUIREMENT. Next per-project sequence → `FR-0001`. `fr_type_code` from **`FR_TYPE`** (FORM / INTERFACE / REPORT / BATCH seeded; the project may rename, add or retire types — D-27). Names are not unique; a live duplicate under the same solution warns (S6a-2). First status SPECIFIED. **The solution tag is optional (D-28, D-52).** Warnings, never 422: `no_br` (no live BR link), `non_technology_solution`, `rejected_solution`, `duplicate_name` |
 | `set_fr_solution` | `FUNCTION_REQUIREMENT` | U | Set or clear the FR's one solution tag from the FR register. **The tag must answer at least one of the BRs the FR serves** (a live `BR_SOLUTION` of one of them); an FR with no BR link may carry any live solution of its project, with `no_br`. The tag decides where the FR's effort counts, once. Later drift (an unlink, a step retire, a restore) is never refused and never auto-cleared: the response names the affected FRs and `fr_solution_outside_its_brs` reports them (slice10b §2) |
-| `maintain_fr_types` | `CODE_MASTER` (`FR_TYPE`) | C/U | Per-project types, at EDIT. Each carries a **behaviour** ∈ FORM / INTERFACE / REPORT / BATCH / OTHER, which decides which detail panel the FR form shows and whether the FR appears on the interface list. A new type needs rate-card rows before its FRs can be priced (D-13). **When a project overrides a global type, the project's `EFFORT_RATE` rows and FRs are re-pointed to the override code in the same transaction**, so the rate-card lookup never silently misses (A-16). **A global type's behaviour is immutable once any FR or rate row references it → 409** (R2-D8, Q6): add a new type instead |
+| `maintain_fr_types` | `CODE_MASTER` (`FR_TYPE`) | C/U | Per-project types, at ADMIN — the project admin (G-5). Each carries a **behaviour** ∈ FORM / INTERFACE / REPORT / BATCH / OTHER, which decides which detail panel the FR form shows and whether the FR appears on the interface list. A new type needs rate-card rows before its FRs can be priced (D-13). **When a project overrides a global type, the project's `EFFORT_RATE` rows and FRs are re-pointed to the override code in the same transaction**, so the rate-card lookup never silently misses (A-16). **A global type's behaviour is immutable once any FR or rate row references it → 409** (R2-D8, Q6): add a new type instead |
 | `describe_interface` | `FR_INTERFACE`, `FR_INTERFACE_DATA_ENTITY` | C/U/D | Components FUNCTION_REQUIREMENT and APPLICATION. FRs whose type behaviour is INTERFACE only. Source application, target application (different, same project), pattern (PUSH / PULL / BIDIRECTIONAL), method (API / FILE / DB / MESSAGE / MANUAL), frequency, volume note, and the data entities carried, each with a note. One save covers the carried set and bumps the detail's `row_version`. Retiring an FR with live interface detail is refused until the detail is removed (S6b-3) |
 | `interface_list` | `v_interface_list` | R | **D-27. Generated, never typed:** one row per interface-behaviour FR, Data migration FRs included and told apart by their FR type (S11-5, S11-7) — FR number, name, FR type, source → target, pattern, method, frequency, data entities and their notes, solution, BR(s) (through `BR_FUNCTION_REQUIREMENT`), status, effort. **Complete = source, target, method and at least one carried entity**; pattern and frequency optional (S6b2-1). Incomplete interfaces are listed as incomplete, not hidden. The pair filter matches direction as stored, BIDIRECTIONAL either way, and counts the interfaces it cannot match (S6b2-2, S6b2-3). Exportable to `.xlsx` |
 | `link_fr_to_bfc_node` | `FR_BFC_NODE` | — | **Retired, never built** (SC-3). An FR reaches the chart through the BRs it serves (D-52); an FR for a whole area is linked to the BRs of that area's processes |
@@ -364,32 +365,56 @@ approval are at EDIT. Baselines are always on: no component gates the routes.
 
 ### 4.7 Auth, users, projects and visibility (scope area 7)
 
-**Who sees what (D-40, OR-6, D-62).** A **platform admin** sees every project and the admin functions.
-Staff are of kind **USER** (read and edit) or **VIEWER** (read only). Staff see every live project
-**except a restricted one they are not a live member of**; on a restricted project their level is the
-lower of their kind's cap and their membership level. **New projects are created restricted** (D-62).
+**Who sees what (D-40, D-71, OR-6, D-62).** A **platform admin** (FTC admin) sees every project and
+program and the admin functions. Staff are of kind **USER** (read and edit) or **VIEWER** (read only).
+Staff see every live project **except a restricted one they reach neither through a live project
+membership nor through a live membership of its program**. A person's level on a project is the
+**higher** of their staff default (open projects only: USER → EDIT, VIEWER → VIEW), their project
+membership and their program membership, **capped by user kind** — a VIEWER never edits or administers
+(D-71). A program member holds their program level on every live project of the program, restricted ones
+included; a program admin is admin of every project in it. **New projects are created restricted** (D-62);
+one created in a program opens at once to that program's members.
 A project the caller cannot see is **404, never 403**; the order is 404 → 403 → 409 (component).
-Levels rank `VIEW` < `EDIT` < `ADMIN`; only platform admins reach ADMIN.
+Levels rank `VIEW` < `EDIT` < `ADMIN` < `PLATFORM`. `ADMIN` is held through a project or program
+membership; `PLATFORM` is never a membership value and is held only by platform admins.
+
+| Who | Level | May do |
+|---|---|---|
+| Platform admin | `PLATFORM` everywhere | everything, on every project and program |
+| Program admin | `ADMIN` on the program and on every project in it | adds, changes and removes program members, and everything a project admin does on each project of the program |
+| Program editor / viewer | `EDIT` / `VIEW` on every project in the program | edit / read those projects, restricted ones included |
+| Project admin | `ADMIN` on the project | adds, changes and removes that project's members; maintains its code lists (G-5) |
+| Project editor / viewer | `EDIT` / `VIEW` | edit / read that project |
+| Staff, not a member | `EDIT` (USER) / `VIEW` (VIEWER) | edit / read open projects only |
+
+An admin grants up to `ADMIN`, at their own scope only: a project admin never touches a program's
+member list (D-71). A project admin may demote or remove another project admin, whoever appointed them;
+a project role belongs to the project and outlives the program admin who granted it (D-73).
+**Platform admin only (D-71):** restricted on/off, components, data-model depth, FTE basis, the DFD rule,
+creating projects and programs, moving a project between programs, users, clients and global codes.
+Project and program admins add people to restricted projects without platform approval; every add is
+audited and appears in the access review at each freeze (D-72).
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `login` | `APP_USER` | R | Verify password hash, check `is_active` → JWT. Update `last_login_at` |
 | `login` | `AUDIT_EVENT` | C | Log success/failure with timestamp and outcome |
 | `create_user` | `APP_USER` | C | Platform admin only. `user_kind` (USER / VIEWER) required in the body. Store hash in `password_hash`; the plaintext is never persisted or logged. An address outside FTC's domains is refused until client logins exist (D-11, D-43) |
-| `change_user_kind` · `set_platform_admin` | `APP_USER`, `AUDIT_EVENT` | U | Platform admin only. Audited (`USER_KIND_CHANGED`). Removing the admin flag requires the kind the user falls back to (DR7-S6) |
-| `create_project` | `PROJECT`, `PROJECT_COMPONENT`, `PROJECT_DFD_RULE` | C | **Platform admin only.** Under a client, optionally in a program of the same client. Body names the component list (closed under its dependencies, else 422 naming the missing one), the template it started from (audit only), the data model depth, and **`is_restricted` explicitly** — the form preselects "Assigned consultants only" (D-62). Seeds **all ten number series** (DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT — R2-D14), the rate card, the control rules, the component rows and **each chart's recommended DFD rule** (D-70) in one transaction; the FTE basis starts at 240 × 8 (D-67). A restricted project starts with no members; the admin lands on its Access screen |
+| `change_user_kind` · `set_platform_admin` | `APP_USER`, `AUDIT_EVENT` | U | Platform admin only. Audited (`USER_KIND_CHANGED`). Removing the admin flag requires the kind the user falls back to (DR7-S6). **Preview → confirm by hash:** the preview lists the project and program memberships that come back into force and every project where the user's level rises; the confirm recomputes it under lock and must match (D-71) |
+| `create_project` | `PROJECT`, `PROJECT_COMPONENT`, `PROJECT_DFD_RULE` | C | **Platform admin only.** Under a client, optionally in a program of the same client. Body names the component list (closed under its dependencies, else 422 naming the missing one), the template it started from (audit only), the data model depth, and **`is_restricted` explicitly** — the form preselects "Assigned consultants only" (D-62); in a program, the form names the program members it opens to (D-71). Seeds **all ten number series** (DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT — R2-D14), the rate card, the control rules, the component rows and **each chart's recommended DFD rule** (D-70) in one transaction; the FTE basis starts at 240 × 8 (D-67). A restricted project starts with no members; the admin lands on its Access screen |
 | `set_components` | `PROJECT_COMPONENT`, `AUDIT_EVENT` | C/U | **D-37, platform admin.** The body is the whole wanted set. Preview: what turns on (incl. what is added by dependency, OR-2), what turns off, and blockers — **a component cannot be switched off while live rows exist in it, or while a component that stays on needs it** (OR-1, named as `soft_delete` does). Confirm by hash; one `PROJECT_COMPONENTS_CHANGED` audit event. Switching back on restores the same row |
 | `set_data_model_depth` | `PROJECT` | U | **D-39, platform admin.** `KEYS_ONLY` / `FULL`, audited, `row_version` checked |
-| `set_restriction` | `PROJECT`, `AUDIT_EVENT` | U | **OR-6, platform admin.** Preview names everyone who **loses** access (restricting) or **gains** it (unrestricting), and who **keeps** it with each member's note, flagging kept members whose level drops; confirm by hash. One `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED` audit event with the member list. Read per request, so it applies on the next request. Existing open projects are switched one by one by an admin after their members are checked, never by a migration (D-62) |
-| `manage_members` | `PROJECT_MEMBER`, `AUDIT_EVENT` | C/U | **Platform admin.** Add (EDIT or VIEW, with a note), change level, remove (soft). One live membership per user per project; **re-adding inserts a new row** — a membership is history, never restored. Allowed on an unrestricted project, where it has no effect until the project is restricted. Audited (`MEMBER_ADDED`, `MEMBER_LEVEL_CHANGED`, `MEMBER_REMOVED`). A live membership blocks retiring its project |
-| `list_visible_projects` | `PROJECT`, `PROJECT_MEMBER` | R | **`visible_project_ids(user)`**: every live unrestricted project plus the restricted ones the user is a live member of, or all for a platform admin. A project the user cannot see does not appear and returns 404, not 403 — non-existence, not refusal |
-| `enforce_project_scope` | `PROJECT`, `PROJECT_MEMBER`, `PROJECT_COMPONENT` | R | **`require_project(user, project, min_level, component)`** — the single service-layer guard every list and detail query passes through, returning the caller's effective level. **One function, one file** (§9.10). Every route reaches it through exactly one declared guard (R2-S1, §9); a write to a component names it (criterion 49b) |
-| `list_effective_access` | `PROJECT_MEMBER`, `APP_USER` | R | Platform admin. Everyone who can open the project, and why: platform admin, all staff (counts by kind) if open, or each member with their capped level if restricted |
+| `set_restriction` | `PROJECT`, `AUDIT_EVENT` | U | **OR-6, platform admin (D-71).** Preview names everyone who **loses** access (restricting) or **gains** it (unrestricting), and who **keeps** it with each member's note and source (direct or via the program), flagging kept members whose level drops — read from `effective_access`, program members included; confirm by hash, recomputed after locking the program and then the project, so a program member added meanwhile → 409. One `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED` audit event with the member list. Read per request, so it applies on the next request. Existing open projects are switched one by one by an admin after their members are checked, never by a migration (D-62) |
+| `manage_members` | `PROJECT_MEMBER`, `AUDIT_EVENT` | C/U | **Project ADMIN** — a platform admin, the project's admins or its program's admins (D-71). Add (ADMIN, EDIT or VIEW, with a note), change level, remove (soft). A VIEWER-kind user above VIEW and a platform admin are refused (422), never capped. One live membership per user per project; **re-adding inserts a new row** — a membership is history, never restored. An EDIT or VIEW membership on an unrestricted project has no effect until the project is restricted; an ADMIN one counts at once. Removing a direct membership leaves any access held through the program, and the screen says so before the confirm. Members whose login is switched off are listed as inactive and stay removable. Audited (`MEMBER_ADDED`, `MEMBER_LEVEL_CHANGED`, `MEMBER_REMOVED`); no platform approval first (D-72). A live membership blocks retiring its project |
+| `manage_program_members` | `PROGRAM_MEMBER`, `AUDIT_EVENT` | C/U | **Program ADMIN** — a platform admin or the program's admins (D-71). The same rules as `manage_members`, one level up: add (ADMIN, EDIT or VIEW, with a note), change level, remove (soft); VIEWER-kind above VIEW and platform admins → 422; one live membership per user per program, re-adding inserts a new row. Each write takes a share lock on the program row. Audited like project members, the program named in the event detail; no platform approval first (D-72). A live membership blocks retiring its program (D-71) |
+| `list_visible_projects` | `PROJECT`, `PROJECT_MEMBER`, `PROGRAM_MEMBER` | R | **`visible_project_ids(user)`**: every live unrestricted project, plus the restricted ones the user is a live member of, plus the restricted ones whose live program the user is a live member of — or all for a platform admin. A project the user cannot see does not appear and returns 404, not 403 — non-existence, not refusal |
+| `enforce_project_scope` | `PROJECT`, `PROJECT_MEMBER`, `PROGRAM_MEMBER`, `PROJECT_COMPONENT` | R | **`require_project(user, project, min_level, component)`** — the single service-layer guard every list and detail query passes through, returning the caller's effective level. **One function, one file** (§9.10). Every route reaches it through exactly one declared guard (R2-S1, §9); a write to a component names it (criterion 49b) |
+| `list_effective_access` | `PROJECT_MEMBER`, `PROGRAM_MEMBER`, `APP_USER` | R | Project ADMIN (D-71). **`effective_access(project)`** — the one list of everyone who can open the project, with their effective level and where it comes from: `PLATFORM_ADMIN`, `STAFF` (counts by kind, open projects), `MEMBER` (direct) or `PROGRAM` (via program X). The Access screen, the restriction and move previews and the freeze access review all read it |
 | `deactivate_user` | `APP_USER` | U | Takes effect on the target's next request, because the JWT carries no role, kind or status claim (S4) |
 | `soft_delete_record` | any soft-deletable business entity | U | **R2-D2, Q4.** Refused with **409 naming the active dependents** (business keys, counted). Nothing cascades, **except a process step** (§4.1 `retire_step_with_dependents`, S3-SR). Audited |
 | `restore_record` | the business entities on the restore allow-list | U | Un-delete (P5). **Only entities on the allow-list** (§7.12). Memberships, control rules, users and `code_master` rows are excluded (R2-S5). **Refused while any parent is inactive** (R2-D2) — restore the parent first |
 | `consistency_check` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `DATA_FIELD`, `BR_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BR_FUNCTION_REQUIREMENT`, `FR_INTERFACE`, every frozen table | R | **Errors:** `hier_code`/`level_no` drift, to-be processes without a BR, processes with children, BR CRUD or external flows with no matching step I/O, `FR_INTERFACE` rows under a non-interface type, and **an active row under an inactive parent, in any of the frozen tables** (R2-D2). **Freeze-blocking warnings:** processes missing an input or an output in a chart whose DFD is on (D-38, S7-3), live rows in an off component. **Warnings:** entities with no fields, entities with keys only under `FULL` (D-39), `fr_solution_outside_its_brs`. **Informational:** e.g. `as_is_support_on_to_be`. **Precondition of freeze, run inside the freeze transaction** (D11, R2-P6) |
-| `(manual)` access review | `PROJECT_MEMBER`, `PROJECT` | R | Ben reviews **effective** access per project — restriction, members and platform admins — at each baseline freeze |
+| `(manual)` access review | `PROJECT_MEMBER`, `PROGRAM_MEMBER`, `PROJECT` | R | Ben reviews **effective** access per project at each baseline freeze — restriction, platform admins and everyone in `effective_access` with their source (direct or via program), together with the member adds audited since the last freeze (D-72) |
 | client access | `APP_USER`, `PROJECT`, `AUDIT_EVENT` | — | **D-43, before first client use, only with the client's consent recorded on the project.** (a) A client read-only login sees **its own project only** — the one place the project wall holds whatever staff can see; withdrawable, every view audited. **Gate (D-11, A-11, finding S8):** before any external party gets a login, record-level confidentiality is built first — `issue_dashboard` reports open issues per named stakeholder, a per-person complaint count, which a client login must not see. (b) An offline HTML viewer file generated from a frozen baseline, by an admin or user, never a viewer; once sent it cannot be withdrawn; each file audited (OR-9) |
 
 `USER_ACCESS_GRANT` is retired history: its rows were copied into `PROJECT_MEMBER` and soft-revoked,
@@ -469,16 +494,18 @@ from a number into an action.
 | `master_data_candidates` | `BR_DATA_ENTITY`, `BFC_NODE` | R | Entities referenced by BRs across many L1 areas. *Action: assign a single owner; it becomes a managed cross-workstream dependency* |
 | `fr_unlinked` | `FUNCTION_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT` | R | **D-28, re-based on D-52.** FRs with no live BR link, count and effort. *Action: link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement* |
 
-### 4.14 Programs (D-32)
+### 4.14 Programs (D-32, D-71)
 
-A program groups related projects for one client. **It shares no data and grants no access** (D-40):
-every row below is either a program header or a read assembled from per-project reports.
+A program groups related projects for one client. **It shares no data; its members reach its projects**
+(D-32, D-71): every row below is a program header, a program membership (§4.7 `manage_program_members`) or a
+read assembled from per-project reports.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
 | `create_program` · `update_program` | `PROGRAM` | C/U | **Platform admin.** Code, name, client, description — no status, dates or manager (A-65). A program's projects must share its `client_id` |
-| `move_project_program` | `PROJECT`, `AUDIT_EVENT` | U | **Platform admin only** (Q10). Two steps: a **preview** showing the roll-up change, then a commit that must quote the preview's hash over from/to — if it changed in between, 409. Moving a project changes roll-ups, not access. Audited (R2-S3) |
-| `program_dashboard` | every per-project report | R | **Every staff user.** For each project in `visible_project_ids(user) ∩ program.projects`: BR / FR / issue counts, control-panel status, effort summary, and WBS plan-vs-actual where a WBS is imported. **Built by calling the per-project report once per project — never new cross-project SQL** (R2-S2). A restricted project the caller is not on is omitted silently; a program whose every project is hidden from the caller is hidden too |
+| `retire_program` | `PROGRAM` | U | **Platform admin.** Refused (409, naming them) while the program has live projects or live members; members are removed first, one audited step each — nothing cascades (VB law 1, D-71) |
+| `move_project_program` | `PROJECT`, `AUDIT_EVENT` | U | **Platform admin only** (Q10, D-71). Two steps: a **preview** showing the roll-up change and **who gains, who loses and whose level changes** through the old and new programs' live members, then a commit that must quote the preview's hash over from/to and those lists. The commit locks both programs (by id), then the project, and recomputes; if it changed in between, 409. Audited (R2-S3) |
+| `program_dashboard` | every per-project report | R | **Every staff user who can see the program.** For each project in `visible_project_ids(user) ∩ program.projects`: BR / FR / issue counts, control-panel status, effort summary, and WBS plan-vs-actual where a WBS is imported. **Built by calling the per-project report once per project — never new cross-project SQL** (R2-S2). A restricted project the caller is not on is omitted silently; a program whose every project is hidden from the caller is hidden too, unless the caller is a live member of it (D-71) |
 | `program_counts` · `program_interfaces` · `program_effort` · `program_control_status` | the same per-project reports | R | The same rule: a list of `{project, result}` pairs, one per visible project. Nothing is stored at program level |
 | `(manual)` cross-project hand-off | — | — | Not a shared entity: each project records its own side. The other project is an **outside party** on the DFD boundary — an `EXTERNAL_ENTITY` named "Project: X", with external flows like any other party (SC-1). No new table |
 
@@ -690,6 +717,8 @@ erDiagram
     %% ---------- identity and access ----------
     APP_USER ||--o{ PROJECT_MEMBER : "is a member through (OR-6)"
     PROJECT ||--o{ PROJECT_MEMBER : "names members of"
+    APP_USER ||--o{ PROGRAM_MEMBER : "is a member through (D-71)"
+    PROGRAM ||--o{ PROGRAM_MEMBER : "names members of"
     APP_USER ||--o{ USER_ACCESS_GRANT : "held (retired - D-40, history only)"
     PROJECT |o--o{ USER_ACCESS_GRANT : "was opened to"
     PROGRAM |o--o{ USER_ACCESS_GRANT : "was opened to"
@@ -1195,7 +1224,15 @@ erDiagram
         bigint project_id FK
         bool project_is_active FK "generated guard"
         bigint app_user_id FK
-        varchar access_level "EDIT | VIEW"
+        varchar access_level "ADMIN | EDIT | VIEW"
+        text member_note
+    }
+    PROGRAM_MEMBER {
+        bigint program_member_id PK
+        bigint program_id FK
+        bool program_is_active FK "generated guard"
+        bigint app_user_id FK
+        varchar access_level "ADMIN | EDIT | VIEW"
         text member_note
     }
     EFFORT_RATE {
@@ -1429,12 +1466,14 @@ The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is designed and bei
 program_code)`; partial UK `(client_id, lower(program_name)) WHERE is_active`. Three composite-FK
 targets: UK `(program_id, client_id)`, UK `(program_id, client_id, is_active)` and UK
 `(program_id, is_active)`. All three are trivially unique supersets of the PK; they exist only so that
-PROJECT (and the retired USER_ACCESS_GRANT) can prove "same client" and "live program". Columns:
+PROJECT, PROGRAM_MEMBER (and the retired USER_ACCESS_GRANT) can prove "same client" and "live program".
+A live `PROGRAM_MEMBER` therefore blocks retiring its program, as a live project does (D-71). Columns:
 `program_code varchar(30) NOT NULL`, `program_name varchar(200) NOT NULL`, `description text`,
 plus §5.1 (soft delete, `row_version`).
 
-**A program is a roll-up grouping, never a data layer or an access scope** (D-32, D-40). No live business
-table other than `PROJECT` carries `program_id`. There is no program-level BFC, DE, BR, FR, issue or
+**A program is a roll-up grouping, never a data layer** (D-32). Its members reach every live project in it
+at their program level (D-71). No live business table other than `PROJECT` carries `program_id`; the
+membership table `PROGRAM_MEMBER` carries it as access, not scope. There is no program-level BFC, DE, BR, FR, issue or
 baseline, and no `PROJECT_SEQUENCE` series (the code is typed by a platform admin). Every program view is
 built by calling each per-project report for the program's projects that the caller can see (R2-S2),
 computed at read time. Baselines stay per project, and there is no program freeze (D-32). D-32 describes no
@@ -1455,14 +1494,16 @@ retired `USER_ACCESS_GRANT`).
   projects is refused. So is restoring a project into a retired program, or putting an active
   project into one (Q4, by construction).
 - **Changing `program_id`** is platform-admin only (Q10), behind a preview and confirm (R2-S3), and audited
-  as `PROJECT_PROGRAM_CHANGED` (§7.10a `move_project_program`). It changes roll-ups, not access. The model
+  as `PROJECT_PROGRAM_CHANGED` (§7.10a `move_project_program`). It changes roll-ups and who reaches the
+  project through a program, so the preview names who gains and who loses access (D-71). The model
   needs no membership-history table: AUDIT_EVENT holds the history.
 - **`is_restricted boolean NOT NULL DEFAULT false`** (OR-6). Who sees a project is decided per request
-  (D-40): platform admins see every project; staff (`USER`, `VIEWER`) see every project **except a
-  restricted one they are not a live `PROJECT_MEMBER` of**, which is 404 to them. **New projects are created
-  restricted** (D-62): the create API requires the choice explicitly and the new-project form preselects
-  "assigned consultants only". The flag is set or cleared only through a preview → confirm pair that names
-  who gains or loses access, audited `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED`.
+  (D-40, D-71): platform admins see every project; staff (`USER`, `VIEWER`) see every project **except a
+  restricted one they are neither a live `PROJECT_MEMBER` of nor a live `PROGRAM_MEMBER` of its program**,
+  which is 404 to them. **New projects are created restricted** (D-62): the create API requires the choice
+  explicitly and the new-project form preselects "assigned consultants only"; a restricted project created
+  in a program opens at once to that program's members. The flag is set or cleared only through a preview →
+  confirm pair that names who gains or loses access, audited `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED`.
 - **`data_model_depth varchar(10) NOT NULL DEFAULT 'FULL'`**, `CHECK (data_model_depth IN ('KEYS_ONLY',
   'FULL'))` (D-39). A CHECK-listed column, not a `code_master` FK, because the code branches on it. Read
   only through `components.depth()`.
@@ -2512,14 +2553,18 @@ DELETE (§6.6).
 `lower(email)` (functional unique index — case-insensitive email is not optional). `password_hash
 varchar(255) NOT NULL` — bcrypt/argon2 output, never logged, never serialized by any Pydantic response
 model. Access has three kinds of user (D-40), both columns read from the row on every request:
-- **`is_platform_admin boolean NOT NULL DEFAULT false`**: every project plus the admin functions
-  (users, projects, programs, global codes). It overrides `user_kind`. The FTC default rate card is a fixed
+- **`is_platform_admin boolean NOT NULL DEFAULT false`**: every project and program at `PLATFORM`, plus the
+  admin functions (users, projects, programs, global codes and the platform-only project settings, D-71).
+  It overrides `user_kind`. A platform admin holds no membership rows. The FTC default rate card is a fixed
   default in code, not an admin function, until a client needs another (SC-10).
 - **`user_kind varchar(20) NOT NULL DEFAULT 'VIEWER'`**, `CHECK (user_kind IN ('USER','VIEWER'))`: USER
   reads and edits, VIEWER reads only. `create_user` requires it in the body; the DB default is the least
-  privilege. Changing it is platform-admin only and audited `USER_KIND_CHANGED`.
-- Levels rank `VIEW` < `EDIT` < `ADMIN`; only a platform admin reaches `ADMIN`. There is no `APP_ROLE`
-  table and no `CLIENT_REVIEWER` role (D-9, D-11).
+  privilege. Changing it (or the admin flag) is platform-admin only, behind a preview → confirm that lists
+  the memberships coming back into force, and audited `USER_KIND_CHANGED` (D-71).
+- Levels rank `VIEW` < `EDIT` < `ADMIN` < `PLATFORM`. `ADMIN` comes only from a project or program
+  membership; `PLATFORM` only from `is_platform_admin`. The kind sets both the staff default on open
+  projects (USER → EDIT, VIEWER → VIEW) and the ceiling any membership can lift the user to (USER →
+  ADMIN, VIEWER → VIEW) (D-71). There is no `APP_ROLE` table and no `CLIENT_REVIEWER` role (D-9, D-11).
 - **Client viewer (D-43), designed and built with the D-43 slice:** `user_kind` widens to
   `CLIENT_VIEWER`, bound to exactly one project by a nullable `client_project_id` column (`CHECK
   ((user_kind = 'CLIENT_VIEWER') = (client_project_id IS NOT NULL))`, never a platform admin), with the
@@ -2528,17 +2573,34 @@ model. Access has three kinds of user (D-40), both columns read from the row on 
 Not `AuditMixin`: its own `created_by` (nullable, the first admin is created by nobody), `updated_by`,
 `deleted_at`, `deleted_by`, `row_version`.
 
-**PROJECT_MEMBER** *(OR-6, D-62)* — one row per membership period of one user on one project, with a
-level. It matters only while the project is restricted. PK `project_member_id`; FK `project_id`,
-`app_user_id`; `access_level varchar(4) NOT NULL CHECK (access_level IN ('EDIT','VIEW'))`; `member_note
+**PROJECT_MEMBER** *(OR-6, D-62, D-71)* — one row per membership period of one user on one project, with a
+level. An EDIT or VIEW membership matters only while the project is restricted; an ADMIN membership
+matters on every project, since staff on an open project get no more than EDIT. PK `project_member_id`; FK
+`project_id`, `app_user_id`; `access_level varchar(5) NOT NULL CHECK (access_level IN
+('ADMIN','EDIT','VIEW'))`; `member_note
 text` (non-blank if present: why they are on it). Partial UK `(project_id, app_user_id) WHERE is_active`.
 **Re-adding inserts a new row** — each period is history, not a link to restore, and access returns only
 through the add route (R2-S5). Live guard: `project_is_active` generated + FK `(project_id,
 project_is_active) → PROJECT(project_id, is_active)` ON UPDATE NO ACTION, so a live membership blocks
-retiring its project. **Effective level** = the lower of the user's kind cap (USER → EDIT, VIEWER → VIEW)
-and `access_level`. Membership on an unrestricted project is allowed and has no effect, so an admin can
-prepare the list before restricting. Managed by admins only, audited `MEMBER_ADDED`,
-`MEMBER_LEVEL_CHANGED`, `MEMBER_REMOVED`; removal is a soft delete. Never baselined: access is not scope.
+retiring its project. **Effective level** = the higher of the staff default (open projects), this
+`access_level` and the user's live `PROGRAM_MEMBER` level on the project's program, capped by the user's
+kind (§7.8). An EDIT or VIEW membership on an unrestricted project is allowed and has no effect, so an
+admin can prepare the list before restricting. Managed at project ADMIN — platform admins, the project's
+admins and its program's admins; a VIEWER-kind user above VIEW and a platform admin are refused (422).
+Audited `MEMBER_ADDED`, `MEMBER_LEVEL_CHANGED`, `MEMBER_REMOVED`; removal is a soft delete. Never baselined:
+access is not scope.
+
+**PROGRAM_MEMBER** *(D-71)* — one row per membership period of one user on one program, with a level. It
+gives that level on every live project of the program, restricted ones included; a program ADMIN is admin of
+each of them and manages the program's members. PK `program_member_id`; FK `program_id`, `app_user_id`;
+`access_level varchar(5) NOT NULL CHECK (access_level IN ('ADMIN','EDIT','VIEW'))` (`ck_prgm_level`);
+`member_note text` (non-blank if present). Partial UK `(program_id, app_user_id) WHERE is_active`
+(`uq_prgm_live`). **Re-adding inserts a new row**; a level change is an audited in-place update. Live guard:
+`program_is_active` generated + FK `(program_id, program_is_active) → PROGRAM(program_id, is_active)` ON
+UPDATE NO ACTION, so a live membership blocks retiring its program. Managed at program ADMIN — platform
+admins and the program's admins; a VIEWER-kind user above VIEW and a platform admin are refused (422).
+Audited with the program in the event detail; removal is a soft delete. Never baselined, never restorable
+(R2-S5), on no `step_retire` list: access is not scope.
 
 **USER_ACCESS_GRANT** *(retired, D-40)* — held one grant of one project role (OWNER / EDITOR / REVIEWER,
 D-9) to one user over one project or one program (D-32). Access is now `user_kind` plus `PROJECT_MEMBER`
@@ -2902,21 +2964,29 @@ are justified in the entity note (§5.3). Layout is the only business-facing tab
 not kept, and that is deliberate. Positions are written for the `ERD` and `DFD` diagrams; old
 `PROCESS_FLOW` rows stay as history and the service refuses new ones (S7-5, D-38).
 
-#### 5.4.11 Program and access (D-32, D-40, D-62) — **visibility computed per request; programs group projects, never grant access.**
+#### 5.4.11 Program and access (D-32, D-40, D-62, D-71) — **visibility computed per request; programs group projects and their members reach them.**
 
 **Staff visibility is computed, not stored per project.** It is derived on every request in
 `services/access.py` from `app_user.is_platform_admin`, `app_user.user_kind` (USER / VIEWER),
-`project.is_restricted` and live `project_member` rows (D-40, OR-6). Storing a row per user per
-project would be derived data that goes stale the moment a project is created.
+`project.is_restricted`, live `project_member` rows and live `program_member` rows on the project's
+program (D-40, D-71, OR-6). Storing a row per user per project would be derived data that goes stale the
+moment a project is created or moved.
 
-- **`project_member` is a named exception list.** It matters only on a restricted project, and a
-  membership on an unrestricted one has no effect, which lets an admin prepare the list before
-  restricting. **New projects are created restricted** (D-62); an admin may clear the flag.
-- **Effective level** = the lower of the user kind's cap (USER → EDIT, VIEWER → VIEW) and the
-  member's `access_level`. Only platform admins reach ADMIN.
-- **Each membership period is its own row.** A partial unique `(project_id, app_user_id) WHERE
-  is_active` allows one live row; re-adding inserts a new row, and access returns only through the
-  add route, never restore (R2-S5).
+- **`project_member` is a named exception list.** An EDIT or VIEW membership matters only on a
+  restricted project and has no effect on an unrestricted one, which lets an admin prepare the list
+  before restricting; an ADMIN membership counts everywhere. **New projects are created restricted**
+  (D-62); a platform admin may clear the flag.
+- **`program_member` reaches through `project.program_id`.** Its level applies on every live project of
+  the program, restricted ones included. The derivation is transitive on purpose: a move re-derives
+  access with no rows to fix, so a move is a permissions event and its preview names who gains and loses.
+- **Effective level** = the higher of the staff default (open projects: USER → EDIT, VIEWER → VIEW), the
+  project membership and the program membership, capped by kind (USER → ADMIN, VIEWER → VIEW). `ADMIN`
+  comes only from a membership; `PLATFORM` only from the admin flag (D-71). That a VIEWER holds nothing
+  above VIEW is not declarable (the kind is on another table): the service refuses it on write (422) and
+  the read-time cap backstops a later change of kind.
+- **Each membership period is its own row**, on both tables. A partial unique `(project_id, app_user_id)`
+  / `(program_id, app_user_id) WHERE is_active` allows one live row; re-adding inserts a new row, and
+  access returns only through the add route, never restore (R2-S5).
 - **`user_access_grant` is retired history**: its live rows were copied into `project_member` and
   soft-revoked, and `vb_app` has SELECT only (S7-6). It was not repurposed, because a table whose
   rows change meaning in place is a table whose history lies.
@@ -2924,8 +2994,9 @@ project would be derived data that goes stale the moment a project is created.
 **A program is a roll-up grouping.** `PROJECT.program_id` links a project to at most one program.
 The composite FK `(program_id, client_id)` enforces *same client*, and the generated
 `program_is_active` guard enforces *live program*. *Who may move a project* is not declarable: it is
-platform-admin only (Q10), held by the service and the audit, and moving a project changes
-roll-ups, not access. Program, project and membership retirement interlock through the generated
+platform-admin only (Q10, D-71), held by the service and the audit — a program admin who could move a
+restricted project into their own program would grant themselves access. Program, project and
+membership retirement interlock through the generated
 `…_is_active` guards, so Q4's "refuse while live dependents exist" is structural in the access
 layer, where a leak would matter most. Roll-ups call each per-project report for the projects in
 `visible_project_ids(user) ∩ program` (R2-S2); a restricted project the caller cannot see is omitted
@@ -3025,7 +3096,7 @@ defect, but it is governed by the `code_master` rule above, not by `FK_LIVENESS`
 | `solution_dependency` | `solution_id`, `depends_on_solution_id` | — |
 | *live-only:* `wbs_item` | `parent_wbs_item_id`, `phase_id`, `solution_id` | — |
 | *live-only:* `risk`, `change_request`, `cr_impact`, `control_rule`, `stakeholder` | every non-excluded FK (owner role, BFC node, solution, impacted objects, org unit); codes | — |
-| *live-only:* `project`, `project_member` | — | `program_id` (`program_is_active`); `project_id` (`project_is_active`) |
+| *live-only:* `project`, `project_member`, `program_member` | — | `program_id` (`program_is_active`); `project_id` (`project_is_active`); `program_member.program_id` (`program_is_active`) |
 
 `bfc_node_flow` is not listed: its rows can never be live again (§5.4.14), so its links never block.
 `user_access_grant` is retired history and takes no writes (§5.4.11).
@@ -3096,9 +3167,10 @@ The model's part is `business_key` / `cross_check_key` on `IMPORT_ROW` and the t
 - `PROJECT_SEQUENCE(project_id, sequence_code)`: `prefix` and `pad_width` depend on both parts (DE
   numbering differs from BR numbering within one project). If prefixes ever become project-wide,
   they move to `PROJECT`.
-- `PROJECT_MEMBER`: surrogate PK, so no partial dependency is possible. Its natural grain, (project,
-  user) with at most one live row, is carried by the partial unique index. `access_level` and
-  `member_note` depend on the membership period.
+- `PROJECT_MEMBER` and `PROGRAM_MEMBER`: surrogate PKs, so no partial dependency is possible. Each natural
+  grain, (project, user) or (program, user) with at most one live row, is carried by its partial unique
+  index. `access_level` and `member_note` depend on the membership period. The effective level is derived
+  per request, never stored, so the transitive program → project path holds no copy to drift (D-71).
 
 **3NF — the four decisions that shaped the model:**
 
@@ -3177,7 +3249,7 @@ determines whether the attribute is *meaningful*, which is a UI rule, not a func
   (§5.4.11). WBS lines are rows, not an imported blob, and MS Project's outline is resolved into
   `parent_wbs_item_id`. FK groups are a scalar per field, not a list of "relationships" on the
   entity.
-- **2NF.** `WBS_ITEM` and `PROJECT_MEMBER` have single-column surrogate PKs, so there is nothing
+- **2NF.** `WBS_ITEM`, `PROJECT_MEMBER` and `PROGRAM_MEMBER` have single-column surrogate PKs, so there is nothing
   partial to depend on. `BASELINE_EFFORT_RATE`'s attributes depend on the whole `(baseline_id,
   source_id)`. A relationship role name would depend on `(data_entity_id, ref_data_entity_id,
   fk_group_no)` rather than the field, which is why it is flagged as a separate entity and not added
@@ -3213,13 +3285,14 @@ database checks, not a copy the application must remember to maintain:
 reference a node from another project. That turns a denormalization risk into a database-enforced
 invariant and gives every query a single-column tenant filter. **Which projects a caller may see is
 decided in one place**, `services/access.py` (`visible_project_ids`, `require_project`), from the
-user's kind, the project's restriction flag and live memberships (§5.4.11). **Every route declares
+user's kind, the project's restriction flag and live project and program memberships (§5.4.11). **Every route declares
 exactly one guard**, a route without one fails at import, and criterion 49 re-proves it. A project
 the caller cannot see is 404, never 403. Row-level security is deferred (§6.4), and criterion 49 is
 the stated condition of that deferral.
 
-**A program widens what is rolled up, never what is shared (D-32, D-40).** No scope table carries
-`program_id`, so no FK path runs from one project's scope into another's, and the composite
+**A program shares no data; its members reach its projects (D-32, D-71).** Program membership widens who
+may open each project in the program, one project at a time through the same guard; it never joins their
+data. No scope table carries `program_id`, so no FK path runs from one project's scope into another's, and the composite
 `(id, project_id)` FKs keep a cross-project reference unstorable. A program dashboard is a set of
 per-project report calls, each passing the same guard, never a query over a shared table (R2-S2).
 The cost is that "the same Customer entity in two projects" is two DEs. A hand-off to another project is
@@ -3285,10 +3358,12 @@ destroy the commercial value of every baseline that references the row.
 **Two role vocabularies, never conflated.** `ORG_ROLE` is the client's ("Claims Supervisor,
 Underwriting Division"), project-scoped, used in RACI and as a performer. The app's access is
 `app_user.is_platform_admin` (D-9), `app_user.user_kind` (USER / VIEWER, D-40) and
-`project_member.access_level`, ranked `VIEW` < `EDIT` < `ADMIN`; `project_role_code` survives only on
+`project_member.access_level` / `program_member.access_level`, ranked `VIEW` < `EDIT` < `ADMIN` < `PLATFORM`
+(D-71); `project_role_code` survives only on
 retired `user_access_grant` history. They share no table, no FK and no name fragment. In the code:
 `org_role` vs `project_role_code` / access level, `/bfc-nodes/{id}/org-roles` and
-`/business-requirements/{id}/org-roles` vs `/projects/{id}/access` and `/projects/{id}/members`. The
+`/business-requirements/{id}/org-roles` vs `/projects/{id}/access`, `/projects/{id}/members` and
+`/programs/{id}/members`. The
 bare word `role` is banned (law 7); it is a PostgreSQL reserved word anyway, so the rule enforces
 itself the first time someone forgets.
 
@@ -3382,11 +3457,12 @@ are designed and arrive with their wave (§12).
 | 46 | `import_row` | Import (D-5, D-25) | via `import_batch` | ✗ — purged after 90 days (Q14) | ✓ |
 | 47 | `app_user` | Identity | — (`user_kind`, D-40) | — | ✓ |
 | 48 | `user_access_grant` | Identity — **retired** (D-40) | nullable — XOR `program_id` | — (SELECT-only history, §6.6) | ✓ (retired) |
-| 48a | `project_member` | Identity (D-40, OR-6, D-62) | ✓ | ✗ — access is not scope | ✓ |
+| 48a | `project_member` | Identity (D-40, OR-6, D-62, D-71) | ✓ | ✗ — access is not scope | ✓ |
+| 48b | `program_member` | Identity (D-71) | — (`program_id`) | ✗ — access is not scope | ✓ |
 | 49 | `audit_event` | Identity | nullable | — | ✓ |
 | 50– | `baseline_*` shadow tables (**25** today) | Baseline | copied | n/a (immutable) | ✓ |
 
-*(`app_role` does not exist — D-9; access is `is_platform_admin` + `user_kind` + `project_member`, §7.8.)*
+*(`app_role` does not exist — D-9; access is `is_platform_admin` + `user_kind` + `project_member` + `program_member`, §7.8.)*
 
 **The shadow tables (D-3, D-12, D-24a, D-27, D-37, D-49, D-52, R2-D7, S8-1).** One per baselined live table,
 listed in `models/baseline.SHADOWED` and `services/freeze_set.FREEZE_SET` (a module assertion keeps the two equal),
@@ -3435,7 +3511,7 @@ that was never agreed.
 immutable table is a data-protection problem); `import_batch` / `import_row` (staging); `diagram_layout`
 (D-30 — a box's position is presentation; a re-opened baseline renders with today's positions, A-52);
 `wbs_item` (D-33 — the schedule belongs to MS Project); `program` (no program freeze, D-32);
-`project_member`, `user_access_grant`, `app_user` (access is not scope); `project_template_component`;
+`project_member`, `program_member`, `user_access_grant`, `app_user` (access is not scope); `project_template_component`;
 `bfc_node_flow` (retired, D-38); `audit_event`, `project_sequence`, `code_master`, `project`, `client`;
 `risk`, `change_request`, `cr_impact`, `decision`, `control_rule`.
 
@@ -3521,7 +3597,8 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `UNIQUE (client_id, program_code)`; partial `uq_program_name_live (client_id, lower(program_name)) WHERE is_active`; `uq_program_client`, `uq_program_client_live`, `uq_program_live` as FK targets | `program` | D-32 — program identity within a client; targets for the same-client and live-program FKs |
 | `fk_project_program_client (program_id, client_id) → program`; `program_is_active GENERATED` + `fk_project_program_live (program_id, client_id, program_is_active) → program` ON UPDATE NO ACTION; `uq_project_live UNIQUE (project_id, is_active)` | `project` | **D-32 — a program's projects share its client; an active project sits only in a live program; a program with live projects cannot be retired (Q4).** Moving a project between programs is platform-admin only and audited (service) |
 | `ck_app_user_kind CHECK (user_kind IN ('USER','VIEWER'))`; `uq_app_user_email (lower(email))` | `app_user` | **D-40** — staff are USER (edit) or VIEWER (read); `is_platform_admin` overrides the kind |
-| partial `uq_pm_live (project_id, app_user_id) WHERE is_active`; `project_is_active GENERATED` + `fk_pm_live_project (project_id, project_is_active) → project (uq_project_live)` ON UPDATE NO ACTION; `ck_pm_level CHECK (access_level IN ('EDIT','VIEW'))`; `ck_pm_note_not_blank` | `project_member` | **OR-6, D-62** — one live membership per user per project; re-adding inserts a new row (each period is history); a live membership blocks retiring its project |
+| partial `uq_pm_live (project_id, app_user_id) WHERE is_active`; `project_is_active GENERATED` + `fk_pm_live_project (project_id, project_is_active) → project (uq_project_live)` ON UPDATE NO ACTION; `ck_pm_level CHECK (access_level IN ('ADMIN','EDIT','VIEW'))` on `varchar(5)`; `ck_pm_note_not_blank` | `project_member` | **OR-6, D-62, D-71** — one live membership per user per project; re-adding inserts a new row (each period is history); a live membership blocks retiring its project. **Service-enforced:** a VIEWER-kind user above VIEW, or any platform admin, is refused (422) |
+| partial `uq_prgm_live (program_id, app_user_id) WHERE is_active`; `program_is_active GENERATED` + `fk_prgm_live_program (program_id, program_is_active) → program (uq_program_live)` ON UPDATE NO ACTION; `ck_prgm_level CHECK (access_level IN ('ADMIN','EDIT','VIEW'))`; `ck_prgm_note_not_blank` | `program_member` | **D-71** — one live membership per user per program; re-adding inserts a new row; a live membership blocks retiring its program. **Service-enforced:** a VIEWER-kind user above VIEW, or any platform admin, is refused (422) |
 | `ck_grant_one_scope CHECK (num_nonnulls(project_id, program_id) = 1)`; partial `uq_grant_one_live_per_user`; live-scope guard FKs | `user_access_grant` | retired (D-40): no live rows remain and `vb_app` cannot INSERT or UPDATE (§6.6); the constraints keep the history consistent |
 | `UNIQUE (project_id, ms_unique_id)` (full); `UNIQUE (wbs_item_id, project_id)`; FK `(parent_wbs_item_id, project_id)`; `CHECK ((outline_level = 1) = (parent_wbs_item_id IS NULL))`; `CHECK (parent_wbs_item_id <> wbs_item_id)`; date-order CHECKs; `CHECK (actual_finish IS NULL OR actual_start IS NOT NULL)`; `CHECK (percent_complete BETWEEN 0 AND 100)`; composite FKs `(phase_id, project_id)`, `(solution_id, project_id)` | `wbs_item` *(when built)* | **D-33, Q13, R2-D15** — one row per MS Project Unique ID per project, restored rather than duplicated on re-import; links cannot cross projects. `row_version` guards the two links only (documented deviation). No unique on `wbs_code` (renumbered by MS Project on outline moves) |
 | `ck_dl_type CHECK (diagram_type IN ('ERD','PROCESS_FLOW','DFD'))` — **new `PROCESS_FLOW` rows are refused by the service** (S7-5); `ck_dl_one_object CHECK (num_nonnulls(bfc_node_id, data_entity_id, external_entity_id, bfc_node_flow_id, process_trigger_id) = 1)`; `ck_dl_erd_entity`; `ck_dl_event_flow_only CHECK (diagram_type = 'PROCESS_FLOW' OR bfc_node_flow_id IS NULL)`; `ck_dl_scope CHECK (diagram_type = 'ERD' OR scope_bfc_node_id IS NOT NULL)`; `ck_dl_collapse_erd`; `uq_dl_object UNIQUE NULLS NOT DISTINCT (project_id, diagram_type, scope_bfc_node_id, bfc_node_id, data_entity_id, external_entity_id, bfc_node_flow_id, process_trigger_id)` (a constraint, named in `ON CONFLICT`); composite `(id, project_id)` FKs | `diagram_layout` | D-30 — one position per object per diagram per scope; typed, project-safe pointers, triggers included (D-49). Old `PROCESS_FLOW` positions stay as history. **Exempt from soft delete and `row_version`** (documented deviation, A-52) |
@@ -3600,6 +3677,8 @@ should treat it as one.
   'ACCOUNTABLE'` is also the Accountable lookup for an as-is step; `uq_bror_one_accountable` for a BR.
 - `project_member`: `ix_pm_user_live (app_user_id) WHERE is_active` serves `visible_project_ids` on every
   request; `uq_pm_live` serves the project side.
+- `program_member`: `ix_prgm_user_live (app_user_id) WHERE is_active` serves `visible_project_ids` and
+  `visible_program_ids`; `uq_prgm_live` serves the program side.
 - `project_component`: `uq_project_component` (leading `project_id`) serves `require_on` and `purge_project`.
 - `bfc_node_flow`: `ix_bnf_from`, `ix_bnf_to (…, project_id)` remain for the guard-FK checks on the history rows.
 - `wbs_item` *(when built)*: `(project_id, ms_unique_id)` is the unique index (the import match);
@@ -3644,7 +3723,7 @@ Grants, not code (S11, R2-S9). The application connects as `vb_app`; migrations 
 - **No `DELETE` on any table, with exactly two exceptions:** `diagram_layout` (the documented hard delete,
   A-52) and `import_row` (the 90-day purge, Q14). Soft delete is an UPDATE, so the app never needs DELETE on a
   business table, and §5.6's "never write a hard-delete endpoint" is a **permission error**, not a review rule.
-  `import_batch`, `project_member`, `user_access_grant` and `audit_event` get no DELETE: they are the import
+  `import_batch`, `project_member`, `program_member`, `user_access_grant` and `audit_event` get no DELETE: they are the import
   trail, the access history and the security log.
 - **No `UPDATE` on `decision`** (A-41), **on any `baseline_*` table**, or **on `audit_event`** (append-only by
   grant and trigger; even the owner cannot UPDATE it). The reject triggers (§6.2) are the belt, the revoked
@@ -3698,7 +3777,7 @@ component is on (409 `COMPONENT_OFF`, D-37), in that order.
 
 ### 7.0 Grid function → service map
 
-Every function named in the §4 grid, and where it lives. Access levels are `VIEW` < `EDIT` < `ADMIN` (D-40).
+Every function named in the §4 grid, and where it lives. Access levels are `VIEW` < `EDIT` < `ADMIN` < `PLATFORM` (D-40, D-71).
 
 <!-- CHECK: grid function names for the D-37…D-64 functions (performer, triggers, chart copy, BR↔FR link, solution tag, components, members, restriction, approve) are taken from the services and routes in code; align with the names the rewritten §4 uses. -->
 
@@ -3767,11 +3846,13 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `diff_baseline` | `baseline.diff` (+ `priced`) | §7.7 |
 | `reopen_baseline` | — | **not implemented, by design** (§4.6) |
 | `login` | `auth.login` | §7.10 |
-| `create_user` · `set_user_kind` · `set_platform_admin` | `user_admin.*` | §7.10 (D-40) |
+| `create_user` · `set_user_kind` · `set_platform_admin` | `user_admin.*` | §7.10 (D-40; kind and admin-flag changes preview → confirm, D-71) |
 | `deactivate_user` | `user_admin.deactivate_user` | §7.10 (S4) |
 | `create_project` | `project.create_project` | §7.10 (platform admin; components, depth and the restriction chosen explicitly; ten series — D-37, D-39, D-62, R2-D14) |
 | `set_project_components` · `set_data_model_depth` | `components.set_components` · `project.set_depth` | §7.10 (D-37, D-39; platform admin, preview → confirm) |
-| `manage_project_members` · `restrict_project` · `list_effective_access` | `project.add/change/remove_member` · `project.set_restriction` · `access.effective_access` | §7.10 (OR-6, D-62; platform admin) |
+| `manage_project_members` · `list_effective_access` | `project.add/change/remove_member` · `access.effective_access` | §7.10 (OR-6, D-71; project ADMIN) |
+| `restrict_project` | `project.set_restriction` | §7.10 (OR-6, D-62, D-71; platform admin, preview → confirm) |
+| `manage_program_members` | `program.add/change/remove_member` | §7.10 (D-71; program ADMIN) |
 | `list_visible_projects` | `access.visible_project_ids` | §7.8 |
 | `enforce_project_scope` | `access.require_project` | §7.8 |
 | `soft_delete_record` · `restore_record` | `lifecycle.retire` / `lifecycle.restore` | §7.12 (refuse with dependents; allow-list — R2-D2, R2-S5) |
@@ -3789,7 +3870,7 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `create_phase` · `assign_solution_phase` · `link_solution_dependency` · `phase_plan_report` | `phase.*` | §7.13 |
 | `maintain_control_rule` · `control_panel` | `control.*` | §7.13 |
 | `requirement_volatility` · `process_change_intensity` · `org_impact_heatmap` · `stakeholder_engagement` · `interface_load` · `data_migration_map` · `master_data_candidates` | `reports.*` | §7.9 |
-| `create_program` · `update_program` · `move_project_program` | `program.*` | §7.10a (D-32) |
+| `create_program` · `update_program` · `retire_program` · `move_project_program` | `program.*` | §7.10a (D-32, D-71) |
 | `program_dashboard` · `program_counts` · `program_interfaces` · `program_effort` · `program_control_status` | `program.rollup` | §7.10a (D-32, R2-S2) |
 | `download_template` / `validate_import` / `commit_import` (`wbs`) · `link_wbs_item` · `wbs_plan_vs_actual` | `bulk.*` (WBS map) / `wbs.link` / `wbs.plan_vs_actual` | §7.11a (D-33, D-41) |
 | `purge_import_rows` | `import_purge.purge_import_rows` | §7.12b (Q14) |
@@ -3973,7 +4054,7 @@ process_completeness(project_id, bfc_set):    # GET /projects/{id}/process-compl
 
 dfd_rule.validate(codes): STARTED always present; ORDER requires DATA_IN and DATA_OUT; unknown code → 422
 dfd_rule.preview(project, bfc_set, codes) → {ready, partly, not_ready, would_block, preview_digest}
-dfd_rule.set(actor, project, bfc_set, codes, row_version, preview_digest):      # project_ctx("ADMIN")
+dfd_rule.set(actor, project, bfc_set, codes, row_version, preview_digest):      # project_ctx("PLATFORM")
     lock the project FOR UPDATE; 409 on a stale row_version or a changed digest; validate → 422
     restore / insert added rows, retire dropped rows (S1-7); project.row_version bumps (never from the body)
     AUDIT PROJECT_DFD_RULE_CHANGED {bfc_set_code, from, to, would_block}
@@ -4369,7 +4450,7 @@ describe_interface(fr, source_app, target_app, pattern, method, frequency, volum
         replace the carried FR_INTERFACE_DATA_ENTITY set, keeping notes the request did not touch (S6b2-4)
     # Complete = source, target, method and ≥ 1 carried entity; pattern and frequency optional (S6b2-1).
 
-maintain_fr_types(project_id, code, label, behaviour_code):          # D-27; EDIT
+maintain_fr_types(project_id, code, label, behaviour_code):          # D-27; project ADMIN (G-5)
     if code exists as a GLOBAL FR_TYPE and this project has no override yet, in one transaction:   # A-16
         override = insert CODE_MASTER(project_id, 'FR_TYPE', code, label, behaviour_code)
         UPDATE effort_rate          SET fr_type_code_id = override WHERE project = :p AND type = global
@@ -4600,15 +4681,20 @@ content_hash = hex(sha256(utf8(
 The single visibility guard (§9.10, §9.11). Every list and detail query in the app passes
 through it; nothing else decides who can see a project.
 
-**The access model (D-40, D-62, OR-5, OR-6).** Three kinds of FTC user, and one optional wall per project:
+**The access model (D-40, D-62, D-71, OR-5, OR-6).** Three kinds of FTC user, two kinds of membership, and
+one optional wall per project:
 
-- **Admin:** `app_user.is_platform_admin = true`. Sees every project, restricted or not, plus the admin
-  functions (users, clients, projects, programs, members, restriction, components, global codes). Admins are
-  the only holders of level `ADMIN`. The FTC default rate card stays a fixed default in code (SC-10).
-- **User:** `app_user.user_kind = 'USER'`. Reads and edits, no admin functions.
+- **Platform admin:** `app_user.is_platform_admin = true`. Sees every project and program, restricted or
+  not, at level `PLATFORM`, plus the platform-only functions (users, clients, creating projects and
+  programs, moving a project between programs, restriction, components, data-model depth, FTE basis, the
+  DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
+  rows. The FTC default rate card stays a fixed default in code (SC-10).
+- **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
+  an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
-  the server. `ck_app_user_kind CHECK (user_kind IN ('USER', 'VIEWER'))`; the column default is the least
-  privilege (`VIEWER`), and `create_user` requires the kind explicitly.
+  the server. A membership above `VIEW` is refused when written (422, D-71). `ck_app_user_kind CHECK
+  (user_kind IN ('USER', 'VIEWER'))`; the column default is the least privilege (`VIEWER`), and
+  `create_user` requires the kind explicitly.
 
 Both columns are read from the row on every request (S4), never from the token. `is_platform_admin`
 overrides `user_kind`, which applies again if the flag is removed.
@@ -4617,30 +4703,38 @@ overrides `user_kind`, which applies again if the flag is removed.
 false`) or **assigned consultants only** (`is_restricted = true`, OR-6). **New projects are created
 restricted** (D-62): the new-project form preselects "Assigned consultants only" and the API requires the
 choice explicitly (§7.10). On a restricted project a USER or VIEWER sees it only as a live
-**`project_member`** (`access_level` ∈ `EDIT` / `VIEW`); an admin may open a project to all staff by
-clearing the flag. A project you cannot see is **404, never 403** (OR-6). Programs are roll-up groupings,
-not access scopes (D-40).
+**`project_member`** or a live **`program_member`** of the project's live program (`access_level` ∈
+`ADMIN` / `EDIT` / `VIEW`, D-71); a platform admin may open a project to all staff by clearing the flag. A
+project you cannot see is **404, never 403** (OR-6).
 
-Levels, ranked: **`VIEW` < `EDIT` < `ADMIN`**. A user's level on a project:
+Levels, ranked: **`VIEW` < `EDIT` < `ADMIN` < `PLATFORM`**. A user's level on a project is the **higher**
+of every source that applies, **capped by kind** (D-71):
 
-| Who | Open project | Restricted project |
+| Source | Applies | Gives |
 |---|---|---|
-| Admin | `ADMIN` | `ADMIN` |
-| USER | `EDIT` | live member → lower of `EDIT` and the member's `access_level`; else **404** |
-| VIEWER | `VIEW` | live member → `VIEW` (a VIEWER added at EDIT still reads only; the add route warns); else **404** |
+| `PLATFORM_ADMIN` | `is_platform_admin` | `PLATFORM` — no other source is read |
+| `STAFF` | the project is open | `KIND_BASE`: USER → `EDIT`, VIEWER → `VIEW` |
+| `MEMBER` | a live `project_member` row | its `access_level` |
+| `PROGRAM` | a live `program_member` row on the project's live program | its `access_level` |
+| — | no source applies | **404** |
+
+The result is capped by `KIND_CAP` (USER → `ADMIN`, VIEWER → `VIEW`), so a VIEWER never edits or
+administers whatever they hold, and a USER demoted to VIEWER drops to `VIEW` on the next request.
 
 `user_access_grant` (D-9, D-32) is **retired**: its rows are soft-revoked history, `vb_app` holds SELECT
 only, and the `PROJECT_ROLE` category (OWNER / EDITOR / REVIEWER) is retired. Nothing reads it for access.
 
 ```python
-LEVEL_RANK = {"VIEW": 1, "EDIT": 2, "ADMIN": 3}
-KIND_CAP   = {"USER": "EDIT", "VIEWER": "VIEW"}        # + CLIENT_VIEWER: VIEW with D-43 (below)
+LEVEL_RANK = {"VIEW": 1, "EDIT": 2, "ADMIN": 3, "PLATFORM": 4}   # PLATFORM is never a membership value
+KIND_BASE  = {"USER": "EDIT", "VIEWER": "VIEW"}         # what staff get on an open project
+KIND_CAP   = {"USER": "ADMIN", "VIEWER": "VIEW"}        # the ceiling any membership lifts a user to
+                                                        # + CLIENT_VIEWER: VIEW with D-43 (below)
 
 @dataclass(frozen=True)
 class EffectiveAccess:
-    level: str            # VIEW / EDIT / ADMIN
-    via: str              # PLATFORM_ADMIN / STAFF / MEMBER
-    member: ProjectMember | None
+    level: str            # VIEW / EDIT / ADMIN / PLATFORM
+    via: str              # PLATFORM_ADMIN / STAFF / MEMBER / PROGRAM — the winning source
+    member: ProjectMember | ProgramMember | None
 ```
 
 | Operation | Level |
@@ -4649,11 +4743,14 @@ class EffectiveAccess:
 | Create / edit / retire / restore / reorder BFC, DE, BR, Solution, FR, Application, Issue, Stakeholder and every link | `EDIT` |
 | Upload, validate and **commit** an import batch | `EDIT` |
 | **Freeze a baseline**; record client approval (S8-1) | `EDIT` |
-| Rate card (S6c-3), project code overrides, control-rule thresholds, project FR types | `EDIT` |
+| Rate card (S6c-3), control-rule thresholds | `EDIT` |
+| Project code overrides and project FR types — the project's code lists (G-5) | `ADMIN` |
 | Link a WBS line to a phase / solution | `EDIT` |
 | Generate the offline viewer file (OR-9) | `EDIT`, never `VIEW` |
-| Members, restriction, components, data model depth, the effective-access list | `ADMIN` |
-| Users, user kind, admin rights, clients, projects, programs, move a project between programs, global codes | `ADMIN` (platform admin) |
+| Project members, the effective-access list | `ADMIN` (project) |
+| Program members | `ADMIN` (program) |
+| Restriction, components, data model depth, FTE basis, the DFD rule (preview and set) | `PLATFORM` |
+| Users, user kind, admin rights, clients, creating projects and programs, move a project between programs, global codes | `PLATFORM` (platform admin) |
 | Program roll-ups | `VIEW`, over the program's projects the caller can see |
 
 ```
@@ -4662,24 +4759,32 @@ visible_project_ids(user) -> set[int] | None:             # None = ALL
     open    = {p.project_id | p.is_active and not p.is_restricted}
     members = {m.project_id | m.app_user_id = user and m.is_active
                               and m.project.is_active and m.project.is_restricted}
-    return open ∪ members
-    # restriction and membership are read per request: restricting a project, or removing a
-    # member, hides it on that user's next request, with no token to expire
+    via_program = {p.project_id | p.is_active and p.is_restricted
+                                  and g = live program_member(p.program_id, user)
+                                  and g.program.is_active}                   # D-71
+    return open ∪ members ∪ via_program
+    # restriction and both memberships are read per request: restricting a project, removing a
+    # member or moving a project hides it on that user's next request, with no token to expire
+
+access_to(user, p) -> EffectiveAccess | None:            # the one place a level is computed
+    if user.is_platform_admin: return EffectiveAccess("PLATFORM", "PLATFORM_ADMIN", None)
+    if p is None or not p.is_active: return None
+    sources = []
+    if not p.is_restricted: sources += [(KIND_BASE[user.user_kind], "STAFF", None)]
+    m = live project_member(p, user)
+    if m: sources += [(m.access_level, "MEMBER", m)]
+    g = live program_member(p.program_id, user) if p.program_id and program(p.program_id).is_active
+    if g: sources += [(g.access_level, "PROGRAM", g)]
+    if not sources: return None                           # → 404
+    best = max(sources, by LEVEL_RANK of level)           # ties: MEMBER before PROGRAM before STAFF
+    return EffectiveAccess(lower_of(KIND_CAP[user.user_kind], best.level), best.via, best.row)
+    # an unknown kind raises: fails closed
 
 require_project(user, project_id, min_level, component=None) -> EffectiveAccess:
     p = PROJECT(project_id)
-    if user.is_platform_admin:
-        if p is None: raise 404
-        eff = EffectiveAccess("ADMIN", "PLATFORM_ADMIN", None)
-    else:
-        if p is None or not p.is_active: raise 404
-        cap = KIND_CAP[user.user_kind]                    # an unknown kind raises: fails closed
-        if p.is_restricted:
-            m = live project_member(p, user)
-            if m is None: raise 404                       # not 403 — a project you cannot see does not exist
-            eff = EffectiveAccess(lower_of(cap, m.access_level), "MEMBER", m)
-        else:
-            eff = EffectiveAccess(cap, "STAFF", None)
+    if user.is_platform_admin and p is None: raise 404
+    eff = access_to(user, p)
+    if eff is None: raise 404                             # not 403 — a project you cannot see does not exist
     if LEVEL_RANK[eff.level] < LEVEL_RANK[min_level]: raise 403
     if component and LEVEL_RANK[min_level] >= LEVEL_RANK["EDIT"]:
         components.require_on(db, project_id, component)  # 409 COMPONENT_OFF (D-37)
@@ -4689,19 +4794,31 @@ require_project(user, project_id, min_level, component=None) -> EffectiveAccess:
 
 visible_program_ids(user) -> set[int] | None:             # None = ALL
     if user.is_platform_admin: return None
-    return {p.program_id | p in visible_project_ids(user) and p.program_id is not None}
-    # a program whose every project is restricted from the caller is hidden
+    via_projects = {p.program_id | p in visible_project_ids(user) and p.program_id is not None}
+    via_member   = {gm.program_id | gm.app_user_id = user and gm.is_active}          # D-71
+    return via_projects ∪ via_member
+    # a program admin opens an empty program; a program whose every project is hidden from
+    # a non-member is hidden
 
 require_program(user, program_id, min_level):
     g = PROGRAM(program_id)
     if user.is_platform_admin:
         if g is None: raise 404
-        return EffectiveAccess("ADMIN", "PLATFORM_ADMIN", None)
+        return EffectiveAccess("PLATFORM", "PLATFORM_ADMIN", None)
     if g is None or not g.is_active or program_id not in visible_program_ids(user): raise 404
-    level = KIND_CAP[user.user_kind]
-    if LEVEL_RANK[level] < LEVEL_RANK[min_level]: raise 403
-    return EffectiveAccess(level, "STAFF", None)
+    gm = live program_member(program_id, user)
+    if gm: eff = EffectiveAccess(lower_of(KIND_CAP[user.user_kind], gm.access_level), "PROGRAM", gm)
+    else:  eff = EffectiveAccess("VIEW", "STAFF", None)   # sees it through its projects: roll-ups only
+    # a program level above VIEW comes ONLY from a program membership or the platform flag,
+    # never from the staff default (D-71)
+    if LEVEL_RANK[eff.level] < LEVEL_RANK[min_level]: raise 403
+    return eff
 ```
+
+**Lock order (D-71).** Every write that changes who reaches a project through a program locks in one order:
+the program row(s) by ascending id `FOR UPDATE`, then the project `FOR UPDATE`, then recomputes its preview
+under the lock (`set_restriction`, `move_project_program`). A program-member write takes the program row
+`FOR SHARE`, so it serialises with both.
 
 **Component gating (D-37).** A component that is off for a project has its write routes refused with
 **409 `COMPONENT_OFF`** (`X-VB-Error: COMPONENT_OFF`). The check is the `component` argument of
@@ -4765,7 +4882,9 @@ def object_guard(model, min_level, id_param="id", component=None):
         obj = db.get(model, int(raw id))      # a non-numeric or over-long id → 404 (no bigint overflow)
         if obj is None: raise 404
         owner = obj.owning_project_id()
-        if owner is None:                     # an object owned by no project
+        if owner is None and hasattr(obj, "owning_program_id"):    # a program member (D-71)
+            access.require_program(db, user, obj.owning_program_id(), min_level)   # 404 → 403
+        elif owner is None:                   # an object owned by no project or program
             if not user.is_platform_admin: raise 404
         else:
             comp = component(obj) if callable(component) else component
@@ -4790,13 +4909,13 @@ guarded at `VIEW`**, or `PUBLIC` anywhere but login and first-run setup. **Crite
 of a component route family (`ROUTE_COMPONENTS` in the test) that does not declare its component, or a
 node-scoped DFD write that does not declare the resolver. A list that must be remembered is a list that
 will be forgotten (R2-S1). `tests/test_access.py::test_no_get_route_leaks_a_restricted_project` calls
-every GET route as a non-member of a restricted project, so a new route that bypasses
-`visible_project_ids` fails. §6.4 makes these tests the stated price of deferring row-level security.
+every GET route as a non-member of a restricted project, and as a member of a different program, so a new
+route that bypasses `visible_project_ids` fails. §6.4 makes these tests the stated price of deferring row-level security.
 
 **Presentation.** `GET /projects/{project_id}` returns `my_access_level` (computed by `require_project`)
 and the project's components; `/auth/me` returns `{is_platform_admin, user_kind}`. The browser hides edit
-controls through `useCanEdit` and components through `useComponents`. Presentation only: the guards still
-refuse.
+controls through `useCanEdit` and components through `useComponents`, comparing levels by rank, so a
+`PLATFORM` caller passes every `ADMIN` check. Presentation only: the guards still refuse.
 
 ### 7.9 `services/reports.py` — the read-only deliverables
 
@@ -4969,15 +5088,26 @@ create_user(actor, email, display_name, initial_password, user_kind):   # platfo
     # plaintext is never persisted, never logged, never in a response model.
     # Admin rights are never a checkbox on creation — see set_platform_admin.
 
-set_user_kind(actor, user_id, user_kind, row_version):          # platform admin
+set_user_kind(actor, user_id, user_kind, row_version, confirm_hash=None):   # platform admin
+    preview = kind_change_preview(user, to=user_kind)             # D-71
+    if confirm_hash is None: return {preview, confirm_hash: sha256(preview)}   # writes nothing
+    lock the user row; recompute the preview; a different hash → 409
     UPDATE ... WHERE row_version = :v                             # 409 on stale
-    AUDIT_EVENT('USER_KIND_CHANGED', detail={from, to})           # effective on the next request
+    AUDIT_EVENT('USER_KIND_CHANGED', detail={from, to, preview})  # effective on the next request
 
-set_platform_admin(actor, user_id, value, rationale, row_version, user_kind=None):  # platform admin
+set_platform_admin(actor, user_id, value, rationale, row_version, user_kind=None, confirm_hash=None):
+    # platform admin
     refuse on oneself (422); refuse a no-op (409); require rationale (422)
     if removing: require user_kind — the kind the user falls back to, so a demoted admin
                  never silently becomes an editor everywhere
+    # granting leaves the user's memberships in place, unread while the flag holds
+    if removing: preview = kind_change_preview(user, to=user_kind); confirm by hash as above
     AUDIT_EVENT('PLATFORM_ADMIN_GRANTED' | 'PLATFORM_ADMIN_REMOVED', detail={rationale, ...})
+
+kind_change_preview(user, to):                                    # D-71
+    # every live project and program membership of the user, with its effective level before
+    # and after: memberships that come back into force (a VIEWER becoming USER, an admin flag
+    # removed) and every project where the level rises are listed for the platform admin to confirm
 
 deactivate_user(actor, target_user_id):                          # platform admin
     refuse on oneself (422)
@@ -4995,8 +5125,9 @@ create_project(actor, client_id, project_code, project_name, program_id, start, 
         dependency — the server never adds a component silently (D-37, OR-2);
         template_code is provenance only (OR-3)
     project = insert PROJECT(..., program_id, data_model_depth, is_restricted)
-    # Creating a project grants nobody anything (D-32). A restricted project starts with no
-    # members; the admin lands on its Access screen to add them.
+    # A restricted project starts with no project members; the admin lands on its Access screen
+    # to add them. In a program it opens at once to that program's live members (D-71), and
+    # the create form names them before the save.
     in the same transaction:
         seed PROJECT_SEQUENCE rows for all ten series:              # R2-D14
             DE, BR, FR, ISSUE, SOL, BEN, RSK, CR, DEC, EXT
@@ -5008,35 +5139,51 @@ create_project(actor, client_id, project_code, project_name, program_id, start, 
     AUDIT_EVENT(event_type='PROJECT_CREATED', project_id=project.id,
                 detail={program_id, template_code, components, data_model_depth, is_restricted})
 
-# ---- members and restriction (OR-6, D-62) — ADMIN level ---------------------------------
-add_member(actor, project, user_id, access_level, member_note):   # EDIT | VIEW
+# ---- members (D-71) — project ADMIN; restriction — PLATFORM ------------------------------
+add_member(actor, project, user_id, access_level, member_note):   # ADMIN | EDIT | VIEW
+    # caller holds ADMIN on the project: platform admin, project admin or program admin
     lock the project row FOR SHARE                     # serialises with a restriction confirm
     require an active user; a platform admin needs no membership (422)
+    if user.user_kind = VIEWER and access_level ≠ VIEW: raise 422   # refused, never capped (D-71)
     if a live membership exists: raise 409
     insert PROJECT_MEMBER(...)                         # partial UK (project, user) WHERE is_active
-    AUDIT_EVENT('MEMBER_ADDED', detail={user_id, access_level})
-    warn VIEWER_CAPPED when a VIEWER is added at EDIT  # their effective level is VIEW
-    # Membership on an open project is allowed and has no effect until it is restricted, so
-    # the list can be prepared first. Re-adding inserts a new row: each membership period is
-    # its own row, never a restore.
+    AUDIT_EVENT('MEMBER_ADDED', detail={user_id, access_level})    # no platform approval first (D-72)
+    # An EDIT or VIEW membership on an open project has no effect until it is restricted, so
+    # the list can be prepared first; an ADMIN one counts at once. Re-adding inserts a new row:
+    # each membership period is its own row, never a restore.
 
 change_member_level(actor, member, access_level, row_version):
+    the same VIEWER refusal as add_member (422)
     AUDIT_EVENT('MEMBER_LEVEL_CHANGED', detail={user_id, from, to})
+    # a project admin may demote another project admin, whoever appointed them (D-73)
 
-remove_member(actor, member, row_version):            # soft-remove (law 1)
+remove_member(actor, member, row_version):                  # soft-remove (law 1)
+    # the member row carries also_via_program (from effective_access), so the screen's confirm
+    # says "still has access via program X" before the DELETE is sent; the API itself does not ask
     AUDIT_EVENT('MEMBER_REMOVED', detail={user_id})
     # Never restorable (R2-S5). Access returns only through add_member, which re-checks
-    # everything and writes its own audit row.
+    # everything and writes its own audit row. Removing a program admin leaves the project
+    # admins they appointed in place: the role belongs to the project (D-73).
 
-set_restriction(actor, project, restricted, confirm_hash=None):   # PUT /projects/{id}/restriction
+# ---- program members (D-71) — program ADMIN -------------------------------------------------
+add_program_member · change_program_member_level · remove_program_member:
+    # the same rules as the project trio, one level up: caller holds ADMIN on the program
+    # (platform admin or program admin); lock the program row FOR SHARE; VIEWER above VIEW → 422;
+    # platform admin → 422; one live row per (program, user); re-adding inserts a new row;
+    # audited with the program in the event detail; no platform approval first (D-72).
+    # A switched-off user's live membership is listed as inactive and stays removable.
+
+set_restriction(actor, project, restricted, confirm_hash=None):   # PUT /projects/{id}/restriction, PLATFORM
     preview = {restricted, changed,
-               loses: staff with no live membership (when restricting),
+               loses: staff whose only source is STAFF (when restricting),
                gains: the same set (when opening),
-               keeps: each live member with level, effective level and note}
+               keeps: effective_access(project) rows with source MEMBER or PROGRAM —
+                      level, effective level, note and source}
     # the preview flags kept members whose effective level is lower than their kind allows
     if confirm_hash is None: return {preview, confirm_hash: sha256(preview)}   # writes nothing
-    lock the project row; recompute; a different hash → 409 "Who can see this project changed
-        since the preview. Review it again."
+    lock the project's program row (if any) FOR UPDATE, then the project row FOR UPDATE (§7.8);
+        recompute; a different hash → 409 "Who can see this project changed
+        since the preview. Review it again."    # a program member added meanwhile lands here
     UPDATE project SET is_restricted = :restricted
     AUDIT_EVENT('PROJECT_RESTRICTED' | 'PROJECT_UNRESTRICTED',
                 detail={members: [...], loses: [...], gains: [...]})
@@ -5045,43 +5192,56 @@ set_restriction(actor, project, restricted, confirm_hash=None):   # PUT /project
     # members and levels is kept with the slice 10c spec until none is left open.
 
 effective_access(project):                             # GET /projects/{id}/access, ADMIN
-    admins  = every active platform admin
-    members = every live membership of an active user, with its effective level
-    if project.is_restricted: return {admins, members}
-    return {admins, members (listed as "applies when restricted"),
-            staff: counts of active non-admin users by kind}
-    # "Who can read this client's data?" answered in full. The access review at each freeze
-    # (§4.7) reads this list.
+    # access.py — the ONE list of everyone who can open the project (D-71)
+    admins  = every active platform admin                                   # source PLATFORM_ADMIN
+    people  = every user with a live project_member (MEMBER) or a live program_member on the
+              project's live program (PROGRAM, "via program X"), each with access_to(user, project)
+              — level, winning source, and every source they hold; switched-off users marked inactive
+    if project.is_restricted: return {admins, people}
+    return {admins, people (EDIT / VIEW memberships listed as "applies when restricted"),
+            staff: counts of active non-admin users by kind}                # source STAFF
+    # "Who can read this client's data?" answered in full. The restriction and move previews,
+    # the Access screen and the access review at each freeze (§4.7, D-72) all read this list.
 ```
 
-### 7.10a `services/program.py` (D-32, D-40)
+### 7.10a `services/program.py` (D-32, D-71)
 
-A program is a header and a set of reads: a client-scoped **roll-up grouping, not an access scope**.
-**It owns no business data**, so it has no SQL of its own over business tables.
+A program is a header, a member list and a set of reads: a client-scoped **roll-up grouping whose members
+reach its projects** (D-71). **It owns no business data**, so it has no SQL of its own over business tables.
 
 ```
 create_program(actor, client_id, program_code, program_name, description):   # platform admin
     require an active client
     insert PROGRAM(...); AUDIT_EVENT('PROGRAM_CREATED')
 
+retire_program(actor, program_id, row_version):                              # platform admin
+    refuse (409, naming them) while live projects or live program members remain   # law 1, D-71
+    # held by fk_project_program_live and fk_prgm_live_program; members are removed first,
+    # each its own audited step — nothing cascades
+
 program_projects(user, program_id):
     return PROJECT where program_id = :program_id and is_active
                      and project_id ∈ visible_project_ids(user)              # R2-S2
 
 move_project_program(actor, project_id, target_program_id | None, confirm_hash=None):
-    # platform admin only (Q10)
+    # platform admin only (Q10, D-71) — a program admin who could move a restricted project
+    # into their own program would grant themselves access
     p = PROJECT(project_id); t = PROGRAM(target_program_id) if target_program_id else None
     if t is not an active program: raise 422
     if t and t.client_id != p.client_id: raise 422 "A program's projects belong to its client"
     if p is already there: raise 422
-    preview = {project: p.project_code, from_program_id, to_program_id, gains: [], loses: []}
-    h = sha256(canonical(preview))
+    before = effective_access(p); after = effective_access(p as if in t)    # D-71
+    preview = {project: p.project_code, from_program_id, to_program_id,
+               gains:   people in after, not in before,
+               loses:   people in before, not in after,
+               changes: people whose level differs (from, to)}
+    h = sha256(canonical(preview))                        # gains, loses and changes are inside the hash
     if confirm_hash is None: return {preview, preview_hash: h}        # step 1 — writes nothing
-    if confirm_hash != h: raise 409 "The project's program changed since the preview"
+    lock both programs FOR UPDATE in ascending id, then the project FOR UPDATE (§7.8); recompute
+    if confirm_hash != h: raise 409 "Who can see this project changed since the preview"
     UPDATE project SET program_id = :t
     AUDIT_EVENT('PROJECT_PROGRAM_CHANGED', project_id, detail=preview)
-    # R2-S3. A move changes roll-ups, not access (D-40), so gains and loses are always empty;
-    # the two steps stay so the admin sees exactly which roll-up the project leaves and joins.
+    # R2-S3. A move changes roll-ups and who reaches the project through a program.
 
 ROLLUPS = {                         # program report → the per-project report it is made of
   'counts':         lambda u, pid: {br: reports.count(u, pid, 'BR'), fr: …, issue_open: …},
@@ -5997,7 +6157,8 @@ a `CHECK` — a playbook §9.3 deviation:
   `CONSULTED` / `INFORMED` / `SUPPORT` / `OTHER` (Q7). It is the stable vocabulary code branches on, so
   that the labels and codes of those two categories can be configurable.
 - **`PROJECT.data_model_depth`** (`KEYS_ONLY` / `FULL`, D-39), **`APP_USER.user_kind`** (`USER` /
-  `VIEWER`, D-40) and **`PROJECT_MEMBER.access_level`** (`EDIT` / `VIEW`, OR-6).
+  `VIEWER`, D-40) and **`PROJECT_MEMBER.access_level`** / **`PROGRAM_MEMBER.access_level`** (`ADMIN` /
+  `EDIT` / `VIEW`, OR-6, D-71).
 - **`BFC_NODE.bfc_set_code`** (`TO_BE` / `AS_IS`, D-47), **`BFC_NODE.performer_kind`** (`ORG_UNIT` /
   `ORG_ROLE` / `APPLICATION` / `AI`, D-46), **`PROCESS_TRIGGER.trigger_kind`** (`TIME` / `EVENT`, D-49),
   and the retired **`BFC_NODE_FLOW.flow_type`** (S2-1).
@@ -6050,17 +6211,18 @@ to `apple` before it is built.
 **Every route declares exactly one guard (R2-S1, §7.8).** The guard is part of the route's
 definition (`@router.get(path, **guard.route)` in `backend/routers/guards.py`); a route without one
 raises at import, and criterion 49 re-proves it over the running app. Levels rank
-**`VIEW` < `EDIT` < `ADMIN`**; only a platform admin reaches `ADMIN` (D-40). A write to a project
+**`VIEW` < `EDIT` < `ADMIN` < `PLATFORM`**; `ADMIN` comes from a project or program membership, and
+only a platform admin reaches `PLATFORM` (D-71). A write to a project
 component names it (`component=`), and criterion 49b fails a write that forgets.
 
 | Guard | Resolves | Routes |
 |---|---|---|
 | `public` | nothing — no JWT | `POST /auth/login`, `GET`/`POST /auth/setup` **only** |
-| `authenticated` | the JWT user; the service filters | `GET /auth/me`, `GET /projects` (via `visible_project_ids`), `GET /programs` (programs with at least one project visible to the caller; admins: all), `GET /project-templates`, `GET /project-components`; later `GET /process-flow-json/schema` |
+| `authenticated` | the JWT user; the service filters | `GET /auth/me`, `GET /projects` (via `visible_project_ids`), `GET /programs` (programs with at least one project visible to the caller, or of which the caller is a live member; admins: all), `GET /project-templates`, `GET /project-components`; later `GET /process-flow-json/schema` |
 | `platform_admin` | `current_user().is_platform_admin`, re-read every request (S4) | `/users*`, `/clients*`, `POST /projects`, `POST /programs`, `POST /programs/{program_id}/projects`, `DELETE /programs/{program_id}/projects/{project_id}`; later `PATCH /programs/{id}`, house control-rule defaults, global code maintenance, `purge` |
-| `project_ctx(level, component=)` | `require_project(user, {project_id}, level, component)` | **every route under `/projects/{project_id}/…`** — `VIEW` for reads and exports; `EDIT` for writes, imports, freeze, client approval, the rate card, project control rules and FR types; `ADMIN` for components, data model depth, the DFD rule and the FTE basis, effective access, members and restriction |
-| `object_guard(Model, level, component=)` | the object's owning project, then `require_project`; an object with no project is platform-admin only | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-triggers/{id}` · `/project-members/{id}` · `/baselines/{id}` · `/bulk/batches/{batch_id}` · **each restore route**, one per `RESTORABLE` entity (§7.12); later `/stakeholders`, `/issues`, `/benefits`, `/risks`, `/change-requests`, `/phases`, `/wbs-items` |
-| `program_ctx(level)` | `require_program(user, {program_id}, level)` | `GET /programs/{program_id}`, `GET /programs/{program_id}/projects`; later the roll-ups `/dashboard`, `/counts`, `/interfaces`, `/effort`, `/control-status`, `/plan-vs-actual` |
+| `project_ctx(level, component=)` | `require_project(user, {project_id}, level, component)` | **every route under `/projects/{project_id}/…`** — `VIEW` for reads and exports; `EDIT` for writes, imports, freeze, client approval, the rate card and project control rules; `ADMIN` for effective access, members and the project's code lists incl. FR types (D-71, G-5); `PLATFORM` for components, data model depth, the DFD rule (preview and set), the FTE basis and restriction (D-71) |
+| `object_guard(Model, level, component=)` | the object's owning project, then `require_project`; a program-owned object (`ProgramMember`), its owning program, then `require_program`; an object with neither is platform-admin only | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-triggers/{id}` · `/project-members/{id}` · `/program-members/{id}` · `/baselines/{id}` · `/bulk/batches/{batch_id}` · **each restore route**, one per `RESTORABLE` entity (§7.12); later `/stakeholders`, `/issues`, `/benefits`, `/risks`, `/change-requests`, `/phases`, `/wbs-items` |
+| `program_ctx(level)` | `require_program(user, {program_id}, level)` | `GET /programs/{program_id}`, `GET /programs/{program_id}/projects`, `GET`/`POST /programs/{program_id}/members` (`ADMIN`); later the roll-ups `/dashboard`, `/counts`, `/interfaces`, `/effort`, `/control-status`, `/plan-vs-actual` |
 
 `component=` on `project_ctx` / `object_guard` is a code, a tuple of codes, or a resolver on the row
 (e.g. a BFC node needs `AS_IS` when it is in the as-is set; external flows, trigger links and drawn
@@ -6081,28 +6243,30 @@ guard that does not fit its path.**
 | `GET /auth/setup` · `POST /auth/setup` | public | email, display_name, password | first-run setup: creates the first platform admin while no account exists, then disables itself |
 | `GET /auth/me` | authenticated | — | the user, `user_kind`, and scope `PLATFORM_ADMIN` / `STAFF`. A project's own level comes with `GET /projects/{id}` |
 | `GET /users` · `POST /users` | platform_admin | email, display_name, initial_password, **user_kind** (required) | user(s). A non-FTC address is refused (D-11) |
-| `PATCH /users/{id}/kind` | platform_admin | user_kind, row_version | `USER_KIND_CHANGED` (D-40) |
-| `PATCH /users/{id}/platform-admin` | platform_admin | is_platform_admin, rationale, row_version | a separate, audited act (deviation 17) |
+| `PATCH /users/{id}/kind` | platform_admin | user_kind, row_version, confirm_hash | without the hash: the memberships that come back into force and the projects where the level rises, plus the hash — writes nothing; with it: recomputed under lock, a different hash → 409. `USER_KIND_CHANGED` (D-40, D-71) |
+| `PATCH /users/{id}/platform-admin` | platform_admin | is_platform_admin, rationale, row_version, user_kind (when removing), confirm_hash (when removing) | a separate, audited act (deviation 17); removing previews the memberships that come back into force, as `/kind` does (D-71) |
 | `PATCH /users/{id}/deactivate` | platform_admin | — | effective on the target's next request (S4) |
 | `GET /clients` · `POST /clients` | platform_admin | client_code, client_name, industry | client(s) — a client list is a cross-project read |
 | **Projects, components and access** | | | |
-| `GET /projects` | authenticated | — | **only the projects the caller can see**: admins all; staff every live unrestricted project plus restricted ones they are a live member of (D-40, D-62) |
-| `POST /projects` | platform_admin | client_id, project_code, project_name, program_id, dates, **component_codes**, template_code, data_model_depth, **is_restricted** | project. **No membership row is created.** The component list must be closed under its dependencies (422 naming the missing one); `template_code` is audit provenance only. The choice of restriction is required; the form preselects "assigned consultants only" (D-62). The ten number series and the rate card are seeded in the same transaction (R2-D14) |
+| `GET /projects` | authenticated | — | **only the projects the caller can see**: admins all; staff every live unrestricted project plus restricted ones they are a live member of, directly or through the project's program (D-40, D-62, D-71) |
+| `POST /projects` | platform_admin | client_id, project_code, project_name, program_id, dates, **component_codes**, template_code, data_model_depth, **is_restricted** | project. **No membership row is created**; in a program, the program's live members reach it at once (D-71). The component list must be closed under its dependencies (422 naming the missing one); `template_code` is audit provenance only. The choice of restriction is required; the form preselects "assigned consultants only" (D-62). The ten number series and the rate card are seeded in the same transaction (R2-D14) |
 | `GET /projects/{project_id}` | project_ctx(VIEW) | — | project + **`my_access_level`**, which `useCanEdit` reads |
 | `PATCH /projects/{project_id}` | project_ctx(EDIT) | project_name, dates, row_version | project. `program_id` is not PATCHable; moving goes through `/programs/{id}/projects` |
 | `GET /projects/{project_id}/code-master/{category}` | project_ctx(VIEW) | — | codes + labels for dropdowns, resolved two-tier via `code_master.resolve` (S10) |
 | `GET /project-templates` · `GET /project-components` | authenticated | — | the templates with their components, and the component catalogue (OR-3) |
 | `GET /projects/{project_id}/components` | project_ctx(VIEW) | — | each component, on or off |
-| `PUT /projects/{project_id}/components` | project_ctx(ADMIN) | component_codes (the whole wanted set), confirm_hash | **without the hash:** the preview — turned on, added by dependency, turned off, blockers, hash; writes nothing (OR-2). **With it:** applied in one transaction; 409 if the preview changed or a blocker remains (a component with live rows cannot be switched off, OR-1). One `PROJECT_COMPONENTS_CHANGED` audit event |
-| `PUT /projects/{project_id}/data-model-depth` | project_ctx(ADMIN) | data_model_depth, row_version | `KEYS_ONLY` / `FULL` (D-39) |
-| `GET /projects/{project_id}/access` | project_ctx(ADMIN) | — | **effective access**: the platform admins, and either the members with their effective level (restricted) or the staff counts by kind plus any members listed as "applies when restricted" |
-| `GET /projects/{project_id}/members` · `POST …/members` | project_ctx(ADMIN) | user_id, access_level (`EDIT`/`VIEW`), member_note | membership. Re-adding a removed member inserts a new row. Adding a VIEWER at EDIT warns: the effective level is the lower of the two |
-| `PATCH /project-members/{id}` · `DELETE /project-members/{id}` | object_guard(ProjectMember, ADMIN) | access_level, row_version | level change / soft removal. Audited (`MEMBER_*`). **Not restorable** (R2-S5) |
-| `PUT /projects/{project_id}/restriction` | project_ctx(ADMIN) | is_restricted, confirm_hash | preview → confirm (R2-S3 pattern): the preview names who loses, gains and keeps access, flagging kept members whose level drops; a stale hash → 409. Applies on each user's next request. `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED` |
+| `PUT /projects/{project_id}/components` | project_ctx(PLATFORM) | component_codes (the whole wanted set), confirm_hash | **without the hash:** the preview — turned on, added by dependency, turned off, blockers, hash; writes nothing (OR-2). **With it:** applied in one transaction; 409 if the preview changed or a blocker remains (a component with live rows cannot be switched off, OR-1). One `PROJECT_COMPONENTS_CHANGED` audit event |
+| `PUT /projects/{project_id}/data-model-depth` | project_ctx(PLATFORM) | data_model_depth, row_version | `KEYS_ONLY` / `FULL` (D-39) |
+| `GET /projects/{project_id}/access` | project_ctx(ADMIN) | — | **effective access** (`access.effective_access`, D-71): the platform admins, and everyone holding a live project or program membership with their effective level and source — direct or "via program X" — plus, on an open project, the staff counts by kind with EDIT / VIEW members listed as "applies when restricted" |
+| `GET /projects/{project_id}/members` · `POST …/members` | project_ctx(ADMIN) | user_id, access_level (`ADMIN`/`EDIT`/`VIEW`), member_note | membership. Re-adding a removed member inserts a new row. A VIEWER-kind user above `VIEW`, or a platform admin → 422 (D-71). Switched-off users are listed as inactive. Audited; no platform approval first (D-72) |
+| `PATCH /project-members/{id}` · `DELETE /project-members/{id}` | object_guard(ProjectMember, ADMIN) | access_level, row_version | level change / soft removal. Audited (`MEMBER_*`). The member row carries `also_via_program`, so the screen's confirm says "still has access via program X". **Not restorable** (R2-S5) |
+| `PUT /projects/{project_id}/restriction` | project_ctx(PLATFORM) | is_restricted, confirm_hash | preview → confirm (R2-S3 pattern): the preview names who loses, gains and keeps access — program members included, each with their source — flagging kept members whose level drops; the confirm locks the program, then the project, and recomputes; a stale hash → 409. Applies on each user's next request. `PROJECT_RESTRICTED` / `PROJECT_UNRESTRICTED` |
 | **Programs** | | | |
-| `GET /programs` · `POST /programs` | authenticated · platform_admin | program_code, program_name, client_id, description | programs (D-32). Programs are client-scoped roll-up groupings, not an access scope (D-40) |
+| `GET /programs` · `POST /programs` | authenticated · platform_admin | program_code, program_name, client_id, description | programs (D-32). Programs are client-scoped roll-up groupings whose members reach their projects (D-71). `GET` lists the programs visible to the caller, including those they are a member of |
 | `GET /programs/{program_id}` · `GET /programs/{program_id}/projects` | program_ctx(VIEW) | — | the program, and its projects visible to the caller |
-| `POST /programs/{program_id}/projects` · `DELETE /programs/{program_id}/projects/{project_id}` | platform_admin | project_id; `confirm_hash` (omit for preview) | without the hash: a preview of the roll-up change, plus its hash — writes nothing. With it: moves the project; **409 if the preview changed** (R2-S3). Audited. A project of another client → 422 |
+| `GET /programs/{program_id}/members` · `POST …/members` | program_ctx(ADMIN) | user_id, access_level (`ADMIN`/`EDIT`/`VIEW`), member_note | program membership (D-71). Re-adding inserts a new row; a VIEWER-kind user above `VIEW`, or a platform admin → 422; switched-off users listed as inactive. Audited, the program in the event detail; no platform approval first (D-72) |
+| `PATCH /program-members/{id}` · `DELETE /program-members/{id}` | object_guard(ProgramMember, ADMIN) — resolved through the owning program | access_level, row_version | level change / soft removal. **Not restorable** (R2-S5) |
+| `POST /programs/{program_id}/projects` · `DELETE /programs/{program_id}/projects/{project_id}` | platform_admin | project_id; `confirm_hash` (omit for preview) | without the hash: a preview of the roll-up change and of who gains, loses or changes level through the two programs' members, plus its hash — writes nothing. With it: moves the project; **409 if the preview changed** (R2-S3). Audited. A project of another client → 422 |
 | **Business function chart (both sets, D-47)** | | | |
 | `GET /projects/{project_id}/bfc-tree?bfc_set=TO_BE\|AS_IS&include_retired=` | project_ctx(VIEW) | — | the full tree of one set, with each to-be process's `br_number` |
 | `POST /projects/{project_id}/bfc-nodes` | project_ctx(EDIT); `AS_IS` checked in the service for the as-is set | parent_bfc_node_id, node_name, is_process, purpose_desc, bfc_set | node incl. generated `hier_code`. A to-be process gets its BR in the same transaction (D-2, S7-2); an as-is process gets none |
@@ -6191,11 +6355,11 @@ component.
 |---|---|---|---|
 | **Slice 13b–13d — the DFD rule, process volume, drawing on the DFD (D-65, D-67, D-70)** | | | |
 | `GET /projects/{project_id}/dfd-rule` | project_ctx(VIEW) | — | per chart: the required elements, `rule_applies`, locked and recommended flags; the catalogue; the project's `row_version` (D-70) |
-| `POST /projects/{project_id}/dfd-rule/preview` | project_ctx(ADMIN) | bfc_set_code, codes | for that chart: ready / partly / not ready / would block, and `preview_digest`. No write |
-| `PUT /projects/{project_id}/dfd-rule` | project_ctx(ADMIN) | bfc_set_code, codes, row_version, preview_digest | the chart's rule; 409 on a stale `row_version` or digest; 422 if STARTED is dropped or ORDER lacks DATA_IN and DATA_OUT. `PROJECT_DFD_RULE_CHANGED` (D-70, Q-5) |
+| `POST /projects/{project_id}/dfd-rule/preview` | project_ctx(PLATFORM) | bfc_set_code, codes | for that chart: ready / partly / not ready / would block, and `preview_digest`. No write |
+| `PUT /projects/{project_id}/dfd-rule` | project_ctx(PLATFORM) | bfc_set_code, codes, row_version, preview_digest | the chart's rule; 409 on a stale `row_version` or digest; 422 if STARTED is dropped or ORDER lacks DATA_IN and DATA_OUT. `PROJECT_DFD_RULE_CHANGED` (D-70, Q-5) |
 | `POST /bfc-nodes/{id}/hand-offs` | object_guard(BfcNode, EDIT, DFD resolver) | to_bfc_node_id, data_entity_id | a hand-off drawn on the canvas: this process's output and the other process's input, in one transaction through `ensure_step_io`. 422 across charts; 404 for a process the caller cannot see (D-65). Every other drawn connection uses the existing step I/O, external-flow and trigger routes |
 | `PATCH /bfc-nodes/{id}/volume` | object_guard(BfcNode, EDIT, set resolver) | runs_per_period, volume_period_code, transactions_per_run, transaction_unit_code, seconds_per_transaction, row_version | the process with its derived `annual_hours`, `fte` and `incomplete`. Hours or FTE in the body → 422 (`extra="forbid"`); a non-process node → 422. `PROCESS_VOLUME_SET` |
-| `PUT /projects/{project_id}/fte-basis` | project_ctx(ADMIN) | working_days_per_year, hours_per_working_day, row_version | the FTE basis (default 240 × 8). `PROJECT_FTE_BASIS_CHANGED` |
+| `PUT /projects/{project_id}/fte-basis` | project_ctx(PLATFORM) | working_days_per_year, hours_per_working_day, row_version | the FTE basis (default 240 × 8). `PROJECT_FTE_BASIS_CHANGED` |
 | `GET /projects/{project_id}/volume-summary` | project_ctx(VIEW) | — | per chart, hours and FTE per L1 / L2 area, as-is beside to-be, matched by code and name; unmatched areas with their reason; incomplete processes listed (Q-28) |
 | **Slice 11 — structured BR, attribute usage, system-to-system flows (D-59, D-60b, D-61)** | | | |
 | BR requirement lines · attribute ticks in the CRUD grid · BR system flows · "Create interface FR from these flows" | object_guard(BusinessRequirement, EDIT; flows: `APPLICATION`; the seeding action: `FUNCTION_REQUIREMENT` + `APPLICATION`) | line_kind_code, priority_code, line_text, seq_no · attribute ticks with the entity ticks in one request · data_entity_id, source/target application, flow_note | §4.3. Line numbers, the BR's priority and flow coverage are derived, never sent. `PATCH /business-requirements/{id}` then accepts `br_statement` and status only. Route shapes fixed by the slice 11 build |
@@ -6219,7 +6383,7 @@ component.
 | `GET/PUT /projects/{project_id}/control-rules` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
 | `GET /projects/{project_id}/control-panel` · `GET /projects/{project_id}/analysis/{analysis_code}` | project_ctx(VIEW) | — | **every analysis vs its rule → GREEN / FLAG / ESCALATE, with owner and action. The PMO's one screen**; any single analysis with its `headline_value` |
 | **Wave 1g — code maintenance** | | | |
-| `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / EDIT) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
+| `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / ADMIN) (G-5) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
 | `PUT /code-master/FR_TYPE` | platform_admin | as above | the global tier |
 | **Wave 2 — benefits, change requests, WBS** | | | |
 | `GET/POST /projects/{project_id}/benefits` · `PATCH/DELETE /benefits/{id}` · `POST/DELETE /benefits/{id}/solutions` | `BENEFIT` | benefit fields; solution_id, contribution_pct | benefit incl. `BEN-0001` (D-14) |
@@ -6306,8 +6470,8 @@ Each is observable by someone who did not build it.
 17a. Renaming a data entity between freezes makes the diff report the DE as CHANGED (D-3).
 17b. Two sessions PATCH the same BR with the same `row_version`; the first succeeds, the
     second returns 409 with a `detail` string, and the first write is not lost (D-6).
-18. A non-admin who is not a live member of restricted project P receives **404** for
-    `GET /projects/P`, and P does not appear in `GET /projects` (D-40, OR-6).
+18. A non-admin who is not a live member of restricted project P, nor of P's program, receives
+    **404** for `GET /projects/P`, and P does not appear in `GET /projects` (D-40, D-71, OR-6).
 18a. A VIEWER sees every unrestricted project in `GET /projects`. Restricting a project first
     previews who loses access; after the confirm, the project is hidden from each of them on
     their next request.
@@ -6375,9 +6539,9 @@ Each is observable by someone who did not build it.
 47. **(D12)** A project override of `ISSUE_SEVERITY` appears in the import template's
     dropdown, passes the import validator, and shows in the React dropdown — all three read
     it from `code_master.resolve`.
-48. **(S1, D-9, D-40)** A VIEWER is refused every write, baseline freeze included; a User is
-    refused the admin functions (members, restriction, components, users); a platform admin
-    passes every level check.
+48. **(S1, D-9, D-40, D-71)** A VIEWER is refused every write, baseline freeze included; a User
+    with no ADMIN membership is refused the admin functions (members, code lists, restriction,
+    components, users); a platform admin passes every level check.
 49. **(S2, S7, R2-S1)** **The route-coverage test.** It walks every route **registered in
     the running app** — not a list in §9 — and fails if any route declares **no guard**, or
     more than one, or if the declared guard is not really attached as a dependency. It also
@@ -6521,7 +6685,7 @@ Each is observable by someone who did not build it.
     containing `NaN` are each rejected before anything is staged.
 100. **(D-26)** A data entity with one PK field and no data types saves without error;
      `validate_entity_model` lists no warning for the missing types.
-101. **(D-27, D-40)** A User renames FR type `INTERFACE` to "連携" and adds type "API" with
+101. **(D-27, D-40, G-5)** A project admin renames FR type `INTERFACE` to "連携" and adds type "API" with
      behaviour INTERFACE. FRs of both types show the interface panel and appear on the
      interface list; no code change or deployment is involved.
 102. **(D-27)** Interface detail on an FR of type FORM returns 422. Changing an interface FR's
@@ -6646,19 +6810,23 @@ Each is observable by someone who did not build it.
 139. **(D-40)** The one-grant model is retired: `vb_app` cannot INSERT or UPDATE
      `user_access_grant`, and two live memberships of one user on one project are refused by
      the database.
-140. **(D-40)** Program grants are retired. A program's roll-ups cover the projects in it that
-     the caller can see; a restricted project the caller is not on is omitted without a count.
-141. **(R2-S3)** Only a platform admin moves a project between programs. The preview returns a
-     hash; committing with a stale `confirm_hash` returns 409; the committed move writes one
-     audit row. Moving a project into a program of another client returns 422.
-142. **(R2-S2)** A staff user calling a program roll-up receives one entry per project of the
+140. **(D-71)** A live program member at EDIT opens and edits every live project of the program,
+     restricted ones included, and their level on each is the higher of their project and
+     program memberships; a program ADMIN passes every project-ADMIN route of those projects.
+     A program's roll-ups cover the projects in it that the caller can see; a restricted
+     project the caller reaches by neither membership is omitted without a count.
+141. **(R2-S3, D-71)** Only a platform admin moves a project between programs. The preview names
+     who gains, loses and changes level through the two programs' members and returns a hash;
+     committing with a stale `confirm_hash` returns 409; the committed move writes one audit
+     row. Moving a project into a program of another client returns 422.
+142. **(R2-S2, D-71)** A staff user calling a program roll-up receives one entry per project of the
      program visible to them, each equal to that project's own report; a program none of
-     whose projects they can see is 404. A static check finds no query with `project_id IN`
-     in `services/program.py`.
-143. **(D-40)** A platform admin creating a project creates no membership row.
-     `GET /projects/{id}/access` lists the platform admins and either the members with their
-     effective level (restricted) or the staff counts by kind (unrestricted), each with its
-     source.
+     whose projects they can see, and of which they are not a member, is 404. A static check
+     finds no query with `project_id IN` in `services/program.py`.
+143. **(D-40, D-71)** A platform admin creating a project creates no membership row.
+     `GET /projects/{id}/access` lists the platform admins, every project and program member
+     with their effective level and source (direct or via the program), and on an unrestricted
+     project the staff counts by kind.
 144. **(D-36)** The prompt pack returned by `GET /process-flow-json/schema` names Claude and
      Microsoft Copilot under FTC accounts as the only approved services. Its first
      instruction is to remove personal data from the source.
@@ -6672,12 +6840,19 @@ Each is observable by someone who did not build it.
 148. **(R2-D13)** `process_completeness.ext_without_io` is 0 on any project, always.
 149. **(D-46)** A process with no performer appears in `process_completeness.no_performer`
      as a warning that does not block the freeze, and is drawn in the UNASSIGNED lane.
-150. **(D-40)** Retired with program grants.
+150. **(D-71)** A program with a live member cannot be retired (409 naming the member); once the
+     members are removed, one audited step each, the retire succeeds. A program admin of a
+     program with no projects opens it and manages its member list.
 151. **(R2-D2)** Soft-deleting a BFC node whose BR is active returns 409 naming the BR. The
      node, the BR and their links are unchanged.
 152. **(R2-S8, D-35)** An upload of exactly the route cap is accepted; one byte more returns
      413 from ingress.
-153. **(D-40)** Retired with program grants: memberships are managed only by a platform admin.
+153. **(D-71, D-72, D-73)** Project members are added, changed and removed by a platform admin,
+     the project's admins and its program's admins; program members by a platform admin and
+     the program's admins; a project admin is refused (403) on the program's member list. Each
+     add writes one audit row and appears in the next freeze's access review with its source.
+     A project admin appointed by a program admin keeps the role when that program admin is
+     removed, and a project admin can demote another project admin.
 154. **(Q15)** `purge_project` by a non-admin returns 403, and without a reason 422. Run by a
      platform admin, it leaves no live or snapshot row for the project, the project's archive
      key is deleted, an existing archive file for it can no longer be decrypted, and a
@@ -6799,6 +6974,27 @@ Each is observable by someone who did not build it.
      returns the file.
 192. **(SC-7)** A project editor (EDIT) can decide a change request and reset the project's control rules
      to the house defaults; a viewer gets 403.
+
+### Project admins and program members (D-71…D-73, G-5)
+
+193. **(D-71, G-5)** A plain USER with no ADMIN membership gets 403 on every `ADMIN` and `PLATFORM`
+     route of a project they can see — members, effective access, code lists incl. FR types,
+     restriction, components, data-model depth, FTE basis, DFD rule preview and set — and 403 on
+     every program `ADMIN` route of a program they can see (404 on one they cannot).
+194. **(D-71)** A project admin (and a program admin) gets 403 on every `PLATFORM` route of the
+     project: restriction, components, data-model depth, FTE basis and DFD rule preview and set;
+     and on moving the project between programs.
+195. **(D-71)** A live member of program A gets 404 on every route of a restricted project in
+     program B, and that project does not appear in `GET /projects`.
+196. **(D-71)** Adding a VIEWER-kind user to a project or a program at EDIT or ADMIN, or changing
+     their level to either, returns 422 and writes nothing; adding a platform admin returns 422.
+197. **(D-71)** Removing a user's direct membership of a project they also reach through its program
+     shows "still has access via program X" in the screen's confirm; after removal the user still
+     opens the project at their program level, and the Access screen shows the source as the program.
+198. **(D-71)** A program member added between a restriction preview and its confirm makes the
+     confirm return 409, and the restriction is not applied.
+199. **(D-71)** Changing a user's kind from VIEWER to USER, or removing a platform admin's flag,
+     previews every membership that comes back into force; a confirm with a stale hash returns 409.
 
 ---
 
@@ -7153,11 +7349,12 @@ The uploaded-file lifecycle and the `.xlsx` parser configuration are specified i
   of deferring row-level security (§6.4). Routes register only on a `GuardedRouter` with
   `**guard.route`; a route with no guard fails at import. A write to a project component names
   it (`component=`), or criterion 49b fails it.
-- **Visibility has one owner:** `access.visible_project_ids`, `require_project` and
-  `require_program` are the only readers of `user_kind`, `is_restricted` and `project_member`
-  (D-40, D-62). A project you cannot see is 404, never 403; the order is 404 → 403 → 409.
+- **Visibility has one owner:** `services/access.py` (`access_to`, `visible_project_ids`,
+  `visible_program_ids`, `require_project`, `require_program`, `effective_access`) is the only reader of
+  `user_kind`, `is_restricted`, `project_member` and `program_member` for access (D-40, D-62, D-71). A
+  project you cannot see is 404, never 403; the order is 404 → 403 → 409.
   `test_access.py::test_no_get_route_leaks_a_restricted_project` calls every GET route as a
-  non-member.
+  non-member and as a member of a different program.
 - **`services/program.py` contains no SQL over business tables** (R2-S2). A roll-up is a loop
   over per-project reports. A `project_id IN (...)` anywhere in it is a code-review rejection.
 - `escape_cell()` is used by **every** sheet-writing path, with no exceptions (S5).
@@ -7330,7 +7527,7 @@ route in `api/scope.js`. Screens link to each other only through these.
   since the last baseline) and Project management (baselines and approvals, change requests,
   risks, issues, WBS progress). Each tile appears when its wave lands, never with invented
   numbers.
-- **Engagement selector.** It lists only what `visible_project_ids(user)` returns, programs
+- **Engagement selector.** It lists only what `visible_project_ids(user)` and `visible_program_ids(user)` return, programs
   first with their projects. Program context (`/g/:programId`) shows only roll-ups; any
   drill-down opens the per-project screen under `/p/:projectId`, so project screens never mix
   projects.
