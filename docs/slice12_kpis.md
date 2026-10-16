@@ -15,11 +15,11 @@ faked (D-51). The night batch of 2026-10-15 built the first cut of the Scope das
 | S4 | FRs not traced to any requirement | BR ↔ FR links | yes (note under S3) |
 | S5 | Effort in scope (days), FRs rated / not yet | rate card (D-13) | yes |
 | S6 | Per business area: processes, requirements, confirmed, FRs, reach, effort | scope-summary | yes (table) |
-| S7 | Processes not ready for the DFD rule (red / amber lights) | DFD light (D-68, D-70) | no — after 13b merges |
-| S8 | Data entities without fields / keys only | consistency check | no |
-| S9 | Effort by solution | effort summary `by_solution` | no (data exists) |
-| S10 | Open freeze warnings | baseline preview gate | no (data exists) |
-| S11 | Filter by business area (the mockup's workstream switch) | — | no |
+| S7 | Processes not ready for the DFD rule (red / amber lights) | DFD light (D-68, D-70) | yes (slice 12) |
+| S8 | Data entities without fields / keys only | consistency check | yes (slice 12) |
+| S9 | Effort by solution | effort summary `by_solution` | yes (slice 12) |
+| S10 | Open freeze warnings | baseline preview gate | yes (slice 12) |
+| S11 | Filter by business area (the mockup's workstream switch) | — | yes (slice 12) |
 
 ## Project management dashboard
 

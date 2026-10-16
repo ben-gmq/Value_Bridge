@@ -548,6 +548,8 @@ class ScopeAreaOut(BaseModel):
     with_solution: int
     frs: int
     effort_days: float
+    not_ready_red: int = 0            # S7: to-be processes whose light is red (blocks the freeze) …
+    not_ready_amber: int = 0          # … or amber (a recommended element missing)
 
 
 class ScopeTotalsOut(BaseModel):
@@ -562,6 +564,15 @@ class ScopeTotalsOut(BaseModel):
     effort_days: float                # every live FR
     traced_effort_days: float         # distinct traced FRs — the table's total row
     untraced_effort_days: float
+    # slice 12 (docs/slice12_kpis.md)
+    dfd_on: bool                      # the to-be DFD rule applies; when off the S7 figures are None
+    not_ready_red: int | None
+    not_ready_amber: int | None
+    entities_without_fields: int      # S8, whole project
+    entities_keys_only: int           # S8 (FULL depth only; always 0 under KEYS_ONLY)
+    freeze_errors: int                # S10: what the next freeze would refuse on (must-be-empty lines) …
+    freeze_blocking: int              # … the freeze-blocking warnings (e.g. a process missing its output) …
+    freeze_warnings: int              # … and the warnings that never refuse
 
 
 class ScopeSummaryOut(BaseModel):
