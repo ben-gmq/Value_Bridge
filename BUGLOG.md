@@ -389,3 +389,8 @@ place.
 - **2026-10-16 · test harness (`sara`, L3):** the app's bcrypt cost is bcrypt's library default, implicitly; pin it
   as `auth.security.BCRYPT_ROUNDS = 12` with a test that it is ≥ 12, and have the harness lower that constant.
 
+- **2026-10-16 · access slice A (`sara`; steps 1–3: L1, L5–L8 fixed in the slice):** (L4) switched-off users' memberships
+  do not show on the member list (as before, sara 7b L8); the decision paper wants them shown, marked inactive and
+  removable — take it with program members in slice B. (L9) the user-type confirm's lock is not exercised by a
+  concurrent test (sequential stale case only); and slice B must add program memberships to `user_admin._comes_back`
+  and its digest, or a demoted admin's program role comes back unseen.

@@ -50,13 +50,16 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   `GuardedRouter(prefix="/api/v1")`. Routers declare only their sub-paths.
 - **Every route declares exactly one guard** — `backend/routers/guards.py`: `public`,
   `authenticated`, `platform_admin`, `project_ctx(min_level, component=)`, `object_guard(Model, min_level,
-  component=)`, `program_ctx(min_level)`; levels `VIEW` < `EDIT` < `ADMIN` (only platform admins reach
-  ADMIN). A write to a project component names it (`component=`), else 409 COMPONENT_OFF; criterion 49b
+  component=)`, `program_ctx(min_level)`; levels `VIEW` < `EDIT` < `ADMIN` < `PLATFORM`. ADMIN is a project
+  admin (a `project_member` at ADMIN, D-71) and guards only members and the access list; **an FTC-only project
+  setting takes `PLATFORM`** (only platform admins hold it) — `test_project_admin.py` pins both route sets. A write to a project component names it (`component=`), else 409 COMPONENT_OFF; criterion 49b
   (`ROUTE_COMPONENTS` in `tests/test_route_guards.py`) fails a write that forgets. Use
   `@router.get(path, **guard.route)`. A route without a guard **fails at import**, and criterion 49 re-proves it.
 - **Visibility has one owner:** `backend/services/access.py` (`visible_project_ids`,
-  `require_project`, `require_program`). D-40: admins see all; staff (`app_user.user_kind` USER = edit,
-  VIEWER = read) see every project **except a restricted one they are not a live `project_member` of**.
+  `require_project`, `require_program`, and `level_for` / `who_can_open` — the only place a level is computed).
+  D-40/D-71: admins see all; staff see every project **except a restricted one they are not a live
+  `project_member` of**, at the higher of the staff default (`KIND_BASE`) and their membership, capped by kind
+  (`KIND_CAP`, never a default).
   A project you cannot see is **404, never 403**; order is 404 → 403 → 409. `user_access_grant` is
   retired history (SELECT-only). `tests/test_access.py::test_no_get_route_leaks_a_restricted_project`
   calls every GET route as a non-member — a new route that bypasses `visible_project_ids` fails it.
