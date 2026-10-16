@@ -80,6 +80,9 @@ def _gate_report(report: dict) -> tuple[dict, dict, dict]:
     return errors, blocking, warnings
 
 
+gate_report = _gate_report                    # public name: the Scope dashboard counts the same gate (slice 12, S10)
+
+
 def _live_counts(db: Session, project_id: int, on: frozenset[str]) -> dict[str, int]:
     out = {}
     for e in FREEZE_SET:

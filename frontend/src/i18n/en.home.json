@@ -34,5 +34,22 @@
   "home.change.REMOVED": "Removed",
   "home.change.MOVED": "Moved",
   "home.openDiff": "Open the comparison",
-  "home.empty": "Nothing in the function chart yet. Start with the business function chart."
+  "home.empty": "Nothing in the function chart yet. Start with the business function chart.",
+  "home.areaFilter": "Business area",
+  "home.allAreas": "All areas",
+  "home.areaBrs": "Requirements in {area}",
+  "home.areaConfirmed": "{n} confirmed",
+  "home.effortAreaNote": "Effort of the function requirements this area's requirements reach",
+  "home.notReady": "Processes not ready",
+  "home.notReadyNote": "Red blocks the next freeze · {amber} amber (a recommended element missing) ·",
+  "home.openChart": "Open the chart",
+  "home.dfdOff": "The to-be DFD is off for this project, so no process carries a readiness light",
+  "home.dataModel": "Data entities to finish",
+  "home.dataModelNote": "Whole project · {none} without fields, {keys} with keys only",
+  "home.nextFreeze": "Next freeze: blocking items",
+  "home.nextFreezeNote": "Whole project · {warnings} warnings that never block ·",
+  "home.openBaselines": "Open baselines",
+  "home.bySolution": "Effort by solution",
+  "home.bySolutionNone": "No rated function requirement is delivered through a solution yet.",
+  "home.unassigned": "{n} days not delivered through a solution"
 }

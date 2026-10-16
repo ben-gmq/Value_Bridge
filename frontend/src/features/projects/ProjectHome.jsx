@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Box, Button, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
+import { Box, Button, Link, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
 import { baselineApi, effortApi, scopeSummaryApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
-import { Card, Code, ListRow, PurpleTile, Tag, Tile } from '../../components/kit';
+import { Card, Code, ListRow, PurpleTile, Segmented, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { AgreedChip, StatusChip, fmtDate } from '../baselines/baselineKit';
@@ -88,9 +89,16 @@ export default function ProjectHome() {
     enabled: Boolean(latest) });
   const dq = useQuery({ queryKey: keys.baselineDiff(projectId, latest?.baseline_id, 'live', false),   // sara M4
     queryFn: () => baselineApi.diff(projectId, latest.baseline_id, 'live'), enabled: Boolean(latest), staleTime: 60_000 });
+  const [areaCode, setAreaCode] = useState('ALL');           // S11: the mockup's workstream switch
   const p = q.data;
   const s = sq.data;
   const e = eq.data;
+  // S11: an area picked → the area's own row feeds the tiles that are counted per area; the rest say "whole project"
+  const area = s && areaCode !== 'ALL' ? s.areas.find((a) => a.hier_code === areaCode) : null;
+  const v = area ?? s?.totals;
+  const topSolutions = (e?.by_solution ?? []).filter((x) => x.solution_number)
+    .sort((a, b) => Number(b.days) - Number(a.days)).slice(0, 4);
+  const unassignedDays = Number((e?.by_solution ?? []).find((x) => !x.solution_number)?.days ?? 0);
   const brRows = dq.data?.entities?.business_requirement?.rows ?? [];
   const brChange = (c) => brRows.filter((r) => r.change === c).length;
   const today = fmtDate(new Date().toISOString());
@@ -107,21 +115,63 @@ export default function ProjectHome() {
         </>)}>
       {s && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {s.areas.length > 1 && (
+            <Segmented size="sm" label={t('home.areaFilter')} value={areaCode} onChange={setAreaCode}
+              options={[{ value: 'ALL', label: t('home.allAreas') },
+                ...s.areas.map((a) => ({ value: a.hier_code, label: a.name }))]} />)}
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'minmax(0,1.3fr) repeat(3, minmax(0,1fr))' } }}>
-            {latest && lq.data ? (
+            {area ? (
+              <PurpleTile label={t('home.areaBrs', { area: area.name })} value={area.brs}
+                note={t('home.areaConfirmed', { n: area.confirmed })} />
+            ) : latest && lq.data ? (
               <PurpleTile label={t('home.inBaseline', { label: latest.version_label })} value={lq.data.counts.business_requirement ?? 0}
                 unit={t('home.ofToday', { n: s.totals.brs })}
                 note={dq.data && t('home.sinceBaseline', { added: brChange('ADDED'), changed: brChange('CHANGED'), label: latest.version_label })} />
             ) : (
               <PurpleTile label={t('home.inBaselineNone')} value={s.totals.brs} note={bl.isSuccess && !latest ? t('home.noBaselineYet') : null} />
             )}
-            <Tile label={t('home.reach')} value={`${pct(s.totals.with_fr, s.totals.brs)}%`}
-              note={t('home.reachNote', { n: s.totals.with_fr, total: s.totals.brs, frs: s.totals.frs })} />
-            <Tile label={t('home.noSolution')} value={s.totals.brs - s.totals.with_solution}
-              tone={s.totals.brs - s.totals.with_solution > 0 ? 'caution' : undefined}
-              note={t('home.noSolutionNote', { n: s.totals.frs_without_br })} />
-            <Tile label={t('home.effort')} value={`${days(s.totals.effort_days)} ${t('home.effortUnit')}`}
-              note={e && t('home.effortNote', { rated: e.rated_count, unrated: e.unrated_count })} />
+            <Tile label={t('home.reach')} value={`${pct(v.with_fr, v.brs)}%`}
+              note={t('home.reachNote', { n: v.with_fr, total: v.brs, frs: v.frs })} />
+            <Tile label={t('home.noSolution')} value={v.brs - v.with_solution}
+              tone={v.brs - v.with_solution > 0 ? 'caution' : undefined}
+              note={area ? null : t('home.noSolutionNote', { n: s.totals.frs_without_br })} />
+            <Tile label={t('home.effort')} value={`${days(v.effort_days)} ${t('home.effortUnit')}`}
+              note={area ? t('home.effortAreaNote') : e && t('home.effortNote', { rated: e.rated_count, unrated: e.unrated_count })} />
+          </Box>
+
+          {/* slice 12 (docs/slice12_kpis.md): S7 readiness per area; S8–S10 always the whole project */}
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' } }}>
+            {s.totals.dfd_on ? (
+              <Tile label={t('home.notReady')} value={v.not_ready_red} tone={v.not_ready_red > 0 ? 'escalate' : undefined}
+                note={(
+                  <>
+                    {t('home.notReadyNote', { amber: v.not_ready_amber })}{' '}
+                    <Link component={RouterLink} to={links.processes(projectId)}>{t('home.openChart')}</Link>
+                  </>)} />
+            ) : (
+              <Tile label={t('home.notReady')} value="—" note={t('home.dfdOff')} />
+            )}
+            <Tile label={t('home.dataModel')} value={s.totals.entities_without_fields + s.totals.entities_keys_only}
+              tone={s.totals.entities_without_fields + s.totals.entities_keys_only > 0 ? 'caution' : undefined}
+              note={t('home.dataModelNote', { none: s.totals.entities_without_fields, keys: s.totals.entities_keys_only })} />
+            <Tile label={t('home.nextFreeze')} value={s.totals.freeze_errors + s.totals.freeze_blocking}
+              tone={s.totals.freeze_errors + s.totals.freeze_blocking > 0 ? 'escalate' : undefined}
+              note={(
+                <>
+                  {t('home.nextFreezeNote', { warnings: s.totals.freeze_warnings })}{' '}
+                  <Link component={RouterLink} to={links.baselines(projectId)}>{t('home.openBaselines')}</Link>
+                </>)} />
+            <Card title={t('home.bySolution')} bodySx={{ gap: 0.5 }}>
+              {!topSolutions.length && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('home.bySolutionNone')}</Typography>}
+              {topSolutions.map((x) => (
+                <Box key={x.solution_id} sx={{ display: 'flex', gap: 1, alignItems: 'baseline', fontSize: 13 }}>
+                  <Code sx={{ fontSize: 12.5 }}>{x.solution_number}</Code>
+                  <Typography noWrap sx={{ fontSize: 13, flex: 1, minWidth: 0 }}>{x.solution_name}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{days(Number(x.days))}</Typography>
+                </Box>))}
+              {unassignedDays > 0 && (
+                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('home.unassigned', { n: days(unassignedDays) })}</Typography>)}
+            </Card>
           </Box>
 
           <Box sx={{ display: 'grid', gap: 2, alignItems: 'start', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.7fr) minmax(300px,1fr)' } }}>

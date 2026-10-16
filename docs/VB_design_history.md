@@ -16,10 +16,27 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-30] Does a requirement-line change count as "effort exposed" in the priced diff?** (raised 2026-10-16, `sara`
-  H2.) §7.13 defines exposure as the effort of FRs reachable "from a changed BR". What a BR says now lives in its
-  lines, so 11a counts a BR as changed when a line is added, changed or removed (a reorder does not). Without that,
-  exposure silently drops to 0 for most requirement changes. Built that way; Ben to confirm.
+- **[Q-32] Who maintains a project's code lists — EDIT (as signed off) or ADMIN?** (raised 2026-10-16, wave 1g spec,
+  `design-auditor` round 1.) §7.12 and the API table give `maintain_fr_types` / `PUT …/code-master/FR_TYPE` the EDIT
+  guard. Ren's working assumption for 1g is "the project's admin role" — in VB only platform admins reach ADMIN (D-40),
+  so that would mean FTC admins only. `docs/slice1g_spec.md` §14 R2.
+- **[Q-33] When a project relabels a company code, do its existing rows follow?** (raised 2026-10-16, wave 1g,
+  `design-auditor` HIGH.) Today the FR-type override re-points the project's rows (§7.12); for every other category a
+  relabel would leave old rows on the company label and new rows on the project label, so exports and baselines show two
+  names for one value. Proposed: extend the re-point to every category (spec §14 R1). Round 2 calls this a new design;
+  its costs: every write at EDIT or above takes a shared lock on the project row (a re-point briefly holds writes in that
+  project), the re-point updates every row of that category in the project in one transaction (not bumping row_version),
+  and a short exclusion list is kept by hand with a test (spec §15). The alternative — every backend read labels by
+  (project, category, code) — touches every exporter and the freeze and is not recommended.
+- **[Q-35] Rate cells for a new FR type or complexity** (raised 2026-10-16, wave 1g round 2). Adding a company FR type
+  or complexity seeds unconfirmed cells in every live project (spec R6), so the picker never offers a type that cannot
+  be rated. Which numbers? Proposal: copy each project's own cell of the existing type with the same behaviour; behaviour
+  OTHER and a new complexity have no source — FTC to give a default, or leave those cells blank (rating returns 422
+  until filled). It also shows as added rate rows in each project's next baseline comparison.
+- **[Q-36] May PROJECT_STATUS be overridden per project?** (raised 2026-10-16, wave 1g round 2.) It is a plain code
+  column on `project`; if yes it joins the re-point, if no it is company-only like PROJECT_TEMPLATE.
+- **[Q-34] A project may hide a company code, and Japanese / Thai labels wait for wave 4** (Ren's working assumptions
+  A2, A3 for 1g) — Ben to confirm.
 
 ---
 
@@ -479,6 +496,7 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | S11-4 | *(Superseded by S11-5.)* **[Q-11a] A migration flow is covered by any FR of the same BR whose interface carries the entity between the same two systems, whatever the FR's behaviour (batch included).** Ben: "Not sure what is Migration Flow" — explained as the one-off copy at go-live; every flow defaults to Integration, Migration is an option; the recommendation taken | slice11_schema §3.3 |
 | S11-5 | **Migration is an FR type, not a flow tag** — supersedes S11-2's flow kind and S11-4. Ben: "So you are talking about Solution Type or FR Type? If that is the case should be FR Type." A BR system-to-system flow stays (BR × entity × from × to) with no kind. FR_TYPE gains `MIGRATION` "Data migration" with behaviour `INTERFACE`, so it has the interface card (source, target, entities) and covers a flow exactly as an interface FR does; the rate card gains its four complexity rows, at the interface rates until FTC confirms its man-days | S11-2, S11-4 |
 | S11-6 | **[Q-29] Slice 11 merges as one: 11a, 11b and 11c land on `main` together, once all three are built and tested, with one hash-spec bump (spec 4) for all three tables.** Ben: "Q-29 combine please". The spec's §5 / criterion 189 stand as written; the three pieces are built and reviewed one by one on the branch, never merged one by one | slice11_schema §5, §7 |
+| S11-8 | **[Q-30] A requirement-line edit counts towards "effort exposed".** Ben: option (a), "line edits count, as built". A BR counts as changed in the priced diff when its own row changed or one of its requirement lines was added, changed or removed; a reorder does not, and lines a side never froze (`not_frozen_in`) are skipped (sara 11a H2) | `priced_diff` |
 | S11-7 | **[Q-31] Yes to both.** Ben: "Q-31 Yes". (1) Data migration FRs (S11-5) are listed in the Interfaces register beside interface FRs, with their FR type shown so the two can be told apart; a migration FR carries the same interface card, Frequency optional as for any interface (S6b2-1). (2) Rate-card rows added between two baselines (e.g. the four MIGRATION rows backfilled into existing projects) count in the comparison headline like any other added row | `interface_list`; §7.7 diff |
 | S12-1 | **Slice 12 KPI list approved as drafted** (`docs/slice12_kpis.md`). Ben: "let's go with that, I do not want too many in the beginning." Slice 12 adds only S7–S11 from the list; the Project-management view stays a card on the dashboard until it has more than one tile (the list's question 2) | D-58 |
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |

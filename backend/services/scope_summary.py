@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
+from services import baseline, process_flow
+from services.consistency import consistency_check
 
 AGREED = {"CONFIRMED", "BASELINED"}
 
@@ -66,4 +68,27 @@ def summary(db: Session, project_id: int) -> dict:
     totals["effort_days"] = days(live_frs)
     totals["traced_effort_days"] = days(traced)
     totals["untraced_effort_days"] = days(set(live_frs) - traced)
+
+    # Slice 12 (docs/slice12_kpis.md, S12-1). S7: the to-be processes per area that are not Ready under the chart's
+    # DFD rule — red blocks the next freeze, amber misses a recommended element — read through the same reader as the
+    # light (process_flow.readiness), so the tile and the chart never disagree. No DFD on → no figure (None).
+    ready = process_flow.readiness(db, project_id, "TO_BE")
+    for r in out:
+        r["not_ready_red"] = r["not_ready_amber"] = 0
+    by_code = {r["hier_code"]: r for r in out}
+    for node_id, p in ready["processes"].items():
+        r = by_code.get(area_of.get(node_id))
+        if r is not None and p["light"] != process_flow.READY:
+            r["not_ready_red" if p["light"] == process_flow.NOT_READY else "not_ready_amber"] += 1
+    totals["dfd_on"] = ready["rule_applies"]
+    for k in ("not_ready_red", "not_ready_amber"):
+        totals[k] = sum(r[k] for r in out) if ready["rule_applies"] else None
+    # S8, S10: whole-project figures, from the consistency report the freeze itself reads.
+    report = consistency_check(project_id, db)
+    errors, blocking, warnings = baseline.gate_report(report)
+    totals["entities_without_fields"] = len(report["entities_without_fields"])
+    totals["entities_keys_only"] = len(report["entities_keys_only"])
+    totals["freeze_errors"] = sum(len(v) for v in errors.values())
+    totals["freeze_blocking"] = sum(len(v) for v in blocking.values())
+    totals["freeze_warnings"] = sum(len(v) for v in warnings.values())
     return {"areas": out, "totals": totals}
