@@ -1,6 +1,6 @@
-"""Programs (§7.10a, D-32, D-40): a header and a set of reads — a roll-up grouping, no longer an
-access scope. It owns no business data, so it has no SQL over business tables — roll-ups call the
-per-project reports."""
+"""Programs (§7.10a, D-32, D-71): a header, a set of reads and its members. It owns no business data, so it has no
+SQL over business tables — roll-ups call the per-project reports. Its members reach every live project of the program
+at their level (D-71); who can open what is still decided only by services/access."""
 import hashlib
 import json
 
@@ -8,8 +8,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import AppUser, Client, Program, Project
+from models import AppUser, Client, Program, ProgramMember, Project
 from services import access, audit
+from services.lifecycle import soft_delete
 
 
 def get_program(db: Session, program_id: int) -> Program:
@@ -54,12 +55,36 @@ def program_projects(db: Session, user: AppUser, program_id: int) -> list[Projec
     return list(db.scalars(q.order_by(Project.project_code)))
 
 
+def _move_changes(db: Session, p: Project, target_program_id: int | None) -> dict:
+    """Who gains, loses or changes level on the project when it moves (D-71; model §5): every active staff user whose
+    level differs between the old and the new program's memberships. The preview hash covers it."""
+    gains, loses, changes = [], [], []
+    users = db.scalars(select(AppUser).where(AppUser.is_active, ~AppUser.is_platform_admin)
+                       .order_by(AppUser.display_name))
+    for u in users:
+        old = access.live_program_member(db, p.program_id, u.app_user_id)
+        new = access.live_program_member(db, target_program_id, u.app_user_id)
+        if old is None and new is None:
+            continue
+        m = access.live_member(db, p.project_id, u.app_user_id)
+        ml = m.access_level if m else None
+        before = access.level_for(u.user_kind, p.is_restricted, ml, old.access_level if old else None)
+        after = access.level_for(u.user_kind, p.is_restricted, ml, new.access_level if new else None)
+        b, a = before[0] if before else None, after[0] if after else None
+        if b == a:
+            continue
+        who = {"user_id": u.app_user_id, "display_name": u.display_name, "before": b, "after": a}
+        (gains if b is None else loses if a is None else changes).append(who)
+    return {"gains": gains, "loses": loses, "changes": changes}
+
+
 def move_project_program(db: Session, actor: AppUser, project_id: int,
                          target_program_id: int | None, confirm_hash: str | None,
                          expected_from_program_id: int | None = None) -> dict:
-    """Platform admin only (Q10). Step 1 (no hash) previews the move and writes nothing; step 2
-    applies it only if the preview is unchanged (R2-S3). Since D-40 a move changes roll-ups, not
-    access, so `gains` and `loses` are always empty (slice7_schema §8.6)."""
+    """Platform admin only (Q10, D-71 (6): a program admin moving a restricted project into their own program would
+    grant themselves access). Step 1 (no hash) previews the move and writes nothing; step 2 locks both programs then
+    the project (design-auditor M2), recomputes the preview and applies it only if unchanged (R2-S3). Since D-71 a move
+    changes access: the preview names who gains, loses or changes level through the programs' members."""
     p = db.get(Project, project_id)
     if p is None or not p.is_active:
         raise HTTPException(404, "Not found")
@@ -72,17 +97,132 @@ def move_project_program(db: Session, actor: AppUser, project_id: int,
         raise HTTPException(422, "A program's projects belong to its client")
     if (p.program_id or None) == (target_program_id or None):
         raise HTTPException(422, "The project is already there")
-    preview = {"project": p.project_code, "from_program_id": p.program_id,
-               "to_program_id": target_program_id,
-               "gains": [], "loses": []}
+    def plan() -> dict:
+        return {"project": p.project_code, "from_program_id": p.program_id, "to_program_id": target_program_id,
+                **_move_changes(db, p, target_program_id)}
+    preview = plan()
     h = hashlib.sha256(json.dumps(preview, sort_keys=True).encode()).hexdigest()
     if confirm_hash is None:
         return {"preview": preview, "preview_hash": h, "applied": False}
-    if confirm_hash != h:
+    from services.project import lock_program
+    seen_program = p.program_id
+    lock_program(db, seen_program, target_program_id)
+    db.refresh(p, with_for_update=True)
+    if t is not None:
+        db.refresh(t)
+        if not t.is_active:                                   # sara B L5: retired while we waited
+            raise HTTPException(422, "Choose an active program")
+    if p.program_id != seen_program:
         raise HTTPException(409, "The project's program changed since the preview. Review it again.")
+    preview = plan()
+    h = hashlib.sha256(json.dumps(preview, sort_keys=True).encode()).hexdigest()
+    if confirm_hash != h:
+        raise HTTPException(409, "Who can open this project, or its program, changed since the preview. "
+                                 "Review it again.")
     p.program_id = target_program_id
     p.updated_by = actor.app_user_id
     audit.record(db, "PROJECT_PROGRAM_CHANGED", actor_id=actor.app_user_id, project_id=project_id,
                  detail=preview)
     db.commit()
     return {"preview": preview, "preview_hash": h, "applied": True}
+
+
+# ---- program members (D-71 (2), (5); D-73) — program ADMIN by route guard ----------------------------------------
+def _program_share_lock(db: Session, program_id: int) -> None:
+    """Member writes take the program row FOR SHARE; a restriction or move confirm takes it FOR UPDATE (design-auditor
+    M2), so a member added mid-confirm waits and the recomputed preview sees them."""
+    db.execute(select(Program.program_id).where(Program.program_id == program_id).with_for_update(read=True))
+
+
+def _member_out(m: ProgramMember, u: AppUser) -> dict:
+    level = "PLATFORM" if u.is_platform_admin else access._lower(access.KIND_CAP[u.user_kind], m.access_level)
+    return {"program_member_id": m.program_member_id, "user_id": u.app_user_id, "display_name": u.display_name,
+            "user_kind": u.user_kind, "user_is_active": u.is_active, "access_level": m.access_level,
+            "effective_level": level, "member_note": m.member_note, "row_version": m.row_version}
+
+
+def list_members(db: Session, program: Program) -> list[dict]:
+    """Live memberships, switched-off users included and marked, so they can be removed (design-auditor L1)."""
+    rows = db.execute(select(ProgramMember, AppUser).join(AppUser, AppUser.app_user_id == ProgramMember.app_user_id)
+                      .where(ProgramMember.program_id == program.program_id, ProgramMember.is_active)
+                      .order_by(ProgramMember.program_member_id)).all()
+    return [_member_out(m, u) for m, u in rows]
+
+
+def member_row(db: Session, m: ProgramMember) -> dict:
+    return _member_out(m, db.get(AppUser, m.app_user_id))
+
+
+def member_candidates(db: Session, program: Program) -> list[dict]:
+    """Who a program admin may add: active staff, not platform admins, not yet live members (/users stays FTC-only)."""
+    taken = set(db.scalars(select(ProgramMember.app_user_id).where(ProgramMember.program_id == program.program_id,
+                                                                   ProgramMember.is_active)))
+    return [{"user_id": u.app_user_id, "display_name": u.display_name, "user_kind": u.user_kind}
+            for u in db.scalars(select(AppUser).where(AppUser.is_active, ~AppUser.is_platform_admin)
+                                .order_by(AppUser.display_name)) if u.app_user_id not in taken]
+
+
+def _check_level(target: AppUser, access_level: str) -> None:
+    """D-71 (7): a VIEWER-kind user is refused above VIEW, never quietly capped."""
+    if not access.rank_ok(access.KIND_CAP[target.user_kind], access_level):
+        raise HTTPException(422, f"{target.display_name} is a viewer and can only be added as a viewer")
+
+
+def add_member(db: Session, actor: AppUser, program: Program, user_id: int, access_level: str,
+               member_note: str | None) -> ProgramMember:
+    from services.project import _user_share_lock
+    _program_share_lock(db, program.program_id)
+    _user_share_lock(db, user_id)
+    target = db.get(AppUser, user_id)
+    if target is None or not target.is_active:
+        raise HTTPException(422, "Choose an active user")
+    if target.is_platform_admin:
+        raise HTTPException(422, "A platform admin sees every project and needs no membership")
+    _check_level(target, access_level)
+    if access.live_program_member(db, program.program_id, user_id) is not None:
+        raise HTTPException(409, f"{target.display_name} is already a member of this program")
+    m = ProgramMember(program_id=program.program_id, app_user_id=user_id, access_level=access_level,
+                      member_note=(member_note or "").strip() or None, created_by=actor.app_user_id)
+    db.add(m)
+    db.flush()                    # uq_prgm_live is the backstop against a concurrent add (→ 409)
+    audit.record(db, "PROGRAM_MEMBER_ADDED", actor_id=actor.app_user_id, target_table="program_member",
+                 target_id=m.program_member_id,
+                 detail={"program_id": program.program_id, "user_id": user_id, "access_level": access_level})
+    db.commit()
+    return m
+
+
+def change_member_level(db: Session, actor: AppUser, m: ProgramMember, access_level: str,
+                        row_version: int) -> ProgramMember:
+    """Any program admin may change any member, another admin included (D-73)."""
+    from services.project import _user_share_lock
+    _program_share_lock(db, m.program_id)
+    _user_share_lock(db, m.app_user_id)
+    if not m.is_active:
+        raise HTTPException(409, "That membership was already removed")
+    if m.row_version != row_version:
+        raise HTTPException(409, "Updated by another user. Please refresh.")
+    _check_level(db.get(AppUser, m.app_user_id), access_level)
+    if m.access_level != access_level:
+        old, m.access_level = m.access_level, access_level
+        m.updated_by = actor.app_user_id
+        audit.record(db, "PROGRAM_MEMBER_LEVEL_CHANGED", actor_id=actor.app_user_id, target_table="program_member",
+                     target_id=m.program_member_id,
+                     detail={"program_id": m.program_id, "user_id": m.app_user_id, "from": old, "to": access_level})
+    db.commit()
+    return m
+
+
+def remove_member(db: Session, actor: AppUser, m: ProgramMember, row_version: int) -> None:
+    """Soft-remove (law 1); never restored — access returns only through add. The project admins this member
+    appointed keep their roles: a role belongs to the project (D-73)."""
+    _program_share_lock(db, m.program_id)
+    if not m.is_active:
+        raise HTTPException(409, "That membership was already removed")
+    if m.row_version != row_version:
+        raise HTTPException(409, "Updated by another user. Please refresh.")
+    soft_delete(m, actor.app_user_id)
+    m.updated_by = actor.app_user_id
+    audit.record(db, "PROGRAM_MEMBER_REMOVED", actor_id=actor.app_user_id, target_table="program_member",
+                 target_id=m.program_member_id, detail={"program_id": m.program_id, "user_id": m.app_user_id})
+    db.commit()

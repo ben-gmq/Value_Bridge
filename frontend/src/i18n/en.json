@@ -200,5 +200,14 @@
   "access.levelDropsNote": "Marked members keep only read access once the project is limited. If they should keep editing, set their level to Can edit in the member list.",
   "access.createdNote": "Project created. Only its assigned consultants can open it, and it has none yet — add them below.",
   "nav.volume": "Time & FTE",
-  "admin.codeLists": "Code lists"
+  "admin.codeLists": "Code lists",
+  "program.members": "Program members",
+  "program.membersNote": "Each member opens every project in this program at their level — including projects limited to assigned consultants. A program admin also manages the members of each project in it.",
+  "program.userOff": "login switched off",
+  "program.removeBody": "{name} loses what this program gave them on their next click. Project roles they hold directly, and project admins they appointed, stay.",
+  "access.viaProgram": "via program {code}",
+  "access.alsoViaProgram": "also via program {code}",
+  "access.removeBodyProgram": "{name} is removed from this project's list, but still opens it through program {code}. To take that away, remove them from the program.",
+  "access.programMembers": "Through the program",
+  "access.keepsViaProgram": "Keep access through the program:"
 }

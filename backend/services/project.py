@@ -90,10 +90,14 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     on = components.initial_rows(db, p.project_id, component_codes, actor.app_user_id)   # D-37
     rule = dfd_rule_service.initial_rows(db, p.project_id, dfd_rule, actor.app_user_id)  # D-70 (Q-4), same tx
     # A later slice copies CONTROL_RULE house defaults here (§7.13).
+    # D-71: a project created inside a program opens at once to the program's members — restricted or not — so the
+    # audit names them (design-auditor; D-62's "no members yet" no longer means "nobody sees it").
+    admitted = [{"user_id": r["user"].app_user_id, "level": r["level"]}
+                for r in access.who_can_open(db, p)["program_members"]] if program_id else []
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
                  detail={"program_id": program_id, **cells, "template_code": template_code,
                          "components": on, "data_model_depth": data_model_depth, "dfd_rule": rule,
-                         "is_restricted": is_restricted})
+                         "is_restricted": is_restricted, "program_members_admitted": admitted})
     db.commit()
     return p
 
@@ -136,21 +140,33 @@ def _person(u: AppUser) -> dict:
     return {"user_id": u.app_user_id, "display_name": u.display_name, "user_kind": u.user_kind}
 
 
-def _row(m: ProjectMember, u: AppUser, level: str, via: str) -> dict:
+def _row(m: ProjectMember, u: AppUser, level: str, via: str, also_via_program: str | None = None) -> dict:
     return {**_person(u), "project_member_id": m.project_member_id, "access_level": m.access_level,
-            "effective_level": level, "via": via, "member_note": m.member_note, "row_version": m.row_version}
+            "effective_level": level, "via": via, "member_note": m.member_note, "row_version": m.row_version,
+            "also_via_program": also_via_program}
 
 
 def _member_row(db: Session, m: ProjectMember) -> dict:
     """One member as the Access screen shows it, with the level they hold on the project right now."""
-    u, p = db.get(AppUser, m.app_user_id), db.get(Project, m.project_id)
-    if u.is_platform_admin:
-        return _row(m, u, "PLATFORM", "PLATFORM_ADMIN")
-    return _row(m, u, *access.level_for(u.user_kind, p.is_restricted, m.access_level))
+    p = db.get(Project, m.project_id)
+    r = next((r for r in access.who_can_open(db, p)["members"]
+              if r["member"].project_member_id == m.project_member_id), None) if m.is_active else None   # sara B L2
+    u = db.get(AppUser, m.app_user_id)
+    if r is None:                                       # a removed row, or one of a switched-off user
+        return _row(m, u, m.access_level, "MEMBER")
+    return _row(m, u, r["level"], r["via"], r["also_via_program"])
 
 
 def list_members(db: Session, project: Project) -> list[dict]:
-    return [_row(r["member"], r["user"], r["level"], r["via"]) for r in access.who_can_open(db, project)["members"]]
+    return [_row(r["member"], r["user"], r["level"], r["via"], r["also_via_program"])
+            for r in access.who_can_open(db, project)["members"]]
+
+
+def _program_row(r: dict) -> dict:
+    """A person who opens the project through its program only (D-71): no project_member row to change here."""
+    return {**_person(r["user"]), "program_member_id": r["program_member"].program_member_id,
+            "access_level": r["program_member"].access_level, "effective_level": r["level"], "via": r["via"],
+            "program_code": r["program_code"]}
 
 
 def member_candidates(db: Session, project: Project) -> list[dict]:
@@ -230,30 +246,41 @@ def set_restriction(db: Session, actor: AppUser, project: Project, restricted: b
     """§8.3 + DR7-D2: preview who loses or gains access AND who keeps it, at the level they will hold (each member
     with the note that explains why), inside the hash; then confirm. Audited."""
     def plan() -> dict:
-        opened = access.who_can_open(db, project)["members"]
-        members = {r["user"].app_user_id: r for r in opened if not r["user"].is_platform_admin}
+        w = access.who_can_open(db, project)
+        members = {r["user"].app_user_id: r for r in w["members"] if not r["user"].is_platform_admin}
+        via_program = {r["user"].app_user_id: r for r in w["program_members"] if not r["user"].is_platform_admin}
         staff = _staff(db)
-        keeps = []
+        keeps, keeps_via_program = [], []
         # DR10c-S1: a kept member whose level is lower behind the wall than in the open (a USER kept at VIEW,
         # e.g. copied from an old grant) is flagged, so the admin raises it before or after confirming.
         for u in staff:
-            r = members.get(u.app_user_id)
-            if r is None:
-                continue
-            level, via = access.level_for(u.user_kind, restricted, r["member"].access_level)
-            drops = (restricted and not project.is_restricted
-                     and access.LEVEL_RANK[level] < access.LEVEL_RANK[r["level"]])
-            keeps.append({**_row(r["member"], u, level, via), "level_drops": drops})
-        others = [_person(u) for u in staff if u.app_user_id not in members]
+            r, g = members.get(u.app_user_id), via_program.get(u.app_user_id)
+            if r is not None:
+                pl = r["also_via_program"] and access.live_program_member(db, project.program_id, u.app_user_id)
+                level, via = access.level_for(u.user_kind, restricted, r["member"].access_level,
+                                              pl.access_level if pl else None)
+                drops = (restricted and not project.is_restricted
+                         and access.LEVEL_RANK[level] < access.LEVEL_RANK[r["level"]])
+                keeps.append({**_row(r["member"], u, level, via, r["also_via_program"]), "level_drops": drops})
+            elif g is not None:                       # D-71: a program role keeps them in (design-auditor H1)
+                level, via = access.level_for(u.user_kind, restricted, None, g["program_member"].access_level)
+                keeps_via_program.append({**_program_row({**g, "level": level, "via": via}),
+                                          "level_drops": restricted and not project.is_restricted
+                                          and access.LEVEL_RANK[level] < access.LEVEL_RANK[g["level"]]})
+        others = [_person(u) for u in staff if u.app_user_id not in members and u.app_user_id not in via_program]
         return {"restricted": restricted, "changed": restricted != project.is_restricted,
                 "loses": others if restricted and not project.is_restricted else [],
                 "gains": others if not restricted and project.is_restricted else [],
-                "keeps": keeps}
+                "keeps": keeps, "keeps_via_program": keeps_via_program}
     preview = plan()
     h = hashlib.sha256(json.dumps(preview, sort_keys=True, default=str).encode()).hexdigest()
     if confirm_hash is None:
         return {**preview, "confirm_hash": h, "applied": False}
+    seen_program = project.program_id
+    lock_program(db, seen_program)                            # D-71 / design-auditor M2: program, then project
     db.refresh(project, with_for_update=True)                 # sara 7b L1: re-read under the lock
+    if project.program_id != seen_program:                    # sara B L1: moved meanwhile — its program is unlocked
+        raise HTTPException(409, "Who can see this project changed since the preview. Review it again.")
     preview = plan()
     if hashlib.sha256(json.dumps(preview, sort_keys=True, default=str).encode()).hexdigest() != confirm_hash:
         raise HTTPException(409, "Who can see this project changed since the preview. Review it again.")
@@ -278,5 +305,14 @@ def effective_access(db: Session, project: Project) -> dict:
     each freeze reads this (§4.7, D-72)."""
     w = access.who_can_open(db, project)
     return {"is_restricted": project.is_restricted, "admins": [_person(u) for u in w["admins"]],
-            "members": [_row(r["member"], r["user"], r["level"], r["via"]) for r in w["members"]],
+            "members": [_row(r["member"], r["user"], r["level"], r["via"], r["also_via_program"]) for r in w["members"]],
+            "program_members": [_program_row(r) for r in w["program_members"]],
             "staff": w["staff"]}
+
+
+def lock_program(db: Session, *program_ids: int | None) -> None:
+    """The lock order every write that changes who reaches a project through a program follows (D-71; design-auditor
+    M2): the program row(s) FOR UPDATE in ascending id, then the project. Program-member writes take the program row
+    FOR SHARE, so a member added mid-confirm waits, and the recomputed preview sees it."""
+    for pid in sorted({p for p in program_ids if p is not None}):
+        db.execute(select(Program.program_id).where(Program.program_id == pid).with_for_update())

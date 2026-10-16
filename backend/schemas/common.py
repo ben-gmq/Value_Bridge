@@ -65,10 +65,11 @@ class AccessChangeIn(BaseModel):
 
 
 class ComesBackOut(BaseModel):
-    project_id: int
+    project_id: int | None                           # None: a program role itself (via PROGRAM_ROLE)
     project_code: str
     project_name: str
-    access_level: str                                # the stored membership
+    access_level: str                                # the stored membership that gives it
+    via: str = "MEMBER"                              # MEMBER or PROGRAM (D-71)
     level_before: str | None                         # None: unread until now (admin) or no access
     level_after: str
 
@@ -117,6 +118,19 @@ class ProgramOut(Orm):
     program_code: str
     program_name: str
     description: str | None
+    row_version: int
+    my_access_level: str | None = None   # VIEW / EDIT / ADMIN / PLATFORM, on the single-program read (D-71)
+
+
+class ProgramMemberOut(BaseModel):
+    program_member_id: int
+    user_id: int
+    display_name: str
+    user_kind: str
+    user_is_active: bool                 # a switched-off user's membership still shows, to be removed (L1)
+    access_level: str
+    effective_level: str
+    member_note: str | None
     row_version: int
 
 
@@ -283,9 +297,26 @@ class MemberOut(BaseModel):
     user_kind: str
     access_level: str
     effective_level: str                 # what they hold on the project now: access.level_for (D-71)
-    via: str                             # MEMBER / STAFF / PLATFORM_ADMIN — where that level comes from
+    via: str                             # MEMBER / PROGRAM / STAFF / PLATFORM_ADMIN — where that level comes from
+    also_via_program: str | None = None  # D-71: the program they ALSO hold a role through (removing this row keeps it)
     member_note: str | None
     row_version: int
+
+
+class ProgramAccessOut(BaseModel):
+    """Someone who opens a project only through its program (D-71) — no project_member row to change."""
+    user_id: int
+    display_name: str
+    user_kind: str
+    program_member_id: int
+    program_code: str
+    access_level: str
+    effective_level: str
+    via: str
+
+
+class ProgramKeptOut(ProgramAccessOut):
+    level_drops: bool = False
 
 
 class KeptMemberOut(MemberOut):
@@ -302,6 +333,7 @@ class EffectiveAccessOut(BaseModel):
     is_restricted: bool
     admins: list[PersonOut]
     members: list[MemberOut]
+    program_members: list[ProgramAccessOut] = []      # D-71: open it through the program
     staff: dict[str, int] | None         # counts by kind while unrestricted
 
 
@@ -316,6 +348,7 @@ class RestrictionOut(BaseModel):
     loses: list[PersonOut]
     gains: list[PersonOut]
     keeps: list[KeptMemberOut]           # DR7-D2: who keeps access, and why
+    keeps_via_program: list[ProgramKeptOut] = []     # D-71: kept by a program role
     confirm_hash: str
     applied: bool
 

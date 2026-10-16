@@ -39,6 +39,11 @@ export const api = {
 
   programs: () => d(http.get('/api/v1/programs')),
   program: (id) => d(http.get(`/api/v1/programs/${id}`)),
+  programMembers: (id) => d(http.get(`/api/v1/programs/${id}/members`)),
+  programMemberCandidates: (id) => d(http.get(`/api/v1/programs/${id}/member-candidates`)),
+  addProgramMember: (id, body) => d(http.post(`/api/v1/programs/${id}/members`, body)),
+  changeProgramMember: (id, body) => d(http.patch(`/api/v1/program-members/${id}`, body)),
+  removeProgramMember: (id, rowVersion) => d(http.delete(`/api/v1/program-members/${id}`, { params: { row_version: rowVersion } })),
   programProjects: (id) => d(http.get(`/api/v1/programs/${id}/projects`)),
   createProgram: (body) => d(http.post('/api/v1/programs', body)),
   moveIntoProgram: (id, body) => d(http.post(`/api/v1/programs/${id}/projects`, body)),

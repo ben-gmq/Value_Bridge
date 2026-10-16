@@ -20,7 +20,7 @@ import { t } from '../../i18n/t';
 const levelsFor = (kind, current) => (kind === 'VIEWER'
   ? ['VIEW', ...(current && current !== 'VIEW' ? [current] : [])] : ['ADMIN', 'EDIT', 'VIEW']);
 
-function LevelSelect({ id, value, onChange, kind }) {
+export function LevelSelect({ id, value, onChange, kind }) {
   return (
     <FormControl size="small" sx={{ minWidth: 160 }}>
       <InputLabel id={`${id}-label`}>{t('access.level')}</InputLabel>
@@ -187,6 +187,9 @@ export default function AccessPage() {
                         <Tag tone={row.effective_level === 'VIEW' ? 'neutral' : 'navy'}>{t(`access.level.${row.effective_level}`)}</Tag>
                         {row.via === 'STAFF' && (
                           <Typography component="span" sx={{ ml: 1, fontSize: 12.5, color: 'brand.muted' }}>{t('access.viaStaff')}</Typography>)}
+                        {row.also_via_program && (
+                          <Typography component="span" sx={{ ml: 1, fontSize: 12.5, color: 'brand.muted' }}>
+                            {t(row.via === 'PROGRAM' ? 'access.viaProgram' : 'access.alsoViaProgram', { code: row.also_via_program })}</Typography>)}
                       </TableCell>
                       <TableCell sx={{ color: 'text.secondary', wordBreak: 'break-word', minWidth: 120 }}>{row.member_note}</TableCell>
                       <TableCell align="right" sx={{ pr: 2.5 }}>
@@ -199,6 +202,15 @@ export default function AccessPage() {
               </Table>
             </Box>
           </Card>
+          {data?.program_members?.length > 0 && (
+            <Card title={t('access.programMembers')} bodySx={{ gap: 1 }}>
+              {data.program_members.map((p) => (
+                <Box key={p.program_member_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{p.display_name}</Typography>
+                  <Tag tone={p.effective_level === 'VIEW' ? 'neutral' : 'navy'}>{t(`access.level.${p.effective_level}`)}</Tag>
+                  <Typography sx={{ fontSize: 12.5, color: 'brand.muted' }}>{t('access.viaProgram', { code: p.program_code })}</Typography>
+                </Box>))}
+            </Card>)}
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(3, minmax(0, 1fr))' } }}>
             <LevelTile strong title={t('access.admins')} body={t('settings.acc.adminWhat')} names={names(data?.admins ?? [])} />
             <LevelTile title={t('access.level.EDIT')} body={t('settings.acc.editWhat')} />
@@ -228,6 +240,14 @@ export default function AccessPage() {
                     </Box>))}
                   {preview.keeps.some((k) => k.level_drops) && (
                     <Alert severity="warning">{t('access.levelDropsNote')}</Alert>)}
+                  {preview.keeps_via_program?.length > 0 && (
+                    <>
+                      <Typography sx={{ fontWeight: 600 }}>{t('access.keepsViaProgram')}</Typography>
+                      {preview.keeps_via_program.map((k) => (
+                        <Typography key={k.program_member_id} variant="body2">
+                          {k.display_name} — {t(`access.level.${k.effective_level}`)} · {t('access.viaProgram', { code: k.program_code })}
+                        </Typography>))}
+                    </>)}
                 </>
               )}
               {!preview.changed && <Typography>{t('access.nobody')}</Typography>}
@@ -241,7 +261,9 @@ export default function AccessPage() {
         </DialogActions>
       </Dialog>
       <ConfirmDialog open={Boolean(confirmRemove)} title={t('access.removeTitle')}
-        body={t(data?.is_restricted ? 'access.removeBody' : 'access.removeBodyOpen', { name: confirmRemove?.display_name })}
+        body={confirmRemove?.also_via_program
+          ? t('access.removeBodyProgram', { name: confirmRemove.display_name, code: confirmRemove.also_via_program })
+          : t(data?.is_restricted ? 'access.removeBody' : 'access.removeBodyOpen', { name: confirmRemove?.display_name })}
         confirmLabel={t('access.remove')}
         busy={remove.isPending} onClose={() => setConfirmRemove(null)} onConfirm={() => remove.mutate(confirmRemove)} />
       <Snackbar open={Boolean(notice)} autoHideDuration={4000} onClose={() => setNotice('')} message={notice} />

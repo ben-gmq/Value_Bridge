@@ -58,7 +58,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 - **Visibility has one owner:** `backend/services/access.py` (`visible_project_ids`,
   `require_project`, `require_program`, and `level_for` / `who_can_open` — the only place a level is computed).
   D-40/D-71: admins see all; staff see every project **except a restricted one they are not a live
-  `project_member` of**, at the higher of the staff default (`KIND_BASE`) and their membership, capped by kind
+  `project_member` of, or reach through a live `program_member` of its program**, at the higher of the staff default
+  (`KIND_BASE`), their project role and their program role, capped by kind
   (`KIND_CAP`, never a default).
   A project you cannot see is **404, never 403**; order is 404 → 403 → 409. `user_access_grant` is
   retired history (SELECT-only). `tests/test_access.py::test_no_get_route_leaks_a_restricted_project`

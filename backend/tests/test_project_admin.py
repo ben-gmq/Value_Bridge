@@ -33,6 +33,12 @@ CODE_LIST_ADMIN_ROUTES = {("POST", "/api/v1/projects/{project_id}/code-lists/{ca
                           ("PATCH", "/api/v1/code-master/{code_id}"),
                           ("PATCH", "/api/v1/code-master/{code_id}/restore"),
                           ("DELETE", "/api/v1/code-master/{code_id}")}
+# access slice B: a program's members are its admins' (D-71 (5)); their guards are proven in tests/test_program_members.py
+PROGRAM_ADMIN_ROUTES = {("GET", "/api/v1/programs/{program_id}/members"),
+                        ("GET", "/api/v1/programs/{program_id}/member-candidates"),
+                        ("POST", "/api/v1/programs/{program_id}/members"),
+                        ("PATCH", "/api/v1/program-members/{id}"),
+                        ("DELETE", "/api/v1/program-members/{id}")}
 
 
 def _routes(level: str) -> set[tuple[str, str]]:
@@ -65,7 +71,7 @@ def pa(client, world):
 # ---- 1, 2: the route table --------------------------------------------------------------------------------
 def test_the_ftc_only_and_project_admin_route_sets_are_exactly_these():
     assert _routes("PLATFORM") == PLATFORM_ROUTES
-    assert _routes("ADMIN") == ADMIN_ROUTES | CODE_LIST_ADMIN_ROUTES
+    assert _routes("ADMIN") == ADMIN_ROUTES | CODE_LIST_ADMIN_ROUTES | PROGRAM_ADMIN_ROUTES
 
 
 def test_every_ftc_only_route_refuses_a_project_admin_and_a_plain_editor(client, pa):

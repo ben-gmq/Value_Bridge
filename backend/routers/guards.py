@@ -120,6 +120,22 @@ def program_ctx(min_level: str) -> GuardSpec:
     return GuardSpec(Guard.PROGRAM_CTX, dep, min_level)
 
 
+def program_object_guard(model: type, min_level: str, id_param: str = "id") -> GuardSpec:
+    """For a program-scoped row (`owning_program_id()`, e.g. a program membership, D-71): resolve its program, then
+    require_program — 404 for a program you cannot see, 403 below the level."""
+    if not hasattr(model, "owning_program_id"):
+        raise RouteDefinitionError(f"{model.__name__} has no owning_program_id()")
+
+    def dep(request: Request, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+        raw = request.path_params.get(id_param)
+        obj = db.get(model, int(raw)) if raw and str(raw).isdigit() and len(str(raw)) <= 18 else None
+        if obj is None:
+            raise HTTPException(404, access.NOT_FOUND)
+        access.require_program(db, user, obj.owning_program_id(), min_level)
+        return obj
+    return GuardSpec(Guard.PROGRAM_CTX, dep, min_level, model)
+
+
 def object_guard(model: type, min_level: str, id_param: str = "id", component=None,
                  share_lock: bool = True) -> GuardSpec:
     """For routes carrying an object id and no project (finding S3). The owning project is

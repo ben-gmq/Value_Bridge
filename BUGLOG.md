@@ -399,3 +399,8 @@ place.
   today's sizes, measure before a client project grows large. (L8) four scratch copies of service code sit untracked
   in `backend/` (never staged) — delete on Ben's click. Criterion 19 (a save during a re-point) is proven by lock
   order, not a two-connection test.
+- **2026-10-16 · access slice B (`sara`; M1, M2, L1, L2, L5, L6 fixed in the slice):** (L3) `program._check_level`
+  duplicates `project._check_level`, and `program.py` imports `project._user_share_lock` / `lock_program` — move the
+  three to one home (`services/access.py` or a `services/locks.py`). (L4) `program._move_changes` is N+1 (up to 3
+  queries per active staff user) and runs under the move confirm's locks — load both programs' members and the
+  project's members in 3 queries before a client tenant has many users.

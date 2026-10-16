@@ -3,13 +3,13 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AppUser, ProjectMember
-from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin,
+from models import AppUser, ProgramMember, ProjectMember
+from routers.guards import (GuardedRouter, authenticated, object_guard, platform_admin, program_object_guard,
                             program_ctx, project_ctx)
 from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn, DfdRuleIn,
                             DfdRuleOut, DfdRulePreviewIn, DfdRulePreviewOut,
                             EffectiveAccessOut, MemberIn, MemberOut, MemberPatch, PersonOut,
-                            ProgramIn, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
+                            ProgramIn, ProgramMemberOut, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
                             RestrictionIn, RestrictionOut, TemplateOut)
 from schemas.process_flow import FteBasisIn, FteBasisOut, VolumeSummaryOut
 from services import access, code_master, components, dfd_rule, process_volume
@@ -24,6 +24,8 @@ _editor = project_ctx("EDIT")
 _proj_admin = project_ctx("ADMIN")             # a project admin or a platform admin: members, access list (D-71)
 _platform = project_ctx("PLATFORM")            # platform admins only: the FTC-only project settings (D-71 (6))
 _prog_reader = program_ctx("VIEW")
+_prog_admin = program_ctx("ADMIN")              # a program admin or a platform admin: its members (D-71)
+_prog_member_admin = program_object_guard(ProgramMember, "ADMIN")
 _member_admin = object_guard(ProjectMember, "ADMIN")
 
 
@@ -192,8 +194,42 @@ def create_program(body: ProgramIn, actor: AppUser = Depends(_admin.dep), db: Se
 
 
 @router.get("/programs/{program_id}", response_model=ProgramOut, **_prog_reader.route)
-def read_program(program_id: int, db: Session = Depends(get_db)):
-    return program_service.get_program(db, program_id)
+def read_program(program_id: int, eff=Depends(_prog_reader.dep), db: Session = Depends(get_db)):
+    p = program_service.get_program(db, program_id)
+    return ProgramOut.model_validate(p).model_copy(update={"my_access_level": eff.level})
+
+
+# ---- program members (D-71 (2), (5)): the program's admins and platform admins ----
+@router.get("/programs/{program_id}/members", response_model=list[ProgramMemberOut], **_prog_admin.route)
+def list_program_members(program_id: int, db: Session = Depends(get_db)):
+    return program_service.list_members(db, program_service.get_program(db, program_id))
+
+
+@router.get("/programs/{program_id}/member-candidates", response_model=list[PersonOut], **_prog_admin.route)
+def program_member_candidates(program_id: int, db: Session = Depends(get_db)):
+    return program_service.member_candidates(db, program_service.get_program(db, program_id))
+
+
+@router.post("/programs/{program_id}/members", response_model=ProgramMemberOut, status_code=201,
+             **_prog_admin.route)
+def add_program_member(program_id: int, body: MemberIn, actor: AppUser = Depends(_auth.dep),
+                       db: Session = Depends(get_db)):
+    m = program_service.add_member(db, actor, program_service.get_program(db, program_id), body.user_id,
+                                   body.access_level, body.member_note)
+    return program_service.member_row(db, m)
+
+
+@router.patch("/program-members/{id}", response_model=ProgramMemberOut, **_prog_member_admin.route)
+def change_program_member(id: int, body: MemberPatch, m: ProgramMember = Depends(_prog_member_admin.dep),
+                          actor: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
+    program_service.change_member_level(db, actor, m, body.access_level, body.row_version)
+    return program_service.member_row(db, m)
+
+
+@router.delete("/program-members/{id}", status_code=204, **_prog_member_admin.route)
+def remove_program_member(id: int, row_version: int, m: ProgramMember = Depends(_prog_member_admin.dep),
+                          actor: AppUser = Depends(_auth.dep), db: Session = Depends(get_db)):
+    program_service.remove_member(db, actor, m, row_version)
 
 
 @router.get("/programs/{program_id}/projects", response_model=list[ProjectOut], **_prog_reader.route)

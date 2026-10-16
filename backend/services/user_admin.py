@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from auth.security import hash_password
 from config import get_settings
-from models import AppUser, Project, ProjectMember
+from models import AppUser, Program, ProgramMember, Project, ProjectMember
 from services import access, audit
 from services.lifecycle import soft_delete
 
@@ -77,21 +77,39 @@ def deactivate_user(db: Session, actor: AppUser, user_id: int) -> AppUser:
 def _comes_back(db: Session, user: AppUser, new_kind: str, new_admin: bool) -> list[dict]:
     if new_admin:
         return []                                    # a platform admin's memberships are unread
-    rows = db.execute(select(ProjectMember, Project).join(Project, Project.project_id == ProjectMember.project_id)
-                      .where(ProjectMember.app_user_id == user.app_user_id, ProjectMember.is_active,
-                             Project.is_active)
-                      .order_by(Project.project_code, Project.project_id)).all()
+    # every live project the user reaches by a live project or program membership (sara 1g L9: program roles too)
+    direct = {m.project_id: m.access_level for m in db.scalars(select(ProjectMember).where(
+        ProjectMember.app_user_id == user.app_user_id, ProjectMember.is_active))}
+    programs = {g.program_id: g.access_level for g in db.scalars(select(ProgramMember).join(
+        Program, Program.program_id == ProgramMember.program_id).where(
+        ProgramMember.app_user_id == user.app_user_id, ProgramMember.is_active, Program.is_active))}
+    projects = db.scalars(select(Project).where(
+        Project.is_active, Project.project_id.in_(direct or {-1}) | Project.program_id.in_(programs or {-1}))
+        .order_by(Project.project_code, Project.project_id))
     out = []
-    for m, p in rows:
-        after = access.level_for(new_kind, p.is_restricted, m.access_level)[0]
+    for p in projects:
+        ml, gl = direct.get(p.project_id), programs.get(p.program_id)
+        after = access.level_for(new_kind, p.is_restricted, ml, gl)[0]
         if user.is_platform_admin:
             before = None                            # unread until now
         else:
-            got = access.level_for(user.user_kind, p.is_restricted, m.access_level)
+            got = access.level_for(user.user_kind, p.is_restricted, ml, gl)
             before = got[0] if got else None
         if before is None or access.LEVEL_RANK[after] > access.LEVEL_RANK[before]:
+            stored = max((x for x in (ml, gl) if x), key=lambda x: access.LEVEL_RANK[x])
             out.append({"project_id": p.project_id, "project_code": p.project_code, "project_name": p.project_name,
-                        "access_level": m.access_level, "level_before": before, "level_after": after})
+                        "access_level": stored, "via": "MEMBER" if stored == ml else "PROGRAM",
+                        "level_before": before, "level_after": after})
+    # the program roles themselves — managing a program's members — even with no live project behind them (sara B M1)
+    for g, prog in db.execute(select(ProgramMember, Program).join(Program, Program.program_id == ProgramMember.program_id)
+                              .where(ProgramMember.app_user_id == user.app_user_id, ProgramMember.is_active,
+                                     Program.is_active).order_by(Program.program_code, Program.program_id)).all():
+        after = access._lower(access.KIND_CAP[new_kind], g.access_level)
+        before = None if user.is_platform_admin else access._lower(access.KIND_CAP[user.user_kind], g.access_level)
+        if before is None or access.LEVEL_RANK[after] > access.LEVEL_RANK[before]:
+            out.append({"project_id": None, "project_code": prog.program_code, "project_name": prog.program_name,
+                        "access_level": g.access_level, "via": "PROGRAM_ROLE",
+                        "level_before": before, "level_after": after})
     return out
 
 

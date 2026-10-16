@@ -45,6 +45,8 @@ export const keys = {
   project: (p) => ['project', String(p)],
   projectAccess: (p) => ['access', String(p)],
   memberCandidates: (p) => ['memberCandidates', String(p)],
+  programMembers: (g) => ['programMembers', String(g)],
+  programMemberCandidates: (g) => ['programMemberCandidates', String(g)],
   codeLists: (p) => ['codeLists', String(p ?? 'company')],
   accessChange: (u, kind, admin) => ['accessChange', String(u), kind, String(admin)],
   // The tree read carries each process's DFD light (D-68, slice 13a). DR13-D2, one choice: there is no separate
