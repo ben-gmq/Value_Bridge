@@ -3,7 +3,7 @@ direction, raci_behaviour, fk_group_no, created_by — appear only in *Out model
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schemas.common import Orm
 from schemas.process_flow import Light, RuleElement
@@ -133,7 +133,52 @@ class BrOut(Orm):
 
 
 class BrDetailOut(BrOut, Stamp):
-    pass
+    priority_code: str | None = None       # D-59: derived from the live lines, never stored
+
+
+# ---- requirement lines (D-59, slice11_schema §1) ----
+class BrLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    line_kind_code: str = Field(min_length=1, max_length=40)
+    priority_code: str | None = Field(default=None, max_length=40)
+    line_text: str = Field(min_length=1, max_length=8000)   # sara M1: backfilled legacy text is up to 8000
+
+
+class BrLinePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    row_version: int
+    line_kind_code: str | None = Field(default=None, min_length=1, max_length=40)
+    priority_code: str | None = Field(default=None, max_length=40)          # null clears it
+    line_text: str | None = Field(default=None, min_length=1, max_length=8000)
+
+    @field_validator("line_kind_code", "line_text", mode="before")
+    @classmethod
+    def _not_null(cls, v, info):
+        if v is None:
+            raise ValueError(f"{info.field_name} cannot be empty")
+        return v
+
+
+class BrLineOut(Orm):
+    br_requirement_line_id: int
+    br_id: int
+    line_no: int
+    line_label: str
+    seq_no: int
+    line_kind_code: str
+    priority_code: str | None
+    line_text: str
+    is_active: bool
+    row_version: int
+
+
+class BrLineOrderItem(BaseModel):
+    br_requirement_line_id: int
+    row_version: int
+
+
+class BrLineOrderIn(BaseModel):
+    lines: list[BrLineOrderItem] = Field(max_length=500)
 
 
 class ProcessOut(BaseModel):
@@ -142,9 +187,9 @@ class ProcessOut(BaseModel):
 
 
 class BrPatch(_Patch):
+    # D-59: the legacy business_logic / output_expectation are read-only now — sending them is a 422.
+    model_config = ConfigDict(extra="forbid")
     br_statement: str | None = Field(default=None, max_length=8000)
-    business_logic: str | None = Field(default=None, max_length=8000)
-    output_expectation: str | None = Field(default=None, max_length=8000)
     status_code: str | None = Field(default=None, max_length=40)
 
 

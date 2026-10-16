@@ -15,8 +15,8 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from models import (Application, Base, BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity,
-                    FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution)
+from models import (Application, Base, BfcNode, BrRequirementLine, BusinessRequirement, DataEntity, DataField,
+                    ExternalEntity, FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -28,7 +28,8 @@ GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour"
                                   "bfc_set_code"})                                 # + 7c (§9.1): one Link per parent
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
-              Solution, FunctionRequirement, Application, ProcessTrigger)
+              Solution, FunctionRequirement, Application, ProcessTrigger,
+              BrRequirementLine)                                       # D-59: a line comes back with its number
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -43,6 +44,7 @@ LABELS = {
     "br_data_entity": ("Requirement data", lambda r: f"CRUD {r.crud_code}"),
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
+    "br_requirement_line": ("Requirement line", lambda r: r.line_label),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
     "solution": ("Solution", lambda r: f"{r.solution_number} {r.solution_name}"),
     "function_requirement": ("Function requirement", lambda r: f"{r.fr_number} {r.fr_name}"),

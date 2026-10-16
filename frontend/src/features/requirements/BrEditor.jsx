@@ -18,14 +18,15 @@ import { BrSolutionTags } from './BrSolutionTags';
 import { BrFrLinks } from './BrFrLinks';
 import { warningList } from '../frs/frKit';
 import { CoveragePanel } from './CoveragePanel';
+import { BrLines } from './BrLines';
 import { BrStatusTag, OFFER_RETIRE_BR } from './reqKit';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
 // shown read-only (the server refuses them too: business_requirement.SYSTEM_SET_STATUSES).
 const SETTABLE_STATUSES = ['DRAFT', 'CONFIRMED'];
 
-const pickBr = (b) => ({ br_statement: b.br_statement ?? '', business_logic: b.business_logic ?? '',
-  output_expectation: b.output_expectation ?? '', status_code: b.status_code });
+// D-59: business_logic / output_expectation are read-only legacy now — the lines carry what a requirement says.
+const pickBr = (b) => ({ br_statement: b.br_statement ?? '', status_code: b.status_code });
 
 // The two-column splits follow the editor's own width (a container), not the window's.
 const WIDE = '@container (min-width: 700px)';
@@ -121,8 +122,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
   const statusSettable = SETTABLE_STATUSES.includes(form.base.status_code);
   const busy = save.m.isPending || retire.isPending || restore.isPending;
   const statusOptions = statuses.filter((c) => SETTABLE_STATUSES.includes(c.code)).map((c) => ({ value: c.code, label: c.label }));
-  const labels = { br_statement: t('requirements.statement'), business_logic: t('requirements.logic'),
-    output_expectation: t('requirements.output'), status_code: t('requirements.status') };
+  const labels = { br_statement: t('requirements.statement'), status_code: t('requirements.status') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], k === 'status_code' ? getLabel(v[k]) : v[k]]));
   const text = (name, label, rows = 1) => (
     <TextField fullWidth multiline minRows={rows} id={`br-${name}`} label={label} disabled={!editable} value={v[name]}
@@ -153,14 +153,13 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
       {save.error && <Alert severity="error" sx={{ whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
     </>
   );
+  const lines = <BrLines projectId={projectId} br={br} priorityCode={br.priority_code} disabled={!editable} />;
   // Fields, then CRUD beside RACI and solutions. The caller gives it a container (containerType: inline-size).
   const fields = (
     <>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0,1fr)',
         [WIDE]: { gridTemplateColumns: 'minmax(0,3fr) minmax(0,1fr)' } }}>
         <Box sx={{ gridColumn: '1 / -1' }}>{text('br_statement', t('requirements.statement'))}</Box>
-        <Box sx={{ gridColumn: '1 / -1' }}>{text('business_logic', t('requirements.logic'), 2)}</Box>
-        {text('output_expectation', t('requirements.output'))}
         {statusSettable && editable ? (
           <SimpleSelect id="br-status" label={t('requirements.status')} value={v.status_code}
             onChange={(s) => form.set('status_code', s)} options={statusOptions} />
@@ -173,6 +172,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
           </Box>
         )}
       </Box>
+      {lines}
       <Divider />
       <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: 'minmax(0,1fr)',
         [WIDE]: { gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)' } }}>
@@ -200,7 +200,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
     </>
   );
 
-  return { br, error: brQ.error, getLabel, live, actions, saveState, alerts, fields, dialogs,
+  return { br, error: brQ.error, getLabel, live, actions, saveState, alerts, fields, dialogs, lines,
     dirty: form.dirty, canSave: editable && form.dirty, busy, saveNow, discard,
     coverage: isOn('FUNCTION_REQUIREMENT') ? <CoveragePanel projectId={projectId} brId={br.br_id} /> : null,
     // 10d: the process panel lays the parts out itself (ranked), so it reads these instead of `fields`.

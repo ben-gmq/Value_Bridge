@@ -25,6 +25,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates`.
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
+  **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's
+  legacy logic / output text into requirement lines once (idempotent per project).
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`) ·

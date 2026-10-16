@@ -2,7 +2,7 @@
 and RACI links. All frozen into baselines."""
 from sqlalchemy import (
     CHAR, BigInteger, Boolean, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint,
-    Identity, Index, String, Text, UniqueConstraint, text,
+    Identity, Index, SmallInteger, String, Text, UniqueConstraint, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -94,6 +94,65 @@ class BrDataEntity(AuditMixin, Base):
         Index("ix_brde_de", "data_entity_id"),
         Index("ix_brde_io", "bfc_node_id", "data_entity_id", "direction"),
         Index("ix_brde_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrRequirementLine(AuditMixin, Base):
+    """D-59 (slice11_schema §1.1): one numbered requirement statement within one BR — "BR-0043.3". line_no is
+    minted by the service (max + 1 over all the BR's lines, retired included), never reused, never sent; seq_no is
+    the display order. Kind and priority are category-only FKs (no behaviour, §1.3); priority NULL = not yet set."""
+
+    __tablename__ = "br_requirement_line"
+
+    br_requirement_line_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    line_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    seq_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    line_kind_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    line_kind_category: Mapped[str] = mapped_column(String(40), Computed("'BR_LINE_KIND'", persisted=True))
+    priority_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    priority_category: Mapped[str] = mapped_column(String(40), Computed("'BR_PRIORITY'", persisted=True))
+    line_text: Mapped[str] = mapped_column(Text, nullable=False)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrRequirementLine.br_id) == BusinessRequirement.br_id")
+    line_kind_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                 primaryjoin="foreign(BrRequirementLine.line_kind_code_id) == CodeMaster.code_id")
+    priority_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                primaryjoin="foreign(BrRequirementLine.priority_code_id) == CodeMaster.code_id")
+
+    @property
+    def line_kind_code(self) -> str | None:
+        return self.line_kind_row.code if self.line_kind_row is not None else None
+
+    @property
+    def priority_code(self) -> str | None:
+        return self.priority_row.code if self.priority_row is not None else None
+
+    @property
+    def line_label(self) -> str:
+        return f"{self.br_row.br_number}.{self.line_no}"
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "line_no", name="uq_brl_line_no"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brl_br"),
+        ForeignKeyConstraint(["line_kind_code_id", "line_kind_category"],
+                             ["code_master.code_id", "code_master.category"], name="fk_brl_kind",
+                             onupdate="NO ACTION"),
+        ForeignKeyConstraint(["priority_code_id", "priority_category"],
+                             ["code_master.code_id", "code_master.category"], name="fk_brl_priority",
+                             onupdate="NO ACTION"),
+        CheckConstraint("line_no >= 1", name="ck_brl_line_no"),
+        CheckConstraint("btrim(line_text) <> ''", name="ck_brl_text"),
+        Index("uq_brl_seq_live", "br_id", "seq_no", unique=True, postgresql_where=text("is_active")),
+        Index("ix_brl_project", "project_id"),
+        Index("ix_brl_kind", "line_kind_code_id"),
+        Index("ix_brl_priority", "priority_code_id"),
     )
 
     def owning_project_id(self) -> int:

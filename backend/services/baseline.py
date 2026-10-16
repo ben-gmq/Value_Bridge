@@ -389,6 +389,7 @@ def _label_of(side) -> str:
 
 
 BRFR = "br_function_requirement"
+BRL = "br_requirement_line"
 
 
 def _derive_links(lab: "_Labeller") -> dict:
@@ -465,7 +466,12 @@ def diff(db: Session, project_id: int, a, b) -> dict:
                 summary[k] += v
             out[e.table] = {**entry, "status": "OK", "rows": rows_, "derived_sides": derived}
             continue
-        if cols_a is None or cols_b is None:      # joined the set later: its rows are ADDED / REMOVED below
+        # slice11_schema §5.1: an entity one side's spec predates. Its rows still list as ADDED / REMOVED, but the
+        # entry says which side never froze it and they are kept out of the summary: new structure, not new scope.
+        unfrozen = {}
+        if cols_a is None or cols_b is None:
+            side = "both" if cols_a is None and cols_b is None else "a" if cols_a is None else "b"   # sara L3
+            unfrozen = {"not_frozen_in": side, "joined_at_spec": min(e.hash_columns)}
             cols_a = cols_b = cols_a or cols_b
         # slice13_schema §3.7 (F3, Q-22): the entity gained fields between the two sides' specs. The stored hashes
         # cover different lists, so the two sides are compared field by field on the older (shorter) list, and the
@@ -502,8 +508,9 @@ def diff(db: Session, project_id: int, a, b) -> dict:
                             "label": (lb if rb else la).label(e.table, row),
                             "before": {c: _shown(ra, c) for c in fields} if ra and fields else {},
                             "after": {c: _shown(rb, c) for c in fields} if rb and fields else {}})
-            summary[kind] += 1
-        out[e.table] = {**entry, "status": "OK", "rows": changes, **extra}
+            if not unfrozen:
+                summary[kind] += 1
+        out[e.table] = {**entry, "status": "OK", "rows": changes, **extra, **unfrozen}
     return {"from": _label_of(a), "to": _label_of(b), "summary": summary, "entities": out,
             "_rows": (cache_a, cache_b)}
 
@@ -565,20 +572,32 @@ def priced(d: dict, a, b, on_a: frozenset, on_b: frozenset) -> dict:
 def _exposed(d, cache_a, cache_b, on_a, on_b) -> float | None:
     """Σ effort of the FRs reachable BR → BR ↔ FR link → FR from a changed BR, in b (in a for a REMOVED BR);
     slice10b §6.5: needs only FUNCTION_REQUIREMENT, and a pre-v2 side's links are the derived ones in its cache.
-    Lines de-duplicated by FR. Informational, never added to net (Q3)."""
-    changed = d["entities"]["business_requirement"]["rows"]
+    Lines de-duplicated by FR. Informational, never added to net (Q3).
+    sara H2 (slice 11a): what a BR says now lives in its requirement lines, so a BR also counts as changed when one
+    of its lines was added, removed or changed (a reorder is not a change). Lines one side never froze
+    (`not_frozen_in`) are new structure, not a change, and are skipped."""
+    changed = [(r["change"], r["source_id"]) for r in d["entities"]["business_requirement"]["rows"]]
+    lines = d["entities"].get(BRL, {})
+    if not lines.get("not_frozen_in"):
+        for r in lines.get("rows", []):
+            if r["change"] == "MOVED":
+                continue
+            side = cache_a if r["change"] == "REMOVED" else cache_b
+            row = side.get(BRL, {}).get(r["source_id"])
+            if row is not None:
+                changed.append((r["change"], row["br_id"]))
     if not changed:
         return 0.0
     if "FUNCTION_REQUIREMENT" not in on_a | on_b:
         return None
     seen: dict[int, Decimal] = {}
-    for r in changed:
-        side_rows, on = (cache_a, on_a) if r["change"] == "REMOVED" else (cache_b, on_b)
+    for change, br_id in changed:
+        side_rows, on = (cache_a, on_a) if change == "REMOVED" else (cache_b, on_b)
         if "FUNCTION_REQUIREMENT" not in on:
             continue
         frs = side_rows.get("function_requirement", {})
         for link in side_rows.get(BRFR, {}).values():
-            if link["br_id"] == r["source_id"] and link["fr_id"] in frs and link["fr_id"] not in seen:
+            if link["br_id"] == br_id and link["fr_id"] in frs and link["fr_id"] not in seen:
                 seen[link["fr_id"]] = frs[link["fr_id"]]["effort_days"] or Decimal(0)
     return float(sum(seen.values()))
 

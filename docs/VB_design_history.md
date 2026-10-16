@@ -16,7 +16,22 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open.
+- **[Q-29] Slice 11's three tables: one hash spec or three?** (raised 2026-10-16, slice 11a build; `sara` pre-commit
+  review §4.) The spec (§5, criterion 189, `slice11_schema` §5/§7) has `br_requirement_line`, `br_data_field` and
+  `br_system_flow` all join at **hash spec 4**, landing together. The build is in three pieces (11a/11b/11c) and Ren's
+  plan merges them one at a time; a spec-4 baseline frozen between two merges would stop verifying once the next table
+  registers at spec 4 (demo and UAT databases freeze baselines). 11a as built registers lines at spec 4. Options:
+  (a) merge 11a–11c together, spec unchanged; (b) 11b at spec 5 and 11c at spec 6, spec text rewritten. Also
+  recommended either way: a hash-spec bump is taken on `main` in order, like a migration id (CLAUDE.md line).
+- **[Q-30] Does a requirement-line change count as "effort exposed" in the priced diff?** (raised 2026-10-16, `sara`
+  H2.) §7.13 defines exposure as the effort of FRs reachable "from a changed BR". What a BR says now lives in its
+  lines, so 11a counts a BR as changed when a line is added, changed or removed (a reorder does not). Without that,
+  exposure silently drops to 0 for most requirement changes. Built that way; Ben to confirm.
+- **[Q-31] Data migration FRs (S11-5) in the Interfaces register, and new rate-card rows in a diff headline.**
+  (raised 2026-10-16, `design-auditor` on S11-5; lands with 11c.) (1) List migrations with interfaces (with a type
+  column), separately, or not at all — and does a migration carry a Frequency? (2) Rate-card rows added between two
+  freezes (the MIGRATION backfill on existing projects) count as "+4 added" in the headline; count them, or report
+  them apart as new structure?
 
 ---
 

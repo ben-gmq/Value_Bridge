@@ -29,8 +29,9 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 3       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 4       # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
+#                             4: br_requirement_line joined the set (slice 11a, D-59)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -101,6 +102,9 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        label=("crud_code",), refs=(("br_id", BR), ("data_entity_id", DE))),
     _e("br_org_role", "BR", ("br_id", "org_role_id", "raci_code", "raci_behaviour"),
        label=("raci_label",), refs=(("br_id", BR), ("org_role_id", ORG))),
+    # D-59 (slice11_schema §5): numbered requirement lines; seq_no is display order, a position column (MOVED).
+    _e("br_requirement_line", "BR", ("br_id", "line_no", "line_kind_code", "priority_code", "line_text"),
+       ("seq_no",), ("line_no",), (("br_id", BR),), since=4),
     _e(APP, "APPLICATION", ("application_code", "application_name", "vendor", "version_label", "app_kind_code",
                             "lifecycle_code", "description"), label=("application_code", "application_name")),
     _e(SOL, "SOLUTION", ("solution_number", "solution_name", "description", "category_code", "status_code",

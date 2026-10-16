@@ -16,7 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow,
-                    BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrFunctionRequirement, BrOrgRole, BrSolution,
+                    BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrFunctionRequirement, BrOrgRole, BrRequirementLine,
+                    BrSolution,
                     BusinessRequirement,
                     DataEntity, ExternalEntity, OrgRole, ProcessTrigger, Solution)
 from services import audit, bfc, components, lifecycle
@@ -34,14 +35,15 @@ RETIRED_TABLES = frozenset({"bfc_node_flow"})
 # BR (same-stamp copies for a step retired with its BR), and fk_bnor_node_as_is refuses them live.
 AS_IS_ONLY_TABLES = frozenset({"bfc_node_org_role"})
 OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution,          # BrSolution: S5-1 (Ben, 2026-10-09)
-               BrFunctionRequirement)                         # D-52, slice10b Q-12: the FR itself survives
+               BrFunctionRequirement,                         # D-52, slice10b Q-12: the FR itself survives
+               BrRequirementLine)                             # D-59, slice11_schema §4
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BfcNodeOrgRole, ApplicationBfcNode,
-     BfcNodeTrigger),
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BrRequirementLine, BfcNodeOrgRole,
+     ApplicationBfcNode, BfcNodeTrigger),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -111,6 +113,8 @@ def describe(db: Session, row) -> str:
         return f"{ext.ext_number} {ext.ext_name} ({row.direction})"
     if isinstance(row, BfcNodeTrigger):
         return f"Trigger: {db.get(ProcessTrigger, row.process_trigger_id).trigger_name}"
+    if isinstance(row, BrRequirementLine):
+        return f"{row.line_label} {row.line_text[:60]}"
     return lifecycle.label(row)
 
 

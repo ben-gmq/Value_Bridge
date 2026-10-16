@@ -88,6 +88,9 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
   // Q-22 (slice13_schema §3.7): an entity that gained fields between the two sides is compared on the older list;
   // say which fields were left out, so a quiet comparison is never read as "nothing changed there" (e.g. volume).
   const partly = d ? Object.entries(d.entities).filter(([, e]) => e.not_compared?.length) : [];
+  // slice11_schema §5.1: an entity one side was frozen before (e.g. requirement lines). Its rows are listed, but
+  // they are new structure, not new scope, so the counts above leave them out.
+  const unfrozen = d ? Object.entries(d.entities).filter(([, e]) => e.not_frozen_in && e.rows.length) : [];
   const notUsed = d ? [...new Set(Object.values(d.entities).filter((e) => e.component_on && !e.component_on.a && e.rows.length).map((e) => e.area))] : [];
   const showDays = pricing?.available;
   // D-52: untraced = no BR link (renamed from unlinked; older responses still say unlinked_days).
@@ -132,6 +135,9 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
             <Alert key={`nc-${e}`} severity="info">
               {t('baselines.notCompared', { entity: entityLabel(e),
                 fields: x.not_compared.map((c) => t(`baselines.field.${c}`)).join(', ') })}</Alert>))}
+          {unfrozen.map(([e, x]) => (
+            <Alert key={`nf-${e}`} severity="info">
+              {t('baselines.notFrozenIn', { label: x.not_frozen_in === 'a' ? d.from : d.to, entity: entityLabel(e) })}</Alert>))}
           {notUsed.length > 0 && <Alert severity="info">{notUsed.map(areaLabel).join(', ')} — {t('baselines.notUsed', { label: fromLabel })}</Alert>}
           <Card title={t('baselines.changes', { from: fromLabel, to: toLabel })} bodySx={{ px: 0, gap: 1 }}
             action={(

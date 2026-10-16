@@ -8,7 +8,7 @@ from datetime import date
 from sqlalchemy import select
 
 from models import AppUser, BfcNode, BrOrgRole, BusinessRequirement
-from services import (application, baseline, bfc, business_requirement, client_org, components, data_entity, effort,
+from services import (application, baseline, bfc, br_lines, business_requirement, client_org, components, data_entity, effort,
                       external_entity, freeze_set, function_requirement, raci, solution, trigger)
 from services.project import create_client, create_project
 from services.user_admin import create_user
@@ -228,6 +228,14 @@ SOLUTIONS = [
 ]
 
 
+def _lines(db, y, br, logic, out):
+    """D-59: what a requirement says, as numbered lines — the logic a Must rule, the result a Must output."""
+    if logic:
+        br_lines.add_line(db, y, br, "RULE", "MUST", logic)
+    if out:
+        br_lines.add_line(db, y, br, "OUTPUT", "MUST", out)
+
+
 def _node(db, nid):
     return db.get(BfcNode, nid)
 
@@ -267,9 +275,9 @@ def build_showcase(db, admin: AppUser, domain: str, pw: str) -> int:
                 node = bfc.create_node(db, y, pid, l2.bfc_node_id, pname, is_process=True)
                 br = db.scalars(select(BusinessRequirement).where(
                     BusinessRequirement.bfc_node_id == node.bfc_node_id, BusinessRequirement.is_active)).one()
-                br = business_requirement.update_br(db, y, br, br.row_version, {
-                    "br_statement": stmt, "business_logic": logic, "output_expectation": out},
-                    "CONFIRMED" if confirmed else None)
+                br = business_requirement.update_br(db, y, br, br.row_version, {"br_statement": stmt},
+                                                    "CONFIRMED" if confirmed else None)
+                _lines(db, y, br, logic, out)
                 for ename, letter in crud:
                     business_requirement.link_data_entity(db, y, br, ents[ename].data_entity_id, letter, None)
                 raci.link(db, y, BrOrgRole, br, roles[perf].org_role_id, "R")
@@ -340,9 +348,9 @@ def build_showcase(db, admin: AppUser, domain: str, pw: str) -> int:
             br = db.scalars(select(BusinessRequirement).where(
                 BusinessRequirement.bfc_node_id == node.bfc_node_id, BusinessRequirement.is_active)).one()
             br = business_requirement.update_br(db, y, br, br.row_version, {
-                "br_statement": "Cancel an open order and release its stock and credit",
-                "business_logic": "Picked orders cannot be cancelled, only returned.",
-                "output_expectation": "A cancelled order; stock and credit released"}, "CONFIRMED")
+                "br_statement": "Cancel an open order and release its stock and credit"}, "CONFIRMED")
+            _lines(db, y, br, "Picked orders cannot be cancelled, only returned.",
+                   "A cancelled order; stock and credit released")
             business_requirement.link_data_entity(db, y, br, ents["Sales order"].data_entity_id, "R", None)
             business_requirement.link_data_entity(db, y, br, ents["Sales order"].data_entity_id, "U", None)
             raci.link(db, y, BrOrgRole, br, roles["ORDER_CLERK"].org_role_id, "R")
@@ -355,11 +363,8 @@ def build_showcase(db, admin: AppUser, domain: str, pw: str) -> int:
 
     # Work in progress after v1.1: draft edits and one new draft process with no data yet.
     br = db.get(BusinessRequirement, brs["Check credit"])
-    business_requirement.update_br(db, y, br, br.row_version, {
-        "business_logic": "Remaining limit = credit limit − open receivables − open orders. If the order amount "
-                          "exceeds the remaining limit, set the credit result to HOLD and return the order to "
-                          "Sales with the shortfall. Key accounts may exceed by 10% with the credit manager's "
-                          "approval."}, None)
+    br_lines.add_line(db, y, br, "CONTROL", "SHOULD",
+                      "Key accounts may exceed the remaining limit by 10% with the credit manager's approval.")
     bfc.create_node(db, y, pid, db.get(BfcNode, step["Raise invoice"]).parent_bfc_node_id, "Issue credit note",
                     is_process=True)
     db.commit()

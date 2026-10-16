@@ -388,8 +388,7 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
     primary = (
       <>
         {brText('br_statement', t('processes.panel.statement'), 2, 16, t('processes.panel.statementPlaceholder'))}
-        {brText('business_logic', t('processes.panel.logic'), 3, 14, t('processes.panel.logicPlaceholder'))}
-        {brText('output_expectation', t('processes.panel.output'), 1, 14, t('processes.panel.outputPlaceholder'))}
+        {brEd.lines}
       </>
     );
   } else if (br && !brEd.error) {

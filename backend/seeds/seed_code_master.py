@@ -51,6 +51,10 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                                ("SUPERSEDED", "Superseded")]),
     ("BR_STATUS", False, [("DRAFT", "Draft"), ("CONFIRMED", "Confirmed"),
                           ("BASELINED", "Baselined"), ("SUPERSEDED", "Superseded")]),
+    # D-59 (slice11_schema §1.3): no behaviour codes — nothing branches on a kind; "highest priority" is sort_order.
+    ("BR_LINE_KIND", False, [("RULE", "Rule"), ("CALCULATION", "Calculation"), ("VALIDATION", "Validation"),
+                             ("OUTPUT", "Output"), ("CONTROL", "Control")]),
+    ("BR_PRIORITY", False, [("MUST", "Must"), ("SHOULD", "Should"), ("COULD", "Could"), ("WONT", "Won't")]),
     ("FR_FULFILMENT_STATUS", False, [("SPECIFIED", "Specified"),
                                      ("ACCEPTED_BY_VENDOR", "Accepted by vendor"),
                                      ("BUILT", "Built"), ("TESTED", "Tested"),

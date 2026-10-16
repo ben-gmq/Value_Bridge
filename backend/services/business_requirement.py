@@ -14,7 +14,9 @@ from services import lifecycle
 log = logging.getLogger("vb")
 
 CRUD = ("C", "R", "U", "D")
-EDITABLE = ("br_statement", "business_logic", "output_expectation")
+# D-59 (slice11_schema §1.2): business_logic / output_expectation are read-only legacy, copied once into lines by
+# seeds.backfill_br_lines; the bodies refuse them (BrPatch forbids extra fields).
+EDITABLE = ("br_statement",)
 # Set only by the baseline freeze, never chosen by a person (Ben, 2026-09-29, S1-8).
 SYSTEM_SET_STATUSES = frozenset({"BASELINED", "SUPERSEDED"})
 

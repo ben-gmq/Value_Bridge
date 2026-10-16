@@ -370,4 +370,9 @@ place.
   centrally; (L8) housekeeping — `select` imported inside `process_volume.summary`, `ProjectOut.hours_per_working_day`
   float vs Decimal string elsewhere, `VolumeSection` repeats the period list (deviation 7h), a stray
   `s13d-snap-check2b.yml` at main's root.
+- **2026-10-16 · slice 11a (`sara` pre-commit; H1, H2, M1, L1, L3 fixed in the slice; M2 → history [Q-29]):**
+  (L4) the derived BR priority is on the BR detail read only — §1.1 also wants it on the BR list (`BrOut` /
+  `list_brs`); (L7) no test of a reversed cross-spec diff (spec 4 → spec 3: lines REMOVED, kept out of the
+  summary), and §7's spec-2 baseline case is not re-proven for lines; (L2) after a 0055 downgrade and re-upgrade the
+  backfill marker survives and the copy never re-runs — documented in `br_lines.backfill`; legacy text stays visible.
 
