@@ -375,4 +375,9 @@ place.
   `list_brs`); (L7) no test of a reversed cross-spec diff (spec 4 → spec 3: lines REMOVED, kept out of the
   summary), and §7's spec-2 baseline case is not re-proven for lines; (L2) after a 0055 downgrade and re-upgrade the
   backfill marker survives and the copy never re-runs — documented in `br_lines.backfill`; legacy text stays visible.
+- **2026-10-16 · slice 11a browser check (Lilly):** the baseline comparison names a requirement line
+  "3 · BR-0002 · 01.01.02 Check credit" (own label, then its BR's label), where the panel says "BR-0002.3" — read the
+  same way in both places (a label rule for `br_requirement_line` in the diff labeller).
+- **2026-10-16 · test harness (`sara`, L3):** the app's bcrypt cost is bcrypt's library default, implicitly; pin it
+  as `auth.security.BCRYPT_ROUNDS = 12` with a test that it is ≥ 12, and have the harness lower that constant.
 
