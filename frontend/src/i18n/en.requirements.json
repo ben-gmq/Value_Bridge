@@ -110,5 +110,8 @@
   "requirements.lines.hideLegacy": "Hide earlier free text",
   "requirements.lines.legacyHint": "What this requirement said before it had numbered lines. Read-only; it was copied into lines once.",
   "requirements.lines.legacyLogic": "Business logic",
-  "requirements.lines.legacyOutput": "Output expectation"
+  "requirements.lines.legacyOutput": "Output expectation",
+  "requirements.attr.tickHelp": "Tick which attributes each action creates (C), reads (R) or updates (U). An action is ticked on the entity row first; removing it there removes its attribute ticks.",
+  "requirements.attr.tickFor": "{crud} {field}",
+  "requirements.attr.noneTicked": "No attribute ticked for {cruds} yet"
 }

@@ -31,7 +31,8 @@ from services.baseline_shadow import code_pairs, snapshot_column_names
 
 CURRENT_HASH_SPEC = 4       # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
-#                             4: br_requirement_line joined the set (slice 11a, D-59)
+#                             4: slice 11 — br_requirement_line (D-59), br_data_field (D-60b) and br_system_flow
+#                                (D-61) joined the set together (S11-6)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -105,6 +106,9 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
     # D-59 (slice11_schema §5): numbered requirement lines; seq_no is display order, a position column (MOVED).
     _e("br_requirement_line", "BR", ("br_id", "line_no", "line_kind_code", "priority_code", "line_text"),
        ("seq_no",), ("line_no",), (("br_id", BR),), since=4),
+    # D-60(b): the attributes a BR uses, C / R / U. Spec 4 with the lines and flows: slice 11 reaches main as one (S11-6).
+    _e("br_data_field", "BR", ("br_id", "data_entity_id", "data_field_id", "crud_code", "usage_note"),
+       label=("crud_code",), refs=(("br_id", BR), ("data_entity_id", DE), ("data_field_id", "data_field")), since=4),
     _e(APP, "APPLICATION", ("application_code", "application_name", "vendor", "version_label", "app_kind_code",
                             "lifecycle_code", "description"), label=("application_code", "application_name")),
     _e(SOL, "SOLUTION", ("solution_number", "solution_name", "description", "category_code", "status_code",

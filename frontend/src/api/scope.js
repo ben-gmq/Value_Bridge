@@ -65,6 +65,9 @@ export const brApi = {
   linkSolution: (id, body) => d(http.post(`${V}/business-requirements/${id}/solutions`, body)),
   editSolutionLink: (id, linkId, body) => d(http.patch(`${V}/business-requirements/${id}/solutions/${linkId}`, body)),
   unlinkSolution: (id, linkId, rowVersion) => del(`${V}/business-requirements/${id}/solutions/${linkId}`, rowVersion),
+  // D-60b: the CRUD grid — entity and attribute ticks read and saved together, with the rows the screen showed.
+  grid: (id) => d(http.get(`${V}/business-requirements/${id}/data-grid`)),
+  saveGrid: (id, body) => d(http.put(`${V}/business-requirements/${id}/data-grid`, body)),
   // D-59 requirement lines: the number is minted by the server, never sent.
   lines: (id, includeRetired = false) => d(http.get(`${V}/business-requirements/${id}/lines`, { params: { include_retired: includeRetired } })),
   addLine: (id, body) => d(http.post(`${V}/business-requirements/${id}/lines`, body)),

@@ -236,6 +236,63 @@ class BrDataEntityOut(Orm):
     row_version: int
 
 
+# ---- the CRUD grid with attribute ticks (D-60b, slice11_schema §2) ----
+class BrDataFieldOut(Orm):
+    br_data_field_id: int
+    br_id: int
+    data_entity_id: int
+    data_field_id: int
+    crud_code: str
+    usage_note: str | None
+    row_version: int
+
+
+class GridInfo(BaseModel):
+    code: str
+    data_entity_id: int
+    crud_code: str
+
+
+class BrGridOut(BaseModel):
+    entities: list[BrDataEntityOut]
+    attributes: list[BrDataFieldOut]
+    info: list[GridInfo]
+
+
+class GridEntityTick(BaseModel):
+    data_entity_id: int
+    crud_code: Literal["C", "R", "U", "D"]
+
+
+class GridAttributeTick(BaseModel):
+    data_field_id: int
+    crud_code: Literal["C", "R", "U"]                  # Delete stays entity-level (Q-8)
+    usage_note: str | None = Field(max_length=2000)    # required (null allowed): the PUT is the whole state (sara L2)
+
+
+class GridKnown(BaseModel):
+    table: Literal["br_data_entity", "br_data_field"]
+    id: int
+    row_version: int
+
+
+class BrGridIn(BaseModel):
+    """The whole grid as the screen leaves it, and every live row the screen was showing (`known`), so a change made
+    by someone else since is a 409, never overwritten."""
+    model_config = ConfigDict(extra="forbid")
+    entity_ticks: list[GridEntityTick] = Field(max_length=2000)
+    attribute_ticks: list[GridAttributeTick] = Field(max_length=5000)
+    known: list[GridKnown] = Field(max_length=7000)
+
+    @field_validator("entity_ticks", "attribute_ticks")
+    @classmethod
+    def _once_each(cls, v, info):                      # sara L3: a tick sent twice is refused, never collapsed
+        keys = [(t.data_entity_id if info.field_name == "entity_ticks" else t.data_field_id, t.crud_code) for t in v]
+        if len(keys) != len(set(keys)):
+            raise ValueError(f"{info.field_name}: each tick may appear once")
+        return v
+
+
 class ExternalFlowIn(BaseModel):
     external_entity_id: int
     direction: Direction

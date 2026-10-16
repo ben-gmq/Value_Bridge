@@ -18,7 +18,7 @@ from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolutio
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
 from schemas.scope import (ScopeSummaryOut, BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BrLineIn,
-                           BrLineOrderIn, BrLineOut, BrLinePatch, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
+                           BrLineOrderIn, BrLineOut, BrLinePatch, BrGridIn, BrGridOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
                            DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
@@ -267,6 +267,21 @@ def unlink_br_data(id: int, link_id: int, row_version: int, br: BusinessRequirem
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     br_service.unlink_data_entity(db, _uid(user), _child(db, BrDataEntity, link_id, "br_id", br.br_id),
                                   row_version)
+
+
+@router.get("/business-requirements/{id}/data-grid", response_model=BrGridOut, **_br_r.route)
+def read_br_grid(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    return br_service.grid(db, br)
+
+
+@router.put("/business-requirements/{id}/data-grid", response_model=BrGridOut, **_br_w.route)
+def save_br_grid(id: int, body: BrGridIn, br: BusinessRequirement = Depends(_br_w.dep),
+                 user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """D-60b: entity and attribute ticks in one request; the step I/O they license is written with them (D-24)."""
+    return br_service.save_grid(
+        db, _uid(user), br, {(t.data_entity_id, t.crud_code) for t in body.entity_ticks},
+        {(t.data_field_id, t.crud_code): t.usage_note for t in body.attribute_ticks},
+        {(k.table, k.id): k.row_version for k in body.known})
 
 
 @router.get("/business-requirements/{id}/org-roles", response_model=list[BrRaciOut], **_br_r.route)

@@ -25,6 +25,7 @@ EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_
 # Guard columns carry the target's is_active / is_process; the FK they sit in duplicates the
 # plain (id, project_id) FK beside it, so they are ignored when matching rows.
 GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour",   # + 6b-2 (schema §7)
+                                  "io_is_active",                                  # + 11b: fk_brdf_licence
                                   "bfc_set_code"})                                 # + 7c (§9.1): one Link per parent
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
@@ -45,6 +46,8 @@ LABELS = {
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
     "br_requirement_line": ("Requirement line", lambda r: r.line_label),
+    "br_data_field": ("Requirement attribute",
+                      lambda r: f"{r.br_row.br_number} · {r.field_row.field_name} ({r.crud_code})"),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
     "solution": ("Solution", lambda r: f"{r.solution_number} {r.solution_name}"),
     "function_requirement": ("Function requirement", lambda r: f"{r.fr_number} {r.fr_name}"),

@@ -81,6 +81,8 @@ class BrDataEntity(AuditMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("br_id", "data_entity_id", "crud_code", name="uq_brde_grain"),
+        # D-60(b): the target of br_data_field's licence FK — a live attribute tick needs this live row.
+        UniqueConstraint("br_id", "data_entity_id", "crud_code", "io_is_active", name="uq_brde_live_licence"),
         ForeignKeyConstraint(["br_id", "project_id", "bfc_node_id"],
                              ["business_requirement.br_id", "business_requirement.project_id",
                               "business_requirement.bfc_node_id"], name="fk_brde_br"),
@@ -94,6 +96,46 @@ class BrDataEntity(AuditMixin, Base):
         Index("ix_brde_de", "data_entity_id"),
         Index("ix_brde_io", "bfc_node_id", "data_entity_id", "direction"),
         Index("ix_brde_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrDataField(AuditMixin, Base):
+    """D-60(b) (slice11_schema §2): BR × attribute × C / R / U — which fields a BR uses and how. Delete stays
+    entity-level. Licensed by the BR's live entity-level row of the same CRUD (fk_brdf_licence → uq_brde_live_licence),
+    so a tick can never outlive its entity tick; the field FK proves the attribute belongs to that entity."""
+
+    __tablename__ = "br_data_field"
+
+    br_data_field_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    crud_code: Mapped[str] = mapped_column(CHAR(1), nullable=False)
+    brde_is_active: Mapped[bool | None] = mapped_column(
+        Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
+    data_field_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    usage_note: Mapped[str | None] = mapped_column(Text)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrDataField.br_id) == BusinessRequirement.br_id")
+    field_row = relationship("DataField", viewonly=True, lazy="joined",
+                             primaryjoin="foreign(BrDataField.data_field_id) == DataField.data_field_id")
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "data_field_id", "crud_code", name="uq_brdf_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brdf_br"),
+        ForeignKeyConstraint(["br_id", "data_entity_id", "crud_code", "brde_is_active"],
+                             ["br_data_entity.br_id", "br_data_entity.data_entity_id", "br_data_entity.crud_code",
+                              "br_data_entity.io_is_active"], name="fk_brdf_licence", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["data_field_id", "data_entity_id"],
+                             ["data_field.data_field_id", "data_field.data_entity_id"], name="fk_brdf_field"),
+        CheckConstraint("crud_code IN ('C', 'R', 'U')", name="ck_brdf_crud"),
+        Index("ix_brdf_field", "data_field_id"),
+        Index("ix_brdf_project", "project_id"),
     )
 
     def owning_project_id(self) -> int:

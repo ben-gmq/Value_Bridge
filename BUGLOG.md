@@ -68,6 +68,10 @@ place.
   while a link runs. Slice 5 adopts the locked form for `br_solution`, so the fix is the same
   `lock_for_share` before the liveness check. · **files:** `backend/services/step_io.py:16-20`,
   `backend/services/business_requirement.py`
+- **2026-10-16 (slice 11b, `sara` M1):** the CRUD grid save (`business_requirement.save_grid` → `_link` →
+  `step_io.ensure_step_io` → `live_entity`) reaches the same unlocked entity check. Its attribute half was fixed in
+  11b (each newly ticked field is locked FOR SHARE first; `test_br_attributes` proves the race); the entity half
+  waits for this entry's fix in `step_io.live_entity`, which covers both paths.
 
 ---
 
