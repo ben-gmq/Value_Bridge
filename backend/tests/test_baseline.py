@@ -211,18 +211,18 @@ def test_edits_after_a_freeze_leave_it_alone_and_the_diff_names_each_change(clie
     """Criteria 14, 16, 17, 17a: the snapshot does not move; one ADDED, one REMOVED, CHANGED naming the field."""
     w = scope(client, ed)
     v10 = bid(freeze(client, ed))
-    patch_br(client, ed, w["br1"], business_logic="Credit check before acceptance")
+    patch_br(client, ed, w["br1"], br_statement="Credit check before acceptance")   # 11a: logic is read-only
     de = client.get(f"{API}/data-entities/{w['order']['data_entity_id']}", headers=ed["h"]).json()
     assert client.patch(f"{API}/data-entities/{de['data_entity_id']}", headers=ed["h"],
                         json={"row_version": de["row_version"], "de_name": "Customer order"}).status_code == 200
     s3, br3 = io_step(client, ed, "Confirm order", w["group"]["bfc_node_id"], w["order"], w["invoice"])
     v11 = bid(freeze(client, ed))
     frozen = client.get(f"{API}/baselines/{v10}/rows/business_requirement", headers=ed["h"]).json()["rows"]
-    assert {r["business_logic"] for r in frozen} == {None}
+    assert {r["br_statement"] for r in frozen} == {None}
     d = diff(client, ed, v10, v11)
     br_rows = {r["label"]: r for r in d["entities"]["business_requirement"]["rows"]}
     changed = next(r for r in br_rows.values() if r["change"] == "CHANGED")
-    assert changed["fields"] == ["business_logic"] and changed["after"]["business_logic"].startswith("Credit")
+    assert changed["fields"] == ["br_statement"] and changed["after"]["br_statement"].startswith("Credit")
     assert any(r["change"] == "ADDED" for r in br_rows.values())
     de_rows = d["entities"]["data_entity"]["rows"]
     assert [(r["change"], r["fields"]) for r in de_rows] == [("CHANGED", ["de_name"])]
@@ -549,7 +549,7 @@ def test_the_hash_is_pinned_to_its_canonical_text(client, ed, db):
     """§4 [Q-15], DR8-L2: PostgreSQL ::text, length-prefixed, \\x1f between, \\x1e for NULL. Emptying a field
     reads CHANGED (criterion 41)."""
     w = scope(client, ed)
-    patch_br(client, ed, w["br1"], br_statement="Take the order", business_logic="")
+    patch_br(client, ed, w["br1"], br_statement="")             # 11a: the statement, not the read-only logic
     v10 = bid(freeze(client, ed))
     row = db.execute(text("SELECT * FROM baseline_business_requirement WHERE baseline_id = :b AND source_id = :s"),
                      {"b": v10, "s": w["br1"]["br_id"]}).mappings().one()
@@ -557,9 +557,9 @@ def test_the_hash_is_pinned_to_its_canonical_text(client, ed, db):
     vals = [None if row[c] is None else str(row[c]) for c in cols]
     assert row["content_hash"] == _py_hash(vals)
     assert _py_hash(["A\x1fB", "C"]) != _py_hash(["A", "B\x1fC"]) and _py_hash([""]) != _py_hash([None])
-    patch_br(client, ed, w["br1"], business_logic=None)
+    patch_br(client, ed, w["br1"], br_statement=None)
     d = diff(client, ed, v10, "live")
-    assert [r["fields"] for r in d["entities"]["business_requirement"]["rows"]] == [["business_logic"]]
+    assert [r["fields"] for r in d["entities"]["business_requirement"]["rows"]] == [["br_statement"]]
 
 
 def test_spec_versions_that_differ_report_per_entity(client, ed, monkeypatch):

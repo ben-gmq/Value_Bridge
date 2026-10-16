@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from models import Application, CodeMaster, DataEntity, FrInterface, FrInterfaceDataEntity, FunctionRequirement
+from schemas.interface import CarriedIn
 from services import audit, errors, lifecycle
 from services.code_master import validate_required_code
 
@@ -89,9 +90,7 @@ def describe_interface(db: Session, actor_id: int, fr: FunctionRequirement, body
     # ---- every check has passed; the writes start here (DR6b2-P3) ----
     values = {"source_application_id": src, "target_application_id": tgt, "volume_note": body.volume_note, **codes}
     if fi is None:
-        fi = FrInterface(fr_id=fr.fr_id, project_id=fr.project_id, created_by=actor_id, **values)
-        db.add(fi)
-        db.flush()
+        fi = new_detail(db, actor_id, fr, values)
     else:
         previous = {k: getattr(fi, k) for k in AUDITED}
         if not fi.is_active:
@@ -124,6 +123,25 @@ def _code_of(db: Session, code_id: int | None) -> str | None:
     if code_id is None:
         return None
     return db.get(CodeMaster, code_id).code
+
+
+def new_detail(db: Session, actor_id: int, fr: FunctionRequirement, values: dict) -> FrInterface:
+    """THE one place a new interface detail row is created (sara 11c M1): the PUT and "Create interface FR from these
+    flows" both come here. No checks, no commit — the callers have checked liveness and own the transaction."""
+    fi = FrInterface(fr_id=fr.fr_id, project_id=fr.project_id, created_by=actor_id, **values)
+    db.add(fi)
+    db.flush()
+    return fi
+
+
+def create_detail(db: Session, actor_id: int, fr: FunctionRequirement, source_application_id: int,
+                  target_application_id: int, carried: dict[int, str | None]) -> FrInterface:
+    """A new interface on a new FR with its carried entities and their notes, inside the caller's transaction
+    (slice 11c seeding). Shares new_detail and the carried-set writer with the PUT, so both stay identical."""
+    fi = new_detail(db, actor_id, fr, {"source_application_id": source_application_id,
+                                       "target_application_id": target_application_id})
+    _replace_carried(db, actor_id, fi, {de: CarriedIn(data_entity_id=de, note=note) for de, note in carried.items()})
+    return fi
 
 
 def _replace_carried(db: Session, actor_id: int, fi: FrInterface, wanted: dict) -> None:

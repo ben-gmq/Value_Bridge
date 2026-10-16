@@ -180,7 +180,7 @@ def link_solution(db: Session, actor_id: int, sol: Solution, application_id: int
     lifecycle.lock_for_share(db, app)             # application, then solution (R2-D11 order)
     lifecycle.lock_for_share(db, sol)
     _live(app, sol)
-    if app.lifecycle_code == "AS_IS":             # read after the lock, before any relink (DR6b review)
+    if is_as_is_only(app):                        # read after the lock, before any relink (DR6b review)
         raise HTTPException(422, f"{app.application_code} is as-is only, so it cannot deliver a future "
                                  "solution. Mark it To-be or Both first.")
     row = db.scalars(select(ApplicationSolution).where(
@@ -339,3 +339,8 @@ def support_on_to_be(db: Session, project_id: int | None) -> list[dict]:
         q = q.where(ApplicationBfcNode.project_id == project_id)
     return [{"application_bfc_node_id": i, "application_code": a, "hier_code": h}
             for i, a, h in db.execute(q.order_by(BfcNode.hier_code, Application.application_code))]
+
+
+def is_as_is_only(app: Application) -> bool:
+    """APP_LIFECYCLE is a system category (fixed codes, services header): an application in the as-is landscape only."""
+    return app.lifecycle_code == "AS_IS"

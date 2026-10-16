@@ -16,7 +16,10 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open.
+- **[Q-30] Does a requirement-line change count as "effort exposed" in the priced diff?** (raised 2026-10-16, `sara`
+  H2.) §7.13 defines exposure as the effort of FRs reachable "from a changed BR". What a BR says now lives in its
+  lines, so 11a counts a BR as changed when a line is added, changed or removed (a reorder does not). Without that,
+  exposure silently drops to 0 for most requirement changes. Built that way; Ben to confirm.
 
 ---
 
@@ -475,6 +478,8 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | S11-2 | **[Q-11] Both.** *(The flow kind is superseded by S11-5: migration is an FR type.)* Ben chose option (a): "Integration and migration, each flow tagged." A BR system-to-system flow carries a kind, `INTEGRATION` (ongoing) or `MIGRATION` (one-off data migration), CHECK-listed because coverage branches on it; built into slice 11's own migration, not added later. The kind joins the flow's grain. One sub-point opens: [Q-11a] (§1) | slice11_schema §3.3, §8 |
 | S11-4 | *(Superseded by S11-5.)* **[Q-11a] A migration flow is covered by any FR of the same BR whose interface carries the entity between the same two systems, whatever the FR's behaviour (batch included).** Ben: "Not sure what is Migration Flow" — explained as the one-off copy at go-live; every flow defaults to Integration, Migration is an option; the recommendation taken | slice11_schema §3.3 |
 | S11-5 | **Migration is an FR type, not a flow tag** — supersedes S11-2's flow kind and S11-4. Ben: "So you are talking about Solution Type or FR Type? If that is the case should be FR Type." A BR system-to-system flow stays (BR × entity × from × to) with no kind. FR_TYPE gains `MIGRATION` "Data migration" with behaviour `INTERFACE`, so it has the interface card (source, target, entities) and covers a flow exactly as an interface FR does; the rate card gains its four complexity rows, at the interface rates until FTC confirms its man-days | S11-2, S11-4 |
+| S11-6 | **[Q-29] Slice 11 merges as one: 11a, 11b and 11c land on `main` together, once all three are built and tested, with one hash-spec bump (spec 4) for all three tables.** Ben: "Q-29 combine please". The spec's §5 / criterion 189 stand as written; the three pieces are built and reviewed one by one on the branch, never merged one by one | slice11_schema §5, §7 |
+| S11-7 | **[Q-31] Yes to both.** Ben: "Q-31 Yes". (1) Data migration FRs (S11-5) are listed in the Interfaces register beside interface FRs, with their FR type shown so the two can be told apart; a migration FR carries the same interface card, Frequency optional as for any interface (S6b2-1). (2) Rate-card rows added between two baselines (e.g. the four MIGRATION rows backfilled into existing projects) count in the comparison headline like any other added row | `interface_list`; §7.7 diff |
 | S12-1 | **Slice 12 KPI list approved as drafted** (`docs/slice12_kpis.md`). Ben: "let's go with that, I do not want too many in the beginning." Slice 12 adds only S7–S11 from the list; the Project-management view stays a card on the dashboard until it has more than one tile (the list's question 2) | D-58 |
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |

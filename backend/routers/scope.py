@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from auth.dependencies import current_user
 from database import get_db
 from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolution, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeOrgRole,
-                    BrDataEntity, BrOrgRole, BusinessRequirement, DataEntity, DataField,
+                    BrDataEntity, BrOrgRole, BrRequirementLine, BrSystemFlow, BusinessRequirement, DataEntity, DataField,
                     ExternalEntity, OrgRole, OrgUnit, BrFunctionRequirement, BrSolution, FunctionRequirement,
                     Solution)
 from routers.guards import GuardedRouter, object_guard, project_ctx
 from schemas.erd import ErdGraphOut
-from schemas.scope import (ScopeSummaryOut, BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
+from schemas.scope import (ScopeSummaryOut, BfcNodeDetailOut, BfcNodeIn, BfcNodeOut, BrDetailOut, BrLineIn,
+                           BrLineOrderIn, BrLineOut, BrLinePatch, BrGridIn, BrGridOut, BrFlowIn, BrFlowOut, BrFlowPatch, BrFlowsToFrIn, BrFlowsToFrOut, BfcNodePatch, BrDataEntityIn, BrDataEntityOut,
                            BrOut, BrPatch, BrRaciOut, DataEntityIn, DataEntityListOut, DataEntityOut,
                            DataEntityPatch, DataEntityUseOut,
                            DataFieldIn, DataFieldOut, DataFieldPatch, ExternalEntityIn,
@@ -35,7 +36,7 @@ from schemas.function_requirement import (BrFrIn, BrFrOut, BrFrPatch, BrFrSoluti
                                          WarningsOut)
 from schemas.solution import (BrSolutionIn, BrSolutionOut, BrSolutionPatch, SolutionBrOut, SolutionIn,
                              SolutionListOut, SolutionOut, SolutionPatch)
-from services import bfc, business_requirement as br_service, client_org, data_entity as de_service
+from services import bfc, br_flows, br_lines, business_requirement as br_service, client_org, data_entity as de_service
 from services import components, external_entity as ext_service, lifecycle, raci, render, stamp, step_io, step_retire
 from services import effort as effort_service, interface as iface_service, scope_summary as summary_service
 from services import application as app_service, function_requirement as fr_service, solution as sol_service
@@ -233,7 +234,8 @@ def list_brs(project_id: int, include_retired: bool = False, db: Session = Depen
 
 @router.get("/business-requirements/{id}", response_model=BrDetailOut, **_br_r.route)
 def read_br(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
-    return {**BrOut.model_validate(br).model_dump(), **stamp.of(db, br)}
+    return {**BrOut.model_validate(br).model_dump(), **stamp.of(db, br),
+            "priority_code": br_lines.br_priority(db, br.br_id)}
 
 
 @router.patch("/business-requirements/{id}", response_model=BrOut, **_br_w.route)
@@ -267,6 +269,70 @@ def unlink_br_data(id: int, link_id: int, row_version: int, br: BusinessRequirem
                                   row_version)
 
 
+# ---- system-to-system flows on a BR (D-61, docs/slice11_schema.md §3) — component APPLICATION ---------------
+_br_app_w = _og(BusinessRequirement, "EDIT", "APPLICATION")
+_br_fr_app_w = _og(BusinessRequirement, "EDIT", ("FUNCTION_REQUIREMENT", "APPLICATION"))
+
+
+def _flow_out(db, br, row, cover=None):
+    cover = br_flows.coverage(db, br) if cover is None else cover
+    return {**{c: getattr(row, c) for c in ("br_system_flow_id", "br_id", "data_entity_id", "source_application_id",
+                                            "target_application_id", "flow_note", "row_version")},
+            "covered_by": cover.get(row.br_system_flow_id, []), "info": br_flows.info(db, br, row)}
+
+
+@router.get("/business-requirements/{id}/flows", response_model=list[BrFlowOut], **_br_r.route)
+def list_br_flows(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    cover = br_flows.coverage(db, br)
+    return [_flow_out(db, br, f, cover) for f in br_flows.list_flows(db, br)]
+
+
+@router.post("/business-requirements/{id}/flows", response_model=BrFlowOut, status_code=201, **_br_app_w.route)
+def add_br_flow(id: int, body: BrFlowIn, br: BusinessRequirement = Depends(_br_app_w.dep),
+                user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = br_flows.add_flow(db, _uid(user), br, body.data_entity_id, body.source_application_id,
+                            body.target_application_id, body.flow_note)
+    return _flow_out(db, br, row)
+
+
+@router.patch("/business-requirements/{id}/flows/{flow_id}", response_model=BrFlowOut, **_br_app_w.route)
+def update_br_flow(id: int, flow_id: int, body: BrFlowPatch, br: BusinessRequirement = Depends(_br_app_w.dep),
+                   user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    row = br_flows.update_note(db, _uid(user), _child(db, BrSystemFlow, flow_id, "br_id", br.br_id), body.row_version,
+                               body.flow_note)
+    return _flow_out(db, br, row)
+
+
+@router.delete("/business-requirements/{id}/flows/{flow_id}", status_code=204, **_br_app_w.route)
+def remove_br_flow(id: int, flow_id: int, row_version: int, br: BusinessRequirement = Depends(_br_app_w.dep),
+                   user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    lifecycle.unlink(db, _uid(user), _child(db, BrSystemFlow, flow_id, "br_id", br.br_id), row_version)
+
+
+@router.post("/business-requirements/{id}/flows/interface-fr", response_model=BrFlowsToFrOut, status_code=201,
+             **_br_fr_app_w.route)
+def flows_to_interface_fr(id: int, body: BrFlowsToFrIn, br: BusinessRequirement = Depends(_br_fr_app_w.dep),
+                          user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """"Create interface FR from these flows" (§3.1): FR + interface + carried entities + BR link in one save."""
+    fr, warnings = br_flows.seed_interface_fr(db, _uid(user), br, body.flow_ids, body.fr_type_code, body.fr_name)
+    return {"fr_id": fr.fr_id, "fr_number": fr.fr_number, "warnings": warnings}
+
+
+@router.get("/business-requirements/{id}/data-grid", response_model=BrGridOut, **_br_r.route)
+def read_br_grid(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
+    return br_service.grid(db, br)
+
+
+@router.put("/business-requirements/{id}/data-grid", response_model=BrGridOut, **_br_w.route)
+def save_br_grid(id: int, body: BrGridIn, br: BusinessRequirement = Depends(_br_w.dep),
+                 user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """D-60b: entity and attribute ticks in one request; the step I/O they license is written with them (D-24)."""
+    return br_service.save_grid(
+        db, _uid(user), br, {(t.data_entity_id, t.crud_code) for t in body.entity_ticks},
+        {(t.data_field_id, t.crud_code): t.usage_note for t in body.attribute_ticks},
+        {(k.table, k.id): k.row_version for k in body.known})
+
+
 @router.get("/business-requirements/{id}/org-roles", response_model=list[BrRaciOut], **_br_r.route)
 def list_br_roles(id: int, br: BusinessRequirement = Depends(_br_r.dep), db: Session = Depends(get_db)):
     return raci.list_links(db, BrOrgRole, br.br_id)
@@ -283,6 +349,44 @@ def link_br_role(id: int, body: RaciIn, br: BusinessRequirement = Depends(_br_w.
 def unlink_br_role(id: int, link_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     raci.unlink(db, _uid(user), _child(db, BrOrgRole, link_id, "br_id", br.br_id), row_version)
+
+
+# ---- requirement lines (D-59, docs/slice11_schema.md §1) — no component: a BR always exists -------------
+@router.get("/business-requirements/{id}/lines", response_model=list[BrLineOut], **_br_r.route)
+def list_br_lines(id: int, include_retired: bool = False, br: BusinessRequirement = Depends(_br_r.dep),
+                  db: Session = Depends(get_db)):
+    return br_lines.list_lines(db, br, include_retired)
+
+
+@router.post("/business-requirements/{id}/lines", response_model=BrLineOut, status_code=201, **_br_w.route)
+def add_br_line(id: int, body: BrLineIn, br: BusinessRequirement = Depends(_br_w.dep),
+                user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return br_lines.add_line(db, _uid(user), br, body.line_kind_code, body.priority_code, body.line_text)
+
+
+@router.put("/business-requirements/{id}/lines/order", response_model=list[BrLineOut], **_br_w.route)
+def reorder_br_lines(id: int, body: BrLineOrderIn, br: BusinessRequirement = Depends(_br_w.dep),
+                     user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return br_lines.reorder(db, _uid(user), br, [(x.br_requirement_line_id, x.row_version) for x in body.lines])
+
+
+@router.patch("/business-requirements/{id}/lines/{line_id}", response_model=BrLineOut, **_br_w.route)
+def update_br_line(id: int, line_id: int, body: BrLinePatch, br: BusinessRequirement = Depends(_br_w.dep),
+                   user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return br_lines.update_line(db, _uid(user), _child(db, BrRequirementLine, line_id, "br_id", br.br_id),
+                                body.row_version, body.model_dump(exclude_unset=True, exclude={"row_version"}))
+
+
+@router.delete("/business-requirements/{id}/lines/{line_id}", status_code=204, **_br_w.route)
+def retire_br_line(id: int, line_id: int, row_version: int, br: BusinessRequirement = Depends(_br_w.dep),
+                   user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    lifecycle.retire(db, _uid(user), _child(db, BrRequirementLine, line_id, "br_id", br.br_id), row_version)
+
+
+@router.patch("/business-requirements/{id}/lines/{line_id}/restore", response_model=BrLineOut, **_br_w.route)
+def restore_br_line(id: int, line_id: int, br: BusinessRequirement = Depends(_br_w.dep),
+                    user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return br_lines.restore_line(db, _uid(user), _child(db, BrRequirementLine, line_id, "br_id", br.br_id))
 
 
 # ---- solutions and the BRs they answer (§7.5, §4.3, docs/slice5_spec.md) -----------------

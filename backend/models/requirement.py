@@ -2,7 +2,7 @@
 and RACI links. All frozen into baselines."""
 from sqlalchemy import (
     CHAR, BigInteger, Boolean, CheckConstraint, Computed, ForeignKey, ForeignKeyConstraint,
-    Identity, Index, String, Text, UniqueConstraint, text,
+    Identity, Index, SmallInteger, String, Text, UniqueConstraint, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -81,6 +81,8 @@ class BrDataEntity(AuditMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("br_id", "data_entity_id", "crud_code", name="uq_brde_grain"),
+        # D-60(b): the target of br_data_field's licence FK — a live attribute tick needs this live row.
+        UniqueConstraint("br_id", "data_entity_id", "crud_code", "io_is_active", name="uq_brde_live_licence"),
         ForeignKeyConstraint(["br_id", "project_id", "bfc_node_id"],
                              ["business_requirement.br_id", "business_requirement.project_id",
                               "business_requirement.bfc_node_id"], name="fk_brde_br"),
@@ -94,6 +96,152 @@ class BrDataEntity(AuditMixin, Base):
         Index("ix_brde_de", "data_entity_id"),
         Index("ix_brde_io", "bfc_node_id", "data_entity_id", "direction"),
         Index("ix_brde_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrDataField(AuditMixin, Base):
+    """D-60(b) (slice11_schema §2): BR × attribute × C / R / U — which fields a BR uses and how. Delete stays
+    entity-level. Licensed by the BR's live entity-level row of the same CRUD (fk_brdf_licence → uq_brde_live_licence),
+    so a tick can never outlive its entity tick; the field FK proves the attribute belongs to that entity."""
+
+    __tablename__ = "br_data_field"
+
+    br_data_field_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    crud_code: Mapped[str] = mapped_column(CHAR(1), nullable=False)
+    brde_is_active: Mapped[bool | None] = mapped_column(
+        Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
+    data_field_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    usage_note: Mapped[str | None] = mapped_column(Text)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrDataField.br_id) == BusinessRequirement.br_id")
+    field_row = relationship("DataField", viewonly=True, lazy="joined",
+                             primaryjoin="foreign(BrDataField.data_field_id) == DataField.data_field_id")
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "data_field_id", "crud_code", name="uq_brdf_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brdf_br"),
+        ForeignKeyConstraint(["br_id", "data_entity_id", "crud_code", "brde_is_active"],
+                             ["br_data_entity.br_id", "br_data_entity.data_entity_id", "br_data_entity.crud_code",
+                              "br_data_entity.io_is_active"], name="fk_brdf_licence", onupdate="NO ACTION"),
+        ForeignKeyConstraint(["data_field_id", "data_entity_id"],
+                             ["data_field.data_field_id", "data_field.data_entity_id"], name="fk_brdf_field"),
+        CheckConstraint("crud_code IN ('C', 'R', 'U')", name="ck_brdf_crud"),
+        Index("ix_brdf_field", "data_field_id"),
+        Index("ix_brdf_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrSystemFlow(AuditMixin, Base):
+    """D-61 (slice11_schema §3): "what data entity we copy from which system to which system" on a to-be BR — one row
+    per (BR × entity × from-application × to-application). Both ends come from the Applications master list (S11-3),
+    never free text, and differ. No pointer to an FR: coverage by an interface FR is derived (§3.1); an interface FR
+    and a Data migration FR (S11-5) cover a flow alike. Gated by APPLICATION."""
+
+    __tablename__ = "br_system_flow"
+
+    br_system_flow_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    flow_note: Mapped[str | None] = mapped_column(Text)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrSystemFlow.br_id) == BusinessRequirement.br_id")
+    entity_row = relationship("DataEntity", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.data_entity_id) == DataEntity.data_entity_id")
+    source_row = relationship("Application", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.source_application_id) == Application.application_id")
+    target_row = relationship("Application", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.target_application_id) == Application.application_id")
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "data_entity_id", "source_application_id", "target_application_id",
+                         name="uq_brsf_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brsf_br"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"],
+                             ["data_entity.data_entity_id", "data_entity.project_id"], name="fk_brsf_de"),
+        ForeignKeyConstraint(["source_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_brsf_source"),
+        ForeignKeyConstraint(["target_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_brsf_target"),
+        CheckConstraint("source_application_id <> target_application_id", name="ck_brsf_endpoints_distinct"),
+        Index("ix_brsf_de", "data_entity_id"),
+        Index("ix_brsf_source", "source_application_id"),
+        Index("ix_brsf_target", "target_application_id"),
+        Index("ix_brsf_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class BrRequirementLine(AuditMixin, Base):
+    """D-59 (slice11_schema §1.1): one numbered requirement statement within one BR — "BR-0043.3". line_no is
+    minted by the service (max + 1 over all the BR's lines, retired included), never reused, never sent; seq_no is
+    the display order. Kind and priority are category-only FKs (no behaviour, §1.3); priority NULL = not yet set."""
+
+    __tablename__ = "br_requirement_line"
+
+    br_requirement_line_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    line_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    seq_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    line_kind_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    line_kind_category: Mapped[str] = mapped_column(String(40), Computed("'BR_LINE_KIND'", persisted=True))
+    priority_code_id: Mapped[int | None] = mapped_column(BigInteger)
+    priority_category: Mapped[str] = mapped_column(String(40), Computed("'BR_PRIORITY'", persisted=True))
+    line_text: Mapped[str] = mapped_column(Text, nullable=False)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrRequirementLine.br_id) == BusinessRequirement.br_id")
+    line_kind_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                 primaryjoin="foreign(BrRequirementLine.line_kind_code_id) == CodeMaster.code_id")
+    priority_row = relationship("CodeMaster", viewonly=True, lazy="joined",
+                                primaryjoin="foreign(BrRequirementLine.priority_code_id) == CodeMaster.code_id")
+
+    @property
+    def line_kind_code(self) -> str | None:
+        return self.line_kind_row.code if self.line_kind_row is not None else None
+
+    @property
+    def priority_code(self) -> str | None:
+        return self.priority_row.code if self.priority_row is not None else None
+
+    @property
+    def line_label(self) -> str:
+        return f"{self.br_row.br_number}.{self.line_no}"
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "line_no", name="uq_brl_line_no"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brl_br"),
+        ForeignKeyConstraint(["line_kind_code_id", "line_kind_category"],
+                             ["code_master.code_id", "code_master.category"], name="fk_brl_kind",
+                             onupdate="NO ACTION"),
+        ForeignKeyConstraint(["priority_code_id", "priority_category"],
+                             ["code_master.code_id", "code_master.category"], name="fk_brl_priority",
+                             onupdate="NO ACTION"),
+        CheckConstraint("line_no >= 1", name="ck_brl_line_no"),
+        CheckConstraint("btrim(line_text) <> ''", name="ck_brl_text"),
+        Index("uq_brl_seq_live", "br_id", "seq_no", unique=True, postgresql_where=text("is_active")),
+        Index("ix_brl_project", "project_id"),
+        Index("ix_brl_kind", "line_kind_code_id"),
+        Index("ix_brl_priority", "priority_code_id"),
     )
 
     def owning_project_id(self) -> int:

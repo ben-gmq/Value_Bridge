@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
-                    BfcNodeTrigger, BrFunctionRequirement, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
+                    BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
                     ProjectComponent, ProjectTemplateComponent, Solution)
 from services import audit
 
@@ -96,6 +96,7 @@ FREEZE_GATES: dict[str, Gate] = {
     "bfc_node_trigger": Gate(by_step_set={"AS_IS": "AS_IS", "TO_BE": "TO_BE_DFD"}),
     "process_trigger": Gate(any_of=frozenset({"TO_BE_DFD", "AS_IS"})),
     "application": Gate(all_of=frozenset({"APPLICATION"})),
+    "br_system_flow": Gate(all_of=frozenset({"APPLICATION"})),                            # D-61, slice11_schema §4
     "application_bfc_node": Gate(all_of=frozenset({"APPLICATION"}), by_step_set={"AS_IS": "AS_IS"}),
     "solution": Gate(all_of=frozenset({"SOLUTION"})),
     "br_solution": Gate(all_of=frozenset({"SOLUTION"})),
@@ -117,6 +118,7 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     ApplicationBfcNode: ("APPLICATION", "AS_IS"),
     BrSolution: ("SOLUTION",),
     BrFunctionRequirement: ("FUNCTION_REQUIREMENT",),       # slice10b §4.1: a step restore brings links back
+    BrSystemFlow: ("APPLICATION",),                         # D-61: a step restore brings flows back
 }
 DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 

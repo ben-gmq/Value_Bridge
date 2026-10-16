@@ -25,10 +25,15 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates`.
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
+  **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's
+  legacy logic / output text into requirement lines once (idempotent per project), then
+  `seeds.seed_effort_rate --actor-email <admin>` adds the Data migration rate cells (S11-5) to existing projects —
+  before their next freeze, or their next diff counts four added rate rows.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
-- **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`) ·
-  `cd frontend && npm run lint && npm run build`.
+- **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·
+  **before every merge, the full suite:** `./venv/bin/pytest -q -m "" -n 4` (needs `pip install -r requirements-dev.txt`
+  and `./scripts/make_test_worker_dbs.sh 4` once: one test DB per worker) · `cd frontend && npm run lint && npm run build`.
 - **Test screenshots** go to `Evidence/<YYYY-MM-DD>/<slice>/NN-<check>.png` (date of the test run),
   never loose in the repo root and never directly in `Evidence/`. ui-verifier saves PNGs in the repo root
   (sometimes `.playwright-mcp/`); move them after every run. PNGs are gitignored; see `Evidence/README.md`.
@@ -79,8 +84,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
    `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
    DELETE grant, so this fails at the database, not in review.
-   Nothing cascades except a process step: `services/step_retire.OWNED` is the only list of rows
-   that retire with something else; a new table that points at a step blocks until added to it.
+   Nothing cascades except a process step: `services/step_retire.OWNED_BY_STEP` / `OWNED_BY_BR` are the only lists
+   of rows that retire with something else; a new table that points at a step or a BR blocks until added to one.
 2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
    trigger and the insert guard (`vb_ops.immutable_guards`), and shadows are **generated** by
    `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
@@ -114,6 +119,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 - **Migrations only on `main`, in order.** A slice branch that needs a table rebases onto the
   latest `main` before creating its migration, so revision ids never fork. Two slices never
   add migrations at the same time — coordinate on `main`.
+- **A hash-spec bump (`freeze_set.CURRENT_HASH_SPEC`) is taken on `main` in order, like a migration id**; tables that
+  share one spec reach `main` in one merge (S11-6).
 - **This file is the shared rulebook.** A rule learned in one session lands here (via
   `rules-check-drift`) so the other nineteen follow it.
 
@@ -124,7 +131,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 
 ## Landmines
 1. `TRUNCATE app_user … CASCADE` also empties `code_master` (its audit columns reference
-   `app_user`) — the test harness re-seeds after every wipe; do the same in any script.
+   `app_user`) — the test harness copies the library back from its `vb_test_snapshot` schema after a wipe; a script
+   must re-seed.
 2. `audit_event` is append-only by grant **and** trigger; even the owner role cannot UPDATE it.
 3. `request.client.host` is not always an IP — `services/audit.py` stores only valid addresses.
 4. `code_master.created_by` is nullable **only** because seeded library rows have no author.

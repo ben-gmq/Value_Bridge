@@ -3,7 +3,7 @@ direction, raci_behaviour, fk_group_no, created_by — appear only in *Out model
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schemas.common import Orm
 from schemas.process_flow import Light, RuleElement
@@ -133,7 +133,52 @@ class BrOut(Orm):
 
 
 class BrDetailOut(BrOut, Stamp):
-    pass
+    priority_code: str | None = None       # D-59: derived from the live lines, never stored
+
+
+# ---- requirement lines (D-59, slice11_schema §1) ----
+class BrLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    line_kind_code: str = Field(min_length=1, max_length=40)
+    priority_code: str | None = Field(default=None, max_length=40)
+    line_text: str = Field(min_length=1, max_length=8000)   # sara M1: backfilled legacy text is up to 8000
+
+
+class BrLinePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    row_version: int
+    line_kind_code: str | None = Field(default=None, min_length=1, max_length=40)
+    priority_code: str | None = Field(default=None, max_length=40)          # null clears it
+    line_text: str | None = Field(default=None, min_length=1, max_length=8000)
+
+    @field_validator("line_kind_code", "line_text", mode="before")
+    @classmethod
+    def _not_null(cls, v, info):
+        if v is None:
+            raise ValueError(f"{info.field_name} cannot be empty")
+        return v
+
+
+class BrLineOut(Orm):
+    br_requirement_line_id: int
+    br_id: int
+    line_no: int
+    line_label: str
+    seq_no: int
+    line_kind_code: str
+    priority_code: str | None
+    line_text: str
+    is_active: bool
+    row_version: int
+
+
+class BrLineOrderItem(BaseModel):
+    br_requirement_line_id: int
+    row_version: int
+
+
+class BrLineOrderIn(BaseModel):
+    lines: list[BrLineOrderItem] = Field(max_length=500)
 
 
 class ProcessOut(BaseModel):
@@ -142,9 +187,9 @@ class ProcessOut(BaseModel):
 
 
 class BrPatch(_Patch):
+    # D-59: the legacy business_logic / output_expectation are read-only now — sending them is a 422.
+    model_config = ConfigDict(extra="forbid")
     br_statement: str | None = Field(default=None, max_length=8000)
-    business_logic: str | None = Field(default=None, max_length=8000)
-    output_expectation: str | None = Field(default=None, max_length=8000)
     status_code: str | None = Field(default=None, max_length=40)
 
 
@@ -189,6 +234,103 @@ class BrDataEntityOut(Orm):
     direction: str
     usage_note: str | None
     row_version: int
+
+
+# ---- system-to-system flows on a BR (D-61, slice11_schema §3) ----
+class BrFlowIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data_entity_id: int
+    source_application_id: int
+    target_application_id: int
+    flow_note: str | None = Field(default=None, max_length=2000)
+
+
+class BrFlowPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    row_version: int
+    flow_note: str | None = Field(max_length=2000)
+
+
+class BrFlowOut(BaseModel):
+    br_system_flow_id: int
+    br_id: int
+    data_entity_id: int
+    source_application_id: int
+    target_application_id: int
+    flow_note: str | None
+    row_version: int
+    covered_by: list[str]            # derived on every read: the FR numbers that carry it (§3.1)
+    info: list[str]                  # information only: flow_entity_not_used_by_br, flow_touches_as_is_only_application
+
+
+class BrFlowsToFrIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    flow_ids: list[int] = Field(min_length=1, max_length=200)
+    fr_type_code: str = Field(min_length=1, max_length=40)        # an interface-behaviour type (S11-5)
+    fr_name: str = Name()
+
+
+class BrFlowsToFrOut(BaseModel):
+    fr_id: int
+    fr_number: str
+    warnings: list[str | dict] = []      # as the FR screen's create returns them (e.g. a duplicate name)
+
+
+# ---- the CRUD grid with attribute ticks (D-60b, slice11_schema §2) ----
+class BrDataFieldOut(Orm):
+    br_data_field_id: int
+    br_id: int
+    data_entity_id: int
+    data_field_id: int
+    crud_code: str
+    usage_note: str | None
+    row_version: int
+
+
+class GridInfo(BaseModel):
+    code: str
+    data_entity_id: int
+    crud_code: str
+
+
+class BrGridOut(BaseModel):
+    entities: list[BrDataEntityOut]
+    attributes: list[BrDataFieldOut]
+    info: list[GridInfo]
+
+
+class GridEntityTick(BaseModel):
+    data_entity_id: int
+    crud_code: Literal["C", "R", "U", "D"]
+
+
+class GridAttributeTick(BaseModel):
+    data_field_id: int
+    crud_code: Literal["C", "R", "U"]                  # Delete stays entity-level (Q-8)
+    usage_note: str | None = Field(max_length=2000)    # required (null allowed): the PUT is the whole state (sara L2)
+
+
+class GridKnown(BaseModel):
+    table: Literal["br_data_entity", "br_data_field"]
+    id: int
+    row_version: int
+
+
+class BrGridIn(BaseModel):
+    """The whole grid as the screen leaves it, and every live row the screen was showing (`known`), so a change made
+    by someone else since is a 409, never overwritten."""
+    model_config = ConfigDict(extra="forbid")
+    entity_ticks: list[GridEntityTick] = Field(max_length=2000)
+    attribute_ticks: list[GridAttributeTick] = Field(max_length=5000)
+    known: list[GridKnown] = Field(max_length=7000)
+
+    @field_validator("entity_ticks", "attribute_ticks")
+    @classmethod
+    def _once_each(cls, v, info):                      # sara L3: a tick sent twice is refused, never collapsed
+        keys = [(t.data_entity_id if info.field_name == "entity_ticks" else t.data_field_id, t.crud_code) for t in v]
+        if len(keys) != len(set(keys)):
+            raise ValueError(f"{info.field_name}: each tick may appear once")
+        return v
 
 
 class ExternalFlowIn(BaseModel):

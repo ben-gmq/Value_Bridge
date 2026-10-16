@@ -68,6 +68,10 @@ place.
   while a link runs. Slice 5 adopts the locked form for `br_solution`, so the fix is the same
   `lock_for_share` before the liveness check. · **files:** `backend/services/step_io.py:16-20`,
   `backend/services/business_requirement.py`
+- **2026-10-16 (slice 11b, `sara` M1):** the CRUD grid save (`business_requirement.save_grid` → `_link` →
+  `step_io.ensure_step_io` → `live_entity`) reaches the same unlocked entity check. Its attribute half was fixed in
+  11b (each newly ticked field is locked FOR SHARE first; `test_br_attributes` proves the race); the entity half
+  waits for this entry's fix in `step_io.live_entity`, which covers both paths.
 
 ---
 
@@ -370,4 +374,18 @@ place.
   centrally; (L8) housekeeping — `select` imported inside `process_volume.summary`, `ProjectOut.hours_per_working_day`
   float vs Decimal string elsewhere, `VolumeSection` repeats the period list (deviation 7h), a stray
   `s13d-snap-check2b.yml` at main's root.
+- **2026-10-16 · slice 11a (`sara` pre-commit; H1, H2, M1, L1, L3 fixed in the slice; M2 → history [Q-29]):**
+  (L4) the derived BR priority is on the BR detail read only — §1.1 also wants it on the BR list (`BrOut` /
+  `list_brs`); (L7) no test of a reversed cross-spec diff (spec 4 → spec 3: lines REMOVED, kept out of the
+  summary), and §7's spec-2 baseline case is not re-proven for lines; (L2) after a 0055 downgrade and re-upgrade the
+  backfill marker survives and the copy never re-runs — documented in `br_lines.backfill`; legacy text stays visible.
+- **2026-10-16 · slice 11a browser check (Lilly):** the baseline comparison names a requirement line
+  "3 · BR-0002 · 01.01.02 Check credit" (own label, then its BR's label), where the panel says "BR-0002.3" — read the
+  same way in both places (a label rule for `br_requirement_line` in the diff labeller).
+- **2026-10-16 · slice 11c (`sara` pre-commit; M1, L1–L6, L8 fixed in the slice):** (L4) the flow-note PATCH has its
+  API function, audit and test but no edit control on screen yet (notes are set when a flow is added); (L7) a flow
+  removed while "Create interface FR" runs can still seed the FR — accepted, the user asked for that FR; (L9)
+  `br_flows.info` queries once per flow — batch it like `coverage()` if a BR ever holds many flows.
+- **2026-10-16 · test harness (`sara`, L3):** the app's bcrypt cost is bcrypt's library default, implicitly; pin it
+  as `auth.security.BCRYPT_ROUNDS = 12` with a test that it is ≥ 12, and have the harness lower that constant.
 

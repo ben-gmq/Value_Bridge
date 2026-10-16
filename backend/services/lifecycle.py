@@ -15,8 +15,8 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from models import (Application, Base, BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity,
-                    FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution)
+from models import (Application, Base, BfcNode, BrRequirementLine, BusinessRequirement, DataEntity, DataField,
+                    ExternalEntity, FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -25,10 +25,12 @@ EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_
 # Guard columns carry the target's is_active / is_process; the FK they sit in duplicates the
 # plain (id, project_id) FK beside it, so they are ignored when matching rows.
 GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour",   # + 6b-2 (schema §7)
+                                  "io_is_active",                                  # + 11b: fk_brdf_licence
                                   "bfc_set_code"})                                 # + 7c (§9.1): one Link per parent
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
-              Solution, FunctionRequirement, Application, ProcessTrigger)
+              Solution, FunctionRequirement, Application, ProcessTrigger,
+              BrRequirementLine)                                       # D-59: a line comes back with its number
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -43,6 +45,12 @@ LABELS = {
     "br_data_entity": ("Requirement data", lambda r: f"CRUD {r.crud_code}"),
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
+    "br_requirement_line": ("Requirement line", lambda r: r.line_label),
+    "br_system_flow": ("Requirement system flow",
+                       lambda r: f"{r.br_row.br_number} · {r.entity_row.de_name} "
+                                 f"{r.source_row.application_code}→{r.target_row.application_code}"),
+    "br_data_field": ("Requirement attribute",
+                      lambda r: f"{r.br_row.br_number} · {r.field_row.field_name} ({r.crud_code})"),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),
     "solution": ("Solution", lambda r: f"{r.solution_number} {r.solution_name}"),
     "function_requirement": ("Function requirement", lambda r: f"{r.fr_number} {r.fr_name}"),

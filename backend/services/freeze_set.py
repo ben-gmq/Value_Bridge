@@ -29,8 +29,10 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 3       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 4       # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
+#                             4: slice 11 — br_requirement_line (D-59), br_data_field (D-60b) and br_system_flow
+#                                (D-61) joined the set together (S11-6)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -101,8 +103,18 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        label=("crud_code",), refs=(("br_id", BR), ("data_entity_id", DE))),
     _e("br_org_role", "BR", ("br_id", "org_role_id", "raci_code", "raci_behaviour"),
        label=("raci_label",), refs=(("br_id", BR), ("org_role_id", ORG))),
+    # D-59 (slice11_schema §5): numbered requirement lines; seq_no is display order, a position column (MOVED).
+    _e("br_requirement_line", "BR", ("br_id", "line_no", "line_kind_code", "priority_code", "line_text"),
+       ("seq_no",), ("line_no",), (("br_id", BR),), since=4),
+    # D-60(b): the attributes a BR uses, C / R / U. Spec 4 with the lines and flows: slice 11 reaches main as one (S11-6).
+    _e("br_data_field", "BR", ("br_id", "data_entity_id", "data_field_id", "crud_code", "usage_note"),
+       label=("crud_code",), refs=(("br_id", BR), ("data_entity_id", DE), ("data_field_id", "data_field")), since=4),
     _e(APP, "APPLICATION", ("application_code", "application_name", "vendor", "version_label", "app_kind_code",
                             "lifecycle_code", "description"), label=("application_code", "application_name")),
+    # D-61: a BR's system-to-system flows; after `application` (FK order). Spec 4 with the lines and ticks (S11-6).
+    _e("br_system_flow", "BR", ("br_id", "data_entity_id", "source_application_id", "target_application_id", "flow_note"),
+       refs=(("br_id", BR), ("data_entity_id", DE), ("source_application_id", APP), ("target_application_id", APP)),
+       since=4),
     _e(SOL, "SOLUTION", ("solution_number", "solution_name", "description", "category_code", "status_code",
                          "benefit_note", "effort_note"), label=("solution_number", "solution_name")),
     _e("br_solution", "SOLUTION", ("br_id", "solution_id", "coverage_note"), refs=(("br_id", BR),

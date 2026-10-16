@@ -114,7 +114,8 @@ class Baseline(Base):
 # services/freeze_set.FREEZE_SET carries the rest of each entry; a test asserts the two agree.
 SHADOWED = ("org_unit", "org_role", "bfc_node", "data_entity", "data_field", "external_entity",
             "process_trigger", "bfc_node_data_entity", "bfc_node_org_role", "bfc_node_external_flow",
-            "bfc_node_trigger", "business_requirement", "br_data_entity", "br_org_role", "application",
+            "bfc_node_trigger", "business_requirement", "br_data_entity", "br_org_role", "br_requirement_line", "br_data_field",
+            "application", "br_system_flow",
             "solution", "br_solution", "function_requirement", "br_function_requirement", "fr_interface", "fr_interface_data_entity",
             "application_solution", "application_bfc_node", "effort_rate", "project_component")
 

@@ -52,6 +52,7 @@ export const keys = {
   retirePreview: (id) => ['retire-preview', String(id)],     // not under node(id): a retired node has no preview
   brs: (p) => ['brs', String(p)],
   br: (id) => ['br', String(id)],
+  brLines: (id) => ['br', String(id), 'lines'],          // D-59: under br(id), so a BR refresh reloads them
   solutions: (p) => ['solutions', String(p)],
   solution: (id) => ['solution', String(id)],
   solutionLinks: () => ['solution-links'],                                           // both sides' link lists
