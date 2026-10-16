@@ -99,6 +99,8 @@ ROUTE_COMPONENTS = (
     ("/solutions", "SOLUTION"),
     ("/function-requirements", "FUNCTION_REQUIREMENT"),
     ("/business-requirements/{id}/function-requirements", "FUNCTION_REQUIREMENT"),   # D-52 link writes (Q-11)
+    ("/business-requirements/{id}/flows", "APPLICATION"),                    # D-61 flows (slice11_schema §4)
+    ("/business-requirements/{id}/flows/interface-fr", "FUNCTION_REQUIREMENT"),  # …and seeding an FR from them
     ("/applications", "APPLICATION"),
     ("/rate-card", "EFFORT"),
     ("/complexity", "EFFORT"),

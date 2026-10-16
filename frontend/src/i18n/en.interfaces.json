@@ -5,6 +5,7 @@
   "interfaces.number": "Interface",
   "interfaces.name": "Name",
   "interfaces.type": "Type",
+  "interfaces.type": "Type",
   "interfaces.route": "Source → target",
   "interfaces.pattern": "Pattern",
   "interfaces.method": "Method",

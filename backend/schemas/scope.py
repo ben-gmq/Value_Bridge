@@ -236,6 +236,46 @@ class BrDataEntityOut(Orm):
     row_version: int
 
 
+# ---- system-to-system flows on a BR (D-61, slice11_schema §3) ----
+class BrFlowIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    data_entity_id: int
+    source_application_id: int
+    target_application_id: int
+    flow_note: str | None = Field(default=None, max_length=2000)
+
+
+class BrFlowPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    row_version: int
+    flow_note: str | None = Field(max_length=2000)
+
+
+class BrFlowOut(BaseModel):
+    br_system_flow_id: int
+    br_id: int
+    data_entity_id: int
+    source_application_id: int
+    target_application_id: int
+    flow_note: str | None
+    row_version: int
+    covered_by: list[str]            # derived on every read: the FR numbers that carry it (§3.1)
+    info: list[str]                  # information only: flow_entity_not_used_by_br, flow_touches_as_is_only_application
+
+
+class BrFlowsToFrIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    flow_ids: list[int] = Field(min_length=1, max_length=200)
+    fr_type_code: str = Field(min_length=1, max_length=40)        # an interface-behaviour type (S11-5)
+    fr_name: str = Name()
+
+
+class BrFlowsToFrOut(BaseModel):
+    fr_id: int
+    fr_number: str
+    warnings: list[str | dict] = []      # as the FR screen's create returns them (e.g. a duplicate name)
+
+
 # ---- the CRUD grid with attribute ticks (D-60b, slice11_schema §2) ----
 class BrDataFieldOut(Orm):
     br_data_field_id: int

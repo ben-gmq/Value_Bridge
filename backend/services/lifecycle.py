@@ -46,6 +46,9 @@ LABELS = {
     "bfc_node_org_role": ("Step role", lambda r: r.raci_behaviour.title()),
     "br_org_role": ("Requirement role", lambda r: r.raci_behaviour.title()),
     "br_requirement_line": ("Requirement line", lambda r: r.line_label),
+    "br_system_flow": ("Requirement system flow",
+                       lambda r: f"{r.br_row.br_number} · {r.entity_row.de_name} "
+                                 f"{r.source_row.application_code}→{r.target_row.application_code}"),
     "br_data_field": ("Requirement attribute",
                       lambda r: f"{r.br_row.br_number} · {r.field_row.field_name} ({r.crud_code})"),
     "bfc_node_external_flow": ("External flow", lambda r: f"flow {r.direction}"),

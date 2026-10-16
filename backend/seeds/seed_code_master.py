@@ -18,7 +18,9 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
     ("RACI_TYPE", False, [("R", "Responsible", "RESPONSIBLE"), ("A", "Accountable", "ACCOUNTABLE"),
                           ("C", "Consulted", "CONSULTED"), ("I", "Informed", "INFORMED")]),
     ("FR_TYPE", False, [("FORM", "Form", "FORM"), ("INTERFACE", "Interface", "INTERFACE"),
-                        ("REPORT", "Report", "REPORT"), ("BATCH", "Batch", "BATCH")]),
+                        ("REPORT", "Report", "REPORT"), ("BATCH", "Batch", "BATCH"),
+                        # S11-5: a one-off data migration covers a BR flow exactly as an interface does
+                        ("MIGRATION", "Data migration", "INTERFACE")]),
     ("FR_COMPLEXITY", False, [("SIMPLE", "Simple"), ("MEDIUM", "Medium"), ("COMPLEX", "Complex"),
                               ("VERY_COMPLEX", "Very complex")]),
     ("SOLUTION_CATEGORY", True, [("ORG_AND_RULES", "Organization & rules"), ("PEOPLE", "People"),

@@ -54,6 +54,9 @@ def _type(db: Session, project_id: int, fr_type_code: str):
     return code
 
 
+fr_type = _type                                            # public name for other services (slice 11c, sara M1)
+
+
 def _warnings(db: Session, fr: FunctionRequirement, sol: Solution | None) -> list[str]:
     out = []
     if not _linked_br_ids(db, fr.fr_id):
@@ -162,7 +165,7 @@ def brs_of_fr(db: Session, fr: FunctionRequirement) -> list[dict]:
 
 def create_fr(db: Session, actor_id: int, project_id: int, name: str, fr_type_code: str,
               solution_id: int | None, fields: dict,
-              br_id: int | None = None) -> tuple[FunctionRequirement, list]:
+              br_id: int | None = None, commit: bool = True) -> tuple[FunctionRequirement, list]:
     """`br_id` (slice10b Q-20, DR10b-P3): create the FR and link it to that BR in one transaction, through the
     same link_fr (scoped 404, step → BR → FR locks). With a solution too, the BR-row rule applies: the solution
     must be a live solution of that BR (422)."""
@@ -193,6 +196,8 @@ def create_fr(db: Session, actor_id: int, project_id: int, name: str, fr_type_co
             fr.solution_id = sol.solution_id
             db.flush()
     warnings = [*_warnings(db, fr, sol), *drift]
+    if not commit:                                         # slice 11c: the caller writes more in this transaction
+        return fr, warnings
     db.commit()
     db.refresh(fr)
     return with_br_count(db, fr), warnings

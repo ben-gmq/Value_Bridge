@@ -111,6 +111,10 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        label=("crud_code",), refs=(("br_id", BR), ("data_entity_id", DE), ("data_field_id", "data_field")), since=4),
     _e(APP, "APPLICATION", ("application_code", "application_name", "vendor", "version_label", "app_kind_code",
                             "lifecycle_code", "description"), label=("application_code", "application_name")),
+    # D-61: a BR's system-to-system flows; after `application` (FK order). Spec 4 with the lines and ticks (S11-6).
+    _e("br_system_flow", "BR", ("br_id", "data_entity_id", "source_application_id", "target_application_id", "flow_note"),
+       refs=(("br_id", BR), ("data_entity_id", DE), ("source_application_id", APP), ("target_application_id", APP)),
+       since=4),
     _e(SOL, "SOLUTION", ("solution_number", "solution_name", "description", "category_code", "status_code",
                          "benefit_note", "effort_note"), label=("solution_number", "solution_name")),
     _e("br_solution", "SOLUTION", ("br_id", "solution_id", "coverage_note"), refs=(("br_id", BR),

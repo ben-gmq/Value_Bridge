@@ -19,6 +19,7 @@ import { BrFrLinks } from './BrFrLinks';
 import { warningList } from '../frs/frKit';
 import { CoveragePanel } from './CoveragePanel';
 import { BrLines } from './BrLines';
+import { BrFlows } from './BrFlows';
 import { BrStatusTag, OFFER_RETIRE_BR } from './reqKit';
 
 // S1-8: a person sets Draft or Confirmed. Baselined / Superseded are set by the freeze and are
@@ -182,6 +183,12 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
           {isOn('SOLUTION') && <BrSolutionTags projectId={projectId} br={br} disabled={!editable} onWarnings={onLinkWarnings} />}
         </Box>
       </Box>
+      {/* D-61: the data this requirement copies between systems; needs APPLICATION */}
+      {isOn('APPLICATION') && (
+        <>
+          <Divider />
+          <BrFlows projectId={projectId} br={br} disabled={!editable} frOn={isOn('FUNCTION_REQUIREMENT')} />
+        </>)}
       {/* D-52: the BR maps to FRs directly, here; linking needs FUNCTION_REQUIREMENT only, the solution picker SOLUTION too */}
       {isOn('FUNCTION_REQUIREMENT') && (
         <>

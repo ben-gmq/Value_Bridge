@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow,
                     BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrDataField, BrFunctionRequirement, BrOrgRole, BrRequirementLine,
-                    BrSolution,
+                    BrSolution, BrSystemFlow,
                     BusinessRequirement,
                     DataEntity, ExternalEntity, OrgRole, ProcessTrigger, Solution)
 from services import audit, bfc, components, lifecycle
@@ -37,14 +37,15 @@ AS_IS_ONLY_TABLES = frozenset({"bfc_node_org_role"})
 OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution,          # BrSolution: S5-1 (Ben, 2026-10-09)
                BrFunctionRequirement,                         # D-52, slice10b Q-12: the FR itself survives
                BrRequirementLine,                             # D-59, slice11_schema §4
-               BrDataField)                                   # D-60b: retires before its licence, restores after
+               BrDataField,                                   # D-60b: retires before its licence, restores after
+               BrSystemFlow)                                  # D-61
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
 TIERS = (
     (BrDataField,),                                           # D-60b: licensed by br_data_entity (fk_brdf_licence)
     (BrDataEntity, BfcNodeExternalFlow),
-    (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BrRequirementLine, BfcNodeOrgRole,
+    (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BrRequirementLine, BrSystemFlow, BfcNodeOrgRole,
      ApplicationBfcNode, BfcNodeTrigger),
     (BusinessRequirement,),
     (BfcNode,),
@@ -115,6 +116,8 @@ def describe(db: Session, row) -> str:
         return f"{ext.ext_number} {ext.ext_name} ({row.direction})"
     if isinstance(row, BfcNodeTrigger):
         return f"Trigger: {db.get(ProcessTrigger, row.process_trigger_id).trigger_name}"
+    if isinstance(row, BrSystemFlow):
+        return f"{row.entity_row.de_number} {row.source_row.application_code} → {row.target_row.application_code}"
     if isinstance(row, BrDataField):
         return f"{row.field_row.field_name} ({row.crud_code})"
     if isinstance(row, BrRequirementLine):

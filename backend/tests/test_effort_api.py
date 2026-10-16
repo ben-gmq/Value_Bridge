@@ -46,22 +46,24 @@ def rate(client, ed, f, cx, headers=None):
 # ---- seeding ------------------------------------------------------------------------------
 
 def test_a_new_project_gets_the_full_default_card(client, ed, db):
-    """S6c-1, DR6c-D5: all 16 cells, every one marked as an unconfirmed default."""
+    """S6c-1, DR6c-D5: all 20 cells (5 FR types × 4 complexities; MIGRATION joined with S11-5), every one marked as an unconfirmed default."""
     c = card(client, ed)
     seeded = [x for x in c["cells"] if x["standard_days"] is not None]
-    assert len(seeded) == 16 == len(FTC_DEFAULT_RATE_CARD)
+    assert len(seeded) == 20 == len(FTC_DEFAULT_RATE_CARD)
     assert Decimal(cell(c, "INTERFACE", "COMPLEX")["standard_days"]) == Decimal("12")
     assert all(x["unconfirmed_default"] for x in seeded)
     ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "PROJECT_CREATED",
                                              AuditEvent.project_id == ed["p"])).one()
-    assert (ev.detail["rate_cells_seeded"], ev.detail["rate_cells_unresolved"]) == (16, [])
+    assert (ev.detail["rate_cells_seeded"], ev.detail["rate_cells_unresolved"]) == (20, [])
 
 
 def test_backfill_fills_gaps_only_is_idempotent_and_needs_a_platform_admin(client, ed, db):
     """A project from before 6c (simulated by removing one cell as the owner — the app role cannot DELETE)."""
     owner = create_engine(OWNER_URL)
     with owner.begin() as c:
-        c.execute(text("DELETE FROM effort_rate WHERE project_id = :p AND standard_days = 20"), {"p": ed["p"]})
+        # exactly the INTERFACE × VERY_COMPLEX cell (S11-5's MIGRATION row also holds 20 days)
+        c.execute(text("DELETE FROM effort_rate e USING code_master t WHERE e.project_id = :p AND e.standard_days = 20 "
+                       "AND t.code_id = e.fr_type_code_id AND t.code = 'INTERFACE'"), {"p": ed["p"]})
     owner.dispose()
     assert cell(card(client, ed), "INTERFACE", "VERY_COMPLEX")["standard_days"] is None
     with pytest.raises(SystemExit):

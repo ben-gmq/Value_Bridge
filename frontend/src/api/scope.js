@@ -65,6 +65,12 @@ export const brApi = {
   linkSolution: (id, body) => d(http.post(`${V}/business-requirements/${id}/solutions`, body)),
   editSolutionLink: (id, linkId, body) => d(http.patch(`${V}/business-requirements/${id}/solutions/${linkId}`, body)),
   unlinkSolution: (id, linkId, rowVersion) => del(`${V}/business-requirements/${id}/solutions/${linkId}`, rowVersion),
+  // D-61: system-to-system flows; coverage is derived by the server, never sent.
+  flows: (id) => d(http.get(`${V}/business-requirements/${id}/flows`)),
+  addFlow: (id, body) => d(http.post(`${V}/business-requirements/${id}/flows`, body)),
+  updateFlow: (id, flowId, body) => d(http.patch(`${V}/business-requirements/${id}/flows/${flowId}`, body)),
+  removeFlow: (id, flowId, rowVersion) => del(`${V}/business-requirements/${id}/flows/${flowId}`, rowVersion),
+  flowsToFr: (id, body) => d(http.post(`${V}/business-requirements/${id}/flows/interface-fr`, body)),
   // D-60b: the CRUD grid — entity and attribute ticks read and saved together, with the rows the screen showed.
   grid: (id) => d(http.get(`${V}/business-requirements/${id}/data-grid`)),
   saveGrid: (id, body) => d(http.put(`${V}/business-requirements/${id}/data-grid`, body)),

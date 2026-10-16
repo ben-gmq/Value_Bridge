@@ -26,6 +26,7 @@ import { AppLinkPanel } from '../applications/AppLinkPanel';
 import { useBrEditor } from '../requirements/BrEditor';
 import { BrSolutionTags } from '../requirements/BrSolutionTags';
 import { BrFrLinks } from '../requirements/BrFrLinks';
+import { BrFlows } from '../requirements/BrFlows';
 import { BrStatusTag, OFFER_RETIRE_BR } from '../requirements/reqKit';
 
 const pickNode = (n) => ({ node_name: n.node_name ?? '', purpose_desc: n.purpose_desc ?? '',
@@ -456,6 +457,12 @@ export function NodePanel({ projectId, nodeId, path, br, dfd, hasChildren, proce
                 count={facts.frs.count} summary={facts.frs.summary}>
                 <BrFrLinks projectId={projectId} br={brEd.br} disabled={!brEd.editable} solutionsOn={solutionsOn} bare
                   warnings={brEd.frWarnings} setWarnings={brEd.setFrWarnings} onNotice={onNotice} />
+              </PanelSection>
+            )}
+            {/* D-61: the data this requirement copies between systems; needs APPLICATION */}
+            {showBr && isOn('APPLICATION') && (
+              <PanelSection id="sysflows" sections={sections} title={t('requirements.flows.title')}>
+                <BrFlows projectId={projectId} br={brEd.br} disabled={!brEd.editable} frOn={frsOn} bare />
               </PanelSection>
             )}
             {dfdOn && (

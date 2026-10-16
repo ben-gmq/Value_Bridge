@@ -26,7 +26,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's
-  legacy logic / output text into requirement lines once (idempotent per project).
+  legacy logic / output text into requirement lines once (idempotent per project), then
+  `seeds.seed_effort_rate --actor-email <admin>` adds the Data migration rate cells (S11-5) to existing projects —
+  before their next freeze, or their next diff counts four added rate rows.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·

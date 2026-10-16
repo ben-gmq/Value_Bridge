@@ -142,6 +142,53 @@ class BrDataField(AuditMixin, Base):
         return self.project_id
 
 
+class BrSystemFlow(AuditMixin, Base):
+    """D-61 (slice11_schema §3): "what data entity we copy from which system to which system" on a to-be BR — one row
+    per (BR × entity × from-application × to-application). Both ends come from the Applications master list (S11-3),
+    never free text, and differ. No pointer to an FR: coverage by an interface FR is derived (§3.1); an interface FR
+    and a Data migration FR (S11-5) cover a flow alike. Gated by APPLICATION."""
+
+    __tablename__ = "br_system_flow"
+
+    br_system_flow_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    data_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_application_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    flow_note: Mapped[str | None] = mapped_column(Text)
+
+    br_row = relationship("BusinessRequirement", viewonly=True, lazy="joined",
+                          primaryjoin="foreign(BrSystemFlow.br_id) == BusinessRequirement.br_id")
+    entity_row = relationship("DataEntity", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.data_entity_id) == DataEntity.data_entity_id")
+    source_row = relationship("Application", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.source_application_id) == Application.application_id")
+    target_row = relationship("Application", viewonly=True, lazy="joined",
+                              primaryjoin="foreign(BrSystemFlow.target_application_id) == Application.application_id")
+
+    __table_args__ = (
+        UniqueConstraint("br_id", "data_entity_id", "source_application_id", "target_application_id",
+                         name="uq_brsf_grain"),
+        ForeignKeyConstraint(["br_id", "project_id"],
+                             ["business_requirement.br_id", "business_requirement.project_id"], name="fk_brsf_br"),
+        ForeignKeyConstraint(["data_entity_id", "project_id"],
+                             ["data_entity.data_entity_id", "data_entity.project_id"], name="fk_brsf_de"),
+        ForeignKeyConstraint(["source_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_brsf_source"),
+        ForeignKeyConstraint(["target_application_id", "project_id"],
+                             ["application.application_id", "application.project_id"], name="fk_brsf_target"),
+        CheckConstraint("source_application_id <> target_application_id", name="ck_brsf_endpoints_distinct"),
+        Index("ix_brsf_de", "data_entity_id"),
+        Index("ix_brsf_source", "source_application_id"),
+        Index("ix_brsf_target", "target_application_id"),
+        Index("ix_brsf_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
 class BrRequirementLine(AuditMixin, Base):
     """D-59 (slice11_schema §1.1): one numbered requirement statement within one BR — "BR-0043.3". line_no is
     minted by the service (max + 1 over all the BR's lines, retired included), never reused, never sent; seq_no is

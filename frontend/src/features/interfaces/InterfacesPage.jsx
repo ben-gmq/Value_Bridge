@@ -40,6 +40,7 @@ export default function InterfacesPage() {
         <Link component={RouterLink} to={links.fr(projectId, row.fr_id)} underline="hover" onClick={(e) => e.stopPropagation()}>
           <Code>{value}</Code></Link>) },
     { field: 'interface_name', headerName: t('interfaces.name'), flex: 1, minWidth: 200 },
+    { field: 'fr_type_label', headerName: t('interfaces.type'), width: 130 },          // S11-7: Data migration told apart
     { field: 'is_complete', headerName: '', width: 120, sortable: false,
       renderCell: ({ row }) => (row.is_complete ? <Status tone="ok" size="sm">{t('interfaces.completeChip')}</Status> : (
         <Tooltip title={t('interfaces.missingTip', { items: missingText(row.missing) })}>

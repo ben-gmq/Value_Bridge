@@ -382,6 +382,10 @@ place.
 - **2026-10-16 · slice 11a browser check (Lilly):** the baseline comparison names a requirement line
   "3 · BR-0002 · 01.01.02 Check credit" (own label, then its BR's label), where the panel says "BR-0002.3" — read the
   same way in both places (a label rule for `br_requirement_line` in the diff labeller).
+- **2026-10-16 · slice 11c (`sara` pre-commit; M1, L1–L6, L8 fixed in the slice):** (L4) the flow-note PATCH has its
+  API function, audit and test but no edit control on screen yet (notes are set when a flow is added); (L7) a flow
+  removed while "Create interface FR" runs can still seed the FR — accepted, the user asked for that FR; (L9)
+  `br_flows.info` queries once per flow — batch it like `coverage()` if a BR ever holds many flows.
 - **2026-10-16 · test harness (`sara`, L3):** the app's bcrypt cost is bcrypt's library default, implicitly; pin it
   as `auth.security.BCRYPT_ROUNDS = 12` with a test that it is ≥ 12, and have the harness lower that constant.
 
