@@ -67,6 +67,10 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   are seeded by `create_project`; a missing series raises — never insert one lazily.
 - **Lookups:** `code_master`, two-tier (global + project override), resolved only by
   `services/code_master.resolve`. Send codes, never labels. Seeds: `backend/seeds/`, never Alembic.
+  Writes to the lists go only through `services/code_lists` (wave 1g): a project override re-points the project's rows
+  on every code column found in the catalog; a new code FK is re-pointed or named in `code_lists.EXCLUDED`, and a value
+  the code looks up by literal joins `code_lists.PINNED` — `tests/test_code_lists.py` fails otherwise. Pickers use
+  `useCodes().options(current)`, never the full list (hidden codes, R5).
 - **Brand/theme:** `frontend/src/theme/brand.js` (`BRAND`, `STATUS_COLOR_MAP`, `TOKENS`) →
   `theme.js`. Components read `theme.vars.palette.*` — no hex anywhere else.
 - **Look (D-51):** the mockups in `docs/mockups/` (screenshots + source) are the visual reference; dark is the

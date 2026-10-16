@@ -394,3 +394,8 @@ place.
   removable — take it with program members in slice B. (L9) the user-type confirm's lock is not exercised by a
   concurrent test (sequential stale case only); and slice B must add program memberships to `user_admin._comes_back`
   and its digest, or a demoted admin's program role comes back unseen.
+- **2026-10-16 · wave 1g (`sara` pre-commit; M1, M3, L1–L3, L5–L7 fixed; M2 → history [Q-38]):** (L4, part) the
+  code-column list is cached per process but `GET …/code-lists` still runs ~25 count queries per load — fine at
+  today's sizes, measure before a client project grows large. (L8) four scratch copies of service code sit untracked
+  in `backend/` (never staged) — delete on Ben's click. Criterion 19 (a save during a re-point) is proven by lock
+  order, not a two-connection test.
