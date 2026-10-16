@@ -84,8 +84,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
    `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
    DELETE grant, so this fails at the database, not in review.
-   Nothing cascades except a process step: `services/step_retire.OWNED` is the only list of rows
-   that retire with something else; a new table that points at a step blocks until added to it.
+   Nothing cascades except a process step: `services/step_retire.OWNED_BY_STEP` / `OWNED_BY_BR` are the only lists
+   of rows that retire with something else; a new table that points at a step or a BR blocks until added to one.
 2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
    trigger and the insert guard (`vb_ops.immutable_guards`), and shadows are **generated** by
    `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
@@ -119,6 +119,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 - **Migrations only on `main`, in order.** A slice branch that needs a table rebases onto the
   latest `main` before creating its migration, so revision ids never fork. Two slices never
   add migrations at the same time — coordinate on `main`.
+- **A hash-spec bump (`freeze_set.CURRENT_HASH_SPEC`) is taken on `main` in order, like a migration id**; tables that
+  share one spec reach `main` in one merge (S11-6).
 - **This file is the shared rulebook.** A rule learned in one session lands here (via
   `rules-check-drift`) so the other nineteen follow it.
 
