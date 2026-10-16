@@ -24,6 +24,11 @@ Nothing here is in the spec yet.
   "Report" in a priced, client-facing baseline misleads the same way renaming CONFIRMED would. Recommendation: let
   project admins rename FR types and complexities (statuses stay FTC-only) — a one-line change
   (`code_lists.RELABEL_BY_PROJECT_ADMIN`) plus R2's text.
+- **[Q-39…Q-54] Issue module (slice 14) — sixteen questions, each with a recommendation**, in
+  `docs/slice14_issue_spec.md` §12, §14 and §15 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). The
+  ones that change the design: Q-39 (issue statuses company-only with an open / closed behaviour, §15 N1–N2), Q-43
+  (status and resolution in the baseline hash), Q-46 (surrogate key on `issue_br`, rewriting §5.3), Q-50 (the per-area
+  counting rule). The spec is not built until Ben answers and approves it.
 
 
 ---
