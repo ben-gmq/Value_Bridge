@@ -16,7 +16,27 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open.
+- **[Q-32] Who maintains a project's code lists — EDIT (as signed off) or ADMIN?** (raised 2026-10-16, wave 1g spec,
+  `design-auditor` round 1.) §7.12 and the API table give `maintain_fr_types` / `PUT …/code-master/FR_TYPE` the EDIT
+  guard. Ren's working assumption for 1g is "the project's admin role" — in VB only platform admins reach ADMIN (D-40),
+  so that would mean FTC admins only. `docs/slice1g_spec.md` §14 R2.
+- **[Q-33] When a project relabels a company code, do its existing rows follow?** (raised 2026-10-16, wave 1g,
+  `design-auditor` HIGH.) Today the FR-type override re-points the project's rows (§7.12); for every other category a
+  relabel would leave old rows on the company label and new rows on the project label, so exports and baselines show two
+  names for one value. Proposed: extend the re-point to every category (spec §14 R1). Round 2 calls this a new design;
+  its costs: every write at EDIT or above takes a shared lock on the project row (a re-point briefly holds writes in that
+  project), the re-point updates every row of that category in the project in one transaction (not bumping row_version),
+  and a short exclusion list is kept by hand with a test (spec §15). The alternative — every backend read labels by
+  (project, category, code) — touches every exporter and the freeze and is not recommended.
+- **[Q-35] Rate cells for a new FR type or complexity** (raised 2026-10-16, wave 1g round 2). Adding a company FR type
+  or complexity seeds unconfirmed cells in every live project (spec R6), so the picker never offers a type that cannot
+  be rated. Which numbers? Proposal: copy each project's own cell of the existing type with the same behaviour; behaviour
+  OTHER and a new complexity have no source — FTC to give a default, or leave those cells blank (rating returns 422
+  until filled). It also shows as added rate rows in each project's next baseline comparison.
+- **[Q-36] May PROJECT_STATUS be overridden per project?** (raised 2026-10-16, wave 1g round 2.) It is a plain code
+  column on `project`; if yes it joins the re-point, if no it is company-only like PROJECT_TEMPLATE.
+- **[Q-34] A project may hide a company code, and Japanese / Thai labels wait for wave 4** (Ren's working assumptions
+  A2, A3 for 1g) — Ben to confirm.
 
 ---
 
