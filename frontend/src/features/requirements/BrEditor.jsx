@@ -45,7 +45,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
   const qc = useQueryClient();
   const brQ = useQuery({ queryKey: keys.br(brId), queryFn: () => brApi.get(brId), enabled: brId != null });
   const br = brQ.data;
-  const { codes: statuses, getLabel } = useCodes(projectId, 'BR_STATUS');
+  const { options: statuses, getLabel } = useCodes(projectId, 'BR_STATUS');
   const form = useEditForm(br, pickBr);
   const [actionError, setActionError] = useState('');
   const [confirmRetire, setConfirmRetire] = useState(false);
@@ -122,7 +122,7 @@ export function useBrEditor({ projectId, brId, onNotice, embedded = false, crudM
   const editable = live && canEdit;
   const statusSettable = SETTABLE_STATUSES.includes(form.base.status_code);
   const busy = save.m.isPending || retire.isPending || restore.isPending;
-  const statusOptions = statuses.filter((c) => SETTABLE_STATUSES.includes(c.code)).map((c) => ({ value: c.code, label: c.label }));
+  const statusOptions = statuses(br.status_code).filter((c) => SETTABLE_STATUSES.includes(c.code)).map((c) => ({ value: c.code, label: c.label }));
   const labels = { br_statement: t('requirements.statement'), status_code: t('requirements.status') };
   const unsaved = Object.fromEntries(form.changed.map((k) => [labels[k], k === 'status_code' ? getLabel(v[k]) : v[k]]));
   const text = (name, label, rows = 1) => (

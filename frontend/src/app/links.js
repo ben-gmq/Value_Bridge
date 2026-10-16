@@ -29,6 +29,7 @@ export const links = {
   parties: (p) => `/p/${p}/settings/parties`,
   interfaces: (p) => `/p/${p}/interfaces`,
   rateCard: (p) => `/p/${p}/settings/rate-card`,
+  codeLists: (p) => `/p/${p}/settings/code-lists`,                  // wave 1g
   effort: (p) => `/p/${p}/br-fr/effort`,
   applications: (p) => `/p/${p}/systems`,                // D-56: "Systems" in the rail (was settings/applications)
   application: (p, appId) => `/p/${p}/systems/${appId}`,
@@ -43,6 +44,11 @@ export const keys = {
   projectTemplates: () => ['project-templates'],
   project: (p) => ['project', String(p)],
   projectAccess: (p) => ['access', String(p)],
+  memberCandidates: (p) => ['memberCandidates', String(p)],
+  programMembers: (g) => ['programMembers', String(g)],
+  programMemberCandidates: (g) => ['programMemberCandidates', String(g)],
+  codeLists: (p) => ['codeLists', String(p ?? 'company')],
+  accessChange: (u, kind, admin) => ['accessChange', String(u), kind, String(admin)],
   // The tree read carries each process's DFD light (D-68, slice 13a). DR13-D2, one choice: there is no separate
   // readiness key — every writer of step I/O, external flows, trigger links, BR CRUD, step retire/restore,
   // make-process/demote and component toggles invalidates tree(p).

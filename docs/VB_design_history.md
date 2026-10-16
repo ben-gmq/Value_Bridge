@@ -16,27 +16,16 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-32] Who maintains a project's code lists — EDIT (as signed off) or ADMIN?** (raised 2026-10-16, wave 1g spec,
-  `design-auditor` round 1.) §7.12 and the API table give `maintain_fr_types` / `PUT …/code-master/FR_TYPE` the EDIT
-  guard. Ren's working assumption for 1g is "the project's admin role" — in VB only platform admins reach ADMIN (D-40),
-  so that would mean FTC admins only. `docs/slice1g_spec.md` §14 R2.
-- **[Q-33] When a project relabels a company code, do its existing rows follow?** (raised 2026-10-16, wave 1g,
-  `design-auditor` HIGH.) Today the FR-type override re-points the project's rows (§7.12); for every other category a
-  relabel would leave old rows on the company label and new rows on the project label, so exports and baselines show two
-  names for one value. Proposed: extend the re-point to every category (spec §14 R1). Round 2 calls this a new design;
-  its costs: every write at EDIT or above takes a shared lock on the project row (a re-point briefly holds writes in that
-  project), the re-point updates every row of that category in the project in one transaction (not bumping row_version),
-  and a short exclusion list is kept by hand with a test (spec §15). The alternative — every backend read labels by
-  (project, category, code) — touches every exporter and the freeze and is not recommended.
-- **[Q-35] Rate cells for a new FR type or complexity** (raised 2026-10-16, wave 1g round 2). Adding a company FR type
-  or complexity seeds unconfirmed cells in every live project (spec R6), so the picker never offers a type that cannot
-  be rated. Which numbers? Proposal: copy each project's own cell of the existing type with the same behaviour; behaviour
-  OTHER and a new complexity have no source — FTC to give a default, or leave those cells blank (rating returns 422
-  until filled). It also shows as added rate rows in each project's next baseline comparison.
-- **[Q-36] May PROJECT_STATUS be overridden per project?** (raised 2026-10-16, wave 1g round 2.) It is a plain code
-  column on `project`; if yes it joins the re-point, if no it is company-only like PROJECT_TEMPLATE.
-- **[Q-34] A project may hide a company code, and Japanese / Thai labels wait for wave 4** (Ren's working assumptions
-  A2, A3 for 1g) — Ben to confirm.
+- **[Q-39…Q-54] Issue module (slice 14) — sixteen questions, each with a recommendation**, in
+  `docs/slice14_issue_spec.md` §12, §14 and §15 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). The
+  ones that change the design: Q-39 (issue statuses company-only with an open / closed behaviour, §15 N1–N2), Q-43
+  (status and resolution in the baseline hash), Q-46 (surrogate key on `issue_br`, rewriting §5.3), Q-50 (the per-area
+  counting rule). The spec is not built until Ben answers and approves it.
+- **[Q-55…Q-66] Phasing and dependency (slice 15) — twelve questions, each with a recommendation**, in
+  `docs/slice15_phasing_spec.md` §7 and §9 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). Design
+  changes among them: Q-55 (a PHASING component), Q-59 (surrogate keys, rewriting §5.3), Q-63 (one PUT of a solution's
+  whole split instead of the signed POST / DELETE per assignment). Builds after the Issue module (hash spec 5, then 6).
+
 
 ---
 
@@ -487,6 +476,31 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | S10c-2 | **10c Q-1…Q-3**: the performer can be recorded whatever the DFD setting (performer gated by the function chart; triggers stay with the DFD); every live project switches to assigned-only after its team is checked; Lilly keeps the inventory (`slice10c_spec.md` §12) and an admin confirms each switch on its Access screen | slice10c_spec §11 |
 | S11-1 | **Slice 11 [Q-1]…[Q-16] accepted as recommended** (option A numbered BR lines, kinds, life-long numbers, MoSCoW priority, old boxes copied once and kept read-only, attribute C/R/U ticks, flows as business statements, frozen from the next hash spec — spec 4, since slice 13c takes spec 3). **[Q-11] and [Q-17] stay open** (§1) | slice11_schema §8 |
 | S-T | "Trailer" in Ben's 2026-10-12 note means **trigger** | D-56…D-62 note |
+
+### Ben's rulings, 2026-10-16 — wave 1g code lists
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| G-1 | **[Q-34] A project may hide a company code it does not use, and Japanese / Thai labels wait for wave 4.** Ben confirmed Ren's working assumptions A2 and A3. The design text lands with the 1g build | slice1g_spec §11 A2, A3; D-44 |
+| G-2 | **[Q-36] Project statuses stay company-wide.** PROJECT_STATUS is never overridden or hidden per project, like PROJECT_TEMPLATE | slice1g_spec §15 |
+| G-3 | **[Q-33] A project's relabel of a company code moves its existing rows to the project's code** (live and retired rows, never frozen ones), for every overridable category, as the FR-type re-point already does. Ben: "yes to all four". Built as slice1g_spec R1 with R10–R13 and the N3 lock | §7.12 `maintain_fr_types` re-point, extended; slice1g_spec §14 R1, §15 |
+| G-4 | **[Q-35] A new company FR type or complexity copies each project's own rate cell of the existing type with the same behaviour, marked unconfirmed;** behaviour OTHER and a new complexity have no source, so their cells stay blank and rating returns 422 until filled. The added cells show as added rate rows in each project's next comparison (S11-7) | slice1g_spec R6, A4 |
+| G-5 | **[Q-32] A project's code lists are maintained by the project admin** (D-71), not by every editor | §7.12 / API table EDIT guard on `maintain_fr_types` |
+| G-6 | **[Q-38] A project admin may rename the FR types and complexities for their project** (2026-10-17, Ben: "project admins may rename FR types and complexities"). They are pinned only as rate-card keys, so they still cannot be retired or hidden, and an override keeps the company behaviour (R10). Pinned *statuses* stay a platform admin's to rename. Built as `code_lists.RELABEL_BY_PROJECT_ADMIN` | slice1g_spec R2 (narrowed to statuses) |
+
+### Ben's rulings, 2026-10-16 — project admins and program members (D-71…D-73)
+
+Ben: "yes to all four", approving `docs/access_v2_decision.md` §4 as written. It began with his Q-32 answer: "If I
+assign the users to the project, then only the admin has to create the project and assign the users. If the user is
+assigned to a program, then the project is editable by the admin of the project", and "the program admin will also add
+and remove program members, for sure … even if it's risky work, I still have to do it." Model: `docs/access_v2_model.md`;
+design-auditor rounds 1–2 in the paper's §8.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| D-71 | **Project admins and program members.** (1) A project member may be **Admin**, as well as Editor or Viewer. (2) A program has members at **Admin / Editor / Viewer**; a program role gives that level on **every live project of the program, restricted ones included**. (3) A program admin is admin of every project in the program. (4) A person's level on a project is the **higher** of their staff default, project role and program role, **capped by user kind** (a VIEWER never edits or administers). (5) Program members are added and removed by FTC admins and that program's admins; project members by FTC admins, that project's admins and its program's admins; an admin may grant up to Admin, at their own scope only. (6) **FTC admin only:** restricted on/off, components, data-model depth, FTE basis, the DFD rule, creating projects and programs, moving a project between programs. The project admin gets members and code lists. (7) A VIEWER given Editor or Admin is **refused**, not capped. (8) A program with live members cannot be retired until they are removed (law 1) | **Reverses D-40 in part**: "programs grant no access" and "only platform admins reach ADMIN". D-32 (programs group projects) stands for data; D-62 (new projects start restricted) stands, but a restricted project in a program opens to that program's members |
+| D-72 | **[paper item 9] Project and program admins may add people to restricted projects without FTC approving first.** Ben chose (a). Every add is audited, and the access review at each freeze lists everyone and where their access comes from | §4.7 access review |
+| D-73 | **[paper items 10, 11]** (1) Project admins appointed by a program admin keep their role when that program admin is removed — a role belongs to the project. (2) A project admin may demote or remove another project admin, including one an FTC admin appointed; an FTC admin can always restore it | — |
 
 ### Ben's rulings, 2026-10-16 — the two slice 11 questions left open by S11-1
 

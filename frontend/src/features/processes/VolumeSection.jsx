@@ -116,7 +116,7 @@ export function VolumeSection({ projectId, ed, disabled }) {
         <TextField {...field} id="vol-unit" select value={v.unit} onChange={(e) => ed.set('unit', e.target.value)}
           slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': t('processes.volume.unit') } }}>
           <MenuItem value="">{t('processes.volume.noUnit')}</MenuItem>
-          {units.codes.map((c) => <MenuItem key={c.code} value={c.code}>{c.label}</MenuItem>)}
+          {units.options(d.transaction_unit_code).map((c) => <MenuItem key={c.code} value={c.code}>{c.label}</MenuItem>)}
         </TextField>
       </Box>
       <Box sx={row}>

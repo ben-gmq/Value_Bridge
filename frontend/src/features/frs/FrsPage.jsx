@@ -24,7 +24,7 @@ const firstLine = (v) => (v ?? '').split('\n')[0];
 function AddFrDialog({ projectId, solutions, onClose, onDone }) {
   const [f, setF] = useState(EMPTY);
   const [error, setError] = useState('');
-  const { codes: types } = useCodes(projectId, 'FR_TYPE');
+  const { options: typeOptions } = useCodes(projectId, 'FR_TYPE');
   const m = useMutation({
     // The number, status and the type's behaviour are set by the server (VB law 6).
     mutationFn: () => frApi.create(projectId, { fr_name: f.fr_name.trim(), fr_type_code: f.fr_type_code,
@@ -41,7 +41,7 @@ function AddFrDialog({ projectId, solutions, onClose, onDone }) {
           <TextField id="fr-new-name" label={t('frs.name')} required autoFocus value={f.fr_name}
             onChange={(e) => setF({ ...f, fr_name: e.target.value })} slotProps={{ htmlInput: { maxLength: 200 } }} />
           <SimpleSelect id="fr-new-type" label={t('frs.type')} value={f.fr_type_code}
-            onChange={(v) => setF({ ...f, fr_type_code: v })} options={types.map((c) => ({ value: c.code, label: c.label }))} />
+            onChange={(v) => setF({ ...f, fr_type_code: v })} options={typeOptions().map((c) => ({ value: c.code, label: c.label }))} />
           <SimpleSelect id="fr-new-solution" label={t('frs.solution')} value={f.solution_id} allowEmpty
             emptyLabel={t('frs.noSolution')} onChange={(v) => setF({ ...f, solution_id: v })} options={solutionOptions(solutions)} />
           <TextField id="fr-new-desc" label={t('frs.description')} multiline minRows={2} value={f.description}

@@ -48,6 +48,7 @@ class UserIn(BaseModel):
 class UserKindIn(BaseModel):
     user_kind: UserKind
     row_version: int
+    confirm_hash: str | None = None                  # from the access-change preview, when memberships come back (D-71)
 
 
 class PlatformAdminIn(BaseModel):
@@ -55,6 +56,27 @@ class PlatformAdminIn(BaseModel):
     rationale: str = Field(min_length=1, max_length=500)
     row_version: int
     user_kind: UserKind | None = None                # required when removing admin rights (DR7-S6)
+    confirm_hash: str | None = None                  # as UserKindIn
+
+
+class AccessChangeIn(BaseModel):
+    user_kind: UserKind                              # what the user would be
+    is_platform_admin: bool
+
+
+class ComesBackOut(BaseModel):
+    project_id: int | None                           # None: a program role itself (via PROGRAM_ROLE)
+    project_code: str
+    project_name: str
+    access_level: str                                # the stored membership that gives it
+    via: str = "MEMBER"                              # MEMBER or PROGRAM (D-71)
+    level_before: str | None                         # None: unread until now (admin) or no access
+    level_after: str
+
+
+class AccessChangePreviewOut(BaseModel):
+    comes_back: list[ComesBackOut]
+    confirm_hash: str
 
 
 class MeOut(BaseModel):
@@ -96,6 +118,19 @@ class ProgramOut(Orm):
     program_code: str
     program_name: str
     description: str | None
+    row_version: int
+    my_access_level: str | None = None   # VIEW / EDIT / ADMIN / PLATFORM, on the single-program read (D-71)
+
+
+class ProgramMemberOut(BaseModel):
+    program_member_id: int
+    user_id: int
+    display_name: str
+    user_kind: str
+    user_is_active: bool                 # a switched-off user's membership still shows, to be removed (L1)
+    access_level: str
+    effective_level: str
+    member_note: str | None
     row_version: int
 
 
@@ -146,7 +181,7 @@ class ProjectOut(Orm):
     working_days_per_year: int = 240                  # D-67: the FTE basis (slice 13c)
     hours_per_working_day: float = 8.0
     row_version: int
-    my_access_level: str | None = None   # VIEW / EDIT / ADMIN, on the single-project read (§8.6)
+    my_access_level: str | None = None   # VIEW / EDIT / ADMIN / PLATFORM, single-project read (§8.6, D-71)
 
 
 class ComponentOut(BaseModel):
@@ -246,12 +281,12 @@ class ProgramMoveIn(BaseModel):
 # ---- access ----
 class MemberIn(BaseModel):
     user_id: int
-    access_level: Literal["EDIT", "VIEW"]
+    access_level: Literal["ADMIN", "EDIT", "VIEW"]       # ck_pm_level; ADMIN = project admin (D-71)
     member_note: str | None = Field(default=None, max_length=500)
 
 
 class MemberPatch(BaseModel):
-    access_level: Literal["EDIT", "VIEW"]
+    access_level: Literal["ADMIN", "EDIT", "VIEW"]
     row_version: int
 
 
@@ -261,17 +296,31 @@ class MemberOut(BaseModel):
     display_name: str
     user_kind: str
     access_level: str
-    effective_level: str                 # the lower of the kind's cap and the membership level
+    effective_level: str                 # what they hold on the project now: access.level_for (D-71)
+    via: str                             # MEMBER / PROGRAM / STAFF / PLATFORM_ADMIN — where that level comes from
+    also_via_program: str | None = None  # D-71: the program they ALSO hold a role through (removing this row keeps it)
     member_note: str | None
     row_version: int
 
 
+class ProgramAccessOut(BaseModel):
+    """Someone who opens a project only through its program (D-71) — no project_member row to change."""
+    user_id: int
+    display_name: str
+    user_kind: str
+    program_member_id: int
+    program_code: str
+    access_level: str
+    effective_level: str
+    via: str
+
+
+class ProgramKeptOut(ProgramAccessOut):
+    level_drops: bool = False
+
+
 class KeptMemberOut(MemberOut):
     level_drops: bool = False            # DR10c-S1: restricting lowers this member's level (e.g. a USER kept at VIEW)
-
-
-class MemberAddOut(MemberOut):
-    warnings: list[str] = []
 
 
 class PersonOut(BaseModel):
@@ -284,6 +333,7 @@ class EffectiveAccessOut(BaseModel):
     is_restricted: bool
     admins: list[PersonOut]
     members: list[MemberOut]
+    program_members: list[ProgramAccessOut] = []      # D-71: open it through the program
     staff: dict[str, int] | None         # counts by kind while unrestricted
 
 
@@ -298,6 +348,7 @@ class RestrictionOut(BaseModel):
     loses: list[PersonOut]
     gains: list[PersonOut]
     keeps: list[KeptMemberOut]           # DR7-D2: who keeps access, and why
+    keeps_via_program: list[ProgramKeptOut] = []     # D-71: kept by a program role
     confirm_hash: str
     applied: bool
 
@@ -311,3 +362,50 @@ class CodeOut(Orm):
     sort_order: int
     is_system: bool
     project_id: int | None
+    row_version: int = 1                 # wave 1g: the code-list screen edits a row it read
+    is_hidden: bool = False              # wave 1g: hidden from this project's pickers; still shown on records (R5)
+
+
+# ---- code lists (wave 1g; slice1g_spec §9) ----
+class CodeListRowOut(BaseModel):
+    code_id: int
+    label: str
+    sort_order: int
+    behaviour_code: str | None
+    is_active: bool
+    row_version: int
+
+
+class CodeListItemOut(BaseModel):
+    code: str
+    company: CodeListRowOut | None
+    project: CodeListRowOut | None
+    pinned: bool
+    hidden: bool
+    in_use: int
+    sort_order: int
+
+
+class CodeListOut(BaseModel):
+    category: str
+    is_system: bool
+    company_only: bool
+    codes: list[CodeListItemOut]
+
+
+class CodeAddIn(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=200)
+    behaviour_code: str | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+
+
+class CodePatch(BaseModel):
+    row_version: int
+    label: str | None = Field(default=None, max_length=200)
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+    behaviour_code: str | None = None
+
+
+class CodeHideIn(BaseModel):
+    code_id: int

@@ -41,11 +41,13 @@ def test_levels_user_edits_viewer_reads_and_membership_caps(client, world):
     assert client.post(url, headers=rv, json={**body, "node_name": "X"}).status_code == 403
     r = client.get(f"{API}/projects/{w['p_fin']}", headers=rv).json()
     assert r["my_access_level"] == "VIEW"
-    # restricted: a USER member at VIEW reads only; a VIEWER member at EDIT still reads only
-    r = client.post(f"{API}/projects/{w['p_sales']}/members", headers=w["admin"],
-                    json={"user_id": w["users"]["reviewer"], "access_level": "EDIT"})
-    assert r.status_code == 201 and r.json()["warnings"] == ["VIEWER_CAPPED"]
-    assert r.json()["effective_level"] == "VIEW"
+    # restricted: a USER member at VIEW reads only; a VIEWER is refused above VIEW, never quietly capped (D-71 (7))
+    url = f"{API}/projects/{w['p_sales']}/members"
+    for level in ("EDIT", "ADMIN"):
+        r = client.post(url, headers=w["admin"], json={"user_id": w["users"]["reviewer"], "access_level": level})
+        assert r.status_code == 422 and "viewer" in r.json()["detail"]
+    r = client.post(url, headers=w["admin"], json={"user_id": w["users"]["reviewer"], "access_level": "VIEW"})
+    assert r.status_code == 201 and r.json()["effective_level"] == "VIEW"
     restrict(client, w["admin"], w["p_sales"], {w["users"]["owner"]: "VIEW"})
     url = f"{API}/projects/{w['p_sales']}/bfc-nodes"
     assert client.post(url, headers=owner, json=body).status_code == 403
@@ -222,7 +224,7 @@ def test_user_kind_is_required_changed_by_an_admin_and_audited(client, world, db
     assert r.status_code == 200 and r.json()["user_kind"] == "USER"
     assert client.post(url, headers=rv, json={"node_name": "A", "parent_bfc_node_id": None}).status_code == 201
     ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "USER_KIND_CHANGED")).one()
-    assert ev.detail == {"from": "VIEWER", "to": "USER"}
+    assert ev.detail == {"from": "VIEWER", "to": "USER", "comes_back": []}
     assert client.patch(f"{API}/users/{u['app_user_id']}/kind", headers=login(client, "editor@example.test"),
                         json={"user_kind": "USER", "row_version": 1}).status_code == 403
 
@@ -352,10 +354,14 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
              f"{API}/projects/{pid}/baselines/diff?from={bl}&to=live"]
     assert all(client.get(u, headers=w["admin"]).status_code == 200 for u in extra)
     assert any(marks["baseline"] in client.get(f"{API}/baselines/{bl}", headers=w["admin"]).text for _ in [0])
-    for who in ("outsider", "reviewer"):
+    # D-71: the admin of another project in the same program is a non-member here like anyone else
+    r = client.post(f"{API}/projects/{w['p_fin']}/members", headers=w["admin"],
+                    json={"user_id": w["users"]["owner"], "access_level": "ADMIN"})
+    assert r.status_code == 201
+    for who in ("outsider", "reviewer", "owner"):
         hh = login(client, f"{who}@example.test")
         assert all(client.get(u, headers=hh).status_code == 404 for u in extra + [f"{API}/baselines/{bl}"]), who
-    for who in ("outsider", "reviewer"):                          # a non-member USER and VIEWER
+    for who in ("outsider", "reviewer", "owner"):                 # a non-member USER, VIEWER and project admin
         hits, _, _ = _sweep(client, login(client, f"{who}@example.test"), pid, ids)
         assert found(hits) == set(), who
         on_pid = [(p, path, code) for p, path, code, _ in hits if f"/projects/{pid}" in path and code != 404]

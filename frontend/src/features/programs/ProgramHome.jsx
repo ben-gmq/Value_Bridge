@@ -7,6 +7,7 @@ import { Code, SectionLabel, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { CARD_GRID, EngagementCard } from '../projects/homeKit';
+import ProgramMembers from './ProgramMembers';
 
 // D-32: a program is a roll-up, never a data layer. Every figure here is one per-project
 // result; drill-downs open the project's own screens (§14.3).
@@ -32,6 +33,7 @@ export default function ProgramHome() {
                 note={t('program.rollupSoon')} />))}
           </Box>
         </Box>
+        {['ADMIN', 'PLATFORM'].includes(prog.data?.my_access_level) && <ProgramMembers programId={programId} />}
       </Stack>
     </Page>
   );

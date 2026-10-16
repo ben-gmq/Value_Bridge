@@ -10,6 +10,7 @@ import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
+import { CodeListsView } from '../settings/CodeListsPage';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -19,6 +20,29 @@ function useSave(fn, keys, onOk) {
     onSuccess: (res) => { keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] })); setError(''); onOk?.(res); },
     onError: (err) => setError(errorText(err, t('common.saveFailed'))) });
   return { m, error, setError };
+}
+
+// D-71 (design-auditor M1): what a change of kind or admin flag brings back into force. The server recomputes it
+// under a lock and refuses the change unless the hash matches what was shown here.
+function useComesBack(user, kind, admin) {
+  return useQuery({ queryKey: keys.accessChange(user?.app_user_id, kind, admin),
+    queryFn: () => api.accessChangePreview(user.app_user_id, { user_kind: kind, is_platform_admin: admin }),
+    enabled: Boolean(user && kind), staleTime: 0, gcTime: 0 });
+}
+
+function ComesBack({ q }) {
+  if (!q.data) return null;
+  const level = (l) => (l ? t(`access.level.${l}`) : t('admin.comesBackUnread'));
+  if (q.data.comes_back.length === 0) return <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('admin.comesBackNone')}</Typography>;
+  return (
+    <Alert severity="warning" sx={{ mt: 1 }}>
+      <Typography sx={{ fontSize: 13.5, mb: 0.5 }}>{t('admin.comesBack')}</Typography>
+      {q.data.comes_back.map((r) => (
+        <Typography key={r.project_id} sx={{ fontSize: 13.5 }}>
+          {t('admin.comesBackRow', { code: r.project_code, name: r.project_name, before: level(r.level_before), after: level(r.level_after) })}
+        </Typography>))}
+    </Alert>
+  );
 }
 
 const grid = { autoHeight: true, disableRowSelectionOnClick: true, sx: { bgcolor: 'background.paper', border: 0, borderRadius: 0 } };
@@ -56,13 +80,17 @@ function Users({ notify }) {
   const [fallbackKind, setFallbackKind] = useState('VIEWER');
   const create = useSave(() => api.createUser(f), ['users'], () => { setF(empty); notify(t('admin.userCreated')); });
   const deactivate = useSave((id) => api.deactivateUser(id), ['users'], () => { setDeact(null); notify(t('admin.deactivated')); });
+  const removing = Boolean(adminChange?.is_platform_admin);
+  const adminBack = useComesBack(removing ? adminChange : null, fallbackKind, false);
   const setAdmin = useSave((u) => api.setPlatformAdmin(u.app_user_id, {
     is_platform_admin: !u.is_platform_admin, rationale: reason, row_version: u.row_version,
-    user_kind: u.is_platform_admin ? fallbackKind : null }),
+    user_kind: u.is_platform_admin ? fallbackKind : null, confirm_hash: adminBack.data?.confirm_hash ?? null }),
   ['users'], () => { setAdminChange(null); setReason(''); notify(t('admin.adminChanged')); });
   const [kindChange, setKindChange] = useState(null);
+  const kindBack = useComesBack(kindChange, 'USER', false);
   const setKind = useSave((u) => api.setUserKind(u.app_user_id, {
-    user_kind: u.user_kind === 'USER' ? 'VIEWER' : 'USER', row_version: u.row_version }),
+    user_kind: u.user_kind === 'USER' ? 'VIEWER' : 'USER', row_version: u.row_version,
+    confirm_hash: u === kindChange ? kindBack.data?.confirm_hash ?? null : null }),
   ['users'], () => { setKindChange(null); notify(t('admin.kindChanged')); });
   const error = create.error || deactivate.error || setAdmin.error || setKind.error;
   return (
@@ -108,11 +136,15 @@ function Users({ notify }) {
       {/* sara 7b L10: VIEWER → USER grants edit on every project open to all staff — confirm it. */}
       <ConfirmDialog open={Boolean(kindChange)} title={t('admin.makeUserTitle')}
         body={t('admin.makeUserBody', { name: kindChange?.display_name })} confirmLabel={t('admin.makeUser')}
-        busy={setKind.m.isPending} onClose={() => setKindChange(null)} onConfirm={() => setKind.m.mutate(kindChange)} />
+        busy={setKind.m.isPending || !kindBack.data} onClose={() => setKindChange(null)}
+        onConfirm={() => setKind.m.mutate(kindChange)}>
+        <ComesBack q={kindBack} />
+      </ConfirmDialog>
       <ConfirmDialog open={Boolean(adminChange)} title={t('admin.adminTitle')}
         body={t(adminChange?.is_platform_admin ? 'admin.adminBodyRemove' : 'admin.adminBodyGrant', { name: adminChange?.display_name })}
         confirmLabel={adminChange?.is_platform_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}
-        busy={setAdmin.m.isPending || !reason.trim()} onClose={() => { setAdminChange(null); setReason(''); }}
+        busy={setAdmin.m.isPending || !reason.trim() || (removing && !adminBack.data)}
+        onClose={() => { setAdminChange(null); setReason(''); }}
         onConfirm={() => setAdmin.m.mutate(adminChange)}>
         <TextField id="admin-reason" label={t('admin.reason')} value={reason} onChange={(e) => setReason(e.target.value)}
           fullWidth multiline minRows={2} />
@@ -124,6 +156,7 @@ function Users({ notify }) {
               {['USER', 'VIEWER'].map((k) => <MenuItem key={k} value={k}>{t(`admin.kind.${k}`)}</MenuItem>)}
             </Select>
           </FormControl>)}
+        {removing && <Box sx={{ mt: 2 }}><ComesBack q={adminBack} /></Box>}
       </ConfirmDialog>
     </>
   );
@@ -283,7 +316,12 @@ function Projects({ notify }) {
   );
 }
 
-const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects]];
+function CompanyCodeLists() {
+  return <Box sx={{ mt: 2 }}><CodeListsView /></Box>;
+}
+
+const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
+  ['admin.codeLists', CompanyCodeLists]];
 
 export default function AdminPage() {
   const [tab, setTab] = useState(0);

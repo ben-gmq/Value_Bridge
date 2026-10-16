@@ -102,12 +102,14 @@ def platform_admin() -> GuardSpec:
     return GuardSpec(Guard.PLATFORM_ADMIN, dep)
 
 
-def project_ctx(min_level: str, component: str | tuple[str, ...] | None = None) -> GuardSpec:
+def project_ctx(min_level: str, component: str | tuple[str, ...] | None = None,
+                share_lock: bool = True) -> GuardSpec:
     """`component`: the project component(s) a write needs on (D-37); 409 COMPONENT_OFF after
-    the 404 and 403 checks. Ignored on read guards."""
+    the 404 and 403 checks. Ignored on read guards. `share_lock=False` only for a write whose service takes the
+    project row FOR UPDATE first (wave 1g code lists), so it never upgrades a share lock."""
     def dep(project_id: int, user: AppUser = Depends(current_user),
             db: Session = Depends(get_db)) -> access.EffectiveAccess:
-        return access.require_project(db, user, project_id, min_level, component)
+        return access.require_project(db, user, project_id, min_level, component, share_lock)
     return GuardSpec(Guard.PROJECT_CTX, dep, min_level, component=component)
 
 
@@ -118,7 +120,24 @@ def program_ctx(min_level: str) -> GuardSpec:
     return GuardSpec(Guard.PROGRAM_CTX, dep, min_level)
 
 
-def object_guard(model: type, min_level: str, id_param: str = "id", component=None) -> GuardSpec:
+def program_object_guard(model: type, min_level: str, id_param: str = "id") -> GuardSpec:
+    """For a program-scoped row (`owning_program_id()`, e.g. a program membership, D-71): resolve its program, then
+    require_program — 404 for a program you cannot see, 403 below the level."""
+    if not hasattr(model, "owning_program_id"):
+        raise RouteDefinitionError(f"{model.__name__} has no owning_program_id()")
+
+    def dep(request: Request, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+        raw = request.path_params.get(id_param)
+        obj = db.get(model, int(raw)) if raw and str(raw).isdigit() and len(str(raw)) <= 18 else None
+        if obj is None:
+            raise HTTPException(404, access.NOT_FOUND)
+        access.require_program(db, user, obj.owning_program_id(), min_level)
+        return obj
+    return GuardSpec(Guard.PROGRAM_CTX, dep, min_level, model)
+
+
+def object_guard(model: type, min_level: str, id_param: str = "id", component=None,
+                 share_lock: bool = True) -> GuardSpec:
     """For routes carrying an object id and no project (finding S3). The owning project is
     resolved from the object before anything is returned. `model` must implement
     owning_project_id(); an object that resolves to no project is platform-admin only.
@@ -138,6 +157,6 @@ def object_guard(model: type, min_level: str, id_param: str = "id", component=No
                 raise HTTPException(404, access.NOT_FOUND)
         else:
             comp = component(obj) if callable(component) else component
-            access.require_project(db, user, owner, min_level, comp)
+            access.require_project(db, user, owner, min_level, comp, share_lock)
         return obj
     return GuardSpec(Guard.OBJECT_GUARD, dep, min_level, model, component=component)

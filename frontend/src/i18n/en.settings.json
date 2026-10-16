@@ -80,5 +80,7 @@
   "settings.home.working": "Live in the working set",
   "settings.home.latest": "Latest baseline",
   "settings.home.open": "Open baselines",
-  "settings.acc.people_one": "{n} person"
+  "settings.acc.people_one": "{n} person",
+  "settings.codeLists": "Code lists",
+  "settings.codeListsWhat": "Statuses, priorities, FR types and the other lists, in this project's words"
 }

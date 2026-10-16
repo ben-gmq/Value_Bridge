@@ -30,8 +30,8 @@ export default function FrPage() {
   const q = useQuery({ queryKey: keys.fr(frId), queryFn: () => frApi.get(frId) });
   const fr = q.data;
   const solsQ = useQuery({ queryKey: keys.solutions(projectId), queryFn: () => solutionApi.list(projectId) });
-  const { codes: types, getLabel: typeLabel } = useCodes(projectId, 'FR_TYPE');
-  const { codes: statuses, getLabel: statusLabel } = useCodes(projectId, 'FR_FULFILMENT_STATUS');
+  const { options: typeOptions, getLabel: typeLabel } = useCodes(projectId, 'FR_TYPE');
+  const { options: statusOptions, getLabel: statusLabel } = useCodes(projectId, 'FR_FULFILMENT_STATUS');
   const form = useEditForm(fr, pickFr);
   const [notice, setNotice] = useState('');
   const [warnings, setWarnings] = useState([]);
@@ -136,7 +136,7 @@ export default function FrPage() {
       <Card title={t('frs.cardTitle')} action={<SaveState version={form.version} dirty={form.dirty} retired={!live} />}>
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'repeat(2, minmax(0,1fr))' } }}>
           {select('solution_id', solOpts, { allowEmpty: true, emptyLabel: t('frs.noSolution') })}
-          {select('fulfilment_status_code', statuses.map((c) => ({ value: c.code, label: c.label })))}
+          {select('fulfilment_status_code', statusOptions(fr.fulfilment_status_code).map((c) => ({ value: c.code, label: c.label })))}
           <Box sx={{ gridColumn: '1 / -1' }}>{text('fr_name', 1, 200)}</Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -144,7 +144,7 @@ export default function FrPage() {
             <SectionLabel>{labels.fr_type_code}</SectionLabel>
             {editable ? (
               <Segmented label={labels.fr_type_code} value={v.fr_type_code} onChange={(c) => form.set('fr_type_code', c)}
-                options={types.map((c) => ({ value: c.code, label: c.label }))} />
+                options={typeOptions(fr.fr_type_code).map((c) => ({ value: c.code, label: c.label }))} />
             ) : <Box><Tag tone="navy">{typeLabel(v.fr_type_code)}</Tag></Box>}
           </Box>
           <FrEffort key={`${fr.row_version}-${fr.complexity_code}`} projectId={projectId} fr={fr}

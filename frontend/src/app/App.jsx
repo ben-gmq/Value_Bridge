@@ -32,6 +32,7 @@ import RateCardPage from '../features/effort/RateCardPage';
 import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
 import ComponentsPage from '../features/settings/ComponentsPage';
+import CodeListsPage from '../features/settings/CodeListsPage';
 import ComponentOff from '../features/common/ComponentOff';
 import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
@@ -52,7 +53,7 @@ const PAGES = [
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['volume', VolumePage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['organisation', OrganisationPage], ['systems', ApplicationsPage], ['systems/:appId', ApplicationPage],
   ['settings', SettingsPage], ['settings/parties', PartiesPage], ['settings/components', ComponentsPage],
-  ['settings/rate-card', RateCardPage],
+  ['settings/rate-card', RateCardPage], ['settings/code-lists', CodeListsPage],
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
 ];
 

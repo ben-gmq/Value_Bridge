@@ -22,8 +22,8 @@ const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 function AddAppDialog({ projectId, onClose, onDone }) {
   const [f, setF] = useState(EMPTY);
   const [error, setError] = useState('');
-  const { codes: lifecycles } = useCodes(projectId, 'APP_LIFECYCLE');
-  const { codes: kinds } = useCodes(projectId, 'APP_KIND');
+  const { options: lifecycleOptions } = useCodes(projectId, 'APP_LIFECYCLE');
+  const { options: kindOptions } = useCodes(projectId, 'APP_KIND');
   const m = useMutation({
     mutationFn: () => appApi.create(projectId, { application_code: f.application_code.trim(),
       application_name: f.application_name.trim(), lifecycle_code: f.lifecycle_code,
@@ -44,10 +44,10 @@ function AddAppDialog({ projectId, onClose, onDone }) {
           <TextField id="app-new-name" label={t('applications.name')} required value={f.application_name}
             onChange={set('application_name')} slotProps={{ htmlInput: { maxLength: 200 } }} />
           <SimpleSelect id="app-new-lifecycle" label={t('applications.lifecycle')} value={f.lifecycle_code}
-            onChange={(v) => setF({ ...f, lifecycle_code: v })} options={lifecycles.map((c) => ({ value: c.code, label: c.label }))} />
+            onChange={(v) => setF({ ...f, lifecycle_code: v })} options={lifecycleOptions().map((c) => ({ value: c.code, label: c.label }))} />
           <SimpleSelect id="app-new-kind" label={t('applications.kind')} value={f.kind_code} allowEmpty
             emptyLabel={t('applications.noKind')} onChange={(v) => setF({ ...f, kind_code: v })}
-            options={kinds.map((c) => ({ value: c.code, label: c.label }))} />
+            options={kindOptions().map((c) => ({ value: c.code, label: c.label }))} />
           <TextField id="app-new-vendor" label={t('applications.vendor')} value={f.vendor} onChange={set('vendor')}
             slotProps={{ htmlInput: { maxLength: 200 } }} />
         </Stack>

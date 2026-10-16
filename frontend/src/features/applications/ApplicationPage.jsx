@@ -40,8 +40,8 @@ export default function ApplicationPage() {
   const app = q.data;
   const solsQ = useQuery({ queryKey: keys.appLinksOf('app-solutions', appId), queryFn: () => appApi.solutions(appId) });
   const stepsQ = useQuery({ queryKey: keys.appLinksOf('app-steps', appId), queryFn: () => appApi.steps(appId) });
-  const { codes: lifecycles, getLabel: lifecycleLabel } = useCodes(projectId, 'APP_LIFECYCLE');
-  const { codes: kinds, getLabel: kindLabel } = useCodes(projectId, 'APP_KIND');
+  const { options: lifecycleOptions, getLabel: lifecycleLabel } = useCodes(projectId, 'APP_LIFECYCLE');
+  const { options: kindOptions, getLabel: kindLabel } = useCodes(projectId, 'APP_KIND');
   const form = useEditForm(app, pickApp);
   const [notice, setNotice] = useState('');
   const [warnings, setWarnings] = useState([]);
@@ -146,8 +146,8 @@ export default function ApplicationPage() {
         {text('application_name', 1, 200)}
       </Box>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' } }}>
-        {select('lifecycle_code', lifecycles.map((c) => ({ value: c.code, label: c.label })))}
-        {select('kind_code', kinds.map((c) => ({ value: c.code, label: c.label })), { allowEmpty: true, emptyLabel: t('applications.noKind') })}
+        {select('lifecycle_code', lifecycleOptions(app.lifecycle_code).map((c) => ({ value: c.code, label: c.label })))}
+        {select('kind_code', kindOptions(app.app_kind_code).map((c) => ({ value: c.code, label: c.label })), { allowEmpty: true, emptyLabel: t('applications.noKind') })}
         {text('vendor', 1, 200)}
         {text('version_label', 1, 50)}
       </Box>

@@ -50,6 +50,27 @@ class CodeMaster(AuditMixin, Base):
         UniqueConstraint("code_id", "category", name="uq_code_category_target"),
     )
 
+    def owning_project_id(self) -> int | None:
+        """None for a company row, so object_guard keeps it platform-admin only (404 to anyone else, slice1g R9)."""
+        return self.project_id
+
+
+class ProjectCodeVisibility(AuditMixin, Base):
+    """A company code one project has hidden from its pickers (wave 1g, G-1): one row per (project, company code) for
+    life — live = hidden now; unhide retires it, hide again restores it (S1-7). Only services/code_lists writes it.
+    Not shadowed: hiding never changes what a row holds or a baseline froze."""
+
+    __tablename__ = "project_code_visibility"
+
+    project_code_visibility_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    code_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("code_master.code_id"), nullable=False)
+
+    __table_args__ = (UniqueConstraint("project_id", "code_id", name="uq_pcv_project_code"),)
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
 
 class ProjectSequence(Base):
     """One counter per (project, series). All ten are seeded by create_project (R2-D14);

@@ -44,7 +44,7 @@ export default function OrganisationPage() {
   const fetchRoles = () => orgApi.roles(projectId, showRetired);
   const unitsQ = useQuery({ queryKey: unitsKey, queryFn: fetchUnits });
   const rolesQ = useQuery({ queryKey: rolesKey, queryFn: fetchRoles });
-  const { codes: levels, getLabel: levelLabel } = useCodes(projectId, 'ORG_UNIT_LEVEL');
+  const { codes: levels, options: levelOptions, getLabel: levelLabel } = useCodes(projectId, 'ORG_UNIT_LEVEL');
   const [selectedId, setSelectedId] = useState(null);     // string item id for RichTreeView
   const [expanded, setExpanded] = useState(null);         // null → everything expanded
   const [unitDialog, setUnitDialog] = useState(null);     // { row, parent }
@@ -101,7 +101,7 @@ export default function OrganisationPage() {
     { name: 'org_unit_name', label: t('settings.name'), required: true },
     { name: 'level_code', label: t('settings.org.level'), type: 'select', required: editing,
       emptyLabel: t('settings.org.levelDefault', { level: levelLabel(levels[depth - 1]?.code) || depth }),
-      options: levels.map((c) => ({ value: c.code, label: c.label })) },
+      options: levelOptions(unitDialog?.row?.level_code).map((c) => ({ value: c.code, label: c.label })) },
     { name: 'description', label: t('settings.description'), multiline: true },
   ];
   const submitUnit = (body, rowVersion) => {

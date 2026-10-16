@@ -59,7 +59,7 @@ def test_guards_fit_their_paths():
             bad.append(f"{r.path}: {kind} without a minimum level")
         # sara 7b M3: a write is never guarded at VIEW — a viewer can reach no write, by structure
         if kind in ("PROJECT_CTX", "PROGRAM_CTX", "OBJECT_GUARD") and not r.methods <= {"GET", "HEAD"} \
-                and r.openapi_extra[GUARD_KEY]["min_level"] not in ("EDIT", "ADMIN"):
+                and r.openapi_extra[GUARD_KEY]["min_level"] not in ("EDIT", "ADMIN", "PLATFORM"):
             bad.append(f"{sorted(r.methods)} {r.path}: a write guarded at "
                        f"{r.openapi_extra[GUARD_KEY]['min_level']}")
     assert bad == []

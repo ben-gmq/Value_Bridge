@@ -14,6 +14,7 @@ export const api = {
   deactivateUser: (id) => d(http.patch(`/api/v1/users/${id}/deactivate`)),
   setPlatformAdmin: (id, body) => d(http.patch(`/api/v1/users/${id}/platform-admin`, body)),
   setUserKind: (id, body) => d(http.patch(`/api/v1/users/${id}/kind`, body)),
+  accessChangePreview: (id, body) => d(http.post(`/api/v1/users/${id}/access-change-preview`, body)),
   clients: () => d(http.get('/api/v1/clients')),
   createClient: (body) => d(http.post('/api/v1/clients', body)),
 
@@ -30,6 +31,7 @@ export const api = {
 
   access: (projectId) => d(http.get(`/api/v1/projects/${projectId}/access`)),
   members: (projectId) => d(http.get(`/api/v1/projects/${projectId}/members`)),
+  memberCandidates: (projectId) => d(http.get(`/api/v1/projects/${projectId}/member-candidates`)),
   addMember: (projectId, body) => d(http.post(`/api/v1/projects/${projectId}/members`, body)),
   changeMember: (id, body) => d(http.patch(`/api/v1/project-members/${id}`, body)),
   removeMember: (id, rowVersion) => d(http.delete(`/api/v1/project-members/${id}`, { params: { row_version: rowVersion } })),
@@ -37,6 +39,11 @@ export const api = {
 
   programs: () => d(http.get('/api/v1/programs')),
   program: (id) => d(http.get(`/api/v1/programs/${id}`)),
+  programMembers: (id) => d(http.get(`/api/v1/programs/${id}/members`)),
+  programMemberCandidates: (id) => d(http.get(`/api/v1/programs/${id}/member-candidates`)),
+  addProgramMember: (id, body) => d(http.post(`/api/v1/programs/${id}/members`, body)),
+  changeProgramMember: (id, body) => d(http.patch(`/api/v1/program-members/${id}`, body)),
+  removeProgramMember: (id, rowVersion) => d(http.delete(`/api/v1/program-members/${id}`, { params: { row_version: rowVersion } })),
   programProjects: (id) => d(http.get(`/api/v1/programs/${id}/projects`)),
   createProgram: (body) => d(http.post('/api/v1/programs', body)),
   moveIntoProgram: (id, body) => d(http.post(`/api/v1/programs/${id}/projects`, body)),

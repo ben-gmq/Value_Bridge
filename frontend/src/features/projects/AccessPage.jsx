@@ -9,51 +9,57 @@ import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
 import { useAuth } from '../../app/AuthContext';
 import { keys } from '../../app/links';
+import { useCanAdmin } from '../../app/useCanEdit';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card, Code, KV, SectionLabel, Status, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 
-const LEVELS = ['EDIT', 'VIEW'];
+// A viewer is offered read only: the server refuses anything higher (D-71 (7)). A stored higher level from before
+// that rule is still shown, so the select never goes blank.
+const levelsFor = (kind, current) => (kind === 'VIEWER'
+  ? ['VIEW', ...(current && current !== 'VIEW' ? [current] : [])] : ['ADMIN', 'EDIT', 'VIEW']);
 
-function LevelSelect({ id, value, onChange }) {
+export function LevelSelect({ id, value, onChange, kind }) {
   return (
     <FormControl size="small" sx={{ minWidth: 160 }}>
       <InputLabel id={`${id}-label`}>{t('access.level')}</InputLabel>
       <Select labelId={`${id}-label`} id={id} label={t('access.level')} value={value} onChange={(e) => onChange(e.target.value)}>
-        {LEVELS.map((l) => <MenuItem key={l} value={l}>{t(`access.level.${l}`)}</MenuItem>)}
+        {levelsFor(kind, value).map((l) => (
+          <MenuItem key={l} value={l} disabled={kind === 'VIEWER' && l !== 'VIEW'}>{t(`access.level.${l}`)}</MenuItem>))}
       </Select>
     </FormControl>
   );
 }
 
-function AddMember({ projectId, members, onDone }) {
-  const users = useQuery({ queryKey: ['users'], queryFn: api.users });
+function AddMember({ projectId, onDone }) {
+  const users = useQuery({ queryKey: keys.memberCandidates(projectId), queryFn: () => api.memberCandidates(projectId) });
   const [user, setUser] = useState(null);
   const [level, setLevel] = useState('EDIT');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
-  const taken = new Set(members.map((m) => m.user_id));
+  const pick = (u) => { setUser(u); if (u?.user_kind === 'VIEWER') setLevel('VIEW'); };
   const m = useMutation({
-    mutationFn: () => api.addMember(projectId, { user_id: user.app_user_id, access_level: level, member_note: note || null }),
-    onSuccess: (res) => { setUser(null); setNote(''); setError(''); onDone(res.warnings?.includes('VIEWER_CAPPED')
-      ? t('access.viewerCapped') : t('access.added')); },
+    mutationFn: () => api.addMember(projectId, { user_id: user.user_id, access_level: level, member_note: note || null }),
+    onSuccess: () => { setUser(null); setNote(''); setError(''); onDone(t('access.added')); },
     onError: (err) => setError(errorText(err, t('access.failed'))),
   });
   return (
     <>
       {error && <Alert severity="error" sx={{ mx: 2.5 }}>{error}</Alert>}
       <Stack direction="row" useFlexGap sx={{ px: 2.5, gap: 1.25, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Autocomplete id="member-user" sx={{ flex: '1 1 260px', minWidth: 0 }} value={user} onChange={(_, v) => setUser(v)}
-          options={(users.data ?? []).filter((u) => u.is_active && !u.is_platform_admin && !taken.has(u.app_user_id))}
+        <Autocomplete id="member-user" sx={{ flex: '1 1 260px', minWidth: 0 }} value={user} onChange={(_, v) => pick(v)}
+          options={users.data ?? []} isOptionEqualToValue={(a, b) => a.user_id === b.user_id}
           getOptionLabel={(u) => `${u.display_name} — ${t(`access.kind.${u.user_kind}`)}`}
           renderInput={(params) => <TextField {...params} size="small" label={t('access.person')} />} />
-        <LevelSelect id="member-level" value={level} onChange={setLevel} />
+        <LevelSelect id="member-level" value={level} onChange={setLevel} kind={user?.user_kind} />
         <TextField id="member-note" size="small" label={t('access.note')} value={note} onChange={(e) => setNote(e.target.value)}
           sx={{ flex: '1 1 160px' }} />
         <Button variant="contained" startIcon={<PersonAddAltOutlinedIcon />} disabled={!user || m.isPending}
           onClick={() => m.mutate()}>{t('access.addMember')}</Button>
       </Stack>
+      {user?.user_kind === 'VIEWER' && (
+        <Typography sx={{ px: 2.5, fontSize: 12.5, color: 'brand.muted' }}>{t('access.viewerOnlyView')}</Typography>)}
     </>
   );
 }
@@ -78,8 +84,9 @@ function LevelTile({ title, body, names, strong }) {
 export default function AccessPage() {
   const { projectId } = useParams();
   const { isAdmin } = useAuth();
+  const canAdmin = useCanAdmin();
   const qc = useQueryClient();
-  const acc = useQuery({ queryKey: keys.projectAccess(projectId), queryFn: () => api.access(projectId), enabled: isAdmin });
+  const acc = useQuery({ queryKey: keys.projectAccess(projectId), queryFn: () => api.access(projectId), enabled: canAdmin });
   const proj = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId) });
   const [preview, setPreview] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(null);
@@ -87,6 +94,7 @@ export default function AccessPage() {
   const [notice, setNotice] = useState('');
   const created = Boolean(useLocation().state?.created);       // DR10c-P3: arrived here from "Create project"
   const refresh = () => { qc.invalidateQueries({ queryKey: keys.projectAccess(projectId) });
+    qc.invalidateQueries({ queryKey: keys.memberCandidates(projectId) });
     qc.invalidateQueries({ queryKey: keys.project(projectId) }); };
   const fail = (err) => setError(errorText(err, t('access.failed')));
 
@@ -106,14 +114,14 @@ export default function AccessPage() {
     onError: (err) => { setConfirmRemove(null); fail(err); },
   });
 
-  if (!isAdmin) {
+  if (!canAdmin) {
     return <Page title={t('access.title')}><Alert severity="info">{t('access.adminOnly')}</Alert></Page>;
   }
   const data = acc.data;
   const names = (list) => list.map((p) => p.display_name).join(', ');
   return (
     <Page title={t('access.title')} subtitle={t('access.subtitle')} error={error || (acc.error && errorText(acc.error))}
-      actions={data && (
+      actions={data && isAdmin && (
         <Button variant="contained" color="warning" disabled={restrict.isPending}
           onClick={() => restrict.mutate({ value: !data.is_restricted })}>
           {data.is_restricted ? t('access.unrestrict') : t('access.restrict')}</Button>)}>
@@ -138,6 +146,7 @@ export default function AccessPage() {
                 {data.is_restricted ? t('access.restricted')
                   : t('access.unrestricted', { users: data.staff?.USER ?? 0, viewers: data.staff?.VIEWER ?? 0 })}
               </Typography>
+              {!isAdmin && <Typography sx={{ fontSize: 12.5, color: 'brand.muted' }}>{t('access.restrictFtcOnly')}</Typography>}
             </>
           )}
         </Card>
@@ -145,7 +154,7 @@ export default function AccessPage() {
           <Card title={t('access.members')} bodySx={{ px: 0, gap: 1.5 }}
             action={data && <Tag tone="neutral">{t('settings.acc.people', { n: data.members.length })}</Tag>}>
             <Typography sx={{ px: 2.5, fontSize: 13, color: 'text.secondary' }}>{t('access.membersNote')}</Typography>
-            <AddMember projectId={projectId} members={data?.members ?? []} onDone={(msg) => { setNotice(msg); refresh(); }} />
+            <AddMember projectId={projectId} onDone={(msg) => { setNotice(msg); refresh(); }} />
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
@@ -171,11 +180,16 @@ export default function AccessPage() {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <LevelSelect id={`lvl-${row.project_member_id}`} value={row.access_level}
+                        <LevelSelect id={`lvl-${row.project_member_id}`} value={row.access_level} kind={row.user_kind}
                           onChange={(level) => change.mutate({ row, level })} />
                       </TableCell>
                       <TableCell>
-                        <Tag tone={row.effective_level === 'EDIT' ? 'navy' : 'neutral'}>{t(`access.level.${row.effective_level}`)}</Tag>
+                        <Tag tone={row.effective_level === 'VIEW' ? 'neutral' : 'navy'}>{t(`access.level.${row.effective_level}`)}</Tag>
+                        {row.via === 'STAFF' && (
+                          <Typography component="span" sx={{ ml: 1, fontSize: 12.5, color: 'brand.muted' }}>{t('access.viaStaff')}</Typography>)}
+                        {row.also_via_program && (
+                          <Typography component="span" sx={{ ml: 1, fontSize: 12.5, color: 'brand.muted' }}>
+                            {t(row.via === 'PROGRAM' ? 'access.viaProgram' : 'access.alsoViaProgram', { code: row.also_via_program })}</Typography>)}
                       </TableCell>
                       <TableCell sx={{ color: 'text.secondary', wordBreak: 'break-word', minWidth: 120 }}>{row.member_note}</TableCell>
                       <TableCell align="right" sx={{ pr: 2.5 }}>
@@ -188,6 +202,15 @@ export default function AccessPage() {
               </Table>
             </Box>
           </Card>
+          {data?.program_members?.length > 0 && (
+            <Card title={t('access.programMembers')} bodySx={{ gap: 1 }}>
+              {data.program_members.map((p) => (
+                <Box key={p.program_member_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{p.display_name}</Typography>
+                  <Tag tone={p.effective_level === 'VIEW' ? 'neutral' : 'navy'}>{t(`access.level.${p.effective_level}`)}</Tag>
+                  <Typography sx={{ fontSize: 12.5, color: 'brand.muted' }}>{t('access.viaProgram', { code: p.program_code })}</Typography>
+                </Box>))}
+            </Card>)}
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(3, minmax(0, 1fr))' } }}>
             <LevelTile strong title={t('access.admins')} body={t('settings.acc.adminWhat')} names={names(data?.admins ?? [])} />
             <LevelTile title={t('access.level.EDIT')} body={t('settings.acc.editWhat')} />
@@ -217,6 +240,14 @@ export default function AccessPage() {
                     </Box>))}
                   {preview.keeps.some((k) => k.level_drops) && (
                     <Alert severity="warning">{t('access.levelDropsNote')}</Alert>)}
+                  {preview.keeps_via_program?.length > 0 && (
+                    <>
+                      <Typography sx={{ fontWeight: 600 }}>{t('access.keepsViaProgram')}</Typography>
+                      {preview.keeps_via_program.map((k) => (
+                        <Typography key={k.program_member_id} variant="body2">
+                          {k.display_name} — {t(`access.level.${k.effective_level}`)} · {t('access.viaProgram', { code: k.program_code })}
+                        </Typography>))}
+                    </>)}
                 </>
               )}
               {!preview.changed && <Typography>{t('access.nobody')}</Typography>}
@@ -230,7 +261,9 @@ export default function AccessPage() {
         </DialogActions>
       </Dialog>
       <ConfirmDialog open={Boolean(confirmRemove)} title={t('access.removeTitle')}
-        body={t(data?.is_restricted ? 'access.removeBody' : 'access.removeBodyOpen', { name: confirmRemove?.display_name })}
+        body={confirmRemove?.also_via_program
+          ? t('access.removeBodyProgram', { name: confirmRemove.display_name, code: confirmRemove.also_via_program })
+          : t(data?.is_restricted ? 'access.removeBody' : 'access.removeBodyOpen', { name: confirmRemove?.display_name })}
         confirmLabel={t('access.remove')}
         busy={remove.isPending} onClose={() => setConfirmRemove(null)} onConfirm={() => remove.mutate(confirmRemove)} />
       <Snackbar open={Boolean(notice)} autoHideDuration={4000} onClose={() => setNotice('')} message={notice} />

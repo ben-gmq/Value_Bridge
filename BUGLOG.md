@@ -389,3 +389,18 @@ place.
 - **2026-10-16 · test harness (`sara`, L3):** the app's bcrypt cost is bcrypt's library default, implicitly; pin it
   as `auth.security.BCRYPT_ROUNDS = 12` with a test that it is ≥ 12, and have the harness lower that constant.
 
+- **2026-10-16 · access slice A (`sara`; steps 1–3: L1, L5–L8 fixed in the slice):** (L4) switched-off users' memberships
+  do not show on the member list (as before, sara 7b L8); the decision paper wants them shown, marked inactive and
+  removable — take it with program members in slice B. (L9) the user-type confirm's lock is not exercised by a
+  concurrent test (sequential stale case only); and slice B must add program memberships to `user_admin._comes_back`
+  and its digest, or a demoted admin's program role comes back unseen.
+- **2026-10-16 · wave 1g (`sara` pre-commit; M1, M3, L1–L3, L5–L7 fixed; M2 → history [Q-38]):** (L4, part) the
+  code-column list is cached per process but `GET …/code-lists` still runs ~25 count queries per load — fine at
+  today's sizes, measure before a client project grows large. (L8) four scratch copies of service code sit untracked
+  in `backend/` (never staged) — delete on Ben's click. Criterion 19 (a save during a re-point) is proven by lock
+  order, not a two-connection test.
+- **2026-10-16 · access slice B (`sara`; M1, M2, L1, L2, L5, L6 fixed in the slice):** (L3) `program._check_level`
+  duplicates `project._check_level`, and `program.py` imports `project._user_share_lock` / `lock_program` — move the
+  three to one home (`services/access.py` or a `services/locks.py`). (L4) `program._move_changes` is N+1 (up to 3
+  queries per active staff user) and runs under the move confirm's locks — load both programs' members and the
+  project's members in 3 queries before a client tenant has many users.

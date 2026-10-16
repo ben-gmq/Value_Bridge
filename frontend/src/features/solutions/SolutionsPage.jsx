@@ -23,7 +23,7 @@ const firstLine = (v) => (v ?? '').split('\n')[0];
 function AddSolutionDialog({ projectId, onClose, onDone }) {
   const [f, setF] = useState(EMPTY);
   const [error, setError] = useState('');
-  const { codes: categories } = useCodes(projectId, 'SOLUTION_CATEGORY');
+  const { options: categoryOptions } = useCodes(projectId, 'SOLUTION_CATEGORY');
   const m = useMutation({
     // The number and the PROPOSED status are set by the server (VB law 6); only what was typed is sent.
     mutationFn: () => solutionApi.create(projectId, { solution_name: f.solution_name.trim(),
@@ -42,7 +42,7 @@ function AddSolutionDialog({ projectId, onClose, onDone }) {
             onChange={set('solution_name')} slotProps={{ htmlInput: { maxLength: 200 } }} />
           <SimpleSelect id="sol-new-category" label={t('solutions.category')} value={f.category_code}
             onChange={(v) => setF({ ...f, category_code: v })}
-            options={categories.map((c) => ({ value: c.code, label: c.label }))} />
+            options={categoryOptions().map((c) => ({ value: c.code, label: c.label }))} />
           <TextField id="sol-new-desc" label={t('solutions.description')} multiline minRows={2} value={f.description}
             onChange={set('description')} slotProps={{ htmlInput: { maxLength: 4000 } }} />
           <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('solutions.numberMinted')}</Typography>
