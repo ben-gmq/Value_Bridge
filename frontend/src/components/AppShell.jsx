@@ -26,6 +26,7 @@ import UnfoldMoreRounded from '@mui/icons-material/UnfoldMoreRounded';
 import ViewQuiltOutlined from '@mui/icons-material/ViewQuiltOutlined';
 import { useAuth } from '../app/AuthContext';
 import { useComponents } from '../app/useComponents';
+import { useCanAdmin } from '../app/useCanEdit';
 import { keys } from '../app/links';
 import { api } from '../api/vb';
 import { baselineApi } from '../api/scope';
@@ -172,6 +173,7 @@ function UserBlock() {
 
 function Rail({ onNavigate }) {
   const { isAdmin } = useAuth();
+  const canAdmin = useCanAdmin();     // the project's Access item: project admins too (D-71)
   const { projectId } = useParams();
   const { pathname } = useLocation();
   const { anyOn } = useComponents(projectId);
@@ -188,7 +190,7 @@ function Rail({ onNavigate }) {
       <ScopeSelector onNavigate={onNavigate} />
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75, flexGrow: 1 }}>
         {base ? NAV.map((g) => {
-          const items = g.items.filter(([, , , need, adminOnly]) => (!need || anyOn(...need)) && (!adminOnly || isAdmin));
+          const items = g.items.filter(([, , , need, adminOnly]) => (!need || anyOn(...need)) && (!adminOnly || canAdmin));
           if (!items.length) return null;
           return (
             <Box key={g.group} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>

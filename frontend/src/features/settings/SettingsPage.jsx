@@ -3,7 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { Page } from '../../components/Page';
 import { links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
-import { useAuth } from '../../app/AuthContext';
+import { useCanAdmin } from '../../app/useCanEdit';
 import { t } from '../../i18n/t';
 
 // Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9). The organisation
@@ -14,11 +14,11 @@ const ITEMS = [['access', links.access, null, true], ['components', links.compon
 export default function SettingsPage() {
   const { projectId } = useParams();
   const { isOn } = useComponents(projectId);
-  const { isAdmin } = useAuth();
+  const canAdmin = useCanAdmin();     // the Access card: project admins too (D-71)
   return (
     <Page title={t('settings.title')} subtitle={t('settings.subtitle')}>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}>
-        {ITEMS.filter(([, , need, adminOnly]) => (!need || isOn(need)) && (!adminOnly || isAdmin)).map(([key, to]) => (
+        {ITEMS.filter(([, , need, adminOnly]) => (!need || isOn(need)) && (!adminOnly || canAdmin)).map(([key, to]) => (
           <Box key={key} component={RouterLink} to={to(projectId)} sx={(th) => ({ display: 'flex', flexDirection: 'column', gap: 0.5,
             p: 2.25, borderRadius: '24px', bgcolor: th.vars.palette.background.paper, border: `1px solid ${th.vars.palette.divider}`,
             color: 'inherit', textDecoration: 'none',
