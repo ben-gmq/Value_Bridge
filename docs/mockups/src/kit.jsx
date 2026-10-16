@@ -13,6 +13,14 @@ import GroupOutlined from '@mui/icons-material/GroupOutlined';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import UnfoldMoreRounded from '@mui/icons-material/UnfoldMoreRounded';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
+import SyncAltOutlined from '@mui/icons-material/SyncAltOutlined';
+import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined';
+import DnsOutlined from '@mui/icons-material/DnsOutlined';
+import TimerOutlined from '@mui/icons-material/TimerOutlined';
+import SpeedOutlined from '@mui/icons-material/SpeedOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import { BRAND, SURFACE, STATUS_COLOR_MAP, RADIUS, MONO } from './tokens.js';
 
 const RAIL_TEXT = '#DCD7F2';
@@ -35,7 +43,28 @@ const NAV = [
   { group: 'Admin', items: [['project', 'Project & access', GroupOutlined]] },
 ];
 
-function Rail({ active }) {
+// The rail as the app has it today (D-56). Screens 11+ are drawn against the built shell.
+const NAV_APP = [
+  { group: 'Scope', items: [
+    ['home', 'Dashboard', DashboardOutlined],
+    ['bfc', 'Business functions', AccountTreeOutlined],
+    ['dfd', 'Data flow diagram', HubOutlined],
+    ['de', 'Data entities', StorageOutlined],
+    ['sol', 'Solutions', LightbulbOutlined],
+    ['fr', 'Function requirements', ViewQuiltOutlined],
+    ['iface', 'Interfaces', SyncAltOutlined],
+    ['org', 'Organisation', CorporateFareOutlined],
+    ['sys', 'Systems', DnsOutlined],
+  ]},
+  { group: 'Control', items: [
+    ['effort', 'Effort', TimerOutlined],
+    ['fte', 'Time & FTE', SpeedOutlined],
+    ['baseline', 'Baselines', LayersOutlined],
+  ]},
+  { group: 'Admin', items: [['settings', 'Settings', SettingsOutlined]] },
+];
+
+function Rail({ active, current }) {
   return (
     <Box component="nav" aria-label="Main" sx={{ width: 248, flexShrink: 0, bgcolor: SURFACE.rail, display: 'flex', flexDirection: 'column', px: 1.75, py: 2, gap: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1 }}>
@@ -50,7 +79,7 @@ function Rail({ active }) {
         <UnfoldMoreRounded sx={{ fontSize: 18, color: RAIL_MUTED }} />
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75, flexGrow: 1 }}>
-        {NAV.map((g) => (
+        {(current ? NAV_APP : NAV).map((g) => (
           <Box key={g.group} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             <Typography sx={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.06em', color: RAIL_MUTED, px: 1.25, pb: 0.5 }}>{g.group.toUpperCase()}</Typography>
             {g.items.map(([key, label, Icon]) => {
@@ -70,17 +99,18 @@ function Rail({ active }) {
         <Avatar sx={{ width: 32, height: 32, fontSize: 12.5, fontWeight: 700, bgcolor: BRAND.purpleMid, color: '#FFFFFF' }}>KY</Avatar>
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: '#FFFFFF' }}>K. Yamada</Typography>
-          <Typography sx={{ fontSize: 12, color: RAIL_MUTED }}>Owner · FTC</Typography>
+          <Typography sx={{ fontSize: 12, color: RAIL_MUTED }}>{current ? 'User · FTC' : 'Owner · FTC'}</Typography>
         </Box>
       </Box>
     </Box>
   );
 }
 
-export function Shell({ active, crumbs = [], children }) {
+// current: draw the shell as built today (rail, no search, version chip, theme switch, footer) — screens 11+.
+export function Shell({ active, crumbs = [], children, current = false }) {
   return (
     <Box sx={{ width: 1440, height: 900, display: 'flex', bgcolor: SURFACE.page, color: SURFACE.text }}>
-      <Rail active={active} />
+      <Rail active={active} current={current} />
       <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <Box component="header" sx={{ height: 56, flexShrink: 0, px: 3, display: 'flex', alignItems: 'center', gap: 2, borderBottom: `1px solid ${SURFACE.border}` }}>
           <Box component="ol" aria-label="Breadcrumb" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, m: 0, p: 0, listStyle: 'none' }}>
@@ -91,18 +121,20 @@ export function Shell({ active, crumbs = [], children }) {
             ))}
           </Box>
           <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: 300, height: 36, px: 1.5, borderRadius: `${RADIUS.field}px`, bgcolor: SURFACE.field, border: `1px solid ${SURFACE.border}` }}>
+          {!current && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: 300, height: 36, px: 1.5, borderRadius: `${RADIUS.field}px`, bgcolor: SURFACE.field, border: `1px solid ${SURFACE.border}` }}>
             <SearchRounded sx={{ fontSize: 18, color: SURFACE.textMuted }} />
             <InputBase placeholder="Search codes, requirements, entities" inputProps={{ 'aria-label': 'Search' }} sx={{ fontSize: 13.5, flexGrow: 1 }} />
             <Box sx={{ fontFamily: MONO, fontSize: 11.5, color: SURFACE.textMuted, border: `1px solid ${SURFACE.border}`, borderRadius: '6px', px: 0.75 }}>/</Box>
-          </Box>
-          <Chip size="small" label="Working · after v1.2" sx={{ bgcolor: BRAND.purpleTint, color: BRAND.purpleLight, height: 30, px: 0.5 }}
+          </Box>}
+          <Chip size="small" label={current ? 'Working · after v1.1' : 'Working · after v1.2'} sx={{ bgcolor: BRAND.purpleTint, color: BRAND.purpleLight, height: 30, px: 0.5 }}
             icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: BRAND.purpleLight, ml: '10px !important' }} />} />
+          {current && <LightModeOutlined aria-label="Light theme" sx={{ fontSize: 20, color: SURFACE.text, ml: 1 }} />}
         </Box>
         <Box component="main" sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', px: 3, pt: 2.5, pb: 1.5, gap: 2 }}>
           {children}
         </Box>
-        <Box component="footer" sx={{ height: 34, flexShrink: 0, px: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', borderTop: `1px solid ${SURFACE.border}`, fontSize: 12, color: SURFACE.textMuted }}>
+        <Box component="footer" sx={{ height: 34, flexShrink: 0, px: 3, display: 'flex', alignItems: 'center', justifyContent: current ? 'space-between' : 'flex-end', borderTop: `1px solid ${SURFACE.border}`, fontSize: 12, color: SURFACE.textMuted }}>
+          {current && <Box component="span" sx={{ fontWeight: 600, letterSpacing: '0.08em' }}>FORTIENCE CONSULTING · VALUE BRIDGE</Box>}
           © 2026 Fortience Consulting Inc. All rights reserved.
         </Box>
       </Box>

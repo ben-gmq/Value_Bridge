@@ -10,6 +10,8 @@ import Issue from './screens/07_Issue.jsx';
 import ImportPreview from './screens/08_ImportPreview.jsx';
 import Baseline from './screens/09_Baseline.jsx';
 import ProjectAccess from './screens/10_ProjectAccess.jsx';
+import ScopeDashboard from './screens/11_ScopeDashboard.jsx';
+import StructuredRequirement from './screens/12_StructuredRequirement.jsx';
 
 import { BRAND, SURFACE, RADIUS } from './tokens.js';
 
@@ -69,12 +71,16 @@ const theme = createTheme({
 const SCREENS = {
   1: BfcHierarchy, 2: DfdEditor, 3: BusinessRequirement, 4: DataEntity, 5: Solution,
   6: FunctionalRequirement, 7: Issue, 8: ImportPreview, 9: Baseline, 10: ProjectAccess,
+  11: ScopeDashboard, 12: StructuredRequirement,
 };
+const COUNT = Object.keys(SCREENS).length;
 
 const TITLES = ['Business function chart', 'Data flow diagram', 'Business requirement', 'Data entity', 'Solution',
-  'Functional requirement', 'Issue', 'Bulk import preview', 'Baseline', 'Project & access'];
+  'Functional requirement', 'Issue', 'Bulk import preview', 'Baseline', 'Project & access',
+  'Scope dashboard (slice 12)', 'Structured requirement (slice 11)'];
 const SHOTS = ['01_bfc-hierarchy', '02_dfd-editor', '03_business-requirement', '04_data-entity', '05_solution',
-  '06_functional-requirement', '07_issue', '08_import-preview', '09_baseline', '10_project-access'];
+  '06_functional-requirement', '07_issue', '08_import-preview', '09_baseline', '10_project-access',
+  '2026-10-16_proposal/11_scope-dashboard-target', '2026-10-16_proposal/12_structured-requirement-target'];
 
 // Index of all screens, shown when no ?screen= is given.
 function Gallery() {
@@ -101,7 +107,7 @@ export default function App() {
     if (!n) return undefined;
     const onKey = (e) => {
       if (e.target.closest('input, textarea, [contenteditable]')) return;
-      const next = e.key === 'ArrowRight' ? n % 10 + 1 : e.key === 'ArrowLeft' ? (n + 8) % 10 + 1 : e.key === 'Escape' ? 0 : null;
+      const next = e.key === 'ArrowRight' ? n % COUNT + 1 : e.key === 'ArrowLeft' ? (n + COUNT - 2) % COUNT + 1 : e.key === 'Escape' ? 0 : null;
       if (next === null) return;
       window.location.search = next ? `?screen=${next}` : '';
     };

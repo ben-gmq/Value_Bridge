@@ -15,12 +15,18 @@ Ten form mockups as React + MUI components, with a clean 1440×900 PNG of each i
 | 8 | Bulk import preview | `src/screens/08_ImportPreview.jsx` |
 | 9 | Baseline freeze and priced diff | `src/screens/09_Baseline.jsx` |
 | 10 | Project and access | `src/screens/10_ProjectAccess.jsx` |
+| 11 | Scope dashboard, full target (slice 12, not built) — drawn in the current app shell | `src/screens/11_ScopeDashboard.jsx` |
+| 12 | Structured requirement (slice 11, not built) — drawn in the current app shell | `src/screens/12_StructuredRequirement.jsx` |
+
+**Proposal set:** `screenshots/2026-10-16_proposal/` holds 12 slide-ready PNGs (2880×1800) with a caption
+each in its `CAPTIONS.md` — 01–10 shot from the running app on the showcase demo project, 11–12 from the
+mockups above.
 
 ## Run
 
 ```bash
 npm install
-npm run dev          # http://localhost:5190/?screen=1 … ?screen=10
+npm run dev          # http://localhost:5190/?screen=1 … ?screen=12
 ```
 
 ## Colour
