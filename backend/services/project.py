@@ -111,19 +111,14 @@ def update_project(db: Session, actor: AppUser, project: Project, row_version: i
     return project
 
 
-# ---- members and restriction (OR-6, slice7_schema §8.3–§8.4; admin only by route guard) ----
+# ---- members and restriction (OR-6, slice7_schema §8.3–§8.4; D-71, D-73) ----
+# Members and the access list: project ADMIN by route guard — a project admin or a platform admin (D-71 (5)).
+# Restriction: PLATFORM by route guard (D-71 (6)). Who can open the project is read only through
+# access.who_can_open, so the guard and every list here agree (design-auditor H1).
 
 def _staff(db: Session) -> list[AppUser]:
     return list(db.scalars(select(AppUser).where(AppUser.is_active, ~AppUser.is_platform_admin)
                            .order_by(AppUser.display_name)))
-
-
-def _live_members(db: Session, project_id: int) -> list[ProjectMember]:
-    """Live memberships of active users (sara 7b L8: a deactivated user opens nothing)."""
-    return list(db.scalars(select(ProjectMember).join(AppUser, AppUser.app_user_id == ProjectMember.app_user_id)
-                           .where(ProjectMember.project_id == project_id, ProjectMember.is_active,
-                                  AppUser.is_active)
-                           .order_by(ProjectMember.project_member_id)))
 
 
 def _share_lock(db: Session, project_id: int) -> None:
@@ -131,29 +126,57 @@ def _share_lock(db: Session, project_id: int) -> None:
     db.execute(select(Project.project_id).where(Project.project_id == project_id).with_for_update(read=True))
 
 
+def _user_share_lock(db: Session, user_id: int) -> None:
+    """A member write and a confirmed change of that user's kind or admin flag serialise on the user row, so the
+    change never revives a membership its preview did not show (user_admin._require_confirm, D-71)."""
+    db.execute(select(AppUser.app_user_id).where(AppUser.app_user_id == user_id).with_for_update(read=True))
+
+
 def _person(u: AppUser) -> dict:
     return {"user_id": u.app_user_id, "display_name": u.display_name, "user_kind": u.user_kind}
 
 
-def _member_row(db: Session, m: ProjectMember) -> dict:
-    u = db.get(AppUser, m.app_user_id)
+def _row(m: ProjectMember, u: AppUser, level: str, via: str) -> dict:
     return {**_person(u), "project_member_id": m.project_member_id, "access_level": m.access_level,
-            "effective_level": access._lower(access.KIND_CAP[u.user_kind], m.access_level),
-            "member_note": m.member_note, "row_version": m.row_version}
+            "effective_level": level, "via": via, "member_note": m.member_note, "row_version": m.row_version}
+
+
+def _member_row(db: Session, m: ProjectMember) -> dict:
+    """One member as the Access screen shows it, with the level they hold on the project right now."""
+    u, p = db.get(AppUser, m.app_user_id), db.get(Project, m.project_id)
+    if u.is_platform_admin:
+        return _row(m, u, "PLATFORM", "PLATFORM_ADMIN")
+    return _row(m, u, *access.level_for(u.user_kind, p.is_restricted, m.access_level))
 
 
 def list_members(db: Session, project: Project) -> list[dict]:
-    return [_member_row(db, m) for m in _live_members(db, project.project_id)]
+    return [_row(r["member"], r["user"], r["level"], r["via"]) for r in access.who_can_open(db, project)["members"]]
+
+
+def member_candidates(db: Session, project: Project) -> list[dict]:
+    """The people a project admin may add (D-71 (5)): active staff who are not platform admins and not yet live
+    members. Names and kinds only — the full user list stays platform-admin only."""
+    taken = set(db.scalars(select(ProjectMember.app_user_id).where(ProjectMember.project_id == project.project_id,
+                                                                   ProjectMember.is_active)))
+    return [_person(u) for u in _staff(db) if u.app_user_id not in taken]
+
+
+def _check_level(target: AppUser, access_level: str) -> None:
+    """D-71 (7): a VIEWER-kind user is refused above VIEW, never quietly capped."""
+    if not access.rank_ok(access.KIND_CAP[target.user_kind], access_level):
+        raise HTTPException(422, f"{target.display_name} is a viewer and can only be added as a viewer")
 
 
 def add_member(db: Session, actor: AppUser, project: Project, user_id: int, access_level: str,
-               member_note: str | None) -> tuple[ProjectMember, list[str]]:
+               member_note: str | None) -> ProjectMember:
     _share_lock(db, project.project_id)
+    _user_share_lock(db, user_id)
     target = db.get(AppUser, user_id)
     if target is None or not target.is_active:
         raise HTTPException(422, "Choose an active user")
     if target.is_platform_admin:
         raise HTTPException(422, "A platform admin sees every project and needs no membership")
+    _check_level(target, access_level)
     if access.live_member(db, project.project_id, user_id) is not None:
         raise HTTPException(409, f"{target.display_name} is already a member of this project")
     m = ProjectMember(project_id=project.project_id, app_user_id=user_id, access_level=access_level,
@@ -164,17 +187,19 @@ def add_member(db: Session, actor: AppUser, project: Project, user_id: int, acce
                  target_table="project_member", target_id=m.project_member_id,
                  detail={"user_id": user_id, "access_level": access_level})
     db.commit()
-    warnings = (["VIEWER_CAPPED"] if access_level == "EDIT" and target.user_kind == "VIEWER" else [])
-    return m, warnings
+    return m
 
 
 def change_member_level(db: Session, actor: AppUser, m: ProjectMember, access_level: str,
                         row_version: int) -> ProjectMember:
+    """Any project admin may change any member's level, another admin's included, whoever appointed them (D-73)."""
     _share_lock(db, m.project_id)
+    _user_share_lock(db, m.app_user_id)
     if not m.is_active:
         raise HTTPException(409, "That membership was already removed")
     if m.row_version != row_version:
         raise HTTPException(409, "Updated by another user. Please refresh.")
+    _check_level(db.get(AppUser, m.app_user_id), access_level)
     if m.access_level != access_level:
         old, m.access_level = m.access_level, access_level
         m.updated_by = actor.app_user_id
@@ -186,7 +211,8 @@ def change_member_level(db: Session, actor: AppUser, m: ProjectMember, access_le
 
 
 def remove_member(db: Session, actor: AppUser, m: ProjectMember, row_version: int) -> None:
-    """Soft-remove (law 1); never restored — access returns only through add (R2-S5)."""
+    """Soft-remove (law 1); never restored — access returns only through add (R2-S5). A project admin may remove
+    another admin (D-73), or themselves; a platform admin can always add one back."""
     _share_lock(db, m.project_id)
     if not m.is_active:
         raise HTTPException(409, "That membership was already removed")
@@ -201,19 +227,23 @@ def remove_member(db: Session, actor: AppUser, m: ProjectMember, row_version: in
 
 def set_restriction(db: Session, actor: AppUser, project: Project, restricted: bool,
                     confirm_hash: str | None) -> dict:
-    """§8.3 + DR7-D2: preview who loses or gains access AND who keeps it (each member with the note
-    that explains why, e.g. a copied grant), inside the hash; then confirm. Audited."""
+    """§8.3 + DR7-D2: preview who loses or gains access AND who keeps it, at the level they will hold (each member
+    with the note that explains why), inside the hash; then confirm. Audited."""
     def plan() -> dict:
-        members = {m.app_user_id: m for m in _live_members(db, project.project_id)}
+        opened = access.who_can_open(db, project)["members"]
+        members = {r["user"].app_user_id: r for r in opened if not r["user"].is_platform_admin}
         staff = _staff(db)
+        keeps = []
         # DR10c-S1: a kept member whose level is lower behind the wall than in the open (a USER kept at VIEW,
         # e.g. copied from an old grant) is flagged, so the admin raises it before or after confirming.
-        def drops(row: dict) -> bool:
-            open_level = access.KIND_CAP[row["user_kind"]]
-            return (restricted and not project.is_restricted
-                    and access.LEVEL_RANK[row["effective_level"]] < access.LEVEL_RANK[open_level])
-        keeps = [{**row, "level_drops": drops(row)} for row in
-                 (_member_row(db, members[u.app_user_id]) for u in staff if u.app_user_id in members)]
+        for u in staff:
+            r = members.get(u.app_user_id)
+            if r is None:
+                continue
+            level, via = access.level_for(u.user_kind, restricted, r["member"].access_level)
+            drops = (restricted and not project.is_restricted
+                     and access.LEVEL_RANK[level] < access.LEVEL_RANK[r["level"]])
+            keeps.append({**_row(r["member"], u, level, via), "level_drops": drops})
         others = [_person(u) for u in staff if u.app_user_id not in members]
         return {"restricted": restricted, "changed": restricted != project.is_restricted,
                 "loses": others if restricted and not project.is_restricted else [],
@@ -244,13 +274,9 @@ def set_restriction(db: Session, actor: AppUser, project: Project, restricted: b
 
 
 def effective_access(db: Session, project: Project) -> dict:
-    """Everyone who can open the project, and why (§8.6). Admin only, by route guard. The access
-    review at each freeze reads this (§4.7)."""
-    admins = [_person(u) for u in db.scalars(select(AppUser).where(AppUser.is_platform_admin, AppUser.is_active)
-                                             .order_by(AppUser.display_name))]
-    members = list_members(db, project)
-    if project.is_restricted:
-        return {"is_restricted": True, "admins": admins, "members": members, "staff": None}
-    staff = _staff(db)
-    counts = {k: sum(1 for u in staff if u.user_kind == k) for k in access.KIND_CAP}
-    return {"is_restricted": False, "admins": admins, "members": members, "staff": counts}
+    """Everyone who can open the project, and why (§8.6, D-71). Project admin, by route guard. The access review at
+    each freeze reads this (§4.7, D-72)."""
+    w = access.who_can_open(db, project)
+    return {"is_restricted": project.is_restricted, "admins": [_person(u) for u in w["admins"]],
+            "members": [_row(r["member"], r["user"], r["level"], r["via"]) for r in w["members"]],
+            "staff": w["staff"]}

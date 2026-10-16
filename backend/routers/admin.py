@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, platform_admin
-from schemas.common import ClientIn, ClientOut, PlatformAdminIn, UserIn, UserKindIn, UserOut
+from schemas.common import (AccessChangeIn, AccessChangePreviewOut, ClientIn, ClientOut, PlatformAdminIn, UserIn,
+                            UserKindIn, UserOut)
 from services import project as project_service
 from services import user_admin
 
@@ -24,16 +25,22 @@ def create_user(body: UserIn, actor: AppUser = Depends(_admin.dep), db: Session 
                                   body.user_kind)
 
 
+@router.post("/users/{id}/access-change-preview", response_model=AccessChangePreviewOut, **_admin.route)
+def access_change_preview(id: int, body: AccessChangeIn, db: Session = Depends(get_db)):
+    """No write: the memberships a change of kind or admin flag brings back into force, and the hash to confirm."""
+    return user_admin.access_change_preview(db, id, body.user_kind, body.is_platform_admin)
+
+
 @router.patch("/users/{id}/kind", response_model=UserOut, **_admin.route)
 def set_user_kind(id: int, body: UserKindIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
-    return user_admin.set_user_kind(db, actor, id, body.user_kind, body.row_version)
+    return user_admin.set_user_kind(db, actor, id, body.user_kind, body.row_version, body.confirm_hash)
 
 
 @router.patch("/users/{id}/platform-admin", response_model=UserOut, **_admin.route)
 def set_platform_admin(id: int, body: PlatformAdminIn, actor: AppUser = Depends(_admin.dep),
                        db: Session = Depends(get_db)):
     return user_admin.set_platform_admin(db, actor, id, body.is_platform_admin, body.rationale,
-                                         body.row_version, body.user_kind)
+                                         body.row_version, body.user_kind, body.confirm_hash)
 
 
 @router.patch("/users/{id}/deactivate", response_model=UserOut, **_admin.route)

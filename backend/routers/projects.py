@@ -8,7 +8,7 @@ from routers.guards import (GuardedRouter, authenticated, object_guard, platform
                             program_ctx, project_ctx)
 from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, ComponentsIn, DepthIn, DfdRuleIn,
                             DfdRuleOut, DfdRulePreviewIn, DfdRulePreviewOut,
-                            EffectiveAccessOut, MemberAddOut, MemberIn, MemberOut, MemberPatch,
+                            EffectiveAccessOut, MemberIn, MemberOut, MemberPatch, PersonOut,
                             ProgramIn, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
                             RestrictionIn, RestrictionOut, TemplateOut)
 from schemas.process_flow import FteBasisIn, FteBasisOut, VolumeSummaryOut
@@ -21,7 +21,8 @@ _auth = authenticated()
 _admin = platform_admin()
 _reader = project_ctx("VIEW")
 _editor = project_ctx("EDIT")
-_proj_admin = project_ctx("ADMIN")             # only a platform admin reaches ADMIN (§8.6)
+_proj_admin = project_ctx("ADMIN")             # a project admin or a platform admin: members, access list (D-71)
+_platform = project_ctx("PLATFORM")            # platform admins only: the FTC-only project settings (D-71 (6))
 _prog_reader = program_ctx("VIEW")
 _member_admin = object_guard(ProjectMember, "ADMIN")
 
@@ -80,7 +81,7 @@ def read_components(project_id: int, db: Session = Depends(get_db)):
     return components.describe(db, project_id)
 
 
-@router.put("/projects/{project_id}/components", response_model=ComponentsChangeOut, **_proj_admin.route)
+@router.put("/projects/{project_id}/components", response_model=ComponentsChangeOut, **_platform.route)
 def set_components(project_id: int, body: ComponentsIn, actor: AppUser = Depends(_auth.dep),
                    db: Session = Depends(get_db)):
     """Platform admin [Q-10]. Without confirm_hash: the preview. With it: applied, audited."""
@@ -88,16 +89,16 @@ def set_components(project_id: int, body: ComponentsIn, actor: AppUser = Depends
                                      body.component_codes, body.confirm_hash)
 
 
-@router.put("/projects/{project_id}/data-model-depth", response_model=ProjectOut, **_proj_admin.route)
+@router.put("/projects/{project_id}/data-model-depth", response_model=ProjectOut, **_platform.route)
 def set_depth(project_id: int, body: DepthIn, actor: AppUser = Depends(_auth.dep),
               db: Session = Depends(get_db)):
     return components.set_depth(db, actor, project_service.get_project(db, project_id),
                                 body.data_model_depth, body.row_version)
 
 
-# ---- the FTE basis and the volume summary (D-67, slice 13c): a project ADMIN (platform admin, Q-7) sets the basis;
+# ---- the FTE basis and the volume summary (D-67, slice 13c): a platform admin sets the basis (Q-7, D-71 (6));
 # everyone who sees the project reads the summary. A project setting, not a component write: no component=.
-@router.put("/projects/{project_id}/fte-basis", response_model=FteBasisOut, **_proj_admin.route)
+@router.put("/projects/{project_id}/fte-basis", response_model=FteBasisOut, **_platform.route)
 def set_fte_basis(project_id: int, body: FteBasisIn, actor: AppUser = Depends(_auth.dep),
                   db: Session = Depends(get_db)):
     return process_volume.set_basis(db, actor.app_user_id, project_service.get_project(db, project_id),
@@ -109,27 +110,27 @@ def volume_summary(project_id: int, db: Session = Depends(get_db)):
     return process_volume.summary(db, project_service.get_project(db, project_id))
 
 
-# ---- the DFD rule (D-70; slice13_schema §2.5): everyone sees it, a project ADMIN (platform admin, Q-5) changes it.
+# ---- the DFD rule (D-70; slice13_schema §2.5): everyone sees it, a platform admin changes it (Q-5, D-71 (6)).
 # A project setting, not a component write: no component= (the rule only has effect where the chart's DFD is on).
 @router.get("/projects/{project_id}/dfd-rule", response_model=DfdRuleOut, **_reader.route)
 def read_dfd_rule(project_id: int, db: Session = Depends(get_db)):
     return dfd_rule.describe(db, project_service.get_project(db, project_id))
 
 
-@router.post("/projects/{project_id}/dfd-rule/preview", response_model=DfdRulePreviewOut, **_proj_admin.route)
+@router.post("/projects/{project_id}/dfd-rule/preview", response_model=DfdRulePreviewOut, **_platform.route)
 def preview_dfd_rule(project_id: int, body: DfdRulePreviewIn, db: Session = Depends(get_db)):
     """No write: per chart, the lights under the proposed rule and what the next freeze would refuse."""
     return dfd_rule.preview(db, project_service.get_project(db, project_id), body.bfc_set_code, body.codes)
 
 
-@router.put("/projects/{project_id}/dfd-rule", response_model=DfdRuleOut, **_proj_admin.route)
+@router.put("/projects/{project_id}/dfd-rule", response_model=DfdRuleOut, **_platform.route)
 def set_dfd_rule(project_id: int, body: DfdRuleIn, actor: AppUser = Depends(_auth.dep),
                  db: Session = Depends(get_db)):
     return dfd_rule.set_rule(db, actor, project_service.get_project(db, project_id), body.bfc_set_code,
                              body.codes, body.row_version, body.preview_digest)
 
 
-# ---- access: who can open the project, members, restriction (D-40, OR-6) ----
+# ---- access: who can open the project, members (project ADMIN), restriction (PLATFORM) (D-40, OR-6, D-71) ----
 @router.get("/projects/{project_id}/access", response_model=EffectiveAccessOut, **_proj_admin.route)
 def effective_access(project_id: int, db: Session = Depends(get_db)):
     return project_service.effective_access(db, project_service.get_project(db, project_id))
@@ -140,15 +141,19 @@ def list_members(project_id: int, db: Session = Depends(get_db)):
     return project_service.list_members(db, project_service.get_project(db, project_id))
 
 
-@router.post("/projects/{project_id}/members", response_model=MemberAddOut, status_code=201,
+@router.get("/projects/{project_id}/member-candidates", response_model=list[PersonOut], **_proj_admin.route)
+def member_candidates(project_id: int, db: Session = Depends(get_db)):
+    """Who a project admin may add — /users stays platform-admin only (D-71 (5))."""
+    return project_service.member_candidates(db, project_service.get_project(db, project_id))
+
+
+@router.post("/projects/{project_id}/members", response_model=MemberOut, status_code=201,
              **_proj_admin.route)
 def add_member(project_id: int, body: MemberIn, actor: AppUser = Depends(_auth.dep),
                db: Session = Depends(get_db)):
-    m, warnings = project_service.add_member(db, actor, project_service.get_project(db, project_id),
-                                             body.user_id, body.access_level, body.member_note)
-    row = next(r for r in project_service.list_members(db, project_service.get_project(db, project_id))
-               if r["project_member_id"] == m.project_member_id)
-    return {**row, "warnings": warnings}
+    m = project_service.add_member(db, actor, project_service.get_project(db, project_id),
+                                   body.user_id, body.access_level, body.member_note)
+    return project_service._member_row(db, m)
 
 
 @router.patch("/project-members/{id}", response_model=MemberOut, **_member_admin.route)
@@ -164,7 +169,7 @@ def remove_member(id: int, row_version: int, m: ProjectMember = Depends(_member_
     project_service.remove_member(db, actor, m, row_version)
 
 
-@router.put("/projects/{project_id}/restriction", response_model=RestrictionOut, **_proj_admin.route)
+@router.put("/projects/{project_id}/restriction", response_model=RestrictionOut, **_platform.route)
 def set_restriction(project_id: int, body: RestrictionIn, actor: AppUser = Depends(_auth.dep),
                     db: Session = Depends(get_db)):
     """Preview (no hash) names who loses, gains and keeps access; confirm applies it (§8.3, DR7-D2)."""

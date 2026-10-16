@@ -98,7 +98,7 @@ class ProjectMember(AuditMixin, Base):
     project_is_active: Mapped[bool | None] = mapped_column(
         Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
     app_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
-    access_level: Mapped[str] = mapped_column(String(4), nullable=False)
+    access_level: Mapped[str] = mapped_column(String(5), nullable=False)
     member_note: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("AppUser", foreign_keys=[app_user_id])
@@ -106,7 +106,7 @@ class ProjectMember(AuditMixin, Base):
     __table_args__ = (
         ForeignKeyConstraint(["project_id", "project_is_active"], ["project.project_id", "project.is_active"],
                              name="fk_pm_live_project", onupdate="NO ACTION"),
-        CheckConstraint("access_level IN ('EDIT', 'VIEW')", name="ck_pm_level"),
+        CheckConstraint("access_level IN ('ADMIN', 'EDIT', 'VIEW')", name="ck_pm_level"),
         CheckConstraint("member_note IS NULL OR btrim(member_note) <> ''", name="ck_pm_note_not_blank"),
         Index("uq_pm_live", "project_id", "app_user_id", unique=True, postgresql_where=text("is_active")),
         Index("ix_pm_user_live", "app_user_id", postgresql_where=text("is_active")),

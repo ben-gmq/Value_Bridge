@@ -48,6 +48,7 @@ class UserIn(BaseModel):
 class UserKindIn(BaseModel):
     user_kind: UserKind
     row_version: int
+    confirm_hash: str | None = None                  # from the access-change preview, when memberships come back (D-71)
 
 
 class PlatformAdminIn(BaseModel):
@@ -55,6 +56,26 @@ class PlatformAdminIn(BaseModel):
     rationale: str = Field(min_length=1, max_length=500)
     row_version: int
     user_kind: UserKind | None = None                # required when removing admin rights (DR7-S6)
+    confirm_hash: str | None = None                  # as UserKindIn
+
+
+class AccessChangeIn(BaseModel):
+    user_kind: UserKind                              # what the user would be
+    is_platform_admin: bool
+
+
+class ComesBackOut(BaseModel):
+    project_id: int
+    project_code: str
+    project_name: str
+    access_level: str                                # the stored membership
+    level_before: str | None                         # None: unread until now (admin) or no access
+    level_after: str
+
+
+class AccessChangePreviewOut(BaseModel):
+    comes_back: list[ComesBackOut]
+    confirm_hash: str
 
 
 class MeOut(BaseModel):
@@ -146,7 +167,7 @@ class ProjectOut(Orm):
     working_days_per_year: int = 240                  # D-67: the FTE basis (slice 13c)
     hours_per_working_day: float = 8.0
     row_version: int
-    my_access_level: str | None = None   # VIEW / EDIT / ADMIN, on the single-project read (§8.6)
+    my_access_level: str | None = None   # VIEW / EDIT / ADMIN / PLATFORM, single-project read (§8.6, D-71)
 
 
 class ComponentOut(BaseModel):
@@ -246,12 +267,12 @@ class ProgramMoveIn(BaseModel):
 # ---- access ----
 class MemberIn(BaseModel):
     user_id: int
-    access_level: Literal["EDIT", "VIEW"]
+    access_level: Literal["ADMIN", "EDIT", "VIEW"]       # ck_pm_level; ADMIN = project admin (D-71)
     member_note: str | None = Field(default=None, max_length=500)
 
 
 class MemberPatch(BaseModel):
-    access_level: Literal["EDIT", "VIEW"]
+    access_level: Literal["ADMIN", "EDIT", "VIEW"]
     row_version: int
 
 
@@ -261,17 +282,14 @@ class MemberOut(BaseModel):
     display_name: str
     user_kind: str
     access_level: str
-    effective_level: str                 # the lower of the kind's cap and the membership level
+    effective_level: str                 # what they hold on the project now: access.level_for (D-71)
+    via: str                             # MEMBER / STAFF / PLATFORM_ADMIN — where that level comes from
     member_note: str | None
     row_version: int
 
 
 class KeptMemberOut(MemberOut):
     level_drops: bool = False            # DR10c-S1: restricting lowers this member's level (e.g. a USER kept at VIEW)
-
-
-class MemberAddOut(MemberOut):
-    warnings: list[str] = []
 
 
 class PersonOut(BaseModel):
