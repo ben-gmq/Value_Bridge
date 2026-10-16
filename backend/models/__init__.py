@@ -16,7 +16,7 @@ from models.function_requirement import (BrFunctionRequirement, FrInterface, FrI
 from models.identity import AppUser, AuditEvent, ProjectMember, UserAccessGrant  # noqa: F401
 from models.requirement import (BrDataEntity, BrDataField, BrOrgRole, BrRequirementLine,  # noqa: F401
                                 BrSystemFlow, BusinessRequirement)
-from models.shared import CodeMaster, ProjectSequence  # noqa: F401
+from models.shared import CodeMaster, ProjectCodeVisibility, ProjectSequence  # noqa: F401
 from models.solution import BrSolution, Solution  # noqa: F401
 from models.tenancy import (Client, Program, Project, ProjectComponent, ProjectDfdRule,  # noqa: F401
                             ProjectTemplateComponent)
