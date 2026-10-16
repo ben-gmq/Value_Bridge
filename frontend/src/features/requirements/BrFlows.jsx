@@ -27,7 +27,7 @@ export function BrFlows({ projectId, br, disabled, frOn, bare = false }) {
   const q = useQuery({ queryKey: qk, queryFn: () => brApi.flows(br.br_id) });
   const appsQ = useQuery({ queryKey: keys.applications(projectId), queryFn: () => appApi.list(projectId) });
   const entQ = useQuery({ queryKey: keys.entities(projectId), queryFn: () => dataApi.list(projectId) });
-  const { codes: frTypes } = useCodes(projectId, 'FR_TYPE');
+  const { options: frTypes } = useCodes(projectId, 'FR_TYPE');
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
@@ -39,7 +39,7 @@ export function BrFlows({ projectId, br, disabled, frOn, bare = false }) {
   const appOptions = (appsQ.data ?? []).filter((a) => a.is_active)
     .map((a) => ({ value: a.application_id, label: `${a.application_code} — ${a.application_name}` }));
   const entOptions = (entQ.data ?? []).filter((e) => e.is_active).map((e) => ({ value: e.data_entity_id, label: `${e.de_number} ${e.de_name}` }));
-  const ifaceTypes = frTypes.filter((c) => c.behaviour_code === 'INTERFACE').map((c) => ({ value: c.code, label: c.label }));
+  const ifaceTypes = frTypes().filter((c) => c.behaviour_code === 'INTERFACE').map((c) => ({ value: c.code, label: c.label }));
   const refresh = () => { qc.invalidateQueries({ queryKey: qk }); qc.invalidateQueries({ queryKey: keys.br(br.br_id) }); };
   const fail = (err) => { refresh(); setError(isStale(err) ? t('processes.staleLink') : errorText(err, t('common.saveFailed'))); };
 

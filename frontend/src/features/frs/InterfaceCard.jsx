@@ -36,9 +36,9 @@ export function InterfaceCard({ projectId, fr, onNotice }) {
   const editing = form !== null;
   const appsQ = useQuery({ queryKey: keys.applications(projectId), queryFn: () => appApi.list(projectId), enabled: editing });
   const desQ = useQuery({ queryKey: keys.entities(projectId), queryFn: () => dataApi.list(projectId), enabled: editing });
-  const { codes: patterns, getLabel: patternLabel } = useCodes(projectId, 'INTERFACE_PATTERN');
-  const { codes: methods, getLabel: methodLabel } = useCodes(projectId, 'INTERFACE_METHOD');
-  const { codes: freqs, getLabel: freqLabel } = useCodes(projectId, 'INTERFACE_FREQUENCY');
+  const { options: patterns, getLabel: patternLabel } = useCodes(projectId, 'INTERFACE_PATTERN');
+  const { options: methods, getLabel: methodLabel } = useCodes(projectId, 'INTERFACE_METHOD');
+  const { options: freqs, getLabel: freqLabel } = useCodes(projectId, 'INTERFACE_FREQUENCY');
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.iface(fr.fr_id) });
@@ -107,13 +107,13 @@ export function InterfaceCard({ projectId, fr, onNotice }) {
         <SimpleSelect id="iface-target" label={t('interfaces.card.target')} value={form.target} onChange={(v) => set('target', v)} options={apps} /></Grid>
       <Grid size={{ xs: 12, md: 4 }}>
         <SimpleSelect id="iface-pattern" label={t('interfaces.pattern')} value={form.pattern} allowEmpty emptyLabel={t('interfaces.card.none')}
-          onChange={(v) => set('pattern', v)} options={opts(patterns)} /></Grid>
+          onChange={(v) => set('pattern', v)} options={opts(patterns(d?.pattern_code))} /></Grid>
       <Grid size={{ xs: 12, md: 4 }}>
         <SimpleSelect id="iface-method" label={t('interfaces.method')} value={form.method} allowEmpty emptyLabel={t('interfaces.card.none')}
-          onChange={(v) => set('method', v)} options={opts(methods)} /></Grid>
+          onChange={(v) => set('method', v)} options={opts(methods(d?.method_code))} /></Grid>
       <Grid size={{ xs: 12, md: 4 }}>
         <SimpleSelect id="iface-frequency" label={t('interfaces.frequency')} value={form.frequency} allowEmpty emptyLabel={t('interfaces.card.none')}
-          onChange={(v) => set('frequency', v)} options={opts(freqs)} /></Grid>
+          onChange={(v) => set('frequency', v)} options={opts(freqs(d?.frequency_code))} /></Grid>
       <Grid size={12}>
         <TextField id="iface-volume" fullWidth multiline minRows={2} label={t('interfaces.card.volume')} value={form.volume}
           onChange={(e) => set('volume', e.target.value)} slotProps={{ htmlInput: { maxLength: 4000 } }} /></Grid>

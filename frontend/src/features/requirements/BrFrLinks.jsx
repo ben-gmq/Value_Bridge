@@ -24,7 +24,7 @@ const solLabel = (s) => `${s.solution_number} ${s.solution_name}`;
 function NewFrDialog({ projectId, br, brSolutions, solutionsOn, onClose, onDone }) {
   const [f, setF] = useState({ fr_name: '', fr_type_code: '', solution_id: '', description: '' });
   const [error, setError] = useState('');
-  const { codes: types } = useCodes(projectId, 'FR_TYPE');
+  const { options: typeOptions } = useCodes(projectId, 'FR_TYPE');
   const m = useMutation({
     // One step: the FR is created and linked to this BR (Q-20). Number, status and behaviour are the server's (law 6).
     mutationFn: () => frApi.create(projectId, { fr_name: f.fr_name.trim(), fr_type_code: f.fr_type_code,
@@ -42,7 +42,7 @@ function NewFrDialog({ projectId, br, brSolutions, solutionsOn, onClose, onDone 
           <TextField id="brfr-new-name" label={t('frs.name')} required autoFocus value={f.fr_name}
             onChange={(e) => setF({ ...f, fr_name: e.target.value })} slotProps={{ htmlInput: { maxLength: 200 } }} />
           <SimpleSelect id="brfr-new-type" label={t('frs.type')} value={f.fr_type_code}
-            onChange={(v) => setF({ ...f, fr_type_code: v })} options={types.map((c) => ({ value: c.code, label: c.label }))} />
+            onChange={(v) => setF({ ...f, fr_type_code: v })} options={typeOptions().map((c) => ({ value: c.code, label: c.label }))} />
           {solutionsOn && (
             <SimpleSelect id="brfr-new-solution" label={t('requirements.frs.solution')} value={f.solution_id} allowEmpty
               emptyLabel={t('requirements.frs.noSolution')} onChange={(v) => setF({ ...f, solution_id: v })}

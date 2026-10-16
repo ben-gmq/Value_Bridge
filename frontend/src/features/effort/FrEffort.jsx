@@ -31,7 +31,7 @@ function useCurrentRate(projectId, fr) {
 export function FrEffort({ projectId, fr, onRated }) {
   const qc = useQueryClient();
   const canEdit = useCanEdit() && fr.is_active;
-  const { codes, getLabel } = useCodes(projectId, 'FR_COMPLEXITY');
+  const { options, getLabel } = useCodes(projectId, 'FR_COMPLEXITY');
   const { current, offRate } = useCurrentRate(projectId, fr);
   const [pick, setPick] = useState(fr.complexity_code ?? '');
   const [error, setError] = useState('');
@@ -53,7 +53,7 @@ export function FrEffort({ projectId, fr, onRated }) {
       {canEdit ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
           <Segmented label={t('effort.fr.complexity')} value={pick} onChange={setPick}
-            options={[...codes.map((c) => ({ value: c.code, label: c.label })), { value: '', label: t('effort.fr.notRated') }]} />
+            options={[...options(fr.complexity_code).map((c) => ({ value: c.code, label: c.label })), { value: '', label: t('effort.fr.notRated') }]} />
           <Button variant="outlined" size="small" disabled={rate.isPending || (same && !offRate)}
             onClick={() => { setError(''); rate.mutate(); }}>
             {same && offRate ? t('effort.fr.rerate') : t('effort.fr.rate')}</Button>

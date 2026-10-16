@@ -23,7 +23,7 @@ const BR_SINGLE = ['ACCOUNTABLE'];                      // services/raci.py SING
 export function BrRaci({ projectId, br, disabled }) {
   const qc = useQueryClient();
   const queryKey = [...keys.br(br.br_id), 'roles'];
-  const { codes } = useCodes(projectId, 'RACI_TYPE');
+  const { codes, options } = useCodes(projectId, 'RACI_TYPE');
   const q = useQuery({ queryKey, queryFn: () => brApi.roles(br.br_id) });
   const rolesQ = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
   const unitsQ = useQuery({ queryKey: keys.units(projectId), queryFn: () => orgApi.units(projectId) });
@@ -82,7 +82,8 @@ export function BrRaci({ projectId, br, disabled }) {
                 '& .MuiToggleButton-root': { border: 0, borderRadius: '999px !important', minWidth: 30, height: 26, px: 0.75,
                   fontSize: 12.5, fontWeight: 700, color: th.vars.palette.brand.muted },
                 '& .Mui-selected': { bgcolor: `${th.vars.palette.brand.ftcViolet} !important`, color: `${th.vars.palette.brand.onFtc} !important` } })}>
-              {codes.map((c) => (
+              {/* A role sees the codes not hidden plus any it already holds (wave 1g), so it can still unlink one. */}
+              {codes.filter((c) => !c.is_hidden || held.includes(c.code)).map((c) => (
                 <ToggleButton key={c.code} value={c.code} aria-label={c.label} title={c.label}
                   disabled={disabled || toggle.isPending}
                   onClick={() => toggle.mutate({ roleId, code: c.code, on: !held.includes(c.code) })}>
@@ -104,7 +105,7 @@ export function BrRaci({ projectId, br, disabled }) {
             </Alert>)}
           extra={(
             <SimpleSelect id="raci-add-code" label={t('processes.raciCode')} value={addCode} onChange={setAddCode}
-              options={codes.map((c) => ({ value: c.code, label: c.label }))} />)}
+              options={options().map((c) => ({ value: c.code, label: c.label }))} />)}
           onSubmit={(role) => brApi.linkRole(br.br_id, { org_role_id: role.org_role_id, raci_code: addCode })}
           onDone={refresh} onClose={() => setAdding(false)} />
       )}

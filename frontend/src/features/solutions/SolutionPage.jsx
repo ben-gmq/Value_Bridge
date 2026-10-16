@@ -30,8 +30,8 @@ export default function SolutionPage() {
   const canEdit = useCanEdit();
   const q = useQuery({ queryKey: keys.solution(solutionId), queryFn: () => solutionApi.get(solutionId) });
   const sol = q.data;
-  const { codes: categories, getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
-  const { codes: statuses, getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
+  const { options: categoryOptions, getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
+  const { options: statusOptions, getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
   const form = useEditForm(sol, pickSolution);
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
@@ -119,14 +119,14 @@ export default function SolutionPage() {
         <SectionLabel>{labels.category_code}</SectionLabel>
         {editable ? (
           <Segmented label={labels.category_code} value={v.category_code} onChange={(c) => form.set('category_code', c)}
-            options={categories.map((c) => ({ value: c.code, label: c.label }))} />
+            options={categoryOptions(sol.category_code).map((c) => ({ value: c.code, label: c.label }))} />
         ) : <Tag>{categoryLabel(v.category_code)}</Tag>}
       </Box>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,2fr) minmax(0,1fr)' } }}>
         {text('solution_name', 1, 200)}
         {editable ? (
           <SimpleSelect id="sol-status" label={labels.status_code} value={v.status_code}
-            onChange={(c) => form.set('status_code', c)} options={statuses.map((c) => ({ value: c.code, label: c.label }))} />
+            onChange={(c) => form.set('status_code', c)} options={statusOptions(sol.status_code).map((c) => ({ value: c.code, label: c.label }))} />
         ) : <TextField fullWidth size="small" disabled label={labels.status_code} value={statusLabel(v.status_code)} />}
         <Box sx={{ gridColumn: '1 / -1' }}>{text('description', 3)}</Box>
       </Box>

@@ -319,3 +319,16 @@ export const baselineApi = {
   rows: (id, entity, offset, limit) => d(http.get(`${V}/baselines/${id}/rows/${entity}`, { params: { offset, limit } })),
   approve: (id, body) => d(http.post(`${V}/baselines/${id}/approve`, body)),
 };
+
+// Wave 1g: code lists. A project's lists (its admin writes), the company library (platform admin), one code row.
+export const codeListApi = {
+  project: (projectId) => d(http.get(`${P(projectId)}/code-lists`)),
+  addProject: (projectId, category, body) => d(http.post(`${P(projectId)}/code-lists/${category}`, body)),
+  hide: (projectId, codeId) => d(http.post(`${P(projectId)}/code-lists/hidden`, { code_id: codeId })),
+  unhide: (projectId, codeId) => d(http.delete(`${P(projectId)}/code-lists/hidden`, { params: { code_id: codeId } })),
+  company: () => d(http.get(`${V}/code-lists`)),
+  addCompany: (category, body) => d(http.post(`${V}/code-lists/${category}`, body)),
+  update: (codeId, body) => d(http.patch(`${V}/code-master/${codeId}`, body)),
+  retire: (codeId, rowVersion) => del(`${V}/code-master/${codeId}`, rowVersion),
+  restore: (codeId, rowVersion) => d(http.patch(`${V}/code-master/${codeId}/restore`, { row_version: rowVersion })),
+};

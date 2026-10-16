@@ -167,7 +167,7 @@ export function SimpleSelect({ id, label, value, onChange, options, allowEmpty, 
  */
 export function RaciPanel({ projectId, queryKey, list, link, unlink, linkId, single, disabled, onChanged }) {
   const qc = useQueryClient();
-  const { codes } = useCodes(projectId, 'RACI_TYPE');
+  const { codes, options } = useCodes(projectId, 'RACI_TYPE');
   const q = useQuery({ queryKey, queryFn: list });
   const rolesQ = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
   const unitsQ = useQuery({ queryKey: keys.units(projectId), queryFn: () => orgApi.units(projectId) });
@@ -217,7 +217,8 @@ export function RaciPanel({ projectId, queryKey, list, link, unlink, linkId, sin
               </Typography>
             </Box>
             <ToggleButtonGroup size="small" value={held} aria-label={t('processes.raciFor', { role: roleName(role) })} sx={raciGroupSx}>
-              {codes.map((c) => (
+              {/* A role sees the codes not hidden plus any it already holds (wave 1g), so it can still unlink one. */}
+              {codes.filter((c) => !c.is_hidden || held.includes(c.code)).map((c) => (
                 <ToggleButton key={c.code} value={c.code} aria-label={c.label} title={c.label}
                   disabled={disabled || toggle.isPending}
                   onClick={() => toggle.mutate({ roleId, code: c.code, on: !held.includes(c.code) })}>
@@ -244,7 +245,7 @@ export function RaciPanel({ projectId, queryKey, list, link, unlink, linkId, sin
             </Alert>)}
           extra={(
             <SimpleSelect id="raci-add-code" label={t('processes.raciCode')} value={addCode} onChange={setAddCode}
-              options={codes.map((c) => ({ value: c.code, label: c.label }))} />)}
+              options={options().map((c) => ({ value: c.code, label: c.label }))} />)}
           onSubmit={(role) => link({ org_role_id: role.org_role_id, raci_code: addCode })}
           onDone={refresh} onClose={() => setAdding(false)} />
       )}

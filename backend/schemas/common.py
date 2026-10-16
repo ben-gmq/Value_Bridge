@@ -329,3 +329,50 @@ class CodeOut(Orm):
     sort_order: int
     is_system: bool
     project_id: int | None
+    row_version: int = 1                 # wave 1g: the code-list screen edits a row it read
+    is_hidden: bool = False              # wave 1g: hidden from this project's pickers; still shown on records (R5)
+
+
+# ---- code lists (wave 1g; slice1g_spec §9) ----
+class CodeListRowOut(BaseModel):
+    code_id: int
+    label: str
+    sort_order: int
+    behaviour_code: str | None
+    is_active: bool
+    row_version: int
+
+
+class CodeListItemOut(BaseModel):
+    code: str
+    company: CodeListRowOut | None
+    project: CodeListRowOut | None
+    pinned: bool
+    hidden: bool
+    in_use: int
+    sort_order: int
+
+
+class CodeListOut(BaseModel):
+    category: str
+    is_system: bool
+    company_only: bool
+    codes: list[CodeListItemOut]
+
+
+class CodeAddIn(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=200)
+    behaviour_code: str | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+
+
+class CodePatch(BaseModel):
+    row_version: int
+    label: str | None = Field(default=None, max_length=200)
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+    behaviour_code: str | None = None
+
+
+class CodeHideIn(BaseModel):
+    code_id: int

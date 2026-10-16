@@ -47,10 +47,11 @@ export function BrLines({ projectId, br, priorityCode, disabled }) {
   const [showRetired, setShowRetired] = useState(false);
   const q = useQuery({ queryKey: [...keys.brLines(br.br_id), showRetired],
     queryFn: () => brApi.lines(br.br_id, showRetired) });
-  const { codes: kindCodes, getLabel: kindLabel } = useCodes(projectId, 'BR_LINE_KIND');
-  const { codes: prioCodes, getLabel: prioLabel } = useCodes(projectId, 'BR_PRIORITY');
-  const kinds = kindCodes.map((c) => ({ value: c.code, label: c.label }));
-  const priorities = prioCodes.map((c) => ({ value: c.code, label: c.label }));
+  const { options: kindOptions, getLabel: kindLabel } = useCodes(projectId, 'BR_LINE_KIND');
+  const { options: prioOptions, getLabel: prioLabel } = useCodes(projectId, 'BR_PRIORITY');
+  // A picker offers the visible codes plus the line's own (wave 1g); a new line passes nothing.
+  const kinds = (current) => kindOptions(current).map((c) => ({ value: c.code, label: c.label }));
+  const priorities = (current) => prioOptions(current).map((c) => ({ value: c.code, label: c.label }));
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(null);           // the add form's values, or null
   const [editing, setEditing] = useState(null);         // { id, values }
@@ -89,7 +90,7 @@ export function BrLines({ projectId, br, priorityCode, disabled }) {
       return (
         <Box key={line.br_requirement_line_id} sx={{ py: 1 }}>
           <Typography sx={{ mb: 1 }}><Code>{label}</Code></Typography>
-          <LineForm id={`line-${line.br_requirement_line_id}`} kinds={kinds} priorities={priorities} value={editing.values}
+          <LineForm id={`line-${line.br_requirement_line_id}`} kinds={kinds(line.line_kind_code)} priorities={priorities(line.priority_code)} value={editing.values}
             onChange={(values) => setEditing({ ...editing, values })} busy={busy} submitLabel={t('common.save')}
             onCancel={() => setEditing(null)} onSubmit={() => edit.mutate({ line, v: editing.values })} />
         </Box>
@@ -139,7 +140,7 @@ export function BrLines({ projectId, br, priorityCode, disabled }) {
           {priorityCode && <Tag tone="purple">{t('requirements.lines.brPriority', { label: prioLabel(priorityCode) })}</Tag>}
           {!disabled && !adding && (
             <Button size="small" startIcon={<AddRounded />} sx={{ color: 'brand.purpleText' }} disabled={busy}
-              onClick={() => { setError(''); setAdding({ ...blank, line_kind_code: kinds[0]?.value ?? '' }); }}>
+              onClick={() => { setError(''); setAdding({ ...blank, line_kind_code: kinds()[0]?.value ?? '' }); }}>
               {t('requirements.lines.add')}</Button>)}
         </Box>)}>
         {t('requirements.lines.title')}
@@ -150,7 +151,7 @@ export function BrLines({ projectId, br, priorityCode, disabled }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('requirements.lines.none')}</Typography>)}
       <Box>{live.map(row)}</Box>
       {adding && (
-        <LineForm id="line-new" kinds={kinds} priorities={priorities} value={adding} onChange={setAdding} busy={busy}
+        <LineForm id="line-new" kinds={kinds()} priorities={priorities()} value={adding} onChange={setAdding} busy={busy}
           submitLabel={t('requirements.lines.add')} onCancel={() => setAdding(null)} onSubmit={() => add.mutate(adding)} />)}
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <Button size="small" sx={{ alignSelf: 'flex-start', px: 0 }} onClick={() => setShowRetired((s) => !s)}>

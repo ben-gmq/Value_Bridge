@@ -928,7 +928,7 @@ def book_for(slug: str) -> tuple[Target, ...]:
 def out_columns(db: Session, project_id: int, target: Target) -> tuple[xlsx.OutColumn, ...]:
     """Data-validation lists come from THIS project's resolved codes (criterion 47)."""
     return tuple(xlsx.OutColumn(c.code, c.header, c.width, c.protected,
-                                tuple(r.code for r in code_master.resolve(db, project_id, c.category))
+                                tuple(r.code for r in code_master.resolve(db, project_id, c.category, for_picker=True))
                                 if c.category else c.choices)
                  for c in target.columns)
 

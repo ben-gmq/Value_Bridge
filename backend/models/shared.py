@@ -50,6 +50,10 @@ class CodeMaster(AuditMixin, Base):
         UniqueConstraint("code_id", "category", name="uq_code_category_target"),
     )
 
+    def owning_project_id(self) -> int | None:
+        """None for a company row, so object_guard keeps it platform-admin only (404 to anyone else, slice1g R9)."""
+        return self.project_id
+
 
 class ProjectCodeVisibility(AuditMixin, Base):
     """A company code one project has hidden from its pickers (wave 1g, G-1): one row per (project, company code) for

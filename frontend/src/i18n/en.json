@@ -175,7 +175,7 @@
   "admin.comesBackRow": "{code} {name} — {before} → {after}",
   "admin.comesBackNone": "No project role comes back into force.",
   "admin.comesBackUnread": "not in force",
-  "admin.makeUserBody":"{name} will be able to edit every project open to all staff, and the projects they are assigned to with edit access, from their next click.",
+  "admin.makeUserBody": "{name} will be able to edit every project open to all staff, and the projects they are assigned to with edit access, from their next click.",
   "nav.group.scope": "Scope",
   "nav.group.control": "Control",
   "nav.group.admin": "Admin",
@@ -199,5 +199,6 @@
   "access.levelDrops": "Can edit today → read only",
   "access.levelDropsNote": "Marked members keep only read access once the project is limited. If they should keep editing, set their level to Can edit in the member list.",
   "access.createdNote": "Project created. Only its assigned consultants can open it, and it has none yet — add them below.",
-  "nav.volume": "Time & FTE"
+  "nav.volume": "Time & FTE",
+  "admin.codeLists": "Code lists"
 }

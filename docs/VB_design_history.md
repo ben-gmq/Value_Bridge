@@ -14,7 +14,16 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 ## 1. Open — recorded, not decided
 
-Nothing here is in the spec yet. *(Nothing open on 2026-10-16.)*
+Nothing here is in the spec yet.
+
+- **[Q-38] May a project admin rename the FR types and complexities, or only a platform admin?** (raised 2026-10-16,
+  wave 1g build, `sara` M2.) slice1g_spec R2 lets only a platform admin give a project its own wording for a *pinned*
+  code, and R4 pins every rate-card FR type and complexity — so as built, a project admin cannot rename FORM or
+  INTERFACE for their project; they ask FTC. The design's own `maintain_fr_types` (§7.12) imagines projects naming their
+  types, and R10 already fixes behaviour, so a rename cannot change how an FR is priced. Against: renaming INTERFACE to
+  "Report" in a priced, client-facing baseline misleads the same way renaming CONFIRMED would. Recommendation: let
+  project admins rename FR types and complexities (statuses stay FTC-only) — a one-line change
+  (`code_lists.RELABEL_BY_PROJECT_ADMIN`) plus R2's text.
 
 
 ---

@@ -52,7 +52,7 @@ function merge(cur, orig, next) {
 // keep it, and the server assigns it (S1-7).
 export function FieldDialog({ projectId, entity, field, fields, onClose, onSaved }) {
   const qc = useQueryClient();
-  const { codes: types, getLabel } = useCodes(projectId, 'FIELD_DATA_TYPE');
+  const { codes: types, options: typeOptions, getLabel } = useCodes(projectId, 'FIELD_DATA_TYPE');
   const entities = useQuery({ queryKey: keys.entities(projectId), queryFn: () => dataApi.list(projectId) });
   const [f, setF] = useState(() => initial(field, fields));
   const [base, setBase] = useState(field);        // the server version the form is editing
@@ -179,7 +179,7 @@ export function FieldDialog({ projectId, entity, field, fields, onClose, onSaved
             <Select labelId="df-type-label" id="df-type" label={t('data.field.type')} value={typeValue}
               onChange={set('data_type_code')}>
               <MenuItem value="">{t('data.field.typeNone')}</MenuItem>
-              {types.map((c) => <MenuItem key={c.code} value={c.code}>{c.label}</MenuItem>)}
+              {typeOptions(base?.data_type_code).map((c) => <MenuItem key={c.code} value={c.code}>{c.label}</MenuItem>)}
             </Select>
           </FormControl>
           <Stack direction="row" spacing={2}>

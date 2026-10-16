@@ -24,7 +24,7 @@ export default function PartiesPage() {
   // include_retired is requested for "Show retired"; see the hand-back note on api/scope.js.
   const listKey = [...keys.parties(projectId), { retired: showRetired }];
   const q = useQuery({ queryKey: listKey, queryFn: () => partyApi.list(projectId, showRetired) });
-  const { codes: kinds, getLabel } = useCodes(projectId, 'EXTERNAL_ENTITY_KIND');
+  const { options: kindOptions, getLabel } = useCodes(projectId, 'EXTERNAL_ENTITY_KIND');
   const [editing, setEditing] = useState(null);           // { row } — row null to add
   const [confirm, setConfirm] = useState(null);
   const [notice, setNotice] = useState('');
@@ -49,7 +49,7 @@ export default function PartiesPage() {
   const fields = [
     { name: 'ext_name', label: t('settings.party.name'), required: true },
     { name: 'kind_code', label: t('settings.party.kind'), type: 'select', emptyLabel: t('settings.party.noKind'),
-      options: kinds.map((c) => ({ value: c.code, label: c.label })) },
+      options: kindOptions(editing?.row?.kind_code).map((c) => ({ value: c.code, label: c.label })) },
     { name: 'description', label: t('settings.description'), multiline: true },
   ];
   const submit = (body, rowVersion) => (editing.row

@@ -10,6 +10,7 @@ import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
+import { CodeListsView } from '../settings/CodeListsPage';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -315,7 +316,12 @@ function Projects({ notify }) {
   );
 }
 
-const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects]];
+function CompanyCodeLists() {
+  return <Box sx={{ mt: 2 }}><CodeListsView /></Box>;
+}
+
+const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
+  ['admin.codeLists', CompanyCodeLists]];
 
 export default function AdminPage() {
   const [tab, setTab] = useState(0);

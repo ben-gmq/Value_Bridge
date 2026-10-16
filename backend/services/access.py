@@ -119,13 +119,21 @@ def who_can_open(db: Session, project: Project) -> dict:
 
 
 def require_project(db: Session, user: AppUser, project_id: int, min_level: str,
-                    component: str | tuple[str, ...] | None = None) -> EffectiveAccess:
+                    component: str | tuple[str, ...] | None = None, share_lock: bool = True) -> EffectiveAccess:
     """404 → 403 → 409, in that fixed order (slice7_schema §5.2)."""
     eff = access_to(db, user, db.get(Project, project_id))
     if eff is None:
         raise HTTPException(404, NOT_FOUND)
     if not rank_ok(eff.level, min_level):
         raise HTTPException(403, "Your access to this project does not allow that")
+    if share_lock and min_level in ("EDIT", "ADMIN"):
+        # wave 1g N3: every project write holds the project row FOR KEY SHARE before any row lock or code lookup, so a
+        # code-list re-point (FOR UPDATE, services/code_lists) never interleaves with a save that picked a code.
+        # KEY SHARE, not SHARE: it still conflicts with the re-point, but not with a plain UPDATE of the project row, so
+        # two PATCHes of one project meet at row_version (409), never in a deadlock (sara 1g M1). PLATFORM routes are
+        # left out: some of them take the row FOR UPDATE themselves.
+        db.execute(select(Project.project_id).where(Project.project_id == project_id)
+                   .with_for_update(read=True, key_share=True))          # FOR KEY SHARE
     if component and rank_ok(min_level, "EDIT"):         # writes only, admins too (Q-20)
         from services import components
         components.require_on(db, project_id, component)

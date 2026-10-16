@@ -61,8 +61,10 @@ def update_project(project_id: int, body: ProjectPatch, db: Session = Depends(ge
 
 @router.get("/projects/{project_id}/code-master/{category}", response_model=list[CodeOut],
             **_reader.route)
-def project_codes(project_id: int, category: str, db: Session = Depends(get_db)):
-    return code_master.resolve(db, project_id, category.upper())
+def project_codes(project_id: int, category: str, for_picker: bool = False, db: Session = Depends(get_db)):
+    """Unfiltered by default — labels for every code a record may hold — with `is_hidden` marking the codes this
+    project hid; `for_picker=true` leaves them out (wave 1g, R5)."""
+    return code_master.for_display(db, project_id, category.upper(), for_picker)
 
 
 # ---- components and data model depth (D-37, D-39, slice7_schema §5) ----
