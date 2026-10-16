@@ -29,6 +29,10 @@ Nothing here is in the spec yet.
   ones that change the design: Q-39 (issue statuses company-only with an open / closed behaviour, §15 N1–N2), Q-43
   (status and resolution in the baseline hash), Q-46 (surrogate key on `issue_br`, rewriting §5.3), Q-50 (the per-area
   counting rule). The spec is not built until Ben answers and approves it.
+- **[Q-55…Q-66] Phasing and dependency (slice 15) — twelve questions, each with a recommendation**, in
+  `docs/slice15_phasing_spec.md` §7 and §9 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). Design
+  changes among them: Q-55 (a PHASING component), Q-59 (surrogate keys, rewriting §5.3), Q-63 (one PUT of a solution's
+  whole split instead of the signed POST / DELETE per assignment). Builds after the Issue module (hash spec 5, then 6).
 
 
 ---
