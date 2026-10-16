@@ -16,14 +16,6 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-38] May a project admin rename the FR types and complexities, or only a platform admin?** (raised 2026-10-16,
-  wave 1g build, `sara` M2.) slice1g_spec R2 lets only a platform admin give a project its own wording for a *pinned*
-  code, and R4 pins every rate-card FR type and complexity — so as built, a project admin cannot rename FORM or
-  INTERFACE for their project; they ask FTC. The design's own `maintain_fr_types` (§7.12) imagines projects naming their
-  types, and R10 already fixes behaviour, so a rename cannot change how an FR is priced. Against: renaming INTERFACE to
-  "Report" in a priced, client-facing baseline misleads the same way renaming CONFIRMED would. Recommendation: let
-  project admins rename FR types and complexities (statuses stay FTC-only) — a one-line change
-  (`code_lists.RELABEL_BY_PROJECT_ADMIN`) plus R2's text.
 - **[Q-39…Q-54] Issue module (slice 14) — sixteen questions, each with a recommendation**, in
   `docs/slice14_issue_spec.md` §12, §14 and §15 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). The
   ones that change the design: Q-39 (issue statuses company-only with an open / closed behaviour, §15 N1–N2), Q-43
@@ -494,6 +486,7 @@ excluded [Q-11] and [Q-17], which stay open (§1).
 | G-3 | **[Q-33] A project's relabel of a company code moves its existing rows to the project's code** (live and retired rows, never frozen ones), for every overridable category, as the FR-type re-point already does. Ben: "yes to all four". Built as slice1g_spec R1 with R10–R13 and the N3 lock | §7.12 `maintain_fr_types` re-point, extended; slice1g_spec §14 R1, §15 |
 | G-4 | **[Q-35] A new company FR type or complexity copies each project's own rate cell of the existing type with the same behaviour, marked unconfirmed;** behaviour OTHER and a new complexity have no source, so their cells stay blank and rating returns 422 until filled. The added cells show as added rate rows in each project's next comparison (S11-7) | slice1g_spec R6, A4 |
 | G-5 | **[Q-32] A project's code lists are maintained by the project admin** (D-71), not by every editor | §7.12 / API table EDIT guard on `maintain_fr_types` |
+| G-6 | **[Q-38] A project admin may rename the FR types and complexities for their project** (2026-10-17, Ben: "project admins may rename FR types and complexities"). They are pinned only as rate-card keys, so they still cannot be retired or hidden, and an override keeps the company behaviour (R10). Pinned *statuses* stay a platform admin's to rename. Built as `code_lists.RELABEL_BY_PROJECT_ADMIN` | slice1g_spec R2 (narrowed to statuses) |
 
 ### Ben's rulings, 2026-10-16 — project admins and program members (D-71…D-73)
 

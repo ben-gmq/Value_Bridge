@@ -50,10 +50,9 @@ EXCLUDED: dict[tuple[str, str], str] = {
     ("project_template_component", "template_code_id"): "PROJECT_TEMPLATE is company-only (§7.2)",
     ("project_code_visibility", "code_id"): "names the company row a project hid — not a value a record holds",
 }
-# R2, as signed: a project's wording of ANY pinned code is a platform admin's to give — the rate-card FR types and
-# complexities included (R4). Whether project admins may rename FR types is open for Ben (history Q-38); widen this set
-# only on his yes, in the same commit as the spec.
-RELABEL_BY_PROJECT_ADMIN: frozenset[str] = frozenset()
+# R2 protects the meaning of statuses: a project's wording of a pinned status is a platform admin's to give. FR types
+# and complexities are pinned only as rate-card keys, so a project admin may rename them for the project (G-6, Q-38).
+RELABEL_BY_PROJECT_ADMIN: frozenset[str] = frozenset({"FR_TYPE", "FR_COMPLEXITY"})
 
 
 def is_pinned(row: CodeMaster) -> bool:

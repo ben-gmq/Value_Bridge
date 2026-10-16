@@ -160,8 +160,18 @@ def test_pinned_codes_can_be_relabelled_never_retired_or_hidden(client, cl, db):
     assert labels(client, cl, "BR_STATUS")["DRAFT"][0] == "Being drafted"
     assert retire(client, cl, ov, headers=cl["admin"]).status_code == 204       # withdrawing a relabel is allowed
     assert labels(client, cl, "BR_STATUS")["DRAFT"][0] == "In draft"
-    # R2 as signed (history Q-38 open): the rate-card FR types are pinned, so a project admin cannot rename them yet
-    add_project(client, cl, "FR_TYPE", "FORM", "Screen", expect=403)
+    # G-6 (Q-38): FR types and complexities are pinned only as rate-card keys — a project admin renames them; a pinned
+    # status stays a platform admin's (above). Neither can be retired or hidden.
+    ft = add_project(client, cl, "FR_TYPE", "FORM", "Screen")
+    cx = add_project(client, cl, "FR_COMPLEXITY", "SIMPLE", "Small")
+    assert labels(client, cl, "FR_TYPE")["FORM"][0] == "Screen" and labels(client, cl, "FR_COMPLEXITY")["SIMPLE"][0] == "Small"
+    r = client.patch(f"{API}/code-master/{ft['code_id']}", headers=cl["pa"],
+                     json={"row_version": ft["row_version"], "label": "Screen form"})
+    assert r.status_code == 200, r.text
+    assert cx["project_id"] == cl["p"]
+    r = client.post(f"{API}/projects/{cl['p']}/code-lists/hidden", headers=cl["pa"],
+                    json={"code_id": code_id(db, "FR_TYPE", "FORM")})
+    assert r.status_code == 409
 
 
 # ---- sara 1g M3: a company code some project renamed can still be retired and restored -----------------------------
@@ -198,14 +208,14 @@ def test_behaviour_changes_only_while_unused_and_an_override_keeps_it(client, cl
     r = client.patch(f"{API}/code-master/{lone['code_id']}", headers=cl["admin"],
                      json={"row_version": 1, "behaviour_code": "INFORMED"})
     assert r.status_code == 200 and r.json()["behaviour_code"] == "INFORMED"
-    add_project(client, cl, "FR_TYPE", "FORM", "Screen", behaviour_code="REPORT", headers=cl["admin"], expect=409)        # R10
+    add_project(client, cl, "FR_TYPE", "FORM", "Screen", behaviour_code="REPORT", expect=409)        # R10
 
 
 # ---- 8, 14, 15: FR types, rate cells and rating ------------------------------------------------------------------------
 def test_an_fr_type_override_repoints_frs_and_rate_cells_and_rating_still_works(client, cl, db):
     ed = {"h": cl["h"], "p": cl["p"]}
     f = fr(client, ed, "Order entry")
-    ov = add_project(client, cl, "FR_TYPE", "FORM", "Screen", headers=cl["admin"])
+    ov = add_project(client, cl, "FR_TYPE", "FORM", "Screen")                 # a project admin (G-6)
     assert held(db, "function_requirement", "fr_id", f["fr_id"], "fr_type_code_id") == ov["code_id"]
     cells = db.execute(text("SELECT count(*) FROM effort_rate WHERE project_id = :p AND fr_type_code_id = :c"),
                        {"p": cl["p"], "c": ov["code_id"]}).scalar_one()

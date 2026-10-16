@@ -205,8 +205,9 @@ and the freeze, and is not recommended.
 
 **R2 (MEDIUM).** A1 contradicts the signed-off design: §7.12 and the API table give `maintain_fr_types` and
 `PUT …/code-master/FR_TYPE` the **EDIT** guard. Recorded in history §1 *Open* for Ben; the build waits for his answer.
-Either way, a project's **pinned** codes may be relabelled only by a platform admin (a relabel of CONFIRMED to "Draft"
-would mislead a client-facing baseline).
+Either way, a project's **pinned statuses** may be relabelled only by a platform admin (a relabel of CONFIRMED to
+"Draft" would mislead a client-facing baseline). Pinned FR types and complexities — pinned only as rate-card keys — a
+project admin may relabel (G-6, Ben 2026-10-17).
 
 **R3 (LOW).** `maintain_project_code`, `maintain_fr_types` and FR create / retype take the same lock — the project row
 `FOR UPDATE` / `FOR SHARE` — so a create cannot land on the old `code_id` between the override and its re-point.
