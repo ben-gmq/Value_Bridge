@@ -155,6 +155,8 @@ def save_grid(db: Session, actor_id: int, br: BusinessRequirement, entity_ticks:
         raise HTTPException(409, errors.CONFLICT, headers=errors.STALE_HEADERS)
     if any(c not in CRUD for _, c in entity_ticks):
         raise HTTPException(422, "crud_code must be one of C, R, U, D")
+    for de_id in sorted({d for d, _ in entity_ticks - live_e.keys()}):
+        step_io.live_entity(db, br.project_id, de_id)        # VB-009 (sara H-1): entities before fields, the field writers' order
     fields = {}
     for field_id, crud in sorted(attribute_ticks):            # sorted: field locks are taken in one order
         if crud not in ATTRIBUTE_CRUD:

@@ -2,7 +2,7 @@
 
 **Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: 5 entries (VB-006, VB-007, VB-008, VB-009; VB-005, the standing backlog) · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: VB-006, VB-007, VB-008 and VB-005 (the standing backlog); VB-009 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -57,21 +57,6 @@ place.
 - **closed:** 2026-10-11, slice 7b. Every control on both pages goes through `useCanEdit`, which now reads
   the project's `my_access_level`. Found again by `ui-verifier` (7b UAT check 1) together with the same
   gap on the BR page, Client organisation and External parties — all fixed in the same commit.
-
-### VB-009 | A BR→data-entity link may land under an entity retired at the same instant (suspected) | OPEN
-
-- **type:** BUG (concurrency, unverified) · **found:** 2026-10-09 by `design-auditor` (Slice 5 design review round 1, side note to DR1-D1, MEDIUM) · **depends-on:** —
-- `business_requirement.link_data_entity` checks the entity through `step_io.live_entity`, a plain
-  `db.get` with no lock. A data-entity retire that commits between that read and the link's INSERT
-  would leave a live `br_data_entity` under a retired entity; the INSERT's FK check still passes.
-- **To confirm:** two sessions — hold a DataEntity retire open between its lock and its commit
-  while a link runs. Slice 5 adopts the locked form for `br_solution`, so the fix is the same
-  `lock_for_share` before the liveness check. · **files:** `backend/services/step_io.py:16-20`,
-  `backend/services/business_requirement.py`
-- **2026-10-16 (slice 11b, `sara` M1):** the CRUD grid save (`business_requirement.save_grid` → `_link` →
-  `step_io.ensure_step_io` → `live_entity`) reaches the same unlocked entity check. Its attribute half was fixed in
-  11b (each newly ticked field is locked FOR SHARE first; `test_br_attributes` proves the race); the entity half
-  waits for this entry's fix in `step_io.live_entity`, which covers both paths.
 
 ---
 
@@ -135,6 +120,29 @@ place.
   conclude the LOWs were dropped.
 - **Re-open the standing backlog with a new id** when the first LOW-rated finding is
   genuinely deferred. Per the skill, ids are permanent and VB-004 is not reused.
+
+### VB-009 | A BR→data-entity link may land under an entity retired at the same instant (suspected) | CLOSED
+
+- **type:** BUG (concurrency, unverified) · **found:** 2026-10-09 by `design-auditor` (Slice 5 design review round 1, side note to DR1-D1, MEDIUM) · **depends-on:** —
+- `business_requirement.link_data_entity` checks the entity through `step_io.live_entity`, a plain
+  `db.get` with no lock. A data-entity retire that commits between that read and the link's INSERT
+  would leave a live `br_data_entity` under a retired entity; the INSERT's FK check still passes.
+- **To confirm:** two sessions — hold a DataEntity retire open between its lock and its commit
+  while a link runs. Slice 5 adopts the locked form for `br_solution`, so the fix is the same
+  `lock_for_share` before the liveness check. · **files:** `backend/services/step_io.py:16-20`,
+  `backend/services/business_requirement.py`
+- **2026-10-16 (slice 11b, `sara` M1):** the CRUD grid save (`business_requirement.save_grid` → `_link` →
+  `step_io.ensure_step_io` → `live_entity`) reaches the same unlocked entity check. Its attribute half was fixed in
+  11b (each newly ticked field is locked FOR SHARE first; `test_br_attributes` proves the race); the entity half
+  waits for this entry's fix in `step_io.live_entity`, which covers both paths.
+- **root cause:** confirmed — `live_entity` checked `is_active` on an unlocked read.
+- **closed:** 2026-10-17, branch `fix/vb-007-009`. `step_io.live_entity` takes the entity FOR SHARE before the
+  check, which covers the BR link, the grid save, the step I/O editor and hand-off. `sara` H-1 on the fix: the grid
+  save then locked a field before its entity, the reverse of the field writers (`data_entity._lock_entity`), a
+  deadlock; `save_grid` now locks the newly ticked entities first, in id order. Tests in `test_br_attributes.py`:
+  a link waiting on a retire is refused (red without the fix), the grid save leaves the field free while it waits
+  on the entity (red without the H-1 change), and a retire waiting on a link is refused (an order guard; the FK's
+  KEY SHARE holds it too).
 
 ---
 
@@ -360,6 +368,10 @@ place.
   instead of "Already on the diagram" (DfdDraw.jsx). Map that 409 to the same message.
 - sara (out of slice) · slice 13d review, 2026-10-15 · LOW · **`step_io.live_entity` reads the data entity without a lock**,
   so a link could be saved against an entity retired in the same instant (cf. VB-009). Take `FOR SHARE` on the entity.
+  **Fixed 2026-10-17 with VB-009 (branch `fix/vb-007-009`), awaiting Ben's close.**
+- sara L-3 · VB-009 fix review, 2026-10-17 · LOW · **`bfc.link_external_flow` checks the external party without a
+  lock**, so a flow could land under a party retired in the same instant (VB-009's class). Take
+  `lifecycle.lock_for_share(db, ext)` after the project check, before the liveness check.
 - test-runner · slice 10c, 2026-10-15 · LOW · **An interrupted pytest run leaves rows the next run's downgrade refuses**
   (`br_function_requirement`, `baseline`: the 0049 / 0047 downgrade guards raise), so every test errors in the `schema`
   fixture until the DB is cleared by hand. The `clean` fixture's `DATA_TABLES` omits them; wipe them before the downgrade.
