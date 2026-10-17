@@ -16,6 +16,8 @@ DIRECTIONS = ("I", "O")
 
 def live_entity(db: Session, project_id: int, data_entity_id: int) -> DataEntity:
     de = db.get(DataEntity, data_entity_id)
+    if de is not None and de.project_id == project_id:
+        lifecycle.lock_for_share(db, de)                      # VB-009 (SR-5): an entity retire waits for this link
     if de is None or de.project_id != project_id or not de.is_active:
         raise HTTPException(422, "Choose an active data entity in this project")
     return de

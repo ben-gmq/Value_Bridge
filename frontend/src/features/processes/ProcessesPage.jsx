@@ -15,6 +15,7 @@ import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useTreeItemModel } from '@mui/x-tree-view/hooks';
 import { errorText, isStale } from '../../api/client';
 import { bfcApi, brApi } from '../../api/scope';
+import { useBackGuard } from '../../app/backGuard';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
@@ -282,25 +283,14 @@ export default function ProcessesPage() {
     return () => document.removeEventListener('click', onClick, true);
   }, [location.pathname, location.search, navigate]);
 
-  // Back / Forward too (sara L5). A capture listener on window runs before React Router's own popstate
-  // listener, so it can stop the move: it puts the current entry back, asks, and on Save or Discard goes to
-  // where the button was taking the user.
-  const here = useRef(null);
-  useEffect(() => {
-    here.current = { url: location.pathname + location.search + location.hash, state: window.history.state };
-  }, [location.pathname, location.search, location.hash]);
-  useEffect(() => {
-    const onPop = (e) => {
-      const state = guardRef.current?.get();
-      if (!state || (state.count === 0 && !state.draft) || !here.current) return;
-      e.stopImmediatePropagation();
-      const target = window.location.pathname + window.location.search + window.location.hash;
-      window.history.pushState(here.current.state, '', here.current.url);
-      setLeave({ state, go: () => navigate(target) });
-    };
-    window.addEventListener('popstate', onPop, true);
-    return () => window.removeEventListener('popstate', onPop, true);
-  }, [navigate]);
+  // Back / Forward too (sara L5, VB-010): app/backGuard stops the move before React Router sees it; on Save or
+  // Discard the dialog goes where the button was taking the user.
+  useBackGuard((target) => {
+    const state = guardRef.current?.get();
+    if (!state || (state.count === 0 && !state.draft)) return false;
+    setLeave({ state, go: () => navigate(target) });
+    return true;
+  });
 
   // One at a time below 1100px: a newly opened panel starts at its top.
   useEffect(() => { if (!wide && selectedId) window.scrollTo({ top: 0 }); }, [wide, selectedId]);

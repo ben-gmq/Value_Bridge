@@ -224,6 +224,116 @@ def test_a_field_retired_while_a_save_waits_is_refused_not_ticked(client, ed, w)
     assert ticks(grid(client, ed, br)) == []
 
 
+def test_an_entity_retired_while_a_link_waits_is_refused_not_linked(client, ed, w):
+    """VB-009: the link reads the entity under FOR SHARE (step_io.live_entity). A retire holding the entity's lock in
+    another session makes the link wait; once the retire commits, the link sees the entity retired and refuses."""
+    import threading
+    from sqlalchemy import create_engine
+    from tests.conftest import OWNER_URL
+    from tests.test_scope_api import entity
+    br, cust = w["br1"], entity(client, ed, "Customer")
+    eng = create_engine(OWNER_URL)
+    conn = eng.connect()
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=client.post(
+        f"{API}/business-requirements/{br['br_id']}/data-entities", headers=ed["h"],
+        json={"data_entity_id": cust["data_entity_id"], "crud_code": "U"})))
+    try:
+        tx = conn.begin()
+        conn.execute(text("SELECT 1 FROM data_entity WHERE data_entity_id = :d FOR UPDATE"),
+                     {"d": cust["data_entity_id"]})
+        conn.execute(text("UPDATE data_entity SET is_active = false, deleted_at = now() WHERE data_entity_id = :d"),
+                     {"d": cust["data_entity_id"]})
+        t.start()
+        t.join(timeout=2)
+        assert t.is_alive(), "the link must wait for the entity's lock"
+        tx.commit()
+    finally:                                                  # sara L-1: a failed assert never leaves the lock held
+        conn.close()
+        eng.dispose()
+        if t.ident is not None:
+            t.join(timeout=30)
+    assert out["r"].status_code == 422 and "active data entity" in out["r"].json()["detail"]
+    assert cust["data_entity_id"] not in [e["data_entity_id"] for e, _ in current_entities(client, ed, br)]
+
+
+def test_a_retire_waits_for_a_link_in_flight_and_is_then_refused(client, ed, w, world):
+    """VB-009, the other order: a link in flight makes the retire wait; once the link commits, the retire finds the
+    live link and refuses, naming it. An order guard only: the link's INSERT takes the entity FOR KEY SHARE through
+    its FK as well, so this passes without VB-009's lock too (sara L-2). The test above is the one that proves it."""
+    import threading
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from models import BusinessRequirement
+    from services import business_requirement as br_service
+    from tests.conftest import OWNER_URL
+    from tests.test_scope_api import entity
+    br, cust = w["br1"], entity(client, ed, "Customer")
+    eng = create_engine(OWNER_URL)
+    s = Session(eng)
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=client.delete(
+        f"{API}/data-entities/{cust['data_entity_id']}", headers=ed["h"],
+        params={"row_version": cust["row_version"]})))
+    try:
+        row = s.get(BusinessRequirement, br["br_id"])
+        br_service._lock_live(s, row)
+        br_service._link(s, world["users"]["editor"], row, cust["data_entity_id"], "U", None)   # holds the entity
+        t.start()
+        t.join(timeout=2)
+        assert t.is_alive(), "the retire must wait for the link's lock"
+        s.commit()
+    finally:                                                  # sara L-1
+        s.close()
+        eng.dispose()
+        if t.ident is not None:
+            t.join(timeout=30)
+    assert out["r"].status_code == 409 and "Retire these first" in out["r"].json()["detail"]
+    assert cust["data_entity_id"] in [e["data_entity_id"] for e, _ in current_entities(client, ed, br)]
+
+
+def test_a_grid_save_locks_a_new_entity_before_its_fields(client, ed, w):
+    """VB-009 (sara H-1): the field writers lock entity, then field (data_entity._lock_entity). A grid save ticking a
+    new entity and one of its fields must take them in the same order, or the two deadlock. With the entity held by
+    another session the save waits, and while it waits the field is still free."""
+    import threading
+    from sqlalchemy import create_engine
+    from tests.conftest import OWNER_URL
+    from tests.test_scope_api import entity
+    br, cust = w["br1"], entity(client, ed, "Customer")
+    name = field(client, ed, cust, "customer_name")
+    ents = current_entities(client, ed, br)
+    known = known_of(grid(client, ed, br))
+    eng = create_engine(OWNER_URL)
+    holder, probe = eng.connect(), eng.connect()
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=client.put(
+        f"{API}/business-requirements/{br['br_id']}/data-grid", headers=ed["h"],
+        json={"entity_ticks": [{"data_entity_id": e["data_entity_id"], "crud_code": c} for e, c in ents]
+              + [{"data_entity_id": cust["data_entity_id"], "crud_code": "C"}],
+              "attribute_ticks": [{"data_field_id": name["data_field_id"], "crud_code": "C", "usage_note": None}],
+              "known": known})))
+    try:
+        tx = holder.begin()
+        holder.execute(text("SELECT 1 FROM data_entity WHERE data_entity_id = :d FOR NO KEY UPDATE"),
+                       {"d": cust["data_entity_id"]})
+        t.start()
+        t.join(timeout=2)
+        assert t.is_alive(), "the save must wait for the entity's lock"
+        with probe.begin():                                   # the field is not locked ahead of its entity
+            probe.execute(text("SELECT 1 FROM data_field WHERE data_field_id = :f FOR UPDATE NOWAIT"),
+                          {"f": name["data_field_id"]})
+        tx.commit()
+    finally:                                                  # sara L-1
+        holder.close()
+        probe.close()
+        eng.dispose()
+        if t.ident is not None:
+            t.join(timeout=30)
+    assert out["r"].status_code == 200, out["r"].text
+    assert ticks(grid(client, ed, br)) == [(name["data_field_id"], "C")]
+
+
 def test_reticking_an_entity_action_keeps_its_note(client, ed, w):
     """sara L1: unticking and re-ticking an entity action through the grid restores the row with the note it had."""
     br = w["br1"]
