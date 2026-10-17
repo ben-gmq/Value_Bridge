@@ -20,6 +20,12 @@ Nothing here is in the spec yet.
   `docs/slice15_phasing_spec.md` §7 and §9 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). Design
   changes among them: Q-55 (a PHASING component), Q-59 (surrogate keys, rewriting §5.3), Q-63 (one PUT of a solution's
   whole split instead of the signed POST / DELETE per assignment). Builds after the Issue module (hash spec 5, then 6).
+- **[Q-67…Q-85] Baseline archive file + `purge_project` (slice 16, S8-1, Q15) — nineteen questions, each with a
+  recommendation**, in `docs/slice16_archive_purge_spec.md` §15 and §17 and `docs/slice16_archive_purge_schema.md` §10–§11
+  (raised 2026-10-17; apple + design-auditor rounds 1–2). Design changes among them: Q-74 (the purge becomes an
+  in-app request + second admin's approval + an operator script as the owner role, replacing the web route of the
+  §9 route table), Q-75 (a narrow purge exception to law 2), Q-69 (whether a project's audit history is deleted, and
+  so whether the audit FK is dropped), Q-79 (the client's sign-off in the evidence file). Needs no other slice.
 
 
 ---
