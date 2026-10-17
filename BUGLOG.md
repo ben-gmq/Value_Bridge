@@ -1,8 +1,8 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-010 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-011 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
-**Open: VB-006, VB-007, VB-008 and VB-005 (the standing backlog); VB-009 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
+**Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
 
 **Status of the app:** design signed off 2026-09-28; foundation, Slice 1 (chart, requirements,
@@ -34,17 +34,6 @@ place.
   the shell (`frontend/src/components/AppShell.jsx`, cf. commit 07c6fbe "nav scrolls instead
   of squashing"). Evidence: `.playwright-mcp/page-2026-09-30T02-20-08-918Z.png`.
 - **root cause:** not yet investigated · **files:** `frontend/src/components/AppShell.jsx` (suspected)
-
-### VB-007 | Import wizard's "Do fields later" gate can be left with the browser Back button | OPEN
-
-- **type:** BUG · **found:** 2026-10-09 by `sara` (Slice 4a-2 pre-merge review, M-2) · **depends-on:** —
-- 4a-R10 says that after the entities step commits, the wizard can be left only through "Do fields
-  later". `beforeunload` covers reload and tab close, and the dialog blocks Esc and backdrop, but
-  browser Back unmounts the page with no prompt, so a half-built model can be left silently. The
-  "No fields yet" marker and `entities_without_fields` still show it afterwards.
-- **root cause:** `useBlocker` needs a data router; `frontend/src/main.jsx` uses `<BrowserRouter>`.
-  Fix by moving to `createBrowserRouter` (a routing change across the app) or a popstate guard in
-  `ImportWizard.jsx`. · **files:** `frontend/src/main.jsx`, `frontend/src/components/ImportWizard.jsx`
 
 ### VB-008 | The data entity page shows edit controls to reviewers | CLOSED
 
@@ -120,6 +109,39 @@ place.
   conclude the LOWs were dropped.
 - **Re-open the standing backlog with a new id** when the first LOW-rated finding is
   genuinely deferred. Per the skill, ids are permanent and VB-004 is not reused.
+
+### VB-007 | Import wizard's "Do fields later" gate can be left with the browser Back button | CLOSED
+
+- **type:** BUG · **found:** 2026-10-09 by `sara` (Slice 4a-2 pre-merge review, M-2) · **depends-on:** —
+- 4a-R10 says that after the entities step commits, the wizard can be left only through "Do fields
+  later". `beforeunload` covers reload and tab close, and the dialog blocks Esc and backdrop, but
+  browser Back unmounts the page with no prompt, so a half-built model can be left silently. The
+  "No fields yet" marker and `entities_without_fields` still show it afterwards.
+- **root cause:** `useBlocker` needs a data router; `frontend/src/main.jsx` uses `<BrowserRouter>`.
+  Fix by moving to `createBrowserRouter` (a routing change across the app) or a popstate guard in
+  `ImportWizard.jsx`. · **files:** `frontend/src/main.jsx`, `frontend/src/components/ImportWizard.jsx`
+- **2026-10-17:** a popstate guard in the wizard alone does not work: Chrome runs a window's popstate listeners in
+  the order they were added, capture or not, and BrowserRouter adds its own at mount, so the router moves first
+  (seen in headless Chrome). Same cause as VB-010.
+- **closed:** 2026-10-17, branch `fix/vb-007-009` (Ben: option (a), one shared guard). `app/backGuard.js` adds the
+  one popstate listener when it loads (`main.jsx` imports it before render); a screen registers with
+  `useBackGuard`. After step 1 commits, Back keeps the wizard open and asks "Leave without the fields?" (Stay and
+  finish / Do fields later). Headless Chrome, 6 of 6 checks: Evidence/2026-10-17/vb-007/.
+  · **files:** `frontend/src/app/backGuard.js`, `frontend/src/main.jsx`, `frontend/src/components/ImportWizard.jsx`
+
+### VB-010 | The Processes page's unsaved-changes prompt on browser Back appears after the edit is already lost | CLOSED
+
+- **type:** BUG · **found:** 2026-10-17 by Lilly (VB-007 browser check, same cause) · **depends-on:** —
+- With an unsaved change in the node panel, browser Back showed "Save your changes first?", but behind it the router
+  had already moved: the panel had closed and the edit was gone, while the address bar was put back on the node.
+  "Save and continue" then had nothing to save. Reproduced on `main` in headless Chrome:
+  Evidence/2026-10-17/vb-010/10-main-before-fix-edit-lost.png.
+- **root cause:** the sara L5 popstate guard in `ProcessesPage.jsx` was a capture listener added by the page, so it
+  ran after BrowserRouter's (see VB-007); it stopped nothing.
+- **closed:** 2026-10-17, branch `fix/vb-007-009`, with VB-007: the page uses `useBackGuard`. Back keeps the panel and
+  the edit; Keep editing stays; Discard and continue goes where Back was heading, nothing saved (headless Chrome, 4 of
+  4 checks, database row unchanged: Evidence/2026-10-17/vb-010/).
+  · **files:** `frontend/src/features/processes/ProcessesPage.jsx`, `frontend/src/app/backGuard.js`
 
 ### VB-009 | A BR→data-entity link may land under an entity retired at the same instant (suspected) | CLOSED
 
@@ -372,6 +394,14 @@ place.
 - sara L-3 · VB-009 fix review, 2026-10-17 · LOW · **`bfc.link_external_flow` checks the external party without a
   lock**, so a flow could land under a party retired in the same instant (VB-009's class). Take
   `lifecycle.lock_for_share(db, ext)` after the project check, before the liveness check.
+- review L1 · VB-007/VB-010 review, 2026-10-17 · LOW · **After Back and "Do fields later" / "Discard and continue",
+  a second Back returns to the guarded screen** (`navigate(target)` adds an entry: […, A, B', A']). Use
+  `navigate(target, { replace: true })` in `ImportWizard.jsx` and `ProcessesPage.jsx`.
+- review L2 · same · LOW · **Chrome may skip the re-pushed entry on a real toolbar Back** (an entry pushed with no
+  user activation, inside the popstate handler), so a second toolbar Back while the prompt is open could leave the
+  page; headless `goBack` does not show it. Check once by hand with the toolbar Back pressed twice.
+- review L3 · same · LOW · **An in-page `#` link on a guarded screen would raise the prompt** (`app/backGuard.js`).
+  If such a link is added, let a move through when only the hash differs.
 - test-runner · slice 10c, 2026-10-15 · LOW · **An interrupted pytest run leaves rows the next run's downgrade refuses**
   (`br_function_requirement`, `baseline`: the 0049 / 0047 downgrade guards raise), so every test errors in the `schema`
   fixture until the DB is cleared by hand. The `clean` fixture's `DATA_TABLES` omits them; wipe them before the downgrade.

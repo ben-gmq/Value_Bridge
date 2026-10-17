@@ -85,6 +85,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 - **Edit controls** hide through `frontend/src/app/useCanEdit.js` (reads the project's `my_access_level`
   from `GET /projects/{id}`) and components through `app/useComponents.js` — never computed from
   memberships in the browser. Presentation only; the guards still refuse.
+- **Browser Back / Forward** is guarded only through `app/backGuard.js` (`useBackGuard`). A screen's own `popstate`
+  listener runs after BrowserRouter's and stops nothing (VB-007, VB-010).
 - **Deviations** from the playbook: [docs/PLAYBOOK_DEVIATIONS.md](docs/PLAYBOOK_DEVIATIONS.md).
 - **Bugs:** [BUGLOG.md](BUGLOG.md) (`VB-###`). Standing review backlog is VB-005.
 

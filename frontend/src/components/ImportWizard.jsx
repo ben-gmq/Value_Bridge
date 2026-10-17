@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
   Radio, RadioGroup, Stack, Table, TableBody, TableCell, TableHead, TablePagination,
@@ -6,6 +7,7 @@ import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, 
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import UploadFileRounded from '@mui/icons-material/UploadFileRounded';
 import { errorText, isStale } from '../api/client';
+import { useBackGuard } from '../app/backGuard';
 import { importApi } from '../api/scope';
 import { keys } from '../app/links';
 import { Steps } from '../features/common/Steps';
@@ -275,6 +277,16 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     return () => window.removeEventListener('beforeunload', warn);
   }, [fieldsOwed]);
 
+  // VB-007: Back / Forward too. app/backGuard stops the move before React Router sees it; "Do fields later" then
+  // goes where the button was taking the user.
+  const navigate = useNavigate();
+  const [leaveTo, setLeaveTo] = useState(null);
+  useBackGuard((target) => {
+    if (!fieldsOwed) return false;
+    setLeaveTo(target);
+    return true;
+  });
+
   const say = (err = '', info = '') => { setError(err); setNotice(info); };
 
   const dl = useMutation({
@@ -538,6 +550,17 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
         )}
         {step === 'done' && <Button variant="contained" onClick={onClose}>{t('data.import.close')}</Button>}
       </DialogActions>
+      {leaveTo != null && fieldsOwed && (
+        <Dialog open onClose={() => setLeaveTo(null)} maxWidth="xs">
+          <DialogTitle>{t('data.import.model.leaveTitle')}</DialogTitle>
+          <DialogContent><Typography>{t('data.import.model.leaveBody')}</Typography></DialogContent>
+          <DialogActions>
+            <Button onClick={() => { later(); navigate(leaveTo); }} disabled={busy}>
+              {t('data.import.model.later')}
+            </Button>
+            <Button variant="contained" onClick={() => setLeaveTo(null)}>{t('data.import.model.stay')}</Button>
+          </DialogActions>
+        </Dialog>)}
     </Dialog>
   );
 }
