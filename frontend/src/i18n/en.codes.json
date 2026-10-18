@@ -47,5 +47,7 @@
   "codes.behaviour.ACCOUNTABLE": "Accountable",
   "codes.behaviour.CONSULTED": "Consulted",
   "codes.behaviour.INFORMED": "Informed",
-  "codes.behaviour.SUPPORT": "Support"
+  "codes.behaviour.SUPPORT": "Support",
+  "codes.behaviour.OPEN": "Open",
+  "codes.behaviour.CLOSED": "Closed"
 }
