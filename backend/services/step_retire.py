@@ -19,7 +19,7 @@ from models import (ApplicationBfcNode, AuditEvent, BfcNode, BfcNodeDataEntity, 
                     BfcNodeOrgRole, BfcNodeTrigger, BrDataEntity, BrDataField, BrFunctionRequirement, BrOrgRole, BrRequirementLine,
                     BrSolution, BrSystemFlow,
                     BusinessRequirement,
-                    DataEntity, ExternalEntity, OrgRole, ProcessTrigger, Solution)
+                    DataEntity, ExternalEntity, IssueBr, OrgRole, ProcessTrigger, Solution)
 from services import audit, bfc, components, lifecycle
 
 RETIRED = "STEP_RETIRED_WITH_DEPENDENTS"
@@ -38,7 +38,8 @@ OWNED_BY_BR = (BrDataEntity, BrOrgRole, BrSolution,          # BrSolution: S5-1 
                BrFunctionRequirement,                         # D-52, slice10b Q-12: the FR itself survives
                BrRequirementLine,                             # D-59, slice11_schema §4
                BrDataField,                                   # D-60b: retires before its licence, restores after
-               BrSystemFlow)                                  # D-61
+               BrSystemFlow,                                  # D-61
+               IssueBr)                                       # slice 14 (I-3): the issue itself survives
 
 # Retire order; restore runs it reversed. The D-24 licence FKs (fk_brde_io_licence,
 # fk_bnef_io_licence) are immediate, so a licensee always goes before its licence.
@@ -46,7 +47,7 @@ TIERS = (
     (BrDataField,),                                           # D-60b: licensed by br_data_entity (fk_brdf_licence)
     (BrDataEntity, BfcNodeExternalFlow),
     (BfcNodeDataEntity, BrOrgRole, BrSolution, BrFunctionRequirement, BrRequirementLine, BrSystemFlow, BfcNodeOrgRole,
-     ApplicationBfcNode, BfcNodeTrigger),
+     ApplicationBfcNode, BfcNodeTrigger, IssueBr),
     (BusinessRequirement,),
     (BfcNode,),
 )
@@ -122,6 +123,8 @@ def describe(db: Session, row) -> str:
         return f"{row.field_row.field_name} ({row.crud_code})"
     if isinstance(row, BrRequirementLine):
         return f"{row.line_label} {row.line_text[:60]}"
+    if isinstance(row, IssueBr):
+        return f"Issue {row.issue_row.issue_number}"
     return lifecycle.label(row)
 
 
@@ -154,7 +157,9 @@ def preview(db: Session, step: BfcNode) -> dict:
         raise HTTPException(409, f"{lifecycle.label(step)} is already retired")
     owned, blockers, h = _assess(db, step)
     return {"owned": [_ref(r, describe(db, r)) for r in owned],
-            "blockers": [_ref(b) for b in blockers], "confirm_hash": h, "tag_drift": _tag_drift(db, owned)}
+            "blockers": [_ref(b) for b in blockers], "confirm_hash": h, "tag_drift": _tag_drift(db, owned),
+            # I-3 (Q-41): the issues losing their link to this step's BR; they stay live (information, not hashed)
+            "issues": sorted(r.issue_row.issue_number for r in owned if isinstance(r, IssueBr))}
 
 
 def _tag_drift(db: Session, owned: list) -> list[str]:

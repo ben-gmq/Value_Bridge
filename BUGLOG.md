@@ -446,3 +446,18 @@ place.
   three to one home (`services/access.py` or a `services/locks.py`). (L4) `program._move_changes` is N+1 (up to 3
   queries per active staff user) and runs under the move confirm's locks — load both programs' members and the
   project's members in 3 queries before a client tenant has many users.
+- **2026-10-18 · slice 14 step A (`sara`; M1–M3 fixed in the step):** (L1) 0061's downgrade clears the behaviour of
+  every ISSUE_STATUS row, so a status a platform admin added later makes the re-upgrade refuse — clear only the five
+  seeded codes and refuse while another company status exists. (L2) `test_migration_0061_0062.py` covers the
+  project-tier refusal but not the live-hide refusal. (L3) the ISSUE switch-off blocker lists bare stakeholder ids;
+  label them `#<id>` like `lifecycle.LABELS`. (L4) `StakeholdersPage` does not show a failed org-unit load. (L5)
+  `CodeListsPage` keeps a third copy of the behaviour vocabularies — serve them from the API.
+- **2026-10-18 · slice 14 step B (`sara`; M1, L1–L4, L6 fixed in the step):** (L5) the issue schemas do not forbid
+  unknown fields, so a PATCH carrying `resolution` / `resolved_at` is ignored with a 200 rather than a 422 (law 6
+  holds) — add `extra="forbid"`. (L7) no two-connection race test for R11 (raise / edit-raiser against a concurrent
+  stakeholder retire); the FOR SHARE → FOR UPDATE order carries it. (L8) `IssuePage` does not check that the issue
+  belongs to the project in the address; `/p/A/issues/<B's id>` shows B's issue with A's pickers.
+- **2026-10-18 · slice 14 step C (`sara`; M2, M3, L1, L4, L6 fixed in the step; M1 is step D's Grade 1 proof):**
+  (L2) `issue.links_of` and the link route read each link's BR lazily, one query per link — load `br_row` with
+  `selectinload`. (L3) the register's area filter lists only areas with open issues and drops the "As-is" prefix the
+  dashboard shows. (L5) `DashboardOut` rows are untyped `list[dict]` — pin them as small models.

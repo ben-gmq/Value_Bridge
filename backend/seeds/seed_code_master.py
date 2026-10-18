@@ -66,9 +66,10 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
     ("ISSUE_TYPE", False, [("PROCESS", "Process"), ("DATA", "Data"), ("SYSTEM", "System"),
                            ("ORGANIZATION", "Organization"), ("POLICY", "Policy"),
                            ("OTHER", "Other")]),
-    ("ISSUE_STATUS", False, [("OPEN", "Open"), ("IN_PROGRESS", "In progress"),
-                             ("RESOLVED", "Resolved"), ("DEFERRED", "Deferred"),
-                             ("CLOSED", "Closed")]),
+    # I-1, slice14 §15 N1–N2: company-only, each status open or closed (migration 0061 set these on existing rows).
+    ("ISSUE_STATUS", False, [("OPEN", "Open", "OPEN"), ("IN_PROGRESS", "In progress", "OPEN"),
+                             ("RESOLVED", "Resolved", "CLOSED"), ("DEFERRED", "Deferred", "OPEN"),
+                             ("CLOSED", "Closed", "CLOSED")]),
     ("ORG_UNIT_LEVEL", False, [("DEPARTMENT", "Department"), ("DIVISION", "Division"),
                                ("SECTION", "Section")]),
     ("FIELD_DATA_TYPE", False, [("STRING", "String"), ("INTEGER", "Integer"),

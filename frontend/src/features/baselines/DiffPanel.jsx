@@ -123,6 +123,10 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
                 value={showDays ? fmtDays(days) : d.summary[k]}
                 note={showDays ? t('baselines.objects', { n: d.summary[k] }) : null} />))}
           </Box>
+          {/* I-14 (Q-52): issue changes are counted apart from scope, never in the tiles above */}
+          {d.issue_summary && (d.issue_summary.ADDED + d.issue_summary.CHANGED + d.issue_summary.REMOVED) > 0 && (
+            <Alert severity="info">{t('baselines.issueChanges', { added: d.issue_summary.ADDED,
+              changed: d.issue_summary.CHANGED, removed: d.issue_summary.REMOVED })}</Alert>)}
           {pricing && !pricing.available && <Alert severity="info">{t('baselines.pricingOff', { labels: pricing.in.join(', ') })}</Alert>}
           {showDays && pricing.totals.effort_exposed_days > 0 && <Alert severity="info">{t('baselines.exposed', { n: pricing.totals.effort_exposed_days })}</Alert>}
           {showDays && pricing.totals.unrated_fr_count > 0 && <Alert severity="warning">{t('baselines.unrated', { n: pricing.totals.unrated_fr_count })}</Alert>}
@@ -146,7 +150,8 @@ export function DiffPanel({ projectId, from, to, fromLabel, toLabel }) {
                   label={<Typography sx={{ fontSize: 13 }}>{t('baselines.priced')}</Typography>} />
                 <Segmented size="sm" label={t('baselines.col.change')} value={kind} onChange={setKind}
                   options={[{ value: 'ALL', label: t('baselines.all', { n: total }) },
-                    ...CHANGE_KINDS.map((k) => ({ value: k, label: `${t(`baselines.change.${k}`)} ${d.summary[k]}` }))]} />
+                    ...CHANGE_KINDS.map((k) => ({ value: k,                 // the rows include issues (sara D L3)
+                      label: `${t(`baselines.change.${k}`)} ${d.summary[k] + (d.issue_summary?.[k] ?? 0)}` }))]} />
               </Stack>)}>
             {shown.length === 0 ? (
               <Typography sx={{ px: 2.5, color: 'text.secondary' }}>{t('baselines.noChanges')}</Typography>

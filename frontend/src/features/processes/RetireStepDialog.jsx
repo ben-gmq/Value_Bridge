@@ -10,7 +10,7 @@ import { Mono } from './chartKit';
 
 // Preview order = the spec's owned set (docs/step_retire_spec.md §4). Unknown tables still list.
 const KINDS = ['business_requirement', 'br_data_entity', 'br_org_role', 'bfc_node_data_entity',
-  'bfc_node_org_role', 'bfc_node_external_flow', 'bfc_node_flow'];
+  'bfc_node_org_role', 'bfc_node_external_flow', 'bfc_node_flow', 'issue_br'];
 
 const count = (owned, ...tables) => owned.filter((o) => tables.includes(o.table)).length;
 
@@ -78,6 +78,10 @@ export function RetireStepDialog({ step, onClose, onRetired }) {
                 : <RowList rows={rows} />}
             </Box>
           ))}
+          {pv.issues?.length > 0 && (                     // slice 14 (I-3): the issues stay, only their link goes
+            <Alert severity="info" sx={{ mt: 1 }}>
+              {t('processes.retireStepIssues', { issues: pv.issues.join(', ') })}</Alert>
+          )}
           {blocked && (
             <Alert severity="warning" sx={{ mt: 1 }}>
               <Typography sx={{ fontSize: 13, mb: 0.5 }}>{t('processes.retireStepBlocked')}</Typography>

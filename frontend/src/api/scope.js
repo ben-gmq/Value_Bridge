@@ -143,6 +143,29 @@ export const partyApi = {
   restore: (id) => d(http.patch(`${V}/external-entities/${id}/restore`)),
 };
 
+export const stakeholderApi = {                                       // slice 14 (§4.5)
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/stakeholders`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/stakeholders`, body)),
+  update: (id, body) => d(http.patch(`${V}/stakeholders/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/stakeholders/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/stakeholders/${id}/restore`)),
+};
+
+export const issueApi = {                                             // slice 14 (§4.5)
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/issues`, { params })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/issues`, body)),
+  get: (id) => d(http.get(`${V}/issues/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/issues/${id}`, body)),
+  resolve: (id, body) => d(http.post(`${V}/issues/${id}/resolve`, body)),
+  reopen: (id, body) => d(http.post(`${V}/issues/${id}/reopen`, body)),
+  retire: (id, rowVersion) => del(`${V}/issues/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/issues/${id}/restore`)),
+  brs: (id) => d(http.get(`${V}/issues/${id}/brs`)),
+  link: (id, brId) => d(http.post(`${V}/issues/${id}/brs`, { br_id: brId })),
+  unlink: (id, linkId, rowVersion) => del(`${V}/issues/${id}/brs/${linkId}`, rowVersion),
+  dashboard: (projectId) => d(http.get(`${P(projectId)}/issue-dashboard`)),
+};
+
 export const orgApi = {
   units: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-units`, { params: { include_retired: includeRetired } })),
   createUnit: (projectId, body) => d(http.post(`${P(projectId)}/org-units`, body)),

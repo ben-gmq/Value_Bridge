@@ -7,6 +7,7 @@ attribute tick and flow, hashed on the agreed columns — Grade 1, proven at the
 Left uncovered on purpose: flows across more than one page of applications (no paging exists)."""
 import pytest
 from sqlalchemy import text
+from services.freeze_set import CURRENT_HASH_SPEC
 
 from tests.test_application_api import app, retire_app
 from tests.test_baseline import bid, freeze, owner_exec, scope
@@ -221,7 +222,7 @@ def test_one_baseline_holds_every_live_line_tick_and_flow_hashed_on_the_agreed_c
                          headers=ed["h"], params={"row_version": gone["row_version"]}).status_code == 204
     b = freeze(client, ed)["baseline"]
     v = b["baseline_id"]
-    assert b["hash_spec_version"] == 4
+    assert b["hash_spec_version"] == CURRENT_HASH_SPEC     # a fresh freeze: the current spec (5 since slice 14)
     q = lambda sql: db.execute(text(sql), {"b": v}).mappings().all()     # noqa: E731
     ln = q("SELECT source_id, br_id, line_no, line_kind_code, priority_code, line_text, content_hash "
            "FROM baseline_br_requirement_line WHERE baseline_id = :b")

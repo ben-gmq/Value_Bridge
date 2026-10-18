@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import AppUser, CodeMaster, EffortRate, Project, ProjectCodeVisibility
-from models.shared import FR_BEHAVIOURS, RACI_BEHAVIOURS
+from models.shared import FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, RACI_BEHAVIOURS
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
 from services import audit
 from services.code_master import resolve
@@ -32,11 +32,14 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
     | {("SOLUTION_STATUS", c) for c in ("PROPOSED", "REJECTED")}
     | {("BR_LINE_KIND", c) for c in ("RULE", "OUTPUT")}
     | {("PROJECT_STATUS", "PLANNING")}
+    | {("ISSUE_STATUS", c) for c in ("OPEN", "IN_PROGRESS", "RESOLVED", "DEFERRED", "CLOSED")}   # I-1: pinned
+    | {("ISSUE_SEVERITY", "CRITICAL")}                              # I-13: the M3 tile counts it by code
     | {("FR_TYPE", t) for t, _ in FTC_DEFAULT_RATE_CARD}          # the rate card is keyed by them (R4)
     | {("FR_COMPLEXITY", c) for _, c in FTC_DEFAULT_RATE_CARD}
 )
-COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS"})   # §7.2, G-2: never overridden or hidden per project
-BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE"})
+# §7.2, G-2, I-1: never overridden or hidden per project
+COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS"})
+BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS"})
 CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 
 # R12: code columns the re-point never reaches, each with its reason. A code FK in neither this list nor the
@@ -44,6 +47,7 @@ CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 EXCLUDED: dict[tuple[str, str], str] = {
     ("user_access_grant", "project_role_code_id"): "retired table, SELECT-only (D-40)",
     ("project", "status_code_id"): "PROJECT_STATUS is company-only (G-2)",
+    ("issue", "status_code_id"): "ISSUE_STATUS is company-only (I-1)",
     ("import_batch", "status_code_id"): "IMPORT_STATUS is a system category",
     ("project_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
     ("project_template_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
@@ -84,7 +88,8 @@ def _label(label: str | None) -> str:
 def _behaviour(category: str, behaviour: str | None) -> str | None:
     if category in BEHAVIOUR_CATEGORIES and not behaviour:
         raise HTTPException(422, f"A {category} code needs a behaviour")
-    allowed = {"FR_TYPE": FR_BEHAVIOURS, "RACI_TYPE": RACI_BEHAVIOURS}.get(category)
+    allowed = {"FR_TYPE": FR_BEHAVIOURS, "RACI_TYPE": RACI_BEHAVIOURS,
+               "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS}.get(category)
     if allowed and behaviour not in allowed:                        # sara 1g L7: a clear 422, not the CHECK's
         raise HTTPException(422, f"Behaviour must be one of {', '.join(allowed)}")
     if category not in BEHAVIOUR_CATEGORIES and behaviour:
@@ -396,6 +401,8 @@ def update_code(db: Session, actor: AppUser, row: CodeMaster, row_version: int, 
         row.sort_order = sort_order
     if behaviour is not None and behaviour != row.behaviour_code:
         _behaviour(row.category, behaviour)
+        if row.category == "ISSUE_STATUS" and is_pinned(row):         # sara A M-2: reopen writes OPEN by value
+            raise HTTPException(409, f"{row.code} is one the application relies on, so its behaviour is fixed")
         company = row.project_id is None
         if not company and db.scalar(select(CodeMaster).where(
                 CodeMaster.project_id.is_(None), CodeMaster.category == row.category, CodeMaster.code == row.code)):

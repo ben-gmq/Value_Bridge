@@ -77,8 +77,7 @@ def schema():
     cfg = Config(str(BACKEND / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND / "alembic"))
     os.environ["VB_ALEMBIC_URL"] = OWNER_URL
-    command.downgrade(cfg, "base")
-    command.upgrade(cfg, "head")
+    _step_through(cfg)
     _seed_library()
     with owner_engine().begin() as c:
         c.execute(text(f"DROP SCHEMA IF EXISTS {SNAPSHOT} CASCADE; CREATE SCHEMA {SNAPSHOT}"))
@@ -86,6 +85,25 @@ def schema():
             c.execute(text(f"CREATE TABLE {SNAPSHOT}.{t} AS SELECT * FROM {t}"))
     yield
     owner_engine().dispose()
+
+
+def _step_through(cfg) -> None:
+    """Every migration down to base and back up to head, ONE REVISION PER COMMAND. alembic/env.py runs a multi-step
+    command in a single transaction, so `downgrade base` held a lock on every table and index at once; four xdist
+    workers doing it together overflowed the server's shared lock table ("out of shared memory", slice 14). Each
+    step now commits, holding only its own table's locks. Same revisions, same order, same coverage."""
+    import sys
+    from alembic.script import ScriptDirectory
+    if str(BACKEND / "alembic") not in sys.path:                     # the revisions import vb_ops, as env.py allows
+        sys.path.insert(0, str(BACKEND / "alembic"))
+    chain = [s.revision for s in ScriptDirectory.from_config(cfg).walk_revisions()]       # head first
+    with owner_engine().connect() as c:
+        current = c.execute(text("SELECT to_regclass('public.alembic_version') IS NOT NULL")).scalar() and \
+            c.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    for _ in chain[chain.index(current):] if current in chain else []:
+        command.downgrade(cfg, "-1")
+    for rev in reversed(chain):
+        command.upgrade(cfg, rev)
 
 
 def _seed_library():

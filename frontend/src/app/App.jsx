@@ -33,6 +33,9 @@ import OrganisationPage from '../features/settings/OrganisationPage';
 import PartiesPage from '../features/settings/PartiesPage';
 import ComponentsPage from '../features/settings/ComponentsPage';
 import CodeListsPage from '../features/settings/CodeListsPage';
+import StakeholdersPage from '../features/settings/StakeholdersPage';
+import IssuesPage from '../features/issues/IssuesPage';
+import IssuePage from '../features/issues/IssuePage';
 import ComponentOff from '../features/common/ComponentOff';
 import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
@@ -52,9 +55,10 @@ const PAGES = [
   ['requirements/:brId', RequirementPage], ['data', DataEntitiesPage], ['data/diagram', ErdPage], ['data/:deId', DataEntityPage],
   ['interfaces', InterfacesPage], ['br-fr', SolutionsPage], ['br-fr/frs', FrsPage], ['br-fr/effort', EffortPage], ['volume', VolumePage], ['br-fr/frs/:frId', FrPage], ['br-fr/:solutionId', SolutionPage],
   ['organisation', OrganisationPage], ['systems', ApplicationsPage], ['systems/:appId', ApplicationPage],
-  ['settings', SettingsPage], ['settings/parties', PartiesPage], ['settings/components', ComponentsPage],
+  ['settings', SettingsPage], ['settings/parties', PartiesPage], ['settings/stakeholders', StakeholdersPage], ['settings/components', ComponentsPage],
   ['settings/rate-card', RateCardPage], ['settings/code-lists', CodeListsPage],
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
+  ['issues', IssuesPage], ['issues/:issueId', IssuePage],
 ];
 
 // D-37: a screen of a component that is off shows why instead of its content. Any one listed
@@ -65,6 +69,7 @@ const NEEDS = {
   'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
   systems: ['APPLICATION'], 'systems/:appId': ['APPLICATION'],
   'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
+  issues: ['ISSUE'], 'issues/:issueId': ['ISSUE'], 'settings/stakeholders': ['ISSUE'],
 };
 
 function Gated({ path, Screen }) {

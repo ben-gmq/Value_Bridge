@@ -29,10 +29,11 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 4       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 5       # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
 #                             4: slice 11 — br_requirement_line (D-59), br_data_field (D-60b) and br_system_flow
 #                                (D-61) joined the set together (S11-6)
+#                             5: slice 14 — issue and issue_br joined the set together (I-5; one merge, S11-6)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -136,6 +137,14 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
     _e("effort_rate", "EFFORT", ("fr_type_code", "complexity_code", "standard_days"),
        label=("fr_type_label", "complexity_label")),
     _e("project_component", "SCOPE", ("component_code",), label=("component_label",)),
+    # slice 14 (I-5, schema §3.5): appended, so the spec-1…4 order is untouched. Status and resolution are hashed —
+    # "which issues were open when it was signed"; recorded_by / resolved_* are copied, not hashed. Only the
+    # raiser's id is frozen; a baseline shows today's name (I-15).
+    _e("issue", "ISSUE", ("issue_number", "title", "description", "severity_code", "issue_type_code", "status_code",
+                          "raised_by_stakeholder_id", "raised_date", "target_date", "resolution"),
+       label=("issue_number", "title"), since=5),
+    # I-8: issue × BR, labelled by its ends; spec 5 with `issue` (one merge, S11-6).
+    _e("issue_br", "ISSUE", ("issue_id", "br_id"), refs=(("issue_id", "issue"), ("br_id", BR)), since=5),
 )
 BY_TABLE = {e.table: e for e in FREEZE_SET}
 assert tuple(BY_TABLE) == SHADOWED, "FREEZE_SET and models.baseline.SHADOWED disagree"

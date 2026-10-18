@@ -9,7 +9,7 @@ import { t } from '../../i18n/t';
 // Settings holds configuration and master data other screens pick from (Ben, 2026-09-29, S1-9). The organisation
 // and the systems are rail items under Scope since D-56.
 const ITEMS = [['access', links.access, null, true], ['components', links.components],
-  ['parties', links.parties], ['rateCard', links.rateCard, 'EFFORT'], ['codeLists', links.codeLists]];
+  ['parties', links.parties], ['stakeholders', links.stakeholders, 'ISSUE'], ['rateCard', links.rateCard, 'EFFORT'], ['codeLists', links.codeLists]];
 
 export default function SettingsPage() {
   const { projectId } = useParams();

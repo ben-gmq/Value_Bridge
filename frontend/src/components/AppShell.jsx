@@ -16,6 +16,7 @@ import HubOutlined from '@mui/icons-material/HubOutlined';
 import LayersOutlined from '@mui/icons-material/LayersOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
+import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
@@ -54,6 +55,7 @@ export const NAV = [
     ['nav.effort', 'br-fr/effort', TimerOutlined, ['EFFORT']],
     ['nav.volume', 'volume', SpeedOutlined],                              // D-67: as-is vs to-be time
     ['nav.baselines', 'baselines', LayersOutlined],
+    ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
   ] },
   { group: 'nav.group.admin', items: [
     ['nav.settings', 'settings', SettingsOutlined],

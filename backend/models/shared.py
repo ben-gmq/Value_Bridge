@@ -9,6 +9,7 @@ from models.base import AuditMixin, Base
 
 FR_BEHAVIOURS = ("FORM", "INTERFACE", "REPORT", "BATCH", "OTHER")
 RACI_BEHAVIOURS = ("RESPONSIBLE", "ACCOUNTABLE", "CONSULTED", "INFORMED", "SUPPORT", "OTHER")
+ISSUE_STATUS_BEHAVIOURS = ("OPEN", "CLOSED")          # slice14 §15 N1–N2, I-1 (migration 0061)
 SEQUENCE_CODES = ("DE", "BR", "FR", "ISSUE", "SOL", "BEN", "RSK", "CR", "DEC", "EXT")
 
 
@@ -39,12 +40,14 @@ class CodeMaster(AuditMixin, Base):
         Index("uq_code_master_scope", "project_id", "category", "code", unique=True,
               postgresql_nulls_not_distinct=True),
         CheckConstraint(
-            "(category IN ('FR_TYPE','RACI_TYPE')) = (behaviour_code IS NOT NULL)",
+            "(category IN ('FR_TYPE','RACI_TYPE','ISSUE_STATUS')) = (behaviour_code IS NOT NULL)",
             name="ck_code_behaviour_present"),
         CheckConstraint(f"category <> 'FR_TYPE' OR behaviour_code IN ({_in(FR_BEHAVIOURS)})",
                         name="ck_code_fr_behaviour"),
         CheckConstraint(f"category <> 'RACI_TYPE' OR behaviour_code IN ({_in(RACI_BEHAVIOURS)})",
                         name="ck_code_raci_behaviour"),
+        CheckConstraint(f"category <> 'ISSUE_STATUS' OR behaviour_code IN ({_in(ISSUE_STATUS_BEHAVIOURS)})",
+                        name="ck_code_issue_status_behaviour"),
         # Composite-FK target: category is in it because both vocabularies share OTHER (§5.3).
         UniqueConstraint("code_id", "category", "behaviour_code", name="uq_code_behaviour_target"),
         UniqueConstraint("code_id", "category", name="uq_code_category_target"),
