@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
                     BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
-                    ProjectComponent, ProjectTemplateComponent, Solution, Stakeholder)
+                    ProjectComponent, ProjectTemplateComponent, Solution, Issue, Stakeholder)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
@@ -69,7 +69,7 @@ COMPONENT_ROWS = {
     # the as-is chart itself (D-47): its nodes carry everything else of it
     "AS_IS": (_rows(BfcNode, BfcNode.hier_code, BfcNode.bfc_set_code == "AS_IS"),),
     # slice14 R10: live stakeholders too, so ISSUE cannot be switched off under them (labelled by id, R7)
-    "ISSUE": (_rows(Stakeholder, Stakeholder.stakeholder_id),),
+    "ISSUE": (_rows(Issue, Issue.issue_number), _rows(Stakeholder, Stakeholder.stakeholder_id)),
 }
 
 
@@ -108,6 +108,7 @@ FREEZE_GATES: dict[str, Gate] = {
     "fr_interface_data_entity": Gate(all_of=frozenset({"FUNCTION_REQUIREMENT", "APPLICATION"})),
     "application_solution": Gate(all_of=frozenset({"APPLICATION", "SOLUTION"})),
     "effort_rate": Gate(all_of=frozenset({"EFFORT"})),
+    "issue": Gate(all_of=frozenset({"ISSUE"})),                                          # slice14 schema §3.5
 }
 ALWAYS = Gate()
 
@@ -122,6 +123,7 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     BrFunctionRequirement: ("FUNCTION_REQUIREMENT",),       # slice10b §4.1: a step restore brings links back
     BrSystemFlow: ("APPLICATION",),                         # D-61: a step restore brings flows back
     Stakeholder: ("ISSUE",),                                # I-9
+    Issue: ("ISSUE",),
 }
 DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 

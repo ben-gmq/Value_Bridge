@@ -153,3 +153,215 @@ def test_critical_severity_is_pinned_and_the_others_are_project_editable(client,
                     json={"code_id": code_id(db, "ISSUE_SEVERITY", "LOW")})
     assert r.status_code == 201, r.text
     add_project(client, cl, "ISSUE_SEVERITY", "HIGH", "Major")
+
+
+# ---- issues: raise, edit, resolve, reopen, retire (step B; criteria 1-3, 6, 9, 10, 12, 13, 15) --------------------
+def issue(client, ed, raiser, title="Credit field missing", expect=201, headers=None, project=None, **kw):
+    body = {"title": title, "severity_code": "HIGH", "issue_type_code": "DATA",
+            "raised_by_stakeholder_id": raiser["stakeholder_id"], **kw}
+    r = client.post(f"{API}/projects/{project or ed['p']}/issues", headers=headers or ed["h"], json=body)
+    assert r.status_code == expect, r.text
+    return r.json()
+
+
+def get_issue(client, ed, i):
+    return client.get(f"{API}/issues/{i['issue_id']}", headers=ed["h"]).json()
+
+
+def resolve(client, ed, i, status="RESOLVED", resolution="Field added in the target design", rv=None):
+    return client.post(f"{API}/issues/{i['issue_id']}/resolve", headers=ed["h"],
+                       json={"row_version": rv or get_issue(client, ed, i)["row_version"], "status_code": status,
+                             "resolution": resolution})
+
+
+def reopen(client, ed, i):
+    return client.post(f"{API}/issues/{i['issue_id']}/reopen", headers=ed["h"],
+                       json={"row_version": get_issue(client, ed, i)["row_version"]})
+
+
+def edit(client, ed, i, **body):
+    return client.patch(f"{API}/issues/{i['issue_id']}", headers=ed["h"],
+                        json={"row_version": get_issue(client, ed, i)["row_version"], **body})
+
+
+def test_raise_mints_numbers_at_save_and_keeps_raiser_and_recorder_apart(client, ed, world, db):
+    from services.baseline import local_today
+    s = stakeholder(client, ed, "Anan")
+    a = issue(client, ed, s)
+    b = issue(client, ed, s, "Second", raised_date="2026-10-01", target_date="2026-11-01")
+    assert (a["issue_number"], b["issue_number"]) == ("ISS-0001", "ISS-0002")
+    assert a["raised_by_stakeholder_id"] == s["stakeholder_id"]
+    assert a["recorded_by_user_id"] == world["users"]["editor"]                               # from the JWT
+    assert a["raised_date"] == local_today().isoformat() and b["raised_date"] == "2026-10-01"  # I-6
+    assert (a["status_code"], a["status_behaviour"], a["resolved_at"]) == ("OPEN", "OPEN", None)
+    issue(client, ed, s, "Bad dates", raised_date="2026-10-02", target_date="2026-10-01", expect=422)
+    issue(client, ed, s, "   ", expect=422)
+    r = client.post(f"{API}/projects/{ed['p']}/issues", headers=ed["h"],             # law 6: no derived values
+                    json={"title": "x", "severity_code": "HIGH", "issue_type_code": "DATA", "issue_number": "ISS-9999",
+                          "recorded_by_user_id": 1, "raised_by_stakeholder_id": s["stakeholder_id"]})
+    assert r.status_code == 201 and r.json()["issue_number"] == "ISS-0003"
+    assert r.json()["recorded_by_user_id"] == world["users"]["editor"]
+
+
+def test_a_raiser_of_another_project_or_retired_is_refused(client, ed, world):
+    other = client.post(f"{API}/projects/{world['p_sales']}/stakeholders", headers=world["admin"],
+                        json={"stakeholder_name": "Elsewhere"}).json()
+    issue(client, ed, other, expect=422)                                                      # criterion 2
+    s = stakeholder(client, ed, "Anan")
+    assert retire_stk(client, ed, s).status_code == 204
+    issue(client, ed, s, expect=422)
+
+
+def test_resolve_needs_a_closed_status_and_a_resolution(client, ed, world):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    assert resolve(client, ed, i, resolution="   ").status_code == 422                        # criterion 3
+    assert resolve(client, ed, i, status="IN_PROGRESS").status_code == 422                    # an open status
+    r = resolve(client, ed, i)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert (out["status_code"], out["status_behaviour"]) == ("RESOLVED", "CLOSED")
+    assert out["resolved_at"] and out["resolved_by_user_id"] == world["users"]["editor"]
+    r = resolve(client, ed, i, status="CLOSED", resolution="Verified in UAT")                  # RESOLVED → CLOSED
+    assert r.status_code == 200 and r.json()["resolution"] == "Verified in UAT"
+
+
+def test_patch_moves_only_among_open_statuses_and_never_on_a_closed_issue(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    assert edit(client, ed, i, status_code="RESOLVED").status_code == 422                     # criterion 12 (R2)
+    r = edit(client, ed, i, status_code="DEFERRED", severity_code="CRITICAL", target_date="2027-01-31")
+    assert r.status_code == 200 and (r.json()["status_code"], r.json()["status_behaviour"]) == ("DEFERRED", "OPEN")
+    assert resolve(client, ed, i).status_code == 200
+    r = edit(client, ed, i, status_code="IN_PROGRESS")
+    assert r.status_code == 409 and "reopen" in r.json()["detail"]                             # N1
+    assert edit(client, ed, i, title="Renamed while closed").status_code == 200              # other fields still edit
+
+
+def test_reopen_clears_the_stamp_and_keeps_the_text(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    assert reopen(client, ed, i).status_code == 409                                           # not closed
+    assert resolve(client, ed, i, resolution="Added").status_code == 200
+    r = reopen(client, ed, i)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert (out["status_code"], out["resolved_at"], out["resolved_by_user_id"], out["resolution"]) == \
+        ("OPEN", None, None, "Added")                                                          # R3
+
+
+def test_two_resolves_with_one_row_version_conflict(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    rv = get_issue(client, ed, i)["row_version"]
+    assert resolve(client, ed, i, rv=rv).status_code == 200
+    assert resolve(client, ed, i, status="CLOSED", rv=rv).status_code == 409                   # criterion 13
+
+
+def test_the_database_refuses_a_closed_status_without_its_stamp(client, ed, db):
+    from sqlalchemy.exc import IntegrityError
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    closed = code_id(db, "ISSUE_STATUS", "RESOLVED")
+    try:
+        db.execute(text("UPDATE issue SET status_code_id = :c, status_behaviour = 'CLOSED' WHERE issue_id = :i"),
+                   {"c": closed, "i": i["issue_id"]})
+        raise AssertionError("closed without resolved_at was stored")
+    except IntegrityError as e:
+        assert "ck_issue_resolved_iff_closed" in str(e)
+    finally:
+        db.rollback()
+    try:                                                                       # behaviour must match the code's own
+        db.execute(text("UPDATE issue SET status_behaviour = 'CLOSED', resolved_at = now(), resolved_by_user_id = "
+                        "created_by, resolution = 'x' WHERE issue_id = :i"), {"i": i["issue_id"]})
+        raise AssertionError("OPEN stored as closed")
+    except IntegrityError as e:
+        assert "fk_issue_status" in str(e)
+    finally:
+        db.rollback()
+
+
+def test_retire_and_restore_and_the_raiser_cannot_be_retired_meanwhile(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    r = retire_stk(client, ed, s)
+    assert r.status_code == 409 and "ISS-0001" in r.json()["detail"]                          # I-7, criterion 6
+    rv = get_issue(client, ed, i)["row_version"]
+    assert client.delete(f"{API}/issues/{i['issue_id']}", headers=ed["h"], params={"row_version": rv}).status_code == 204
+    assert [x["issue_number"] for x in client.get(f"{API}/projects/{ed['p']}/issues", headers=ed["h"]).json()] == []
+    assert retire_stk(client, ed, s).status_code == 204
+    r = client.patch(f"{API}/issues/{i['issue_id']}/restore", headers=ed["h"])
+    assert r.status_code == 409                                                                 # restore the raiser first
+    assert client.patch(f"{API}/stakeholders/{s['stakeholder_id']}/restore", headers=ed["h"]).status_code == 200
+    r = client.patch(f"{API}/issues/{i['issue_id']}/restore", headers=ed["h"])
+    assert r.status_code == 200 and r.json()["issue_number"] == "ISS-0001"                    # the number comes back
+
+
+def test_the_list_filters(client, ed):
+    a, b = stakeholder(client, ed, "Anan"), stakeholder(client, ed, "Bee")
+    i1 = issue(client, ed, a, severity_code="CRITICAL")
+    issue(client, ed, b, issue_type_code="PROCESS")
+    i3 = issue(client, ed, a)
+    assert resolve(client, ed, i3).status_code == 200
+
+    def nums(**q):
+        r = client.get(f"{API}/projects/{ed['p']}/issues", headers=ed["h"], params=q)
+        assert r.status_code == 200, r.text
+        return [x["issue_number"] for x in r.json()]
+    assert nums() == ["ISS-0001", "ISS-0002", "ISS-0003"]
+    assert nums(open_only=True) == ["ISS-0001", "ISS-0002"]
+    assert nums(severity="CRITICAL") == [i1["issue_number"]]
+    assert nums(issue_type="PROCESS") == ["ISS-0002"]
+    assert nums(raiser=a["stakeholder_id"]) == ["ISS-0001", "ISS-0003"]
+    assert nums(status="RESOLVED") == ["ISS-0003"]
+
+
+def test_issue_access_and_component_gate(client, ed, world, db):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    assert client.get(f"{API}/issues/{i['issue_id']}", headers=ed["rv"]).status_code == 200
+    issue(client, ed, s, headers=ed["rv"], expect=403)
+    assert client.get(f"{API}/issues/{i['issue_id']}", headers=ed["out"]).status_code == 404   # criterion 10
+    assert client.get(f"{API}/projects/{ed['p']}/issues", headers=ed["out"]).status_code == 404
+    r = client.post(f"{API}/issues/{i['issue_id']}/resolve", headers=ed["out"],
+                    json={"row_version": 1, "status_code": "RESOLVED", "resolution": "x"})
+    assert r.status_code == 404
+
+
+def test_no_audit_event_carries_a_title_or_a_name(client, ed, db):
+    """R7, criterion 15 (sara B L-1): retire and restore both kinds, then read every event they wrote."""
+    s = stakeholder(client, ed, "Anan Secretname")
+    i = issue(client, ed, s, "Secret title")
+    for path, row in ((f"/issues/{i['issue_id']}", i),):
+        rv = cur(client, ed, path)["row_version"]
+        assert client.delete(f"{API}{path}", headers=ed["h"], params={"row_version": rv}).status_code == 204
+        assert client.patch(f"{API}{path}/restore", headers=ed["h"]).status_code == 200
+    rv = cur(client, ed, f"/issues/{i['issue_id']}")["row_version"]
+    assert client.delete(f"{API}/issues/{i['issue_id']}", headers=ed["h"], params={"row_version": rv}).status_code == 204
+    assert retire_stk(client, ed, s).status_code == 204
+    assert client.patch(f"{API}/stakeholders/{s['stakeholder_id']}/restore", headers=ed["h"]).status_code == 200
+    events = list(db.scalars(select(AuditEvent).where(AuditEvent.target_table.in_(("issue", "stakeholder")))))
+    assert {e.target_table for e in events} == {"issue", "stakeholder"} and len(events) >= 5
+    assert all("Secret" not in str(e.detail) for e in events)
+
+
+def test_issue_writes_are_refused_with_the_component_off(client, ed, world):
+    """Criterion 9 for issue writes (sara B L-2): the user sees 409 COMPONENT_OFF, not just a declared guard."""
+    from tests.conftest import ALL_COMPONENTS
+    without = [c for c in ALL_COMPONENTS if c != "ISSUE"]
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    pv = client.put(f"{API}/projects/{ed['p']}/components", headers=world["admin"],
+                    json={"component_codes": without}).json()
+    assert any("ISS-0001" in b["message"] for b in pv["blockers"])            # a live issue keeps ISSUE on (R10)
+    rv = get_issue(client, ed, i)["row_version"]
+    assert client.delete(f"{API}/issues/{i['issue_id']}", headers=ed["h"], params={"row_version": rv}).status_code == 204
+    assert retire_stk(client, ed, s).status_code == 204
+    switch(client, world, ed["p"], without)
+    for r in (client.post(f"{API}/projects/{ed['p']}/issues", headers=ed["h"],
+                          json={"title": "x", "severity_code": "HIGH", "issue_type_code": "DATA",
+                                "raised_by_stakeholder_id": s["stakeholder_id"]}),
+              client.post(f"{API}/issues/{i['issue_id']}/resolve", headers=ed["h"],
+                          json={"row_version": i["row_version"], "status_code": "RESOLVED", "resolution": "x"})):
+        assert r.status_code == 409 and r.headers.get("X-VB-Error") == "COMPONENT_OFF", r.text
+    assert client.get(f"{API}/issues/{i['issue_id']}", headers=ed["h"]).status_code == 200    # reads stay open

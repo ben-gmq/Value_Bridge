@@ -16,7 +16,8 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from models import (Application, Base, BfcNode, BrRequirementLine, BusinessRequirement, DataEntity, DataField,
-                    ExternalEntity, FunctionRequirement, OrgRole, OrgUnit, ProcessTrigger, Solution, Stakeholder)
+                    ExternalEntity, FunctionRequirement, Issue, OrgRole, OrgUnit, ProcessTrigger, Solution,
+                    Stakeholder)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -31,7 +32,7 @@ GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour"
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
               Solution, FunctionRequirement, Application, ProcessTrigger,
               BrRequirementLine,                                       # D-59: a line comes back with its number
-              Stakeholder)                                             # slice 14
+              Stakeholder, Issue)                                      # slice 14
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -72,6 +73,7 @@ LABELS = {
     "process_trigger": ("Trigger", lambda r: r.trigger_name),
     # R7 (slice14): ids and numbers only — these labels reach audit_event, which a purge cannot clean.
     "stakeholder": ("Stakeholder", lambda r: f"#{r.stakeholder_id}"),
+    "issue": ("Issue", lambda r: r.issue_number),
     "bfc_node_trigger": ("Step trigger", lambda r: f"{r.trigger_row.trigger_name} ↔ {r.node_row.hier_code}"),
     "bfc_node_flow": ("Flow edge",
                       lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),

@@ -7,6 +7,7 @@ import hashlib
 
 import pytest
 from sqlalchemy import text
+from services.freeze_set import CURRENT_HASH_SPEC
 
 from tests.test_baseline import bid, diff, freeze, owner_exec, patch_br, preview, scope
 from tests.test_scope_api import API, ed  # noqa: F401 — ed is a fixture
@@ -179,7 +180,7 @@ def test_a_frozen_baseline_holds_every_live_line_hashed_on_the_agreed_columns(cl
     retire(client, ed, br, c)
     f = freeze(client, ed)
     v = bid(f)
-    assert f["baseline"]["hash_spec_version"] == 4
+    assert f["baseline"]["hash_spec_version"] == CURRENT_HASH_SPEC     # a fresh freeze: the current spec (5 since slice 14)
     rows = db.execute(text("SELECT source_id, br_id, line_no, seq_no, line_kind_code, priority_code, line_text, "
                            "content_hash FROM baseline_br_requirement_line WHERE baseline_id = :b ORDER BY source_id"),
                       {"b": v}).mappings().all()

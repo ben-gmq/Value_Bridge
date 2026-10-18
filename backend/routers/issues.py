@@ -7,15 +7,17 @@ from sqlalchemy.orm import Session
 
 from auth.dependencies import current_user
 from database import get_db
-from models import AppUser, Stakeholder
+from models import AppUser, Issue, Stakeholder
 from routers.guards import GuardedRouter, object_guard, project_ctx
-from schemas.issue import StakeholderIn, StakeholderOut, StakeholderPatch
+from schemas.issue import (IssueIn, IssueOut, IssuePatch, ReopenIn, ResolveIn, StakeholderIn, StakeholderOut,
+                           StakeholderPatch)
 from services import issue as issue_service, lifecycle
 
 router = GuardedRouter(tags=["issues"])
 _read = project_ctx("VIEW")
 _edit = project_ctx("EDIT", "ISSUE")
 _stk_r, _stk_w = object_guard(Stakeholder, "VIEW"), object_guard(Stakeholder, "EDIT", component="ISSUE")
+_iss_r, _iss_w = object_guard(Issue, "VIEW"), object_guard(Issue, "EDIT", component="ISSUE")
 
 
 def _uid(user: AppUser) -> int:
@@ -57,3 +59,54 @@ def retire_stakeholder(id: int, row_version: int, stk: Stakeholder = Depends(_st
 def restore_stakeholder(id: int, stk: Stakeholder = Depends(_stk_w.dep), user: AppUser = Depends(current_user),
                         db: Session = Depends(get_db)):
     return issue_service.restore_stakeholder(db, _uid(user), stk)
+
+
+# ---- issues (§4.5 raise_issue / resolve_issue; spec §8, §14 R2) -------------------------------------------------
+@router.get("/projects/{project_id}/issues", response_model=list[IssueOut], **_read.route)
+def list_issues(project_id: int, include_retired: bool = False, open_only: bool = False, status: str | None = None,
+                severity: str | None = None, issue_type: str | None = None, raiser: int | None = None,
+                db: Session = Depends(get_db)):
+    return issue_service.list_issues(db, project_id, include_retired, open_only=open_only, status=status,
+                                     severity=severity, issue_type=issue_type, raiser=raiser)
+
+
+@router.post("/projects/{project_id}/issues", response_model=IssueOut, status_code=201, **_edit.route)
+def raise_issue(project_id: int, body: IssueIn, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    return issue_service.raise_issue(db, _uid(user), project_id, body.model_dump())
+
+
+@router.get("/issues/{id}", response_model=IssueOut, **_iss_r.route)
+def read_issue(id: int, issue: Issue = Depends(_iss_r.dep)):
+    return issue
+
+
+@router.patch("/issues/{id}", response_model=IssueOut, **_iss_w.route)
+def update_issue(id: int, body: IssuePatch, issue: Issue = Depends(_iss_w.dep), user: AppUser = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    return issue_service.update_issue(db, _uid(user), issue, body.row_version,
+                                      body.model_dump(exclude_unset=True, exclude={"row_version"}))
+
+
+@router.post("/issues/{id}/resolve", response_model=IssueOut, **_iss_w.route)
+def resolve_issue(id: int, body: ResolveIn, issue: Issue = Depends(_iss_w.dep), user: AppUser = Depends(current_user),
+                  db: Session = Depends(get_db)):
+    return issue_service.resolve_issue(db, _uid(user), issue, body.row_version, body.status_code, body.resolution)
+
+
+@router.post("/issues/{id}/reopen", response_model=IssueOut, **_iss_w.route)
+def reopen_issue(id: int, body: ReopenIn, issue: Issue = Depends(_iss_w.dep), user: AppUser = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    return issue_service.reopen_issue(db, _uid(user), issue, body.row_version)
+
+
+@router.delete("/issues/{id}", status_code=204, **_iss_w.route)
+def retire_issue(id: int, row_version: int, issue: Issue = Depends(_iss_w.dep), user: AppUser = Depends(current_user),
+                 db: Session = Depends(get_db)):
+    """I-4: for an issue raised in error; refused while it has live BR links (lifecycle, through the FK)."""
+    lifecycle.retire(db, _uid(user), issue, row_version)
+
+
+@router.patch("/issues/{id}/restore", response_model=IssueOut, **_iss_w.route)
+def restore_issue(id: int, issue: Issue = Depends(_iss_w.dep), user: AppUser = Depends(current_user),
+                  db: Session = Depends(get_db)):
+    return issue_service.restore_issue(db, _uid(user), issue)

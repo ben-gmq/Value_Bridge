@@ -452,3 +452,8 @@ place.
   project-tier refusal but not the live-hide refusal. (L3) the ISSUE switch-off blocker lists bare stakeholder ids;
   label them `#<id>` like `lifecycle.LABELS`. (L4) `StakeholdersPage` does not show a failed org-unit load. (L5)
   `CodeListsPage` keeps a third copy of the behaviour vocabularies — serve them from the API.
+- **2026-10-18 · slice 14 step B (`sara`; M1, L1–L4, L6 fixed in the step):** (L5) the issue schemas do not forbid
+  unknown fields, so a PATCH carrying `resolution` / `resolved_at` is ignored with a 200 rather than a 422 (law 6
+  holds) — add `extra="forbid"`. (L7) no two-connection race test for R11 (raise / edit-raiser against a concurrent
+  stakeholder retire); the FOR SHARE → FOR UPDATE order carries it. (L8) `IssuePage` does not check that the issue
+  belongs to the project in the address; `/p/A/issues/<B's id>` shows B's issue with A's pickers.

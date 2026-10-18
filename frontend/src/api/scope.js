@@ -151,6 +151,17 @@ export const stakeholderApi = {                                       // slice 1
   restore: (id) => d(http.patch(`${V}/stakeholders/${id}/restore`)),
 };
 
+export const issueApi = {                                             // slice 14 (§4.5)
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/issues`, { params })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/issues`, body)),
+  get: (id) => d(http.get(`${V}/issues/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/issues/${id}`, body)),
+  resolve: (id, body) => d(http.post(`${V}/issues/${id}/resolve`, body)),
+  reopen: (id, body) => d(http.post(`${V}/issues/${id}/reopen`, body)),
+  retire: (id, rowVersion) => del(`${V}/issues/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/issues/${id}/restore`)),
+};
+
 export const orgApi = {
   units: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-units`, { params: { include_retired: includeRetired } })),
   createUnit: (projectId, body) => d(http.post(`${P(projectId)}/org-units`, body)),

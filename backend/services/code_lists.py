@@ -47,6 +47,7 @@ CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 EXCLUDED: dict[tuple[str, str], str] = {
     ("user_access_grant", "project_role_code_id"): "retired table, SELECT-only (D-40)",
     ("project", "status_code_id"): "PROJECT_STATUS is company-only (G-2)",
+    ("issue", "status_code_id"): "ISSUE_STATUS is company-only (I-1)",
     ("import_batch", "status_code_id"): "IMPORT_STATUS is a system category",
     ("project_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
     ("project_template_component", "component_code_id"): "PROJECT_COMPONENT is a system category",

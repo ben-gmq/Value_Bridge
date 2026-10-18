@@ -7,10 +7,14 @@ database with services/baseline_shadow.py.
 
     ./venv/bin/python -m scripts.print_shadow_ddl
 """
-from sqlalchemy import CHAR, BigInteger, Boolean, Integer, Numeric, SmallInteger, String, Text
+from sqlalchemy import CHAR, BigInteger, Boolean, Date, DateTime, Integer, Numeric, SmallInteger, String, Text
 
 
 def render_type(t) -> str:
+    if isinstance(t, DateTime):                                   # slice 14: issue.resolved_at
+        return f"sa.DateTime(timezone={bool(t.timezone)})"
+    if isinstance(t, Date):                                       # slice 14: issue.raised_date / target_date
+        return "sa.Date()"
     if isinstance(t, CHAR):
         return f"sa.CHAR({t.length})"
     if isinstance(t, String) and not isinstance(t, Text):
