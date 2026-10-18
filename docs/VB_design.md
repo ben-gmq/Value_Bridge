@@ -470,12 +470,17 @@ Component CHANGE_REQUEST (needs EFFORT).
 
 ### 4.12 Phasing and dependency (D-18)
 
+Component PHASING, needing SOLUTION (W-3). A phase is a **delivery wave** within one project — never the project
+lifecycle, which comes from the WBS import — and **every word a user sees says "Wave"**; tables, routes and the
+component code keep `phase` (W-1). **FRs are never linked to a wave**: an FR's effort reaches a wave only through its
+one solution's split (W-2).
+
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `create_phase` | `PHASE` | C/U | Delivery wave: name, sequence, start and end dates, status |
-| `assign_solution_phase` | `SOLUTION_PHASE` | C/D | A solution may span phases; the assignment carries the portion |
+| `create_phase` | `PHASE` | C/U | Delivery wave: code, name, sequence, start and end dates, status. Each project defines its own waves; the statuses are company-wide (W-4) |
+| `assign_solution_phase` | `SOLUTION_PHASE` | C/D | A solution may span waves, by percent. The whole split is saved at once with every row's version, and **totals exactly 100 % or is empty** (W-5) |
 | `link_solution_dependency` | `SOLUTION_DEPENDENCY` | C/D | Prerequisite solutions. **Cycles are rejected** — topological check on insert |
-| `phase_plan_report` | `PHASE`, `SOLUTION_PHASE`, `FUNCTION_REQUIREMENT` | R | Effort per phase, dependency violations (a solution scheduled before its prerequisite), and volatile areas still sitting in the current wave |
+| `phase_plan_report` | `PHASE`, `SOLUTION_PHASE`, `FUNCTION_REQUIREMENT` | R | The wave plan: effort per wave, UNPHASED (solutions with no split) and UNASSIGNED, summing to the effort headline; dependency warnings (a prerequisite in a later or the same wave, or none). Live state only (W-7); volatile areas join with 1f |
 
 ### 4.13 Control rules and the analysis pack (D-19)
 
@@ -1335,14 +1340,16 @@ erDiagram
         bigint status_code_id FK
     }
     SOLUTION_PHASE {
-        bigint solution_id PK
-        bigint phase_id PK
+        bigint solution_phase_id PK
+        bigint solution_id FK
+        bigint phase_id FK
         bigint project_id FK
         numeric portion_pct
     }
     SOLUTION_DEPENDENCY {
-        bigint solution_id PK
-        bigint depends_on_solution_id PK
+        bigint solution_dependency_id PK
+        bigint solution_id FK
+        bigint depends_on_solution_id FK
         bigint project_id FK
         text note
     }
@@ -2215,7 +2222,7 @@ row to the diff, not REMOVED + ADDED.
   rationale go to `AUDIT_EVENT` (`RATE_CARD_CHANGED`, §7.13). Nothing reports from the history between
   freezes, so AUDIT_EVENT is the right home.
 - **Freeze** answers *what rate card this baseline was priced on*: the commercial term a signed scope was
-  agreed at, recoverable with the baseline for five years (Q12). `EFFORT_RATE` is in the freeze set under
+  agreed at, kept with the baseline for the project's life and in its archive file after (AR-1). `EFFORT_RATE` is in the freeze set under
   the `EFFORT` component (§6.1); its shadow hashes `fr_type_code`, `complexity_code` and `standard_days`.
   The labels are presentation and the rationale provenance, so neither is hashed.
 
@@ -2283,10 +2290,11 @@ edited after the fact is a record of what someone currently wishes had been deci
 is corrected by writing a **new** decision that references the old one via `supersedes_decision_id`, which
 also keeps the log readable as a narrative.
 
-**PHASE / SOLUTION_PHASE / SOLUTION_DEPENDENCY** (D-18) — delivery waves, the assignment of solutions to
-them (`portion_pct`, because a solution can span waves), and prerequisite links. `SOLUTION_DEPENDENCY` is a
-DAG: **cycles are rejected on insert** by a topological check, the opposite of process order, where loops
-are legal (BFC_NODE_DATA_ENTITY).
+**PHASE / SOLUTION_PHASE / SOLUTION_DEPENDENCY** (D-18) — delivery waves (shown as "Wave", W-1), the assignment of
+solutions to them (`portion_pct`, because a solution can span waves; a solution's live rows total exactly 100 or
+there are none, W-5), and prerequisite links. Both link tables have a surrogate PK and a full UK on their pair
+(S1-5, W-3). `SOLUTION_DEPENDENCY` is a DAG: **cycles are rejected on insert** by a topological check, the opposite of
+process order, where loops are legal (BFC_NODE_DATA_ENTITY).
 
 **WBS_ITEM** *(D-33, D-41, Q13, R2-D15)* — one row per imported MS Project task line in one project
 (component `WBS`). **Tasks come from MS Project; VB does not author them.** VB holds a read copy of the
@@ -3116,7 +3124,7 @@ other facts retire and restore with the step.
 
 The two mechanisms are complementary, not redundant. AUDIT_EVENT answers "who moved the rate in
 March and why". `baseline_effort_rate` answers "what card was v1.0 signed on", which must be
-answerable for five years (Q12) and is exactly what a vendor disputes. Justified in the EFFORT_RATE
+answerable as long as the baseline is (AR-1) and is exactly what a vendor disputes. Justified in the EFFORT_RATE
 note (§5.3).
 
 #### 5.4.17 Logical FK groups — **a group number on the field, not a relationship table.**
@@ -3522,14 +3530,17 @@ immutable table is a data-protection problem); `import_batch` / `import_row` (st
 `bfc_node_flow` (retired, D-38); `audit_event`, `project_sequence`, `code_master`, `project`, `client`;
 `risk`, `change_request`, `cr_impact`, `decision`, `control_rule`.
 
-**Retention (Q12):** a baseline is recoverable for at least five years because no application path and no
-application grant can delete one (§6.6). The model needs no retention column. Long-term archive beyond Azure's
-point-in-time restore window belongs to the deployment design (D-35, §15.3). **Contract wins (Q15):** where a
-client contract requires deletion at engagement end, `purge_project` (§15.3) removes the project's live and
-snapshot rows and destroys its archive key. It is the one hard-delete path in VB, platform-admin only, with a
-recorded reason, and it runs under the owner role — `vb_app` still holds no DELETE (§6.6). Because the reject
-triggers fire for the owner too, the purge disables them inside its own transaction, deletes shadows before
-live rows (`source_id` is NO ACTION) and the header last; live members, components and triggers go before
+**Retention (AR-1):** while a project lives, no application path and no application grant can delete a baseline
+(§6.6). **Two years after the project closes** it is flagged for archiving and every platform admin is reminded
+weekly; archiving writes **one sealed, encrypted file holding the whole project** (its baselines and client
+sign-offs) and then removes the project through the four-eyes purge; the file is kept **until a client contract or
+Ben says delete it**, which is a separate, deliberate step (§15.3). **Contract wins (Q15):** where a client contract
+requires deletion earlier, `purge_project` (§15.3) removes the project's live and snapshot rows and destroys its
+archive key. The purge is the one hard-delete path of business data in VB: requested by one platform admin with a
+recorded reason, approved by another (at least two must exist, AR-5), and run by an FTC operator under the owner
+role — `vb_app` still holds no DELETE (§6.6, AR-4). The reject triggers stay armed: the owner may delete only rows of
+the one project with an approved request, inside the purge transaction (the narrow exception to law 2, AR-4). It
+deletes shadows before live rows (`source_id` is NO ACTION) and the header last; live members, components and triggers go before
 their project (slice8 §11 item 8, slice7 §9.12).
 
 Full column lists (Column · Type · Constraints · Description) are in §5.2's attribute blocks, §5.3's entity
@@ -3739,7 +3750,7 @@ Grants, not code (S11, R2-S9). The application connects as `vb_app`; migrations 
   (`client_approver_name`, `client_approved_on`, `approval_note`, `approval_reference`, `approved_at`,
   `approved_by_user_id`), `updated_by` and `row_version`. The FROZEN → APPROVED → SUPERSEDED transitions (Q8,
   DR8-P1) need these and nothing else; `fn_baseline_header_guard()` additionally refuses any change to a
-  recorded approval. No DELETE: that is Q12's five-year recoverability, held by the database.
+  recorded approval. No DELETE: the application can never remove a baseline; only the purge can (AR-1, AR-4).
 - **Shadows: SELECT and INSERT only**, and INSERT is accepted only into a baseline whose header was written in
   the same transaction (the insert-guard trigger, DR8-S1).
 - **`import_batch`: column-level `UPDATE`** on its lifecycle, count and purge columns only (a write-once trail,
@@ -6127,7 +6138,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `CR_STATUS` | `DRAFT`, `ANALYSED`, `PRICED`, `APPROVED`, `REJECTED`, `DEFERRED` | `CHANGE_REQUEST.status_code` — **D-16** |
 | `CR_ORIGIN` | `CLIENT`, `VENDOR`, `REGULATORY`, `FTC`, `DEFECT` | `CHANGE_REQUEST.origin_code` |
 | `PM_DIMENSION` | `SCOPE`, `SCHEDULE`, `COST`, `BENEFIT`, `RISK`, `QUALITY`, `ORG_CHANGE`, `DATA`, `VENDOR` | `DECISION.dimension_code` — **D-17**, the dimensions the control framework acts on |
-| `PHASE_STATUS` | `PLANNED`, `IN_DELIVERY`, `COMPLETE`, `CANCELLED` | `PHASE.status_code` — **D-18** |
+| `PHASE_STATUS` | `PLANNED`, `IN_DELIVERY`, `COMPLETE`, `CANCELLED` — company-only (W-4) | `PHASE.status_code` — **D-18** |
 | `ISSUE_SEVERITY` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` | `ISSUE.severity_code` |
 | `ISSUE_TYPE` | `PROCESS`, `DATA`, `SYSTEM`, `ORGANIZATION`, `POLICY`, `OTHER` | `ISSUE.issue_type_code` |
 | `ISSUE_STATUS` | `OPEN`, `IN_PROGRESS`, `DEFERRED` (open behaviour); `RESOLVED`, `CLOSED` (closed behaviour) — company-only (I-1) | `ISSUE.status_code` |
@@ -6401,9 +6412,9 @@ component.
 | `POST /projects/{project_id}/bulk/wbs/validate` · `GET /projects/{project_id}/wbs` · `PATCH /wbs-items/{id}` | project_ctx / object_guard(EDIT, `WBS`) | `.xlsx`, `import_mode` · filters · phase_id, solution_id, row_version | WBS keyed by MS Project Unique ID (D-33, R2-D15); **links only by PATCH** — any other field → 422 "Change it in MS Project and re-import". Progress updates are new dated rows, never overwritten by an import (D-41, OR-7); the progress report is generated from them |
 | **Wave 3 — risks and phasing** | | | |
 | `GET/POST /projects/{project_id}/risks` · `PATCH /risks/{id}` · `POST /risks/{id}/materialise` | `RISK` | risk fields · description | risk incl. `RSK-0001`, derived `exposure_score` (D-15); materialise creates and links an issue and leaves the risk row |
-| `GET/POST /projects/{project_id}/phases` · `PATCH/DELETE /phases/{id}` · `POST/DELETE /solutions/{id}/phases` · `/dependencies` · `GET /projects/{project_id}/phase-plan` | project_ctx / object_guard(EDIT) | phase fields · phase_id · depends_on_solution_id | delivery waves and prerequisites, cycles rejected (D-18); effort by phase, dependency violations, volatile areas still in the current wave |
+| `GET/POST /projects/{project_id}/phases` · `PATCH/DELETE /phases/{id}` · `PUT /solutions/{id}/phase-split` · `/dependencies` · `GET /projects/{project_id}/phase-plan` | project_ctx / object_guard(EDIT, PHASING) | phase fields · the whole split with row versions (W-5) · depends_on_solution_id | delivery waves and prerequisites, cycles rejected (D-18); effort by wave, dependency warnings |
 | **Before first client use** | | | |
-| `POST /projects/{project_id}/purge` | platform_admin | reason, `confirm_text` (the project code) | contract-required deletion (Q15, §15.3): deletes live and snapshot rows as `vb_owner` and destroys the project's archive key. The one hard-delete route of business data |
+| `POST /projects/{project_id}/purge-requests` · `POST /purge-requests/{id}/approve` · `…/cancel` | platform_admin | kind (ARCHIVE / DELETE / DELETE_ARCHIVE), reason, `confirm_text` (client and project code) | the archive (AR-1) and contract-required deletion (Q15, §15.3) are **requested and approved in the app by two different platform admins**; an FTC operator then runs the purge script as `vb_owner` (AR-4). No HTTP route deletes |
 | client read-only login and the offline viewer file (D-43) | — | — | client viewers see their own project only; the offline file is generated from a frozen baseline at `EDIT`, never `VIEW`, after recorded client consent (OR-9). Routes fixed by that slice's spec |
 
 Deciding a change request and resetting a project's control rules to the house defaults are **EDIT** — project
@@ -6609,8 +6620,8 @@ Each is observable by someone who did not build it.
 66. **(D-17)** Every CR decision writes a `DECISION` row carrying the rejected alternative
     and the analysis it was taken against.
 67. **(D-18)** Linking solution A to depend on B, then B on A, is rejected as a cycle.
-68. **(D-18)** `phase_plan` flags a solution scheduled in a phase at or before its
-    prerequisite's phase.
+68. **(D-18)** `phase_plan` flags a solution scheduled in a wave at or before its
+    prerequisite's wave.
 69. **(D-19)** A control rule naming an `analysis_code` outside the registry is rejected.
 70. **(D-19)** A control rule cannot be saved without an owning org role.
 71. **(D-19)** With `priced_diff` flagged at 5% and escalating at 10%, a project at 7%
@@ -6860,8 +6871,9 @@ Each is observable by someone who did not build it.
      add writes one audit row and appears in the next freeze's access review with its source.
      A project admin appointed by a program admin keeps the role when that program admin is
      removed, and a project admin can demote another project admin.
-154. **(Q15)** `purge_project` by a non-admin returns 403, and without a reason 422. Run by a
-     platform admin, it leaves no live or snapshot row for the project, the project's archive
+154. **(Q15)** a purge request by a non-admin returns 403, and without a reason 422. Requested by
+     one platform admin, approved by another and run by the operator (AR-4), a DELETE purge
+     leaves no live or snapshot row for the project, the project's archive
      key is deleted, an existing archive file for it can no longer be decrypted, and a
      `PROJECT_PURGED` audit row names the project code, actor, date and reason with no
      content.
@@ -7140,12 +7152,14 @@ decision are recorded in the design history, not here.
   per-project call per project per report, so a dashboard is about 50 report calls. That is
   acceptable at ten projects; at fifty the dashboard needs caching (the same question as
   A-43), not cross-project SQL.
-- ⚠ `ASSUMPTION A-59` — **"Baselines recoverable for 5 years" (Q12) is met in two layers.**
-  In the live database, baselines are never deleted (A-7, A-36). For loss of the database
-  itself, the encrypted per-project baseline archive covers 5 years, because point-in-time
-  restore covers only days (35 at most on Flexible Server). The mechanism, cost and restore
-  drill are §15's. **A client contract that requires deletion at engagement end overrides the
-  5 years (Q15): the project is purged and its archive key destroyed (§15.3).**
+- ⚠ `ASSUMPTION A-59` — **Baseline evidence is kept in two layers (AR-1).** While the project
+  lives, baselines are never deleted from the live database (A-7, A-36), and each freeze (and
+  each client sign-off) also writes an encrypted file outside it, because point-in-time
+  restore covers only days (35 at most on Flexible Server). Two years after the project
+  closes it is archived into one encrypted project file and removed from the app; that file
+  is kept until a client contract or Ben says delete it. The mechanism, cost and restore
+  drill are §15's. **A client contract that requires deletion earlier overrides this (Q15):
+  the project is purged and its archive key destroyed (§15.3).**
 - `ASSUMPTION A-61` — **WBS parentage comes from outline level and row order** in the MS
   Project export, not from the WBS code, which is a display string some schedules customise.
   An export sorted by anything other than ID breaks parentage. The template says so, and
@@ -7281,7 +7295,7 @@ Areas this spec covers in their own sections, each with its own design pass.
 |---|---|---|
 | **Frontend design** — shell, the tree, the read-only baseline mode, how untrusted free text is rendered, the program views and the import previews | §14 | `fortience-app-scaffold` supplies the patterns, the mockups the look (D-51). **Read-only baseline mode is enforced server-side, never only as UI state** |
 | **Deployment and secret handling** — Azure (D-35): Container Apps, PostgreSQL Flexible Server on private networking, Key Vault via managed identity, the two DB roles (§6.6), ingress body limits (R2-S8), the daily purge job (Q14), and the Entra ID SSO decision (R2-S11) | §15 | Infrastructure, not application design |
-| **Backup and restore** — point-in-time restore, 5-year recoverability of baselines (Q12, A-59), and the restore drill before first client use | §15.3 | **The only real reversal mechanism for a wrongly-frozen baseline** (§4.6 offers no reopen, A-20 no restore), which makes it a control, not an ops detail |
+| **Backup and restore** — point-in-time restore, baseline and project archive files kept until deletion is ordered (AR-1, A-59), and the restore drill before first client use | §15.3 | **The only real reversal mechanism for a wrongly-frozen baseline** (§4.6 offers no reopen, A-20 no restore), which makes it a control, not an ops detail |
 
 The uploaded-file lifecycle and the `.xlsx` parser configuration are specified in §7.11 and §7.12.
 
@@ -7692,31 +7706,38 @@ target is confirmed.
   test → build → migration job → new revision. A destructive migration needs a manual
   approval on the production environment (§13).
 
-### 15.3 Backup, restore and evidence retention (R2-S10, Q12)
+### 15.3 Backup, restore and evidence retention (R2-S10, AR-1)
 
 Point-in-time restore is disaster recovery. It restores the **whole server**, reverting
 every other client's work too, and keeps at most 35 days. It is therefore **not** the way
-back from one wrong freeze, and not five-year evidence.
+back from one wrong freeze, and not evidence.
 
 | Layer | What | Kept |
 |---|---|---|
 | Disaster recovery | Flexible Server point-in-time restore, geo-redundant backup | 35 days |
-| **Baseline evidence archive** | At every freeze, that baseline's snapshot rows and content hashes are written as one JSON file to Blob Storage under a **locked immutability policy**, **encrypted with that project's own key in Key Vault** | **5 years**, unless the client contract requires deletion (Q15) |
+| **Baseline evidence archive** | At every freeze, that baseline's snapshot rows and content hashes are written as one JSON file to write-once Blob Storage, **encrypted with that project's own key in Key Vault**; at each client approval, a second file with the sign-off (AR-4) | While the project lives, then inside the project archive (AR-2) |
+| **Project archive** | Two years after the project closes: **one sealed, encrypted file holding the whole project** — every baseline and sign-off — written and verified before the project is removed by the four-eyes purge (AR-1) | **Until a client contract or Ben says delete it**; deletion is its own four-eyes step that destroys the project's key (Q15 deletes earlier) |
 | Logical dump | Monthly `pg_dump` to immutable Blob Storage | 13 months |
 
 - **Reversing one project** means restoring that project's baseline archive into a side
   database, verifying hashes, and reading or re-importing from there. No other project is
   touched.
-- **Contract-required deletion (Q15)** — the contract wins over the 5-year default.
-  Write-once storage cannot be deleted early, which is what makes it evidence, so each
-  project's archive is encrypted with its **own key**. `purge_project`, platform-admin only
-  and with a recorded reason, deletes the project's live and snapshot rows (run as `vb_owner`,
-  the one hard-delete path of business data in VB) and **destroys that project's key**. Because
-  the reject trigger fires for the owner too, the purge disables the triggers inside its own
-  transaction, deletes shadows before live rows and the header last. The archive files remain
-  but can never be read again. The monthly logical dump ages out within 13 months; the purge
+- **Two-year archive (AR-1)** — a closed project is flagged after two years and every platform
+  admin is reminded weekly until it is archived. Archiving keeps the project's key, so its files
+  stay readable by FTC; only the separate deletion step destroys it. Storage is write-once by
+  rights (the app may create and read, never overwrite or delete), not by a retention lock,
+  so the ordered deletion stays possible.
+- **Contract-required deletion (Q15)** — the contract wins over the two-year archive.
+  Each project's files are encrypted with its **own key**, so destroying the key makes every
+  copy unreadable at once. `purge_project` is requested in the app by one platform admin with
+  a recorded reason, approved by a different one (at least two must exist), and run by an FTC
+  operator as `vb_owner` (AR-4, AR-5) — the one hard-delete path of business data in VB. It
+  deletes the project's live and snapshot rows and its activity history except the purge
+  events (AR-3), and **destroys that project's key**. The reject triggers stay armed: the owner
+  may delete only that project's rows inside the purge transaction (AR-4), shadows before live
+  rows and the header last. The monthly logical dump ages out within 13 months; the purge
   record states that date. An `AUDIT_EVENT('PROJECT_PURGED')` keeps the project code, client,
-  date, actor and reason — no content.
+  date, actors and reason — no content. Slice 16 holds the design.
 - **Restore drill before first client use** (§12.3): (a) point-in-time restore to a new
   server; (b) recover one project's baseline from the archive into a side database, with
   hashes verified. The result is recorded in the session handoff.

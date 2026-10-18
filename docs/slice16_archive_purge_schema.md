@@ -1,10 +1,16 @@
-# Slice 16 — Baseline archive file + `purge_project`: logical + physical schema (apple, 2026-10-17)
+# Slice 16 — Baseline and project archive files + `purge_project`: logical + physical schema (apple, 2026-10-17; revised 2026-10-18)
 
-**DRAFT for Ben — not approved.** Revised after design review round 1 (§11). Changes to the immutability law (§4)
-and to `audit_event` (§5) are his.
+**Status: Ben's rulings are in (2026-10-18, history §3 AR-1…AR-6), and the design is approved except Q-86…Q-88** (spec
+§15a). This schema also raises Q-89…Q-92 (§12.9). **§12 is the current design wherever it disagrees with §1–§11**,
+which are kept as the record of the 2026-10-17 draft and of design review round 1. The retention rule is AR-1's: two
+years after a project closes it is due for archiving, and the project archive file is kept until a client contract or
+Ben says delete it. There is **no five-year rule**. Q-69 is answered (b) (AR-3), so the audit FK stays and only the (b)
+migration exists (§12.8). Q-72 is mandatory (AR-5). The changes to the immutability law (§4) and to `audit_event` (§5)
+were accepted by Ben (AR-4 Q-75, AR-3).
 
-Scope: S8-1, Q15 — the archive file owed at every freeze (§15.3, criterion 155) and the one hard-delete path of
-business data (§6.1 *Contract wins*, §15.3, criterion 154). Source of truth: VB_design.md §6.1 (Q15 paragraph),
+Scope: S8-1, Q15, AR-1 — the archive file owed at every freeze (§15.3, criterion 155), the project archive file written
+when a project leaves the app, and the one hard-delete path of business data (§6.1 *Contract wins*, §15.3, criterion
+154). Source of truth: VB_design.md §6.1 (Q15 paragraph),
 §6.6 role rules, §15.3; migrations 0001 (`fn_reject_modification`), 0003 (`audit_event`), 0047/0053/0054
 (`fn_baseline_header_guard`), 0048 (shadows, `fn_shadow_insert_guard`); `services/freeze_set.py` (spec 4).
 
@@ -28,6 +34,8 @@ projects' baselines unopposed. The bypass keeps the trigger armed for every row 
 
 ## 1. Grain
 
+*(2026-10-17 draft — `baseline_archive`, `project_purge` and `project_purge_key` change grain or meaning in §12.1.)*
+
 | Table | One row per … | Key | Lives through a purge? |
 |---|---|---|---|
 | `baseline_archive` | frozen baseline — the archive file owed for it (outbox) | PK `baseline_id` (1:1 with `baseline`) | no — deleted with its baseline |
@@ -36,6 +44,8 @@ projects' baselines unopposed. The bypass keeps the trigger armed for every row 
 | `vb_instance` | this database (exactly one row) | PK `one_row` (always true) | yes — not project data |
 
 ## 2. ER diagram (changed part only)
+
+*(2026-10-17 draft; the current diagram is §12.2.)*
 
 ```mermaid
 erDiagram
@@ -90,11 +100,14 @@ erDiagram
 
 ### 3.1 `baseline_archive` (`BaselineArchive`, `models/baseline.py`)
 
+*(Revised in §12.3: the key becomes `(baseline_id, archive_part, file_seq)` for the sign-off file (Q-79) and the
+replacement file (§18 S5); every column below stays.)*
+
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `baseline_id` | bigint | PK; `fk_ba_baseline (baseline_id, project_id) → baseline (uq_baseline_project)` | the baseline the file is for; 1:1, so the FK is the identity — no surrogate |
 | `project_id` | bigint | NOT NULL (part of the FK) | the purge predicate and the bypass test; the composite FK keeps it equal to the header's |
-| `format_version` | smallint | NOT NULL, `CHECK (format_version >= 1)` | archive JSON layout, set at freeze; a reader five years on needs it |
+| `format_version` | smallint | NOT NULL, `CHECK (format_version >= 1)` | archive JSON layout, set at freeze; a reader years later needs it |
 | `object_name` | varchar(400) | NULL until written; UNIQUE | built from the **instance id and ids only**: `<instance>/<project_id>/<baseline_id>.json.enc` — never a project or client name; unique across environments and restores (§6) |
 | `file_sha256` | char(64) | NULL until written; `CHECK (file_sha256 ~ '^[0-9a-f]{64}$')` | hash of the stored (encrypted) bytes, so the drill proves the blob is the one written |
 | `byte_size` | bigint | NULL until written; `CHECK (byte_size > 0)` | stored size |
@@ -116,6 +129,8 @@ file_sha256, byte_size, key_ref, written_at, attempt_count, last_attempt_at, las
 **State is derived, not coded** (Q-67): owed = `written_at IS NULL`; failing = owed AND `last_error IS NOT NULL`.
 
 ### 3.2 `project_purge` (`ProjectPurge`, `models/tenancy.py`)
+
+*(Revised in §12.5: `purge_kind`, the project-file columns, the DELETE_ARCHIVE link, and new uniques.)*
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
@@ -145,6 +160,8 @@ owner-run CLI can. Key destruction state lives in `project_purge_key`.
 
 ### 3.3 `project_purge_key` (`ProjectPurgeKey`, `models/tenancy.py`)
 
+*(Revised in §12.6: an ARCHIVE records its keys and destroys none; a later DELETE_ARCHIVE destroys them.)*
+
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `project_purge_id` | bigint | PK part; FK `project_purge` | |
@@ -162,6 +179,8 @@ Purge "keys destroyed" = no row with `destroyed_at IS NULL` (derived).
 
 ### 3.4 `vb_instance` (`VbInstance`, `models/shared.py`)
 
+*(Gains `prior_instance_ids` in §12.7, for §18 S6.)*
+
 `one_row boolean PRIMARY KEY DEFAULT true CHECK (one_row)`, `instance_id varchar(40) NOT NULL CHECK (instance_id ~
 '^[a-z0-9][a-z0-9-]{2,39}$')`, `stamped_at timestamptz NOT NULL DEFAULT now()`. Stamped once by an owner-run
 `scripts/stamp_instance.py`; guard refuses UPDATE and DELETE; vb_app SELECT only. An ops table, not a business
@@ -173,6 +192,8 @@ until someone deliberately re-stamps it (and UAT then writes under its own names
 restore into prod keeps the id and its tombstones (§6).
 
 ## 4. The scoped bypass (replaces DISABLE TRIGGER)
+
+*(`fn_purge_allows` gains the request kind and the Q-85 re-purge case in §12.4.)*
 
 One function owns the rule; four trigger functions ask it.
 
@@ -199,7 +220,7 @@ LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
 - **`fn_reject_modification_audit_purgeable()`** — **Q-69(b) only**, used by `trg_audit_event_immutable` alone:
   UPDATE → raise, always; DELETE → `RETURN OLD` only if `fn_purge_allows(OLD.project_id) AND OLD.event_type NOT
   LIKE 'PURGE\_%'`, so purge events survive even a wrong predicate. Under (a) the audit trigger stays on the
-  shared function.
+  shared function. *(§18 S8 and §12.8: the kept event types are named explicitly, not matched by pattern.)*
 - **`fn_reject_modification()` is not touched** — `decision` and anything else keep it, unconditional. A test
   finds every trigger still calling it (catalog query) and proves UPDATE and DELETE raise **as vb_owner, inside an
   open, approved, aged purge with the setting set** — the strongest position the bypass grants.
@@ -221,6 +242,9 @@ LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
 
 ## 5. `audit_event` — two branches, decided by Q-69
 
+**Decided (b)** — AR-3, 2026-10-18. Column (a) is kept below as the record of the option not taken; only the (b)
+mechanism is built (§12.8).
+
 | | Q-69(a) keep the project's audit rows | Q-69(b) delete them, keep `PURGE_*` |
 |---|---|---|
 | FK `audit_event_project_id_fkey` | **dropped** (rows outlive the project) | **kept** — no row points at the project after the purge |
@@ -232,7 +256,7 @@ LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
 project_purge_id, table counts, os_user, host}` — counts and codes, no content. Under (b) a mis-written `PURGE_*`
 row with `project_id` set survives the delete and then blocks the project's own DELETE by FK — the purge rolls
 back, never leaves a dangling id. Under (a) the FK-drop **downgrade** refuses on any dangling id, else re-adds the
-FK — never `NOT VALID`, never deletes audit rows to make it fit. **Why (b) is recommended:** old audit rows carry
+FK — never `NOT VALID`, never deletes audit rows to make it fit. **Why (b) was recommended:** old audit rows carry
 client text — `lifecycle` writes item labels (`"BR-0042 Approve invoice"`), `effort.py` a `change_rationale`.
 
 ## 6. Keys and the archive store
@@ -247,11 +271,15 @@ project per instance, named `vb-<instance>-proj-<project_id>` (ids only); rotati
 - **Tombstone.** The purge's key step first writes a write-once object `<instance>/purged/<project_id>`
   (`{project_purge_id, executed_at}`, no content). The writer **refuses to create a key or write a file for a
   tombstoned project**, so a database restored from before the purge cannot quietly re-key a client whose data was
-  destroyed (what the restored rows mean is Q-85).
+  destroyed (what the restored rows mean is Q-85). *(§12.6: the tombstone also carries the purge kind, and
+  DELETE_ARCHIVE adds a second marker.)*
 - `baseline_archive.key_ref` records the exact version per file; `project_purge_key` records each key's
   destruction. Names are a function of instance and project, so there is no key table (Q-71).
 
 ## 7. Purge transaction (CLI `scripts/purge_project.py`, as vb_owner)
+
+*(§12.5–§12.6 add the ARCHIVE steps before step 1 and the DELETE_ARCHIVE flow; steps 1–6 are unchanged for ARCHIVE
+and DELETE, except that ARCHIVE skips step 6's key destruction.)*
 
 1. `SELECT … FROM project WHERE project_id = :p FOR UPDATE`; an open request exists, approved, approval ≥ 24 h
    old (`fn_purge_allows` is re-checked by every trigger anyway); the operator types
@@ -276,6 +304,7 @@ project per instance, named `vb-<instance>-proj-<project_id>` (ids only); rotati
 ## 8. Delete order for one project (child before parent; derived from the models' FKs)
 
 Expected result of the catalog sort; the run-time order is computed, and a test pins it against this list.
+*(Slices 14 and 15 add their tables to the computed order — §12.10.)*
 
 | # | Table(s) | Predicate |
 |---|---|---|
@@ -308,7 +337,10 @@ table that is in neither and not computed stops the purge. A test plants two pro
 one, and asserts zero rows for it and that the other is byte-identical (shadows and `content_digest` included);
 a second test plants a deliberately wrong predicate and asserts step 4 rolls back.
 
-## 9. Migrations (ids = next free on `main` at build; shown as if this lands before slices 14/15)
+## 9. Migrations (2026-10-17 draft — superseded)
+
+**Superseded by §12.8** (numbering from 0068, after slice 14's 0061–0064 and slice 15's 0065–0067; Q-69 decided
+(b)). Kept for the review record.
 
 | Id | Does | Downgrade |
 |---|---|---|
@@ -320,10 +352,10 @@ a second test plants a deliberately wrong predicate and asserts step 4 rolls bac
 | 0066 — **if Q-69(a)** | drop `audit_event` → `project` FK | refuse on a dangling id (§5) |
 | 0066 — **if Q-69(b)** | `fn_reject_modification_audit_purgeable`; re-point `trg_audit_event_immutable`; FK kept | re-point to `fn_reject_modification` — safe |
 
-Exactly one 0066 is written. 0065 and 0066 weaken a guarantee, so each **pauses for Ben** (law 10) though none
-drops data. No hash-spec bump: nothing enters the freeze set.
+## 10. Questions for Ben (2026-10-17)
 
-## 10. Questions for Ben
+**All answered 2026-10-18** (AR-3…AR-6): Q-67, Q-68, Q-70, Q-71, Q-73, Q-85 as recommended; Q-69 **(b)**; Q-72
+**mandatory**, with at least two live platform admins. Kept as the record of what was asked.
 
 - **Q-67 Status codes or derived state?** All states are fully determined by `written_at` / `approved_at` /
   `executed_at` / `cancelled_at`; a stored status is a transitive dependency that can disagree with them.
@@ -369,3 +401,347 @@ drops data. No hash-spec bump: nothing enters the freeze set.
 8. **MEDIUM — key creation race.** Create-if-absent, versioned refs locally too, never replaced (§6).
 9. **LOW — `backups_age_out_on`** from the database `now()` in ICT (§3.2).
 10. **LOW — `last_error`** is class + fixed message, never `str(exc)` (§3.1).
+
+## 12. Revision for Ben's rulings (2026-10-18)
+
+Folds in AR-1…AR-6 (spec §15a) and the two schema items spec §18 left "for the schema at build" (S5's check columns,
+the key-gone proof) plus S6's re-stamp record, so that the migration list in §12.8 is final. **No hash-spec change:**
+nothing here enters the freeze set, no shadow gains or loses a column, and `project.closed_on` is not copied into the
+baseline header. Q-86 (what the project file holds beyond baselines and sign-offs) changes the file's **content**
+only, not any table, so nothing below waits on it. Q-88 is modelled as recommended (four eyes, keys then files); if
+Ben answers otherwise, the columns still fit and only the guard's DELETE_ARCHIVE branch changes.
+
+### 12.1 Grain (current)
+
+| Table | One row per … | Key | Lives through a purge? |
+|---|---|---|---|
+| `project` *(changed: attributes only)* | project — unchanged | PK `project_id` | no |
+| `baseline_archive` *(grain changed)* | **file owed or written for one part of one frozen baseline**: the scope file at freeze, the sign-off file at client approval (Q-79), and a replacement when the weekly check fails a written file (§18 S5) | PK `(baseline_id, archive_part, file_seq)`; ≤ 1 owed per `(baseline_id, archive_part)` | no — deleted with its baseline |
+| `project_purge` *(widened)* | **request to take one project out of VB, or to delete its archive**: kind ARCHIVE (write the project file, then remove), DELETE (remove under a contract, Q15), or DELETE_ARCHIVE (destroy an archived project's keys and files) | PK `project_purge_id`; per `project_id`: ≤ 1 open of any kind, ≤ 1 executed ARCHIVE-or-DELETE, ≤ 1 executed DELETE_ARCHIVE | **yes** — no FK to `project` |
+| `project_purge_key` *(meaning changed)* | **project key name recorded by a removal** (ARCHIVE or DELETE); destroyed by that DELETE, or later by the DELETE_ARCHIVE of that ARCHIVE | PK `(project_purge_id, key_name)` | **yes** |
+| `vb_instance` *(attribute added)* | this database — unchanged | PK `one_row` | yes |
+
+Why the sign-off file is a second row of `baseline_archive` and not a second table: both files have exactly the same
+attributes, writer, queue, key and verification, and differ only in what they hold. A twin table would duplicate
+every column and the writer would poll two outboxes. The part is a key column, so each part has its own owed row and
+its own write-once state. The approval set on the header is written once and then closed (0047 guard), so one
+sign-off file per baseline is enough; it is owed from the moment the approval is recorded.
+
+### 12.2 ER diagram (changed part only)
+
+```mermaid
+erDiagram
+    CODE_MASTER ||--o{ PROJECT : "status (with behaviour, Q-89 b)"
+    PROJECT ||--o{ BASELINE : "is frozen as"
+    BASELINE ||--o{ BASELINE_ARCHIVE : "is owed one file per part, replaced on a failed check"
+    CLIENT ||--o{ PROJECT_PURGE : "keeps the record of"
+    APP_USER ||--o{ PROJECT_PURGE : "requests / approves / cancels / executes"
+    PROJECT ||..o{ PROJECT_PURGE : "project_id copy, no FK"
+    PROJECT_PURGE |o..o| PROJECT_PURGE : "DELETE_ARCHIVE deletes the archive of"
+    PROJECT_PURGE ||--o{ PROJECT_PURGE_KEY : "records"
+    PROJECT_PURGE |o..o{ PROJECT_PURGE_KEY : "destroys"
+    PROJECT ||--o{ AUDIT_EVENT : "FK kept (AR-3)"
+    PROJECT {
+        bigint project_id PK
+        bigint status_code_id FK
+        varchar status_category FK "Q-89 b only"
+        varchar status_behaviour FK "Q-89 b only"
+        date closed_on "set by the service"
+    }
+    BASELINE_ARCHIVE {
+        bigint baseline_id PK "FK (baseline_id, project_id)"
+        varchar archive_part PK "SCOPE or SIGNOFF"
+        smallint file_seq PK "1, then replacements"
+        bigint project_id FK
+        smallint format_version
+        varchar object_name "UK, write-once"
+        char file_sha256 "write-once"
+        bigint byte_size "write-once"
+        varchar key_ref "write-once"
+        timestamptz written_at
+        int attempt_count
+        varchar last_error
+        timestamptz check_failed_at
+        varchar last_check_error
+    }
+    PROJECT_PURGE {
+        bigint project_purge_id PK
+        varchar purge_kind "ARCHIVE, DELETE, DELETE_ARCHIVE"
+        bigint project_id "no FK"
+        bigint client_id FK
+        varchar project_code
+        text reason
+        bigint archive_purge_id FK "DELETE_ARCHIVE only"
+        bigint repurge_of_purge_id "no FK, Q-85"
+        varchar archive_object_name "UK, ARCHIVE only"
+        char archive_sha256
+        bigint archive_byte_size
+        varchar archive_key_ref
+        timestamptz approved_at
+        timestamptz executed_at
+        date backups_age_out_on
+        timestamptz files_deleted_at
+        int files_deleted_count
+    }
+    PROJECT_PURGE_KEY {
+        bigint project_purge_id PK "FK, the removal"
+        varchar key_name PK
+        text_array key_refs
+        timestamptz destroyed_at
+        boolean was_present
+        bigint destroyed_by_purge_id FK
+        varchar proof_object_name
+    }
+    VB_INSTANCE {
+        boolean one_row PK
+        varchar instance_id
+        text_array prior_instance_ids
+        timestamptz stamped_at
+    }
+```
+
+### 12.3 `project.closed_on`, and `baseline_archive` in its final shape
+
+**`project.closed_on`** — `date NULL`. The day the project's status became closed, in ICT (`local_today()`); cleared
+when the status leaves closed; closing again sets a new date, so the two years restart (Q-87). **Set by the project
+service only, never accepted from a request body** (law 6). Index `ix_project_closed_on (closed_on) WHERE closed_on IS
+NOT NULL` for the due list. **Due** stays derived (Q-67): `closed_on + interval '2 years' <= local_today()` and no
+executed ARCHIVE or DELETE for the project (which, outside a restore, simply means the row still exists).
+
+How the database knows "closed" depends on **Q-89** (§12.9) — PROJECT_STATUS today has no behaviour and CLOSED is not
+pinned, so a status comparison would be the code-branch law 5 forbids:
+- **Q-89 (b), recommended — the I-1 precedent.** PROJECT_STATUS becomes a behaviour category (OPEN / CLOSED);
+  `project` gains `status_category varchar(30) NOT NULL DEFAULT 'PROJECT_STATUS' CHECK (status_category =
+  'PROJECT_STATUS')` and `status_behaviour varchar(20) NOT NULL`, and `fk_project_status` becomes the composite
+  `(status_code_id, status_category, status_behaviour) → code_master (code_id, category, behaviour_code)` with
+  `onupdate NO ACTION`, as `fk_issue_status` (0063). Then **`ck_project_closed_on CHECK ((status_behaviour =
+  'CLOSED') = (closed_on IS NOT NULL))`** — the database refuses a closed project with no clock and an open one with
+  a stale date, and a status an admin adds later must declare whether it closes the project.
+- **Q-89 (a).** `('PROJECT_STATUS', 'CLOSED')` joins `code_lists.PINNED`; the service compares the code; no composite
+  FK and no CHECK — `closed_on` is held by the service alone, and a new "closed-like" status never starts the clock.
+
+**Backfill (Q-92):** every project whose status is CLOSED at migration time gets `closed_on` = the migration day (ICT),
+so nothing becomes due on the day the rule arrives. A project retired (`is_active = false`) while not closed never
+gets a date — Q-90.
+
+**`baseline_archive` (final; replaces the key and adds four columns to §3.1):**
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `archive_part` | varchar(10) | PK part; NOT NULL; `ck_ba_part CHECK (archive_part IN ('SCOPE', 'SIGNOFF'))` | which file of the baseline. A CHECK list, not `code_master`: the writer branches on it to choose what goes in the file — the `data_model_depth` precedent; labels via `t()` |
+| `file_seq` | smallint | PK part; NOT NULL DEFAULT 1, `CHECK (file_seq >= 1)` | 1 for the first file of the part; the weekly check adds `n + 1` when file `n` fails (§18 S5). The current file of a part is its highest `file_seq` (derived) |
+| `check_failed_at` | timestamptz | NULL; only on a written row | when `verify_archive --all` found the stored file missing, short or with a different sha256 |
+| `last_check_error` | varchar(2000) | NULL; `num_nonnulls(check_failed_at, last_check_error) IN (0, 2)`; `CHECK (check_failed_at IS NULL OR written_at IS NOT NULL)` | class + fixed message, as `last_error` |
+
+Every §3.1 column stays. `object_name` per part and seq, ids only: `<instance>/<project_id>/<baseline_id>.json.enc`
+(SCOPE), `….signoff.json.enc` (SIGNOFF), with `.r<file_seq>` before `.json.enc` from seq 2 on — UNIQUE as before, and
+the failed file is never overwritten or deleted by the check.
+**Unique** `uq_ba_owed (baseline_id, archive_part) WHERE written_at IS NULL` (≤ 1 owed per part); `ix_ba_owed`
+unchanged. **Guard `fn_baseline_archive_guard`** gains: INSERT of `SIGNOFF` only when the header's approval set is
+recorded (`baseline.client_approver_name IS NOT NULL`); INSERT with `file_seq > 1` only when row `file_seq − 1` of
+the same part is written and has `check_failed_at` set; on a written row the **only** permitted UPDATE is
+`check_failed_at` / `last_check_error` NULL → value, once (the S5 exemption from the written-row lock); every key column
+and `format_version` never change. **Grants** gain column UPDATE on `check_failed_at, last_check_error`.
+**Who inserts:** the freeze transaction (SCOPE, seq 1); the baseline approval transaction (SIGNOFF, seq 1); the weekly
+check (seq `n + 1`, in the same transaction that sets `check_failed_at` on `n`). Derived states: owed, failing, check
+failed, superseded (a higher seq exists).
+
+### 12.4 `fn_purge_allows` by kind
+
+```sql
+CREATE FUNCTION fn_purge_allows(p_project_id bigint) RETURNS boolean
+LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
+  SELECT session_user = 'vb_owner' AND current_user = 'vb_owner'
+     AND p_project_id IS NOT NULL
+     AND p_project_id::text = current_setting('vb.purge_project_id', true)
+     AND EXISTS (SELECT 1 FROM public.project_purge pp WHERE pp.project_id = p_project_id
+                  AND pp.purge_kind IN ('ARCHIVE', 'DELETE')
+                  AND pp.executed_at IS NULL AND pp.cancelled_at IS NULL
+                  AND pp.approved_at IS NOT NULL
+                  AND (pp.approved_at <= now() - interval '24 hours'
+                       OR pp.repurge_of_purge_id IS NOT NULL)
+                  AND (pp.purge_kind = 'DELETE' OR pp.archive_object_name IS NOT NULL)) $$;
+```
+
+| Kind | Scoped bypass | What the extra conditions add |
+|---|---|---|
+| **ARCHIVE** | yes | **No row can be deleted until the verified project file is recorded on the request** (`archive_object_name IS NOT NULL`). Every trigger thus enforces "recorded, then delete"; that the script verifies before it records is proven by spec criterion 22 (spec §19 U7) |
+| **DELETE** | yes | unchanged from §4 |
+| **DELETE_ARCHIVE** | **never** — not in the kind list | it deletes no database row; a DELETE_ARCHIVE request open for a project can never lend the bypass to anything |
+
+**Q-85 re-purge (AR-6, spec §18 "the function gains that one case"):** `repurge_of_purge_id` (§12.5) waives the 24 h —
+the second approver is still required. Only the owner sets that column, and only from a tombstone it has read (§12.6).
+**Q-72 (two live platform admins) is not in this function** — it runs per deleted row; it is checked once, by the
+`project_purge` guard on the `executed_at` transition (§12.5), which is in the same transaction as the deletes, so a
+refusal there rolls the whole purge back.
+
+### 12.5 `project_purge` — kinds, project file, uniques, guard
+
+**Columns added** (all §3.2 columns stay):
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `purge_kind` | varchar(15) | NOT NULL; `ck_pp_kind CHECK (purge_kind IN ('ARCHIVE', 'DELETE', 'DELETE_ARCHIVE'))`; never changes | **a CHECK list, not `code_master`**: the script and the triggers branch on it (law 5's purpose — a kind an admin could add would reach a branch nobody wrote). Labels via `t()` |
+| `archive_purge_id` | bigint | NULL; `ck_pp_archive_ref CHECK ((purge_kind = 'DELETE_ARCHIVE') = (archive_purge_id IS NOT NULL))`; FK below | the ARCHIVE whose files this request deletes — **yes, DELETE_ARCHIVE references it**: it is the only link from the deletion to the keys it must destroy (§12.6), the project row being long gone |
+| `archive_purge_kind` | varchar(15) | `GENERATED ALWAYS AS (CASE WHEN archive_purge_id IS NOT NULL THEN 'ARCHIVE' END) STORED` | FK helper, as `project.program_is_active` |
+| `repurge_of_purge_id` | bigint | NULL, **no FK** (the original request may be absent from the restored database); `CHECK (purge_kind <> 'DELETE_ARCHIVE' OR repurge_of_purge_id IS NULL)` | Q-85: the id read from the tombstone of a removal that a restore undid. Waives the 24 h only |
+| `archive_object_name` | varchar(400) | NULL; UNIQUE | the project file: `<instance>/<project_id>/project-<project_purge_id>.json.enc` (ids only) |
+| `archive_sha256` | char(64) | NULL; `~ '^[0-9a-f]{64}$'` | of the stored (encrypted) bytes |
+| `archive_byte_size` | bigint | NULL; `> 0` | |
+| `archive_key_ref` | varchar(400) | NULL | the versioned key that encrypted the project file — added beyond the brief's three: the file must be readable and verifiable without the purged `baseline_archive` rows, and §12.6 collects it with the other refs |
+| `files_deleted_at` | timestamptz | NULL | DELETE_ARCHIVE: when the script finished deleting the project's files from the store |
+| `files_deleted_count` | integer | NULL; `>= 0` | how many objects it deleted (the tombstones are kept) |
+
+**Checks tying them to kind and execution**
+- `ck_pp_archive_set CHECK (num_nonnulls(archive_object_name, archive_sha256, archive_byte_size, archive_key_ref) IN (0, 4))`
+- `ck_pp_archive_kind CHECK (purge_kind = 'ARCHIVE' OR archive_object_name IS NULL)` — only an ARCHIVE has a project file
+- `ck_pp_archive_exec CHECK (purge_kind <> 'ARCHIVE' OR executed_at IS NULL OR archive_object_name IS NOT NULL)` — an executed ARCHIVE always names its file
+- `ck_pp_files_deleted CHECK (num_nonnulls(files_deleted_at, files_deleted_count) IN (0, 2) AND (files_deleted_at IS NULL OR (purge_kind = 'DELETE_ARCHIVE' AND executed_at IS NOT NULL)))`
+- `ck_pp_backups` replaces §3.2's backups CHECK: `CHECK ((executed_at IS NOT NULL AND purge_kind <> 'DELETE_ARCHIVE') = (backups_age_out_on IS NOT NULL))` — a DELETE_ARCHIVE removes no database rows, so it starts no backup clock
+
+**Uniques** (`uq_pp_done` is dropped — it would refuse the executed DELETE_ARCHIVE that follows an executed ARCHIVE):
+- `uq_pp_open (project_id) WHERE executed_at IS NULL AND cancelled_at IS NULL` — unchanged, **across kinds**: one
+  open request per project of any kind, so Q-73's pending check stays one lookup
+- `uq_pp_removed (project_id) WHERE executed_at IS NOT NULL AND purge_kind IN ('ARCHIVE', 'DELETE')` — a project
+  leaves VB once per database timeline
+- `uq_pp_archive_deleted (archive_purge_id) WHERE executed_at IS NOT NULL` — an archive is deleted once
+- `uq_pp_id_project_kind (project_purge_id, project_id, purge_kind)` — FK target for
+  `fk_pp_archive (archive_purge_id, project_id, archive_purge_kind) → project_purge (project_purge_id, project_id, purge_kind)`:
+  the database proves the DELETE_ARCHIVE names an ARCHIVE **of the same project**
+
+**Guard `fn_project_purge_guard`** — §3.2's rules stay; added:
+- **INSERT, every kind:** at least two live platform admins (`app_user.is_active AND is_platform_admin`), else raise
+  (Q-72, AR-5); `archive_*`, `repurge_of_purge_id`, `files_deleted_*` must be NULL.
+- **INSERT ARCHIVE / DELETE:** the `project` row exists. (Whether ARCHIVE also requires the project to be due is Q-91,
+  enforced in the service either way.)
+- **INSERT DELETE_ARCHIVE:** the referenced ARCHIVE is executed; `client_id` and `project_code` are **overwritten**
+  from it (a deliberate copy — the record must read alone; the guard keeps it equal to its source).
+- **Approve:** approver and requester are both live platform admins, and two or more exist.
+- **`archive_*`:** NULL → value once, by `vb_owner` only, kind ARCHIVE, while open and approved. They stay on a
+  request cancelled afterwards, so an orphan project file is always named (and later made unreadable by DELETE or
+  DELETE_ARCHIVE).
+- **`repurge_of_purge_id`:** NULL → value once, by `vb_owner` only, while open, kind ARCHIVE or DELETE.
+- **`executed_*` NULL → value** (owner only; the app has no grant) requires, re-checked in the database at that
+  moment: approved; `approved_at <= now() − 24 h` or `repurge_of_purge_id` set; requester ≠ approver and both still
+  live platform admins (§18 S7); at least two live platform admins; then by kind —
+  ARCHIVE: `archive_object_name` set **and** no `project` row with this `project_id` remains;
+  DELETE: no `project` row remains;
+  DELETE_ARCHIVE: no `project_purge_key` row of the referenced ARCHIVE has `destroyed_at IS NULL` — **for this kind
+  "executed" means "keys destroyed"**.
+- **`files_deleted_*`:** NULL → value once, DELETE_ARCHIVE, after execution; otherwise an executed row is frozen as before.
+
+**Grants** unchanged: vb_app cannot write `purge_kind` after insert, `archive_*`, `repurge_of_purge_id`, `executed_*`,
+`backups_age_out_on` or `files_deleted_*`. The app INSERTs `purge_kind` (and `archive_purge_id` for DELETE_ARCHIVE);
+both are then fixed by the guard.
+
+**The ARCHIVE run** (operator script, ahead of §7 step 1): build the project file from the **current** verified file
+of every part of every baseline (AR-2) plus Q-86's content → encrypt under the project key → `put_once` → read the
+stored bytes back and verify them end to end → record `archive_*` and audit `PURGE_ARCHIVE_WRITTEN`, **commit** → §7
+steps 1–5 unchanged, with the file's ref added to the collected key refs → step 6 writes the tombstone
+(`{project_purge_id, purge_kind: ARCHIVE, executed_at}`) and **destroys nothing**. A re-run after a failed purge
+transaction finds `archive_*` already recorded, re-verifies that file and reuses it — the project's writes have been
+refused since the request opened (Q-73), so the file is still current.
+**Name change from spec §15a:** the project file name carries the request id (`project-<project_purge_id>.json.enc`,
+not `project.json.enc`). The store is write-once, so a fixed name would make a cancelled ARCHIVE's file block — or
+worse, be adopted by — a later ARCHIVE of the same project holding newer content.
+
+### 12.6 `project_purge_key` under each kind
+
+| Kind | Key rows | Destroyed |
+|---|---|---|
+| DELETE | inserted in its purge transaction (unchanged) | by itself, after commit (unchanged) |
+| **ARCHIVE** | inserted in its purge transaction, the same way, **plus** `archive_key_ref`'s name | **none** — the rows stay `destroyed_at IS NULL`: "keys held for the archive", an expected state, not R11's alert |
+| DELETE_ARCHIVE | **none of its own** | destroys every row of its `archive_purge_id` |
+
+**Columns added:**
+- `destroyed_by_purge_id bigint NULL`, FK `project_purge` — the request that destroyed this key: the parent itself for
+  a DELETE, the DELETE_ARCHIVE for an ARCHIVE's key. Without it, the destruction of an archive's keys would have no
+  owner in the data.
+- `proof_object_name varchar(400) NULL` — the stored file that **failed to decrypt** after destruction (spec §18's
+  "prove the key is gone"); NULL with `destroyed_at` set means no file existed to prove on, and the script says so.
+- `ck_ppk_destroyed CHECK (num_nonnulls(destroyed_at, was_present, destroyed_by_purge_id) IN (0, 3))` replaces the
+  pair CHECK; `CHECK (proof_object_name IS NULL OR destroyed_at IS NOT NULL)`.
+
+**Guard** adds: INSERT only for a parent of kind ARCHIVE or DELETE (and still only under `fn_purge_allows`); the
+destroyed columns NULL → value once, by `vb_owner`, where `destroyed_by_purge_id` is either (a) the parent itself,
+kind DELETE, executed; or (b) an open, approved DELETE_ARCHIVE with approval ≥ 24 h old whose `archive_purge_id` is
+the parent. **An ARCHIVE can never mark its own keys destroyed.** Derived purge states: DELETE "keys outstanding" =
+rows with `destroyed_at IS NULL`; ARCHIVE "archive readable" = the same rows, until a DELETE_ARCHIVE.
+
+**The DELETE_ARCHIVE run** (no database rows deleted, no bypass): checks as §7 step 1 against the ARCHIVE row (the
+operator types `<client_code>/<project_code>` from it) → writes a second write-once marker
+`<instance>/purged/<project_id>.keys-destroyed` (`{project_purge_id, archive_purge_id}`) → destroys each key row of the
+ARCHIVE under this instance's prefix (S2), proves each, sets `destroyed_*` → sets `executed_*` (the guard refuses while
+any key is left) and audits `PURGE_KEYS_DESTROYED` → deletes every object under `<instance>/<project_id>/` where the
+store allows, sets `files_deleted_*`, audits `PURGE_ARCHIVE_DELETED`. The tombstones are kept.
+**Restore (Q-85):** the script reads the tombstone's kind and the marker — tombstone ARCHIVE and no marker → re-purge
+as ARCHIVE, **adopting** the existing project file after verifying it; marker present, or tombstone DELETE → re-purge as
+**DELETE** (the keys are gone, so no file could be written). Either way the owner sets `repurge_of_purge_id`. §18 S3's
+sequence move must also advance `project_purge`'s identity past every `project_purge_id` found in tombstones, so a new
+request can never reuse an id a tombstone names.
+
+### 12.7 `vb_instance.prior_instance_ids`
+
+`prior_instance_ids text[] NOT NULL DEFAULT '{}'` — every instance id this data was stamped under before the current
+one, appended by `stamp_instance` when it re-stamps a restored database (§18 S6). An array, not a single
+`restored_from_instance_id`, because a restore of a restore (prod → UAT → dev) must still find prod's tombstones; the
+writer and the restore runbook check tombstones under the current id **and every prior one**. Guard: UPDATE only by
+`vb_owner`, only appending `OLD.instance_id` to the array while changing `instance_id`, `stamped_at := now()`; DELETE
+refused. Grain unchanged.
+
+### 12.8 Migrations (final, from 0068)
+
+Slice 14 took 0061–0064 and slice 15 takes 0065–0067; ids are the next free on `main` when built, in this order. One
+table or one change per migration, each its own commit, each reversible; every new model joins `models/__init__.py`
+(law 10). **Pauses for Ben** marks the ones that weaken a guarantee or touch the immutability/audit triggers.
+
+| Id | Does | Downgrade guard | Pause |
+|---|---|---|---|
+| **0068** | `baseline_archive` (final shape §12.3) + guard + grants; **backfill** one owed `SCOPE` row per existing baseline (`created_by = frozen_by_user_id`) and one owed `SIGNOFF` row per baseline with an approval recorded (`created_by = approved_by_user_id`) | refuse if any `written_at IS NOT NULL` (a written file's record would be lost) | no |
+| **0069** | `vb_instance` (with `prior_instance_ids`) + guard + grant (empty; stamped by the script) | refuse if stamped (the restore identity would be lost) | no |
+| **0070** | *Q-89 (b) only:* PROJECT_STATUS becomes a behaviour category — refuse on project-tier or unknown PROJECT_STATUS codes (as 0061), widen `ck_code_behaviour_present`, add `ck_code_project_status_behaviour IN ('OPEN','CLOSED')`, set PLANNING / ACTIVE / ON_HOLD → OPEN, CLOSED → CLOSED; `seed_code_master` carries the same | refuse while `project.status_behaviour` exists (0071 first); else clear the four behaviours and restore the CHECK | no |
+| **0071** | `project.closed_on` + `ix_project_closed_on`; backfill (Q-92). *Under Q-89 (b) also:* `status_category`, `status_behaviour` (backfilled from the status row), the composite `fk_project_status` and `ck_project_closed_on` | refuse while any `project_purge` table exists (0072 first) or any `closed_on IS NOT NULL` set after the migration day (a real clock would be lost); else drop, and under (b) restore the single-column FK | no |
+| **0072** | `project_purge` (incl. `purge_kind`, `archive_*`, `archive_purge_id` + generated helper + `fk_pp_archive`, `repurge_of_purge_id`, `files_deleted_*`, the uniques of §12.5) + guard + grants | refuse if any row exists | no |
+| **0073** | `project_purge_key` (incl. `destroyed_by_purge_id`, `proof_object_name`) + guard + grant | refuse if any row exists | no |
+| **0074** | the scoped bypass: `fn_purge_allows` (§12.4), `fn_reject_modification_purgeable`; re-point **every** `baseline_*` shadow trigger (the 28 plus slices 14–15's, read from the catalog, not counted by hand); replace `fn_baseline_header_guard` from the **latest** frozen-column list on `main` (0054's, or slice 15's if it changed it); `vb_ops.immutable_guards_v2` | refuse if any `project_purge` row is executed (a downgrade must not re-arm guards under a half-run purge); else restore the old triggers and the latest header guard | **yes** — law 2 exception (AR-4 Q-75) |
+| **0075** | **final.** `fn_reject_modification_audit_purgeable` (DELETE only under `fn_purge_allows`, and never an event of the named kept types: `PURGE_REQUESTED`, `PURGE_APPROVED`, `PURGE_CANCELLED`, `PURGE_ARCHIVE_WRITTEN`, `PROJECT_PURGED`, `PURGE_KEYS_DESTROYED`, `PURGE_ARCHIVE_DELETED` — §18 S8, by name, not pattern); re-point `trg_audit_event_immutable`; FK `audit_event → project` **kept** | re-point to `fn_reject_modification` — safe | **yes** — the audit log's immutability (AR-3) |
+
+Without Q-89 (b), 0070 is not written and 0071–0075 become 0070–0074. No migration drops data on upgrade; no
+hash-spec bump.
+
+### 12.9 Questions for Ben raised by this revision (Q-86…Q-88 stay as spec §15a has them)
+
+Numbered as the next free ids in the history on 2026-10-18; renumber if another session took them first.
+- **Q-89 — How does VB know a project is "closed", so the two-year clock starts?** Today "Closed" is just one of four
+  editable project statuses with no meaning attached; an admin could add "Cancelled" or "Completed" and those projects
+  would never come due. (a) treat the code CLOSED as the only closed status (pinned); (b) give every project status an
+  open/closed meaning, as issue statuses got in slice 14 (I-1), so any closed-meaning status starts the clock and the
+  database refuses a closed project without a date. **Recommend (b)** — one more small migration (0070), and the
+  reminder can never miss a project because of how a status was named.
+- **Q-90 — Does a retired (soft-deleted) project that was never closed ever come due?** It still holds client data,
+  but with no `closed_on` it would never be flagged. **Recommend:** yes — retiring a project counts as closing it for
+  the archive clock (the service sets `closed_on` when it retires a project that is not closed); no new column.
+- **Q-91 — May a project be archived before its two years are up?** **Recommend:** no — ARCHIVE only when due; an
+  earlier removal is a DELETE under a contract (Q15), which leaves no project file. If Ben wants "archive on the
+  client's request" too, the service allows any closed project; the schema is the same either way.
+- **Q-92 — When does the clock start for projects already closed when this lands?** We don't hold the day they
+  closed. **Recommend:** the day of the migration, so nothing becomes due on day one. (Reading old audit events for
+  the status change would be more exact but rests on text never meant for it.)
+
+### 12.10 Normalization notes for this revision
+
+- **1NF.** `project_purge_key.key_refs` and `vb_instance.prior_instance_ids` are arrays kept as **evidence lists** —
+  never searched, joined or updated element by element; each is written once (or appended once) as a whole. Treated
+  as one value, as in §3.3.
+- **2NF.** `baseline_archive`'s new composite key `(baseline_id, archive_part, file_seq)`: every file column depends on
+  the whole key (each file has its own name, hash, key ref and check result); `project_id` depends on `baseline_id`
+  alone — a partial dependency, **kept deliberately** as before because it is half of the composite FK that makes it
+  equal to the header's, and it is the purge predicate the bypass tests per row.
+- **3NF.** The project-file columns live on `project_purge` because they depend only on the ARCHIVE request (1:1,
+  optional); a separate `project_archive` table would add a join and a second write-once guard for no new fact.
+  `client_id` / `project_code` on a DELETE_ARCHIVE row are transitively determined by `archive_purge_id` — a labelled
+  copy, forced equal by the guard, so the record reads alone. "Due", "keys held", "keys outstanding", "check failed"
+  and "superseded" are all **derived** from dates and keys, never stored (Q-67).
+- **Delete order (§8).** `audit_event` moves from KEEP to the DELETE set (row 12, AR-3). Slices 14 and 15 add their
+  tables (stakeholder, issue, issue_br and their shadows; slice 15's wave tables) to the computed order — no hand edit;
+  the classification test fails if any lands unlisted.

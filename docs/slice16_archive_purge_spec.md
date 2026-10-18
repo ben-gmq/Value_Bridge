@@ -1,7 +1,9 @@
-# Slice 16 — Baseline archive file + `purge_project` (spec, DRAFT for Ben, 2026-10-17)
+# Slice 16 — Baseline and project archive files + `purge_project` (spec, rulings in; Q-86…Q-93 open)
 
-**Status:** DRAFT — not approved, not built. After design review rounds 1–2 (the cap; §17, §18). Needs Ben's answers
-(Q-67…Q-85) and his OK. **Source of truth:**
+**Status:** Ben ruled on Q-67…Q-85 on 2026-10-18 (AR-1…AR-6, history §3) and **replaced the five-year retention with a
+two-year archive (AR-1)**. Approved **except Q-86…Q-93**, which that rework raises (§15a); not built. **§15a is the
+current design wherever it and the text above it disagree.** Design review rounds 1–2 were spent on the 2026-10-17
+draft (§17, §18); one more round covered only the 2026-10-18 changes (§19). **Source of truth:**
 `docs/VB_design.md` §15.3 (the evidence archive and contract-required deletion), the Q15 paragraph in §6, criteria 154–155,
 §6.6 (the two roles; "the owner role's secret is available only to the migration job"), plan row "Baseline archive file
 + `purge_project`" in `docs/VB_remaining_work.md` (stream B, 2 days, no dependency). **Schema:**
@@ -9,24 +11,38 @@
 and the grade.
 
 ## 1. Purpose
-Keep a sealed, encrypted copy of every frozen baseline outside the database for five years, and — when a client contract
-requires it — remove one project completely, leaving its archive copies unreadable and a record that the removal happened.
+Keep a sealed, encrypted copy of every frozen baseline (and its client sign-off) outside the database while a project
+runs; **two years after a project closes, archive it** — one sealed, encrypted file holding the whole project — and
+remove it from the live app through the four-eyes purge, keeping that file until a client contract or Ben says delete
+it (AR-1); and, when a client contract requires it earlier, remove one project completely, leaving its archive copies
+unreadable and a record that the removal happened (Q15).
 
 ## 1a. Interface
-- **Input:** (archive) every successful baseline freeze, automatically; (purge) a platform admin's request naming the
-  project, a reason and the typed project code, then an FTC operator running the purge job.
-- **Output:** (archive) one encrypted JSON file per baseline in write-once storage, and its row in `baseline_archive`;
-  (purge) no live, snapshot or archive-readable data left for the project, the project's key destroyed, one
-  `project_purge` record and a `PROJECT_PURGED` audit row (code, client, date, actor, reason — no content).
+- **Input:** (baseline files) every successful freeze and every client approval, automatically; (requests) a platform
+  admin's request of kind ARCHIVE, DELETE or DELETE_ARCHIVE naming the project, a reason and the typed client and project
+  codes, a different platform admin's approval, then an FTC operator running the purge job.
+- **Output, per kind:** (baseline files) one encrypted file per baseline and one per sign-off, each with its
+  `baseline_archive` row; **ARCHIVE** — one verified project file, then no live or snapshot data left in the app, the
+  keys **kept** so the project file stays readable by FTC, a tombstone; **DELETE** — no live, snapshot or
+  archive-readable data, the keys destroyed (Q15); **DELETE_ARCHIVE** — the project's keys destroyed (every file
+  unreadable), the files deleted, a second tombstone. Each: one `project_purge` record and its audit rows (codes,
+  client, dates, actors, reason — no content).
 - **Validation:** the archive writer re-reads the frozen rows and refuses to write a file whose recomputed digest differs
-  from the header's; a file is never overwritten. The purge refuses: a non-admin (403), no reason (422), a wrong typed
-  code (422), a second open request for the project (409), and an execution without a second admin's approval, or within
-  24 hours of that approval (Q-72).
-- **Archive:** the archive file *is* the archive (5 years, locked); the purge record and audit rows are kept forever
-  and hold no client content.
-- **Maintenance loop:** the archive writer's backlog (`baseline_archive` rows still owed, and those with an error) is shown to
-  platform admins and checked at each release; the restore drill (§15.3) recovers one baseline from its file into a side
-  database before first client use and once a year after.
+  from the header's; a file is never overwritten. Every request refuses: a non-admin (403), no reason (422), wrong typed
+  codes (422), a second open request for the project (409), fewer than two live platform admins (AR-5), and an execution
+  without a second admin's approval or within 24 hours of it (Q-72). An ARCHIVE also stops, deleting nothing, when the
+  project is not yet due (Q-91), when any baseline lacks a current verified file (§19 U3), or when the project file
+  fails its verification.
+- **Archive:** the per-baseline files while the project runs, then the one project archive file, kept until a client
+  contract or Ben says delete it (AR-1); the purge record and audit rows are kept forever and hold no client content.
+- **Reminder:** two years after a project closes it is flagged "due for archiving" to every FTC platform admin, weekly,
+  until it is archived — never silently (AR-1, AR-5).
+- **Maintenance loop:** the **weekly check** (§19 U1, U5), owned by every platform admin (Q-84), reports: projects due
+  for archiving; projects reopened since the last run; owed or failed baseline files; unfinished purges; and **every
+  held project archive** — the file present with its recorded size and sha256, and its key still able to unwrap. It
+  always reports, even "0 due", and `/admin` warns when the last run is over 8 days old. The restore drill (§15.3)
+  recovers one baseline from its file, and one project file, into a side database before first client use and once a
+  year after.
 
 ## 2. Playbook / doctrine
 `~/.claude/ftc-playbook.md` §9 items 7 (soft delete — this is the one recorded exception, Q15), 10–11 (one service per
@@ -61,11 +77,12 @@ freeze writes a file" provable: a baseline whose row is still owed is a visible 
 ## 5–6. Logical and physical design
 **apple:** `docs/slice16_archive_purge_schema.md` — `baseline_archive` (NET-NEW, PK `baseline_id`, write-once file
 columns, state derived from `written_at`), `project_purge` (NET-NEW, no FK to `project`, state derived from
-`cancelled_at` / `executed_at`, one open and one executed per project), `fn_purge_allows` + a new
+`cancelled_at` / `executed_at`, one open and one executed per project; a request's kind is ARCHIVE or DELETE — §15a),
+`fn_purge_allows` + a new
 `fn_reject_modification_purgeable` for the 28 shadows + the header guard's DELETE branch (NEEDS-CHANGES; the shared
 `fn_reject_modification` that guards `audit_event` is **not** touched), `audit_event` (NEEDS-CHANGES: drop its FK to
 `project` — only under Q-69 (a); under (b) the `PURGE_*` events are written with `project_id` NULL and the id in
-`detail`, and the FK stays), the purge order (§8 there), migrations 0061–0066 (final list in §17 R1). No key material in any table.
+`detail`, and the FK stays), the purge order (§8 there), migrations from 0068 (after slices 14 and 15; final list in the schema's §12). No key material in any table.
 **Where this spec and apple differ, apple's schema wins**; I adopted her corrections: derived state instead of status
 codes, a separate purgeable function, ids-only file and key names, the lock correction (DISABLE TRIGGER blocks other
 projects' freezes, not their reads — and guards nothing while off, which is the real reason not to use it).
@@ -205,7 +222,7 @@ this slice. The archive writer is Grade 2 (a missing file is visible as owed; th
 the SQL on every shadow).
 
 ## 14. Build checklist
-Migrations from 0061, one per commit, reversible; dropping the audit FK and changing the trigger functions pause for Ben
+Migrations from 0068 (slice 14 took 0061–0064, slice 15 takes 0065–0067), one per commit, reversible; dropping the audit FK and changing the trigger functions pause for Ben
 · shadows untouched (no new shadow) · `cryptography` added only after Ben's OK · `sara` before the commit (baselines,
 grants, the migration chain) · no key or credential in a file in the repo, a log or an audit row · the operator script
 prints what it will delete (counts per table) and needs the project code typed again · full suite before merge.
@@ -242,6 +259,96 @@ Q-67…Q-73 are apple's (schema §10, full reasoning there); Q-74…Q-78 are min
   each checked against its digest first (migration 0061 creates their owed rows).
 - **Q-78 — A mutation harness for the purge?** **Recommend:** yes, as its own task after this slice lands (about half a
   day): it proves the tests fail if the order, the project filter or the bypass scope is broken.
+
+## 15a. Ben's rulings (2026-10-18) and the two-year project archive — the current design
+
+**Rulings (history AR-1…AR-6).** Q-67, Q-68, Q-70, Q-71, Q-73, Q-76, Q-77, Q-78, Q-80, Q-81, Q-82, Q-83, Q-85: as
+recommended. **Q-69 (b)**: the purge deletes the project's activity history, keeping only the purge events. **Q-72
+mandatory**: at least two FTC platform admins must exist — the purge (both kinds) refuses with fewer than two live
+platform admins, and the setup check (`/admin` banner and the weekly report) warns. **Q-74** yes · **Q-75** yes (a change
+to VB law 2 Ben accepts) · **Q-79** yes: the evidence includes the client sign-off (approver, date, signed-document
+reference) — the second owed file per baseline at approval, as R7 drafted. **Q-84**: the weekly check's reminder goes
+to all platform admins. **Azure (D-35):** one archive vault per client, as recommended.
+
+**AR-1 replaces Q12.** There is no five-year rule. Everything above that says "five years" or "5 years, locked" reads as
+this section:
+
+1. **Due.** Two years after a project is closed (Q-87), VB flags it **due for archiving**. The flag is derived (no
+   status code, Q-67): `closed_on + 2 years <= local_today()` and no executed ARCHIVE or DELETE request. It shows on the
+   platform-admin purge list and the `/admin` page, and the **weekly check** (R11, Q-84) names every due project to
+   **all** platform admins until it is archived. Never silent: there is no "snooze"; a project that must stay live
+   longer is reopened (its status leaves CLOSED), which the reminder then stops listing.
+2. **Archive = write one project file, then remove the project.** A platform admin opens an **ARCHIVE** request
+   (`project_purge.purge_kind = 'ARCHIVE'`); a different platform admin approves; after the same 24 h the operator runs
+   `scripts/purge_project.py` as today, which now first:
+   - **writes the project archive file** — `<instance>/<project_id>/project-<project_purge_id>.json.enc` (named by the
+     request, so a cancelled request's file never blocks or leaks into a later one), write-once, encrypted under the
+     project's key like the per-baseline files. It holds every frozen baseline of the project exactly as its verified
+     per-baseline file does (header, every shadow row as `::text`, hashes), every client sign-off file (Q-79), the
+     purge record so far, and whatever Q-86 decides about the live state;
+   - **verifies that file** end to end on the exact bytes stored (decrypt, recompute every row hash and every digest,
+     R6) and stops — nothing deleted — on any mismatch;
+   - records the file's name, sha256 and size on the request, then runs the purge transaction unchanged (§7, S1–S9).
+   An ARCHIVE purge **does not destroy the project's key**: it writes the tombstone (so a restore re-runs the removal,
+   R4, Q-83, Q-85) and leaves the key and every file readable by FTC.
+3. **Kept until told.** The project file (and the project's per-baseline files) are kept **until a client contract or
+   Ben says delete them**. Deleting is a separate, deliberate step (Q-88): a **DELETE_ARCHIVE** request with the same
+   four eyes, whose reason cites the contract clause or Ben's instruction; the script destroys the project's keys
+   (Q-71: delete, then purge) — which makes every file of the project unreadable at once — then deletes the files where
+   the store allows, and records both; it also writes a second tombstone `<instance>/purged/<project_id>.keys-destroyed`
+   so that a restore re-runs the removal as a DELETE, never tries to archive again with keys that are gone. The same
+   24 h wait after approval applies.
+4. **Contract first (Q15 stands).** A contract requiring deletion before the two years is the **DELETE** kind: today's
+   flow, unchanged — purge and destroy the keys; no project file is written.
+
+**AR-2 — the per-baseline file at each freeze stays.** The project file is written only when a project leaves the app,
+two or more years after its first baselines were signed. Until then the per-baseline file is the only copy of a signed
+baseline outside the live database (the monthly dump ages out in 13 months, point-in-time restore in 35 days), and
+the project file is assembled from those already-verified files rather than re-read from a database about to be
+purged. So: one file per baseline (and one per sign-off, Q-79) while the project runs, one project file when it
+leaves.
+
+**Storage consequence (for D-35).** A time-locked immutability policy would block AR-1(3)'s deletion, so the store is
+write-once by **rights**, not by a retention lock: the app may create and read, never overwrite or delete; delete
+belongs to the DELETE_ARCHIVE job alone. Locally: files created `O_EXCL`, read-only, deleted only by that script.
+
+**Schema consequences** (apple, schema §12, which governs): `project.closed_on` (set and cleared by the service only —
+Q-87, Q-89); `project_purge.purge_kind` (`ARCHIVE` / `DELETE` / `DELETE_ARCHIVE`, CHECK-listed: the script branches on
+it), the project file's name, sha256, size and key ref, `archive_purge_id` (a DELETE_ARCHIVE names its ARCHIVE, proven
+same-project by a composite FK) and `repurge_of_purge_id` (Q-85: skips only the 24 h wait); per project at most one open
+request, one executed ARCHIVE-or-DELETE and one executed DELETE_ARCHIVE; `baseline_archive` keyed by (baseline, part
+SCOPE / SIGNOFF, file sequence) for the Q-79 sign-off file and §18 S5's replacement files; `fn_purge_allows` only for
+ARCHIVE and DELETE, and for an ARCHIVE only once the verified project file is recorded. The restore step (§18 S3) also
+moves `project_purge`'s id sequence past every id in a tombstone. Migrations 0068–0075; 0074 (the scoped bypass) and
+0075 (the audit purge trigger) pause for Ben.
+
+**Added acceptance criteria.** 20. A project closed two years ago (by `closed_on`) is listed as due and named in the
+weekly reminder to every platform admin; reopening removes it. 21. An ARCHIVE purge writes the project file, verifies
+it, then deletes the project; the file decrypts afterwards and every baseline in it verifies; the key is not destroyed.
+22. A project file that fails its verification stops the ARCHIVE purge before any delete. 23. A DELETE_ARCHIVE request
+needs four eyes and a reason; afterwards no file of the project decrypts. 24. With fewer than two live platform admins
+every purge kind refuses, and `/admin` warns.
+
+**New questions for Ben (raised by the rework).**
+- **Q-86 — What does the project file hold beyond the frozen baselines and sign-offs?** A project can change after its
+  last baseline. (a) only the baselines and sign-offs — anything after the last freeze is lost; (b) also the live state
+  at archiving, every row as text in a section marked "not a baseline — unsigned"; (c) take a closing baseline first —
+  but a freeze can refuse on consistency checks, which would block the archive. **Recommend (b).**
+- **Q-87 — When do the two years start?** **Recommend:** the day the project's status is set to CLOSED, recorded as
+  `closed_on`; reopening clears it and closing again restarts the two years.
+- **Q-88 — How is an archive file deleted?** **Recommend:** the same four eyes as a purge — one platform admin requests,
+  another approves, the reason cites the contract clause or Ben's instruction — then the project's keys are destroyed
+  (every file unreadable at once) and the files deleted; the request record stays forever.
+- **Q-89 (apple) — How does VB know a project is closed?** "Closed" is today just an editable project status with no
+  meaning attached, so a status added later (say "Cancelled") would never start the clock, and comparing codes breaks
+  law 5. (a) pin the CLOSED code; (b) give project statuses an open / closed meaning, as issue statuses got in slice
+  14, so the database refuses a closed project without its date. **Recommend (b).**
+- **Q-90 (apple) — Does a retired project that was never closed come due?** **Recommend yes:** retiring a project sets
+  its `closed_on`, so it is archived like any other.
+- **Q-91 (apple) — Can a project be archived before its two years?** **Recommend no:** an earlier removal is a contract
+  DELETE (Q15). The tables are the same either way.
+- **Q-92 (apple) — When does the clock start for projects already closed when this lands?** **Recommend the migration
+  day**, so nothing becomes due on day one.
 
 ## 16. Size
 About 3.5 days after round 1 (the plan said 2): archive writer, format, verify, local store and keys 1.5 days; purge
@@ -341,3 +448,38 @@ function gains that one case.
 production vault — that decides whether S2 is reachable in Azure); not reviewable until built: the Key Vault and Blob
 setup, the restore loader, the pending-purge check's code, the slice 14–15 tables, and the `detail` of audit events
 written without a project id (checked at build: if one names a project item, it joins the purge under Q-69 (b)).
+
+## 19. Design review of the 2026-10-18 changes (design-auditor, one round on §15a and schema §12: 2 high, 6 medium, 3 low)
+Earlier rounds were spent on the 2026-10-17 draft (§17, §18); this round covered only the rework. Each finding is a
+build rule here — it wins over §15a and schema §12 until the schema is updated at build — except U9, which is Ben's
+question (Q-93).
+
+| # | Finding (rating) | Build rule |
+|---|---|---|
+| U1 | After an ARCHIVE nothing checks the project file or its key again, and it is the only copy (HIGH, P3) — **fix first** | The weekly check covers every executed ARCHIVE with no executed DELETE_ARCHIVE: the object exists with the recorded size and sha256, and `archive_key_ref` still unwraps (a test decrypt of the envelope header). A failure alerts every platform admin and is recorded on the request (`archive_checked_at`, `archive_check_error` — schema at build). The yearly drill restores one project file |
+| U2 | Reopening is the reminder's only off-switch, and any editor could do it (MEDIUM, P4) | Moving a project **out of** a closed status is a **platform-admin** setting (PLATFORM, D-71 (6)); the weekly report names every project reopened since its last run. Closing stays an EDIT action |
+| U3 | The ARCHIVE build does not say what happens when a baseline has no current verified file (MEDIUM, D3) | Before writing, the script stops — deleting nothing — if any part (SCOPE or SIGNOFF) of any baseline of the project has its highest `file_seq` unwritten or check-failed, and names them. Criterion 25 |
+| U4 | A point-in-time restore to before a DELETE_ARCHIVE loses its record; the database then says the archive is readable (MEDIUM, D4) | The restore runbook also scans every `.keys-destroyed` marker under the current and prior instance ids; for each whose ARCHIVE is executed but whose keys read undestroyed, it re-records the DELETE_ARCHIVE from the marker (owner-set, like `repurge_of_purge_id`) or refuses to finish and names it |
+| U5 | A weekly reminder with nothing due looks like one that never ran (LOW, P6) | Every run records a line ("0 due, ran at …"); `/admin` shows the last successful run and warns when it is over 8 days old |
+| U6 | For DELETE_ARCHIVE the database checks four eyes and the 24 h wait only after the keys are gone (MEDIUM, S3) | A guarded `destroy_started_at` transition on `project_purge`, committed before the vault is touched, refused unless the request is an approved DELETE_ARCHIVE at least 24 h old; key destruction reads it. Whether client vaults keep deleted keys recoverable for a fixed window is recorded for the Azure work (D-35) with Q-71 |
+| U7 | The trigger enforces "recorded", not "verified" (LOW, S4) | Schema §12.4 reads "recorded, then delete"; criterion 22 is the proof that the script verifies before it records |
+| U8 | §1a was stale against §15a (MEDIUM, P5) | Fixed: §1a now states Input, Output, Validation and the maintenance loop per kind |
+| U9 | One platform admin can make a second admin account and approve their own request (HIGH, S2) | **Ben's question — Q-93.** Until answered, the guard refuses an approval by an admin whose platform-admin grant was made by the requester |
+
+Criterion added: **25.** An ARCHIVE with a baseline whose current file is owed or check-failed stops before writing,
+naming it. **26.** The weekly check reports a held project file whose object or key no longer verifies.
+
+**Question for Ben added by this round.**
+- **Q-93 — How independent must the second admin be?** Today one platform admin can create a second admin account and
+  approve their own deletion as that account, which defeats four eyes for the one step that destroys the last copy.
+  (a) the approval is refused when the approver's platform-admin grant was made by the requester, or is under 30 days
+  old; (b) making someone a platform admin itself needs a second platform admin's approval. **Recommend (b)** — it
+  closes the gap for every four-eyes control, not only the purge; (a) is the interim rule until (b) is built.
+
+**Questions already open, sharpened by this round.**
+- **Q-86** now also asks whether the project's **activity history** (who changed what) goes into the project file: Q-69
+  (b) deletes it in an ARCHIVE too. **Recommend:** yes, inside the file — the archive should keep the full story; the
+  DELETE purge still removes it everywhere.
+- **Q-89 and Q-90 must be answered together:** under Q-89 (b) a project carries `closed_on` exactly when its status is a
+  closed one, so a retired project that was never closed (Q-90) cannot simply be given a date. **Recommend:** retiring a
+  project moves it to a closed status first (which sets `closed_on`), so the clock starts for it too.
