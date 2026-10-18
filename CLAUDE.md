@@ -108,8 +108,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
    (`models/base.py::AuditMixin`, `alembic/vb_ops.py::audit_columns`). `updated_at` is set by the
    `fn_set_updated_at()` trigger — never `onupdate=`. Stale `row_version` → 409.
 4. **A process is `is_process`, never `level_no = 5`** (D-23). The literal is banned in code.
-5. **Branch on behaviour, never on a code** — FR type and RACI (`code_master.behaviour_code`,
-   D-27/Q7). `== 'INTERFACE'` against a type code is a finding.
+5. **Branch on behaviour, never on a code** — FR type, RACI and issue status (`code_master.behaviour_code`,
+   D-27/Q7, I-1). `== 'INTERFACE'` against a type code is a finding.
 6. **Derived values are never accepted from a request body**: `created_by`, `effort_days`,
    `exposure_score`, `row_version` increments, numbers.
 7. **The bare word `role` is banned** in tables, models and routes: `org_role` vs
