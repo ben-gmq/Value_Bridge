@@ -1,5 +1,9 @@
 # Slice 14 — Issue module: logical + physical schema (apple, 2026-10-16)
 
+**Status:** APPROVED by Ben 2026-10-18 with the spec (`slice14_issue_spec.md` §12, history I-1…I-16). §6 holds his
+rulings; where the spec's §14–§15 revise this schema (no `email`, status behaviour, the two-way resolved CHECK), the
+spec wins. Migration ids are re-taken from `main` at build time.
+
 Scope: the VB_remaining_work.md row **Issue module** — stakeholders; raise / link to BRs / resolve issues (`ISS-`);
 issue dashboard; issues in the baseline freeze; the M3 tile (slice12_kpis.md: "Issues by severity").
 Source of truth: VB_design.md §4.5 (functions), §4.13 `stakeholder_engagement`, §5.4 "ISSUE ↔ BR is
@@ -19,7 +23,7 @@ tables, routes and dashboard are Grade 2/3.
 
 | Table | One row per … | Natural key | Frozen? |
 |---|---|---|---|
-| `stakeholder` | named client-side person (business user or BPO staff) **in one project**; no login (D-4) | live `(project_id, lower(btrim(stakeholder_name)))` (D6) | ✗ — a person is not scope (§6.1 row 28) |
+| `stakeholder` | named client-side person (business user or BPO staff) **in one project**; no login (D-4) | live `(project_id, coalesce(org_unit_id, 0), lower(btrim(stakeholder_name)))` (D6, Q-54) | ✗ — a person is not scope (§6.1 row 28) |
 | `issue` | issue raised in one project, anchored to the **project**, not a BR (§5.3) | `(project_id, issue_number)` — `ISS-0001`, minted at save | ✓ ⇐ `ISSUE` (§6.1 row 41) |
 | `issue_br` | (issue × BR) association; 0..N per issue (§5.4 "ISSUE ↔ BR") | `(issue_id, br_id)` full UK (S1-7: relink restores) | ✓ ⇐ `ISSUE` (§6.1 row 42) |
 | `baseline_issue`, `baseline_issue_br` | live row × baseline | `(baseline_id, source_id)` | n/a (immutable) |
@@ -88,8 +92,8 @@ erDiagram
 | `is_bpo` | boolean | NOT NULL DEFAULT false |
 
 Keys: `uq_stk_project UNIQUE (stakeholder_id, project_id)` (composite-FK target); partial
-`uq_stk_name_live UNIQUE (project_id, lower(btrim(stakeholder_name))) WHERE is_active` (§6.2, D6 — the importer's
-lookup returns at most one). Index `ix_stk_org_unit (org_unit_id, project_id)`. No number series (none of the ten).
+`uq_stk_name_live UNIQUE (project_id, coalesce(org_unit_id, 0), lower(btrim(stakeholder_name))) WHERE is_active`
+(§6.2, D6; Q-54 — two people of the same name in different units are allowed; the importer matches on name + unit). Index `ix_stk_org_unit (org_unit_id, project_id)`. No number series (none of the ten).
 
 ### 3.2 `issue` (`Issue`)
 | Column | Type | Constraints |
@@ -184,33 +188,21 @@ No backfill, no seed migration. 0062 and 0063 share spec 5, so they reach `main`
 `freeze_set` bump (S11-6), and the bump is taken on `main` in order. If Q1 is answered (a), `seed_code_master`
 gains `is_system=True` for `ISSUE_STATUS` — a seed, not a migration (and existing projects need the seed re-run).
 
-## 6. Questions for Ben (design silent or self-contradictory)
+## 6. Ben's rulings (2026-10-18; the questions below were numbered Q-39…Q-48 in history order)
 
-1. **Can a project rename or retire the issue statuses?** `ISSUE_STATUS` is project-editable, but `resolve_issue`
-   and the dashboard must know which code means "resolved" and which mean "open" — and law 5 bans branching on a
-   code. (a) make `ISSUE_STATUS` `is_system` like `BASELINE_STATUS` (labels still editable); (b) give it behaviour
-   codes (OPEN / RESOLVED…) — widens `ck_code_behaviour_present`, a code_master migration. Also: does CLOSED need a
-   resolution too, and does reopening clear `resolved_*`? **Recommend (a); CLOSED needs a resolution; reopen
-   clears `resolved_*` (the audit trail keeps the old text); "open" = OPEN + IN_PROGRESS.**
-2. **Must every stakeholder belong to an org unit?** §4.5 lists "org unit" but BPO staff are often not in the
-   client's chart. **Recommend nullable**; `stakeholder_engagement` shows a "BPO / no unit" row.
-3. **Retiring a step whose BR has an open issue — allow or block?** **Recommend allow**: the link retires with the
-   BR, the issue survives, and the preview names issues that become project-level.
-4. **Can an issue be deleted at all?** §15 has no DELETE route. **Recommend** a soft retire for "raised in error"
-   only, refused while linked (unlink first); everything else is CLOSED/DEFERRED.
-5. **What does a baseline freeze of an issue mean — and is a status change a scope change?** With `status_code`
-   and `resolution` hashed, resolving an issue shows as CHANGED in the next diff. **Recommend hash them** — "which
-   issues were open when v1.0 was signed" is the point of freezing issues; `recorded_by` / `resolved_*` are copied
-   but not hashed.
-6. **Is `raised_date` the day it was typed or the day it was raised?** **Recommend** the day it was raised
-   (workshops are written up later): NOT NULL, defaults to today, editable; `created_at` keeps the typing date.
-7. **A stakeholder who has raised issues can never be retired (the FK liveness rule) — acceptable?** **Recommend
-   yes**: to merge a duplicate, re-point the issues first; erasing a person is `purge_project`'s job (Q15).
-8. **The spec says `ISSUE_BR` PK `(issue_id, br_id)`; §6.2's convention (S1-5) says surrogate PK + full UK on every
-   link row.** **Recommend S1-5** (the shadow needs one `source_id`); the spec's §5.3 line is rewritten in the
-   same commit.
-9. **Are stakeholder writes gated by component `ISSUE`?** §15 names no component for them. **Recommend yes** —
-   issues are their only consumer today; reads stay ungated (§4.13 `stakeholder_engagement`).
-10. **Risk promotion (later wave): "the risk's owner becomes the raiser"** — a raiser is a stakeholder, but a risk
-    owner is not modelled yet. **Recommend** record now that `RISK.owner` must be a `stakeholder_id` (or the
-    consultant picks a raiser on promotion), so the risk slice does not reopen `issue`.
+1. **Q-39 — (b), and the spec's §15 N1–N2.** ISSUE_STATUS is pinned and company-only (`code_lists.COMPANY_ONLY`); only a
+   platform admin relabels it. Each status carries a required open / closed `behaviour_code` (OPEN, IN_PROGRESS,
+   DEFERRED open; RESOLVED, CLOSED closed), carried on `issue` through the composite FK; `resolved_at` is set **iff**
+   the behaviour is closed (DB CHECK). Both closed statuses need a resolution; reopen clears `resolved_*` only (R3).
+2. **Q-40 — org unit nullable.**
+3. **Q-41 — allow;** the link retires with the BR, the issue survives, the preview names it.
+4. **Q-42 — soft retire for "raised in error" only, refused while linked.**
+5. **Q-43 — status and resolution hashed;** `recorded_by` / `resolved_*` copied, not hashed.
+6. **Q-44 — the day raised;** NOT NULL, defaults to `local_today()` (ICT), editable.
+7. **Q-45 — yes;** a stakeholder named by a live issue cannot be retired.
+8. **Q-46 — S1-5 surrogate id;** VB_design §5.3 rewritten in the approval commit.
+9. **Q-47 — yes,** stakeholder writes gated by ISSUE; reads ungated.
+10. **Q-48 — the consultant picks a raiser stakeholder on promotion** (later wave; `issue` unchanged).
+
+Later rulings that touch this schema: **Q-51** — the four seeded severities stay; `("ISSUE_SEVERITY", "CRITICAL")` joins
+`code_lists.PINNED` for the M3 tile. **Q-54** — the live UK above.

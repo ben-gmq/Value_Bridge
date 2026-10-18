@@ -320,11 +320,12 @@ Component ISSUE.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `create_stakeholder` | `STAKEHOLDER` | C/U/D | Named client-side person: name, title, org unit, `is_bpo`. They have no login (D-4) |
+| `create_stakeholder` | `STAKEHOLDER` | C/U/D | Named client-side person: name, title, optional org unit (I-2), `is_bpo`. They have no login (D-4). Writes need component ISSUE (I-9); a stakeholder named by a live issue cannot be retired (I-7) |
 | `raise_issue` | `ISSUE` | C | Next per-project sequence → `ISS-0001`. `severity_code`, `issue_type_code`, `status_code` from `code_master`. **`raised_by_stakeholder_id`** is the business user or BPO who raised it; **`recorded_by_user_id`** is the consultant, from the JWT (§9.2). The two are never the same person and are never conflated |
-| `link_issue_br` | `ISSUE_BR` | C/D | Many-to-many — one issue may span several BRs |
-| `resolve_issue` | `ISSUE` | U | Status → RESOLVED requires a non-empty `resolution`. Store `resolved_at`, `resolved_by` |
-| `issue_dashboard` | `ISSUE`, `ISSUE_BR`, `STAKEHOLDER` | R | Open issues by severity × type, per BFC L1 area via the BR→BFC path, and per raising stakeholder |
+| `link_issue_br` | `ISSUE_BR` | C/D | Many-to-many — one issue may span several BRs. Retiring a step retires its BR's links; the issue stays live and the retire preview names it (I-3) |
+| `resolve_issue` | `ISSUE` | U | A status of closed behaviour (RESOLVED, CLOSED) requires a non-empty `resolution`. Store `resolved_at`, `resolved_by`. Reopen returns to OPEN and clears `resolved_*` (I-1) |
+| `retire_issue` | `ISSUE` | soft | Only for an issue raised in error, refused while it has live BR links (I-4) |
+| `issue_dashboard` | `ISSUE`, `ISSUE_BR`, `STAKEHOLDER` | R | Open issues (every open-behaviour status, DEFERRED included — I-11) by severity × type, per BFC L1 area via the BR→BFC path (an issue counts in every area it touches, unlinked ones under "No area" — I-12), per raising stakeholder, and overdue (target date passed). The M3 tile counts open **Critical** issues only (I-13) |
 
 ### 4.5a Bulk upload / download (D-5)
 
@@ -1165,8 +1166,9 @@ erDiagram
         bigint resolved_by_user_id FK
     }
     ISSUE_BR {
-        bigint issue_id PK
-        bigint br_id PK
+        bigint issue_br_id PK
+        bigint issue_id FK
+        bigint br_id FK
         bigint project_id FK
     }
     BASELINE {
@@ -1550,12 +1552,14 @@ records which template was used. Seeded by `seeds/seed_project_templates.py`, ne
 target of every category-verified code FK (S1-4). `is_system` marks a category the code branches on, which
 a project may not rename or retire. Resolution has one owner, `services/code_master.resolve` (A-16).
 
-Categories on `code_master`, because the value set is genuinely client-configurable: **issue severity,
-issue type, issue status, BR status, FR fulfilment status, FR complexity, project status, solution status,
+Categories on `code_master`, because the value set is genuinely client-configurable: **issue severity
+(four levels: Critical, High, Medium, Low; CRITICAL pinned, I-13), issue type, BR status, FR fulfilment status, FR complexity, project status, solution status,
 application kind, data field data type, org unit level, RACI participation type, FR type (D-27),
 interface pattern / method / frequency (D-27), external entity kind (D-24a)**. System categories (`is_system`, code compares their codes): `BASELINE_STATUS`,
 `SOLUTION_CATEGORY` (S5-4), `APP_LIFECYCLE`, `IMPORT_STATUS` (global tier only, S4-7), and the global-only
-`PROJECT_COMPONENT` and `PROJECT_TEMPLATE` (labels editable). `FLOW_TYPE` (S2-1) and `PROJECT_ROLE` (D-40)
+`PROJECT_COMPONENT` and `PROJECT_TEMPLATE` (labels editable). **Issue status** is pinned and company-only, like
+project status (G-2, I-1): a platform admin relabels it, a project cannot add, override or hide one, and each status
+carries an open / closed behaviour. `FLOW_TYPE` (S2-1) and `PROJECT_ROLE` (D-40)
 are retired categories: their codes stay for the rows that reference them, inactive.
 
 Deliberately **not** routed through `code_master`: `BFC_NODE.level_no` (a structural integer with a hard
@@ -2071,7 +2075,8 @@ today's support warns and is allowed, and is not counted as today's support in `
 `APPLICATION_SOLUTION` is the deliverable.**
 
 **STAKEHOLDER** *(D-4)* — one row per named client-side person in one project. PK `stakeholder_id`; FK
-`project_id`, `org_unit_id`. Partial UK `(project_id, lower(stakeholder_name)) WHERE is_active` (D6).
+`project_id`, `org_unit_id` (nullable, I-2). Partial UK `(project_id, org_unit_id, lower(stakeholder_name)) WHERE
+is_active` (D6, I-16): two people of the same name may sit in different units.
 `is_bpo` separates BPO staff from the client's own business users, because they answer to a different
 contract. It is the raiser of an issue, and carries interview and workshop provenance in later increments.
 Not baselined (a person is not scope).
@@ -2178,13 +2183,15 @@ It is project-scoped by the caller (`reports.interface_list` filters `project_id
 `severity_code_id`, `issue_type_code_id`, `status_code_id`, **`raised_by_stakeholder_id NOT NULL`** (the
 client-side person who raised it) and **`recorded_by_user_id NOT NULL`** (the consultant who typed it)
 (D-4, D8). UK `(project_id, issue_number)`. Resolution is `resolution text`, `resolved_at timestamptz`,
-`resolved_by_user_id`; there is no `resolved_date`.
+`resolved_by_user_id`; there is no `resolved_date`. `raised_date` is the day it was raised, defaulting to today
+(I-6). `resolved_at` is set exactly when the status has closed behaviour (I-1). Frozen with status and resolution
+hashed (I-5); a baseline shows the raiser's current name (I-15).
 
 The issue is anchored to the **project**, not to a BR: an issue found during discovery, before any BR
 exists, still needs somewhere to live. BR linkage is optional and multiple.
 
-**ISSUE_BR** — one row per (issue, BR) association. PK `(issue_id, br_id)`. See §3.3 for the cardinality
-argument.
+**ISSUE_BR** — one row per (issue, BR) association. PK `issue_br_id`; full UK `(issue_id, br_id)`, so a re-link
+restores the same row (S1-5, S1-7, I-8). See §3.3 for the cardinality argument.
 
 #### Control framework (D-13…D-19)
 
@@ -6123,7 +6130,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `PHASE_STATUS` | `PLANNED`, `IN_DELIVERY`, `COMPLETE`, `CANCELLED` | `PHASE.status_code` — **D-18** |
 | `ISSUE_SEVERITY` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` | `ISSUE.severity_code` |
 | `ISSUE_TYPE` | `PROCESS`, `DATA`, `SYSTEM`, `ORGANIZATION`, `POLICY`, `OTHER` | `ISSUE.issue_type_code` |
-| `ISSUE_STATUS` | `OPEN`, `IN_PROGRESS`, `RESOLVED`, `DEFERRED`, `CLOSED` | `ISSUE.status_code` |
+| `ISSUE_STATUS` | `OPEN`, `IN_PROGRESS`, `DEFERRED` (open behaviour); `RESOLVED`, `CLOSED` (closed behaviour) — company-only (I-1) | `ISSUE.status_code` |
 | `ORG_UNIT_LEVEL` | `DEPARTMENT`, `DIVISION`, `SECTION` | `ORG_UNIT.unit_level_code` |
 | `RACI_TYPE` | `R`, `A`, `C`, `I` — **project-editable**; each code carries a **behaviour** ∈ `RESPONSIBLE` / `ACCOUNTABLE` / `CONSULTED` / `INFORMED` / `SUPPORT` / `OTHER` (Q7). Seeded R → RESPONSIBLE, A → ACCOUNTABLE, C → CONSULTED, I → INFORMED. RASCI adds `S` → SUPPORT. RAPID is a **mapping**, not a vocabulary: Perform → RESPONSIBLE, Decide → ACCOUNTABLE, Input → CONSULTED, Recommend / Agree → OTHER | `BR_ORG_ROLE` (a to-be process's roles) and `BFC_NODE_ORG_ROLE` (an as-is process's roles, D-64), both via `raci_behaviour`, FK-verified. Configurable because clients use RASCI / RAPID / house variants. **The single Accountable per BR and per step reads the behaviour, never the letter** (R2-D9). Several RESPONSIBLE roles are legal; the lane is the performer, not a RACI role (D-46). A project holds exactly one live code per load-bearing behaviour, RESPONSIBLE and ACCOUNTABLE: a second is refused when the code is saved (A-60). A behaviour is immutable once referenced, as for `FR_TYPE`; a project override of a global code must carry the global's behaviour |
 | `TRANSACTION_UNIT` | `INVOICE`, `ORDER`, `CASE`, `DOCUMENT`, `RECORD`, `CALL`, `PAYMENT`, `EMPLOYEE`, `OTHER` — library + project override | `BFC_NODE.transaction_unit_code` — **D-67**, what one transaction of a process is. Optional; never branched on (slice 13c) |

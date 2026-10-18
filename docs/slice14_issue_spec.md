@@ -1,7 +1,7 @@
-# Slice 14 — Issue module (spec, DRAFT for Ben, night batch 2026-10-16)
+# Slice 14 — Issue module (spec, APPROVED by Ben 2026-10-18)
 
-**Status:** DRAFT — not approved, not built. Needs Ben's answers to the schema's questions (Q-39…Q-48 below) and his
-OK on this spec. **Source of truth:** `docs/VB_design.md` §4.5 (Issue Management: `create_stakeholder`, `raise_issue`,
+**Status:** APPROVED by Ben 2026-10-18 with his answers to Q-39…Q-54 (§12; history I-1…I-16). Not built yet. Where
+§14–§15 and §12 disagree with the text above them, they win. **Source of truth:** `docs/VB_design.md` §4.5 (Issue Management: `create_stakeholder`, `raise_issue`,
 `link_issue_br`, `resolve_issue`, `issue_dashboard`), §5.3 (STAKEHOLDER, ISSUE, ISSUE_BR), §4.9 (`stakeholder_engagement`,
 for later), the plan row in `docs/VB_remaining_work.md` ("Issue module": stakeholders; raise / link / resolve `ISS-`;
 dashboard; issues in the freeze; the M3 tile). **Schema:** `docs/slice14_issue_schema.md` (apple, 2026-10-16) — grain,
@@ -35,15 +35,15 @@ per BR); one `issue_br` per (issue, BR) pair, surrogate id (Q-46).
 ## 4. Business requirement grid
 | Function | Entity | Use | Logic → output |
 |---|---|---|---|
-| `create_stakeholder` / edit / retire | STAKEHOLDER | C/U/soft | name, title, org unit (optional, Q-40), `is_bpo`; retire refused while a live issue names them (Q-45) |
+| `create_stakeholder` / edit / retire | STAKEHOLDER | C/U/soft | name, title, org unit (optional, Q-40), `is_bpo`; name unique per org unit (Q-54); retire refused while a live issue names them (Q-45) |
 | `raise_issue` | ISSUE | C | `ISS-0001` minted at save; raiser = stakeholder; recorder = the JWT user; raised date defaults to today (Q-44) |
 | `edit_issue` | ISSUE | U | title, description, severity, type, target date; row_version |
 | `link_issue_br` / unlink | ISSUE_BR | C / soft | same project; re-linking restores the same row (S1-7) |
-| `resolve_issue` / reopen | ISSUE | U | RESOLVED (and CLOSED, Q-39) need a resolution; reopen clears the resolution fields (audit keeps the text) |
+| `resolve_issue` / reopen | ISSUE | U | a closed-behaviour status (RESOLVED, CLOSED) needs a resolution; reopen clears `resolved_at` / `resolved_by` (R3) |
 | `retire_issue` | ISSUE | soft | only for issues raised in error; refused while linked (Q-42) |
-| `issue_dashboard` | ISSUE, ISSUE_BR, STAKEHOLDER, BFC_NODE | R | open (OPEN + IN_PROGRESS, by behaviour — Q-39) by severity × type, by L1 area via BR → step → area, by raiser |
+| `issue_dashboard` | ISSUE, ISSUE_BR, STAKEHOLDER, BFC_NODE | R | open (every open-behaviour status: OPEN, IN_PROGRESS, DEFERRED — Q-39, Q-49) by severity (all four) × type, by L1 area (R4, Q-50), by raiser; overdue count |
 | freeze | BASELINE_ISSUE, BASELINE_ISSUE_BR | C | issues and links frozen with code + label pairs; status and resolution hashed (Q-43) |
-| M3 tile | ISSUE | R | open issues, of which high severity; links to the dashboard |
+| M3 tile | ISSUE | R | open issues, of which **Critical** (severity CRITICAL only, labelled "Critical" — Q-51); links to the dashboard |
 
 ## 5–6. Logical and physical design
 `docs/slice14_issue_schema.md` §2–§5 (apple). Three migrations, one table plus shadow each, downgrade guards; ISSUE
@@ -52,8 +52,10 @@ joins `components.BUILT` with a live-row probe.
 ## 7. Function notes
 - **Guards:** reads `project_ctx(VIEW)`; writes `project_ctx(EDIT, component="ISSUE")` / `object_guard(…, EDIT,
   component="ISSUE")`, named in `ROUTE_COMPONENTS` (criterion 49b). Stakeholder writes gated by ISSUE too (Q-47).
-- **Status by behaviour, not code (law 5):** if Q-39 is taken, ISSUE_STATUS becomes a system list (labels editable,
-  codes fixed), and `code_lists.PINNED` covers it automatically.
+- **Status by behaviour, not code (law 5):** ISSUE_STATUS is pinned and company-only (Q-39 (b)): it joins
+  `code_lists.COMPANY_ONLY`, only a platform admin relabels it, and every status carries an open / closed behaviour
+  (§15 N1–N2). **Severity:** the four seeded levels stay project-relabelable; `("ISSUE_SEVERITY", "CRITICAL")` joins
+  `code_lists.PINNED` because the M3 tile looks it up by code (Q-51).
 - **Step retire:** `IssueBr` joins `step_retire.OWNED_BY_BR`; the issue stays live and becomes project-level; the retire
   preview names the issues that lose their link (Q-41).
 - **Org chart:** an org unit with a live stakeholder cannot be retired (new blocker, schema §4).
@@ -93,12 +95,20 @@ freezing at spec 4, migrating, and verifying both an old and a new baseline, plu
 for the issue data and dashboard (figures someone decides from; edge cases left uncovered named at build). **Grade 3**
 for layout. Test plumbing: the existing fast harness.
 
-## 12. Questions for Ben (from `docs/slice14_issue_schema.md` §6, numbered in history order)
-Q-39 issue statuses system-owned (rec. yes) · Q-40 stakeholder org unit optional (rec. yes) · Q-41 retiring a step with an
-open issue allowed (rec. yes) · Q-42 soft retire for issues raised in error only (rec. yes) · Q-43 status and resolution
-in the baseline hash (rec. yes) · Q-44 raised date = the day raised, defaults today (rec. yes) · Q-45 a stakeholder
-with issues can't be retired (rec. yes) · Q-46 `issue_br` surrogate id (rec. yes, rewrite §5.3) · Q-47 stakeholder
-writes gated by ISSUE (rec. yes) · Q-48 risk promotion's raiser (rec. the consultant picks a stakeholder on promotion).
+## 12. Ben's rulings (2026-10-18, via Ren — history I-1…I-16)
+- **Q-39 (b):** issue statuses are pinned and company-only; only a platform admin relabels them; projects cannot add,
+  override or hide one.
+- **Q-40** org unit optional · **Q-41** retiring a step with an open issue is allowed; the link drops and the preview
+  names the issues · **Q-42** soft retire only for issues raised in error, refused while linked · **Q-43** status and
+  resolution hashed · **Q-44** raised date = the day raised, default today (ICT) · **Q-45** a stakeholder with live
+  issues can't be retired · **Q-46** `issue_br` surrogate id (VB_design §5.3 rewritten) · **Q-47** stakeholder writes
+  gated by ISSUE · **Q-48** on risk promotion the consultant picks the raiser.
+- **Q-49:** DEFERRED is open, needs no resolution, and is overdue past its target date like any open status.
+- **Q-50:** the area rule as R4.
+- **Q-51 (changed from the recommendation):** four severity levels — CRITICAL, HIGH, MEDIUM, LOW. The M3 tile counts
+  **only Critical** and is labelled "Critical". The dashboard's severity breakdown shows all four.
+- **Q-52** resolving shows as CHANGED, counted apart from scope in the headline · **Q-53** baselines show the raiser's
+  current name (accepted) · **Q-54** same-name stakeholders allowed; live unique key on name + org unit.
 
 ## 13. Size
 About 3 working days (the plan's figure), 1,500–2,000 lines with tests; the hash bump is the riskiest piece.
@@ -118,7 +128,7 @@ These rules supersede anything above that disagrees. The hash bump 4 → 5 was c
   list's area filter uses the same rule.
 - **R5 (M).** Maintenance loop: the consultant who owns the engagement reviews open issues weekly; the dashboard adds an
   **overdue** count (target date passed, still open).
-- **R6 (M).** Q-39 restated as a real choice (below). Whatever Ben picks, the deploy step refuses while any project-tier
+- **R6 (M).** Q-39 ruled (b). The deploy step refuses while any project-tier
   ISSUE_STATUS row or live hide of one exists (it lists them), so no project-only status escapes the open count.
 - **R7 (M).** Audit labels for stakeholder and issue are the id / number only, never a name or title — audit_event is
   append-only and a purge could not clean them.
@@ -133,16 +143,14 @@ These rules supersede anything above that disagrees. The hash bump 4 → 5 was c
 Added acceptance criteria: 11. An EDIT user of project A unlinking a link of project B through A's issue → 404, nothing
 written. 12. PATCH to RESOLVED → 422; the database refuses a RESOLVED row without `resolved_at`. 13. Two resolves with
 the same row_version → the second is 409. 14. A multi-area issue counts in each area; an unlinked one under "No area".
-15. No audit_event detail contains a stakeholder name or an issue title.
+15. No audit_event detail contains a stakeholder name or an issue title. 16. The M3 tile counts open
+CRITICAL issues only, labelled "Critical" — an open HIGH issue does not move it; the dashboard shows all four severities
+(Q-51). 17. A DEFERRED issue past its target date counts as overdue (Q-49). 18. A project cannot add, override or hide
+an ISSUE_STATUS (409/422); a platform admin can relabel one (Q-39).
 
-Questions added for Ben: **Q-49** is DEFERRED open or closed, and does it need a resolution (rec. open, none) ·
-**Q-50** the area rule (rec. as R4) · **Q-51** the tile's "high severity" (rec. CRITICAL + HIGH, both pinned) ·
-**Q-52** resolving 30 issues shows "30 CHANGED" in the diff headline (rec. yes, with issues counted apart from scope in
-the headline) · **Q-53** a baseline shows the raiser's current name, so renaming a stakeholder changes how old
-baselines display (rec. accept — names are not frozen, by design) · **Q-54** two client people with the same name (rec.
-allow; unique on name + org unit). **Q-39 restated:** (a) system list — nobody can relabel or add statuses; (b) pinned
-and company-only — a platform admin may relabel, projects cannot add or hide statuses (as PROJECT_STATUS, G-2).
-Rec. (b).
+Questions this round raised, now ruled (§12): Q-49 DEFERRED open, no resolution · Q-50 area rule as R4 · Q-51 four
+severities, tile counts Critical only · Q-52 resolving shows CHANGED, counted apart from scope · Q-53 raiser's current
+name accepted · Q-54 unique on name + org unit · Q-39 (b) pinned and company-only.
 
 ## 15. Design review round 2 (final under the cap, 2026-10-16): R1–R12 hold; two medium points settled here
 - **N1.** PATCH refuses any status change while the issue is closed (409, "use reopen"). The database rule is two-way:
@@ -152,7 +160,7 @@ Rec. (b).
 - **N2.** Every ISSUE_STATUS row, company or project, carries that behaviour, required on add; the dashboard, the tile,
   the overdue count and the route split all read the behaviour, never the codes. A status added later is therefore
   open or closed by its own declaration. §4's "open = OPEN + IN_PROGRESS" becomes "open = every status of open
-  behaviour" (DEFERRED follows Q-49). The schema's `email` column and `ck_stk_email` are struck (R8).
+  behaviour" (DEFERRED is open, Q-49). The schema's `email` column and `ck_stk_email` are struck (R8).
 - This makes ISSUE_STATUS a behaviour category: `code_lists.BEHAVIOUR_CATEGORIES` and the code_master CHECKs gain it,
-  in the slice's first migration. Overdue uses `local_today()` (ICT); whether a DEFERRED issue past its target date is
-  overdue follows Q-49.
+  in the slice's first migration. Overdue uses `local_today()` (ICT); a DEFERRED issue past its target date is overdue
+  (Q-49).

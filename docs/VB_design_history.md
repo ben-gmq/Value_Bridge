@@ -16,11 +16,6 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-39…Q-54] Issue module (slice 14) — sixteen questions, each with a recommendation**, in
-  `docs/slice14_issue_spec.md` §12, §14 and §15 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). The
-  ones that change the design: Q-39 (issue statuses company-only with an open / closed behaviour, §15 N1–N2), Q-43
-  (status and resolution in the baseline hash), Q-46 (surrogate key on `issue_br`, rewriting §5.3), Q-50 (the per-area
-  counting rule). The spec is not built until Ben answers and approves it.
 - **[Q-55…Q-66] Phasing and dependency (slice 15) — twelve questions, each with a recommendation**, in
   `docs/slice15_phasing_spec.md` §7 and §9 (raised 2026-10-16, night batch; apple + design-auditor rounds 1–2). Design
   changes among them: Q-55 (a PHASING component), Q-59 (surrogate keys, rewriting §5.3), Q-63 (one PUT of a solution's
@@ -39,6 +34,8 @@ Nothing here is in the spec yet.
 - **2026-10-13 (night)** — slice 10d merged (`bbd0674`). UAT change: the process chart shows tree and panel side by
   side from **1100 px** (was 900 px in D-63) — at 900 px the panel was ~250 px wide and clipped its buttons
   (ui-verifier, Evidence/2026-10-13/slice-10d). Spec §14 updated.
+- **2026-10-18** — Ben's Issue-module rulings I-1…I-16 (Q-39…Q-54) folded into §4.5, §5.3 (STAKEHOLDER UK,
+  ISSUE, ISSUE_BR surrogate id) and §11 (issue status company-only with behaviour; four severities, CRITICAL pinned).
 
 ---
 
@@ -516,6 +513,32 @@ design-auditor rounds 1–2 in the paper's §8.
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
+### Ben's rulings, 2026-10-18 — the Issue module (slice 14, Q-39…Q-54)
+
+Ben, via Ren: "Show me the issue module Q39 to Q54 … I will answer right now." Every recommendation taken except Q-39
+(option (b) of the restated question) and Q-51, which he changed: "critical should only be counting critical, and then
+we have high, medium, and low, so we have four different levels." The spec `docs/slice14_issue_spec.md` is approved with
+these answers.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| I-1 | **[Q-39] Issue statuses are pinned and company-only.** Only an FTC (platform) admin may relabel them; a project cannot add, override or hide one (as PROJECT_STATUS, G-2). Each status carries an open / closed behaviour (slice14 §15 N1–N2): OPEN, IN_PROGRESS and DEFERRED are open; RESOLVED and CLOSED are closed. The deploy refuses while any project-tier ISSUE_STATUS row or hide exists (R6) | §11 (issue status was project-configurable) |
+| I-2 | **[Q-40] A stakeholder's org unit is optional** (BPO staff are often outside the client's chart) | §4.5 `create_stakeholder` |
+| I-3 | **[Q-41] Retiring a step whose BR has an open issue is allowed.** The issue link retires with the BR, the issue stays live (project-level), and the retire preview names the issues | step retire |
+| I-4 | **[Q-42] An issue is soft-retired only when raised in error, and refused while it has live BR links.** Everything else is a status | §15 (no DELETE route) |
+| I-5 | **[Q-43] Status and resolution are in the baseline hash**, so a baseline shows which issues were open when it was signed | freeze set (hash spec 5) |
+| I-6 | **[Q-44] The raised date is the day raised**, defaulting to today in ICT, editable; `created_at` keeps the typing date | — |
+| I-7 | **[Q-45] A stakeholder named as raiser by a live issue cannot be retired** (re-point the issues first) | — |
+| I-8 | **[Q-46] `issue_br` has a surrogate id** (`issue_br_id`) and a full UK on (issue, BR), per S1-5; a re-link restores the same row | §5.3 ISSUE_BR PK |
+| I-9 | **[Q-47] Stakeholder writes are gated by component ISSUE**; reads are not | §15 |
+| I-10 | **[Q-48] On risk promotion, the consultant picks the raiser stakeholder** (a later wave); `issue` is not reopened for it | §4.9 `promote_risk_to_issue` |
+| I-11 | **[Q-49] DEFERRED is an open status, needs no resolution, and counts as overdue past its target date** like any open status | — |
+| I-12 | **[Q-50] Per-area counting:** an issue counts once in every L1 area it touches through a live link to a live BR of a live step; issues with no such link count under "No area"; area rows do not sum to the total. The list's area filter uses the same rule | §4.5 `issue_dashboard` |
+| I-13 | **[Q-51] Four severity levels — Critical, High, Medium, Low — and the M3 tile counts Critical only, labelled "Critical".** Where the dashboard breaks down by severity it shows all four. CRITICAL is pinned (the tile looks it up by code) | slice12_kpis "Issues by severity"; the recommended CRITICAL + HIGH "high severity" count |
+| I-14 | **[Q-52] Resolving issues shows as CHANGED in the comparison headline, counted apart from scope** | §7.7 diff headline |
+| I-15 | **[Q-53] A baseline shows the raiser's current name** — names are not frozen, by design | — |
+| I-16 | **[Q-54] Two stakeholders may share a name;** the live unique key is name + org unit | §5.3 STAKEHOLDER UK (name only) |
+
 ### Slice 10b schema rulings — BR ↔ FR direct (D-52), 2026-10-12
 
 Schema `docs/slice10b_schema.md` (apple). Ben, 2026-10-12: *"Accept all 21 items."*
@@ -711,6 +734,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice10c_spec.md` | Slice 10c — Organisation and Systems up front, BR attributes, assigned-only projects | 2026-10-12 |
 | `docs/slice10d_spec.md · slice10d_raci_schema.md` | Slice 10d — ranked process panel (D-63), one RACI per process (D-64) | 2026-10-13 |
 | `docs/slice11_schema.md` | Slice 11 — structured BR, attribute usage, system-to-system flows (proposal) | 2026-10-12 |
+| `docs/slice14_issue_spec.md · slice14_issue_schema.md` | Slice 14 — Issue module (approved 2026-10-18, I-1…I-16) | 2026-10-18 |
 
 ---
 
