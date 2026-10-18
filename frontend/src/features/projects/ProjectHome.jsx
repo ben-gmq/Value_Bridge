@@ -6,6 +6,7 @@ import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
 import { baselineApi, effortApi, scopeSummaryApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
+import { useComponents } from '../../app/useComponents';
 import { Card, Code, ListRow, PurpleTile, Segmented, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
@@ -80,6 +81,7 @@ function AreaTable({ s }) {
 // mockup's schedule parts (WBS plan vs actual, late tasks) wait for the WBS import (D-33, D-51: no data, no tile).
 export default function ProjectHome() {
   const { projectId } = useParams();
+  const issuesOn = useComponents(projectId).isOn('ISSUE');
   const q = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId) });
   const sq = useQuery({ queryKey: keys.scopeSummary(projectId), queryFn: () => scopeSummaryApi.get(projectId) });
   const eq = useQuery({ queryKey: keys.effortSummary(projectId), queryFn: () => effortApi.summary(projectId) });
@@ -161,6 +163,15 @@ export default function ProjectHome() {
                   {t('home.nextFreezeNote', { warnings: s.totals.freeze_warnings })}{' '}
                   <Link component={RouterLink} to={links.baselines(projectId)}>{t('home.openBaselines')}</Link>
                 </>)} />
+            {/* M3 (slice 14, I-13): Critical counts severity CRITICAL only; the whole project, like S8–S10 */}
+            {issuesOn && (
+              <Tile label={t('home.critical')} value={s.totals.issues_critical}
+                tone={s.totals.issues_critical > 0 ? 'escalate' : undefined}
+                note={(
+                  <>
+                    {t('home.criticalNote', { open: s.totals.issues_open })}{' '}
+                    <Link component={RouterLink} to={links.issues(projectId)}>{t('home.openIssues')}</Link>
+                  </>)} />)}
             <Card title={t('home.bySolution')} bodySx={{ gap: 0.5 }}>
               {!topSolutions.length && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('home.bySolutionNone')}</Typography>}
               {topSolutions.map((x) => (

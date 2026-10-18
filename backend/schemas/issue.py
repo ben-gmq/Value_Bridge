@@ -72,6 +72,33 @@ class ReopenIn(BaseModel):
     row_version: int
 
 
+class IssueBrIn(BaseModel):
+    br_id: int
+
+
+class IssueBrOut(BaseModel):
+    issue_br_id: int
+    issue_id: int
+    br_id: int
+    br_number: str
+    br_statement: str | None
+    bfc_node_id: int
+    is_active: bool
+    row_version: int
+
+
+class DashboardOut(BaseModel):
+    open: int
+    critical: int
+    overdue: int
+    severities: list[str]
+    types: list[str]
+    by_severity_type: list[dict]
+    by_area: list[dict]
+    no_area: int
+    by_raiser: list[dict]
+
+
 class IssueOut(Orm):
     issue_id: int
     project_id: int

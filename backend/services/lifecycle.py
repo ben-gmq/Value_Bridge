@@ -74,6 +74,7 @@ LABELS = {
     # R7 (slice14): ids and numbers only — these labels reach audit_event, which a purge cannot clean.
     "stakeholder": ("Stakeholder", lambda r: f"#{r.stakeholder_id}"),
     "issue": ("Issue", lambda r: r.issue_number),
+    "issue_br": ("Issue ↔ requirement", lambda r: f"{r.issue_row.issue_number} ↔ {r.br_row.br_number}"),
     "bfc_node_trigger": ("Step trigger", lambda r: f"{r.trigger_row.trigger_name} ↔ {r.node_row.hier_code}"),
     "bfc_node_flow": ("Flow edge",
                       lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),

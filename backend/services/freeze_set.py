@@ -143,6 +143,8 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
     _e("issue", "ISSUE", ("issue_number", "title", "description", "severity_code", "issue_type_code", "status_code",
                           "raised_by_stakeholder_id", "raised_date", "target_date", "resolution"),
        label=("issue_number", "title"), since=5),
+    # I-8: issue × BR, labelled by its ends; spec 5 with `issue` (one merge, S11-6).
+    _e("issue_br", "ISSUE", ("issue_id", "br_id"), refs=(("issue_id", "issue"), ("br_id", BR)), since=5),
 )
 BY_TABLE = {e.table: e for e in FREEZE_SET}
 assert tuple(BY_TABLE) == SHADOWED, "FREEZE_SET and models.baseline.SHADOWED disagree"

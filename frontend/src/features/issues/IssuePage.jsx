@@ -17,6 +17,7 @@ import { t } from '../../i18n/t';
 import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CodeTitle, SaveState, TwoCol } from '../frs/frKit';
 import { IssueStatus, SeverityTag } from './issueKit';
+import { IssueBrLinks } from './IssueBrLinks';
 
 const pick = (i) => ({ title: i.title, description: i.description ?? '', severity_code: i.severity_code,
   issue_type_code: i.issue_type_code, status_code: i.status_code, raised_by_stakeholder_id: i.raised_by_stakeholder_id,
@@ -73,7 +74,7 @@ export default function IssuePage() {
 
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: keys.issue(issueId) });
-    qc.invalidateQueries({ queryKey: keys.issues(projectId) });
+    qc.invalidateQueries({ queryKey: keys.issues(projectId) }); qc.invalidateQueries({ queryKey: keys.scopeSummary(projectId) });
   };
   const landed = (row, msg) => { form.saved(row); qc.setQueryData(keys.issue(issueId), row); refreshAll(); setNotice(msg); };
   const save = useFormSave({
@@ -183,6 +184,8 @@ export default function IssuePage() {
     </Card>
   );
   const side = (
+    <>
+    <IssueBrLinks projectId={projectId} issue={issue} canEdit={canEdit} />
     <Card title={t('issues.resolutionTitle')} bodySx={{ gap: 1 }}>
       {issue.resolution ? (
         <Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{issue.resolution}</Typography>
@@ -193,6 +196,7 @@ export default function IssuePage() {
       {issue.resolution && !closed && (
         <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('issues.reopenedNote')}</Typography>)}
     </Card>
+    </>
   );
   const closedOptions = pickOf(sts, '', (c) => c.behaviour_code === 'CLOSED');
 

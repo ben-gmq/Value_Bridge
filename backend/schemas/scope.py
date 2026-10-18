@@ -69,6 +69,8 @@ class RetirePreviewOut(BaseModel):
     confirm_hash: str
     # slice10b §4.2: FRs whose solution tag will answer none of their remaining BRs (information, not hashed)
     tag_drift: list[str] = []
+    # slice 14 (I-3, Q-41): issues whose link to this step's BR retires with it; each stays live (information)
+    issues: list[str] = []
 
 
 class RetireConfirmIn(BaseModel):
@@ -573,6 +575,8 @@ class ScopeTotalsOut(BaseModel):
     freeze_errors: int                # S10: what the next freeze would refuse on (must-be-empty lines) …
     freeze_blocking: int              # … the freeze-blocking warnings (e.g. a process missing its output) …
     freeze_warnings: int              # … and the warnings that never refuse
+    issues_open: int = 0              # M3 (slice 14): open issues, every open-behaviour status
+    issues_critical: int = 0          # … of which severity CRITICAL only (I-13)
 
 
 class ScopeSummaryOut(BaseModel):

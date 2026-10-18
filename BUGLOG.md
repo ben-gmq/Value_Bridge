@@ -457,3 +457,7 @@ place.
   holds) — add `extra="forbid"`. (L7) no two-connection race test for R11 (raise / edit-raiser against a concurrent
   stakeholder retire); the FOR SHARE → FOR UPDATE order carries it. (L8) `IssuePage` does not check that the issue
   belongs to the project in the address; `/p/A/issues/<B's id>` shows B's issue with A's pickers.
+- **2026-10-18 · slice 14 step C (`sara`; M2, M3, L1, L4, L6 fixed in the step; M1 is step D's Grade 1 proof):**
+  (L2) `issue.links_of` and the link route read each link's BR lazily, one query per link — load `br_row` with
+  `selectinload`. (L3) the register's area filter lists only areas with open issues and drops the "As-is" prefix the
+  dashboard shows. (L5) `DashboardOut` rows are untyped `list[dict]` — pin them as small models.

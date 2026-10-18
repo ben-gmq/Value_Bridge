@@ -17,6 +17,7 @@ import { t } from '../../i18n/t';
 import { ShowRetired, SimpleSelect } from '../processes/chartKit';
 import { GRID_SX, Toolbar } from '../frs/frKit';
 import { IssueStatus, SeverityTag } from './issueKit';
+import { IssueDashboard } from './IssueDashboard';
 
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
@@ -81,8 +82,13 @@ export default function IssuesPage() {
   const qc = useQueryClient();
   const { isOn } = useComponents(projectId);
   const canEdit = useCanEdit() && isOn('ISSUE');
+  const [tab, setTab] = useState('register');
   const [view, setView] = useState('open');
-  const [filter, setFilter] = useState({ severity: '', issue_type: '', raiser: '' });
+  const [filter, setFilter] = useState({ severity: '', issue_type: '', raiser: '', area: '' });
+  const dash = useQuery({ queryKey: keys.issueDashboard(projectId), queryFn: () => issueApi.dashboard(projectId) });
+  const areaOptions = [...(dash.data?.by_area ?? []).map((a) => ({ value: String(a.area_id), label: `${a.hier_code} ${a.name}` })),
+    { value: 'none', label: t('issues.dash.noArea') }];
+  const openFiltered = (f) => { setFilter({ severity: '', issue_type: '', raiser: '', area: '', ...f }); setView('open'); setTab('register'); };
   const [showRetired, setShowRetired] = useState(false);
   const params = { open_only: view === 'open', include_retired: showRetired,
     ...Object.fromEntries(Object.entries(filter).filter(([, v]) => v !== '')) };
@@ -125,7 +131,10 @@ export default function IssuesPage() {
     <Page title={t('issues.title')} subtitle={t('issues.subtitle')} error={(q.error || stk.error) && errorText(q.error || stk.error)}
       actions={canEdit && (
         <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('issues.raise')}</Button>)}>
-      <Card>
+      <Segmented label={t('issues.title')} value={tab} onChange={setTab} sx={{ mb: 2 }}
+        options={[{ value: 'register', label: t('issues.tab.register') }, { value: 'dashboard', label: t('issues.tab.dashboard') }]} />
+      {tab === 'dashboard' && <IssueDashboard projectId={projectId} onFilter={openFiltered} />}
+      {tab === 'register' && <Card>
         <Toolbar>
           <Segmented size="sm" label={t('issues.field.status')} value={view} onChange={setView}
             options={[{ value: 'open', label: t('issues.view.open') }, { value: 'all', label: t('issues.view.all') }]} />
@@ -144,6 +153,10 @@ export default function IssuesPage() {
               emptyLabel={t('issues.any')} onChange={(v) => setFilter({ ...filter, raiser: v })}
               options={people.map((s) => ({ value: s.stakeholder_id, label: s.stakeholder_name }))} />
           </Box>
+          <Box sx={{ width: 200 }}>
+            <SimpleSelect id="iss-f-area" label={t('issues.field.area')} value={filter.area} allowEmpty
+              emptyLabel={t('issues.any')} onChange={(v) => setFilter({ ...filter, area: v })} options={areaOptions} />
+          </Box>
           <Box sx={{ flex: 1 }} />
           {!q.error && <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
             {t('issues.count', { n: rows.length })}</Typography>}
@@ -154,10 +167,10 @@ export default function IssuesPage() {
             disableRowSelectionOnClick hideFooterSelectedRowCount
             onRowClick={({ row }) => navigate(links.issue(projectId, row.issue_id))}
             localeText={{ noRowsLabel: t('issues.empty') }} sx={GRID_SX} />)}
-      </Card>
+      </Card>}
       {adding && <RaiseDialog projectId={projectId} stakeholders={people.filter((s) => s.is_active)}
         onClose={() => setAdding(false)}
-        onDone={(i) => { qc.invalidateQueries({ queryKey: keys.issues(projectId) });
+        onDone={(i) => { qc.invalidateQueries({ queryKey: keys.issues(projectId) }); qc.invalidateQueries({ queryKey: keys.scopeSummary(projectId) });
           setNotice(t('issues.raised', { number: i.issue_number })); }} />}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Page>

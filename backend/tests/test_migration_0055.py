@@ -17,7 +17,12 @@ def test_a_clean_downgrade_and_upgrade_round_trip(client, ed, owner):
     assert q(owner, "SELECT 1 FROM information_schema.tables WHERE table_name = 'baseline_br_requirement_line'")
 
 
-def test_a_spec_4_baseline_without_lines_still_refuses_the_downgrade(client, ed, owner):
+def test_a_spec_4_baseline_without_lines_still_refuses_the_downgrade(client, ed, owner, monkeypatch):
+    # Pinned to spec 4 (slice 14 moved the current spec to 5; sara C M2): the baseline this migration guards is a
+    # spec-4 one, and the later revisions' spec-5 guards must let it through to 0055's own refusal.
+    from services import freeze_set
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 4)
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 4)
     scope(client, ed)
     assert freeze(client, ed)["baseline"]["hash_spec_version"] == 4
     assert q(owner, "SELECT count(*) FROM baseline_br_requirement_line")[0][0] == 0

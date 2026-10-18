@@ -270,7 +270,7 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
     marks = {"code": "ZQXCODE", "name": "Zqx secret project", "node": "Zqx hidden L1", "step": "Zqx hidden step",
              "de": "Zqx ledger", "field": "zqx_field", "sol": "Zqx solution", "fr": "Zqx form",
              "app": "ZQXAPP", "unit": "ZQXU", "role": "ZQXR", "ext": "Zqx bank", "baseline": "Zqx frozen note",
-             "stk": "Zqx stakeholder", "issue": "Zqx issue"}
+             "stk": "Zqx stakeholder", "issue": "Zqx issue", "br": "Zqx statement"}
     p = client.post(f"{API}/projects", headers=h, json={
         "client_id": w["client_id"], "project_code": marks["code"], "project_name": marks["name"],
         "program_id": w["program_id"], "component_codes": ALL_COMPONENTS, "is_restricted": True}).json()
@@ -300,8 +300,8 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
     post(f"/projects/{pid}/external-entities", {"ext_name": marks["ext"]}, "external_entity_id")
     stk = post(f"/projects/{pid}/stakeholders", {"stakeholder_name": marks["stk"], "org_unit_id": unit["org_unit_id"]},
                "stakeholder_id")                                                         # slice 14 (sara A M-1)
-    post(f"/projects/{pid}/issues", {"title": marks["issue"], "severity_code": "HIGH", "issue_type_code": "DATA",
-                                     "raised_by_stakeholder_id": stk["stakeholder_id"]}, "issue_id")
+    iss = post(f"/projects/{pid}/issues", {"title": marks["issue"], "severity_code": "HIGH", "issue_type_code": "DATA",
+                                           "raised_by_stakeholder_id": stk["stakeholder_id"]}, "issue_id")
     assert step["is_process"]
     # slice 8: a frozen baseline, marked by its note — its step reads and writes data so the freeze passes
     de2 = post(f"/projects/{pid}/data-entities", {"de_name": "Zqx journal"}, "data_entity_id")
@@ -309,6 +309,11 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
     for d, crud in ((de, "R"), (de2, "C")):
         post(f"/business-requirements/{br['br_id']}/data-entities",
              {"data_entity_id": d["data_entity_id"], "crud_code": crud}, "br_data_entity_id")
+    # slice 14 (sara C L1): an issue link to the hidden BR, whose statement is marked
+    r = client.patch(f"{API}/business-requirements/{br['br_id']}", headers=h,
+                     json={"row_version": br["row_version"], "br_statement": marks["br"]})
+    assert r.status_code == 200, r.text
+    post(f"/issues/{iss['issue_id']}/brs", {"br_id": br["br_id"]}, "issue_br_id")
     pv = client.get(f"{API}/projects/{pid}/baselines/next", headers=h).json()
     fz = client.post(f"{API}/projects/{pid}/baselines/freeze", headers=h, json={
         "note": marks["baseline"], "bump": "MINOR", "confirm_text": pv["confirm_text"],
@@ -351,7 +356,9 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
                  "/api/v1/projects/{project_id}/function-requirements", "/api/v1/projects/{project_id}/applications",
                  "/api/v1/programs/{program_id}/projects", "/api/v1/projects/{project_id}/baselines",
                  "/api/v1/baselines/{id}", "/api/v1/projects/{project_id}/stakeholders",
-                 "/api/v1/stakeholders/{id}", "/api/v1/projects/{project_id}/issues", "/api/v1/issues/{id}"):
+                 "/api/v1/stakeholders/{id}", "/api/v1/projects/{project_id}/issues", "/api/v1/issues/{id}",
+                 "/api/v1/projects/{project_id}/issue-dashboard",                  # names the raiser (slice 14)
+                 "/api/v1/issues/{id}/brs"):                                       # the linked BR's statement
         assert must in seen_by_admin, must                                              # positive control
     assert called > 200
     # slice 8 (sara L6): the parameterised baseline reads, as admin (positive) and as each non-member

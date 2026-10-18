@@ -365,3 +365,154 @@ def test_issue_writes_are_refused_with_the_component_off(client, ed, world):
                           json={"row_version": i["row_version"], "status_code": "RESOLVED", "resolution": "x"})):
         assert r.status_code == 409 and r.headers.get("X-VB-Error") == "COMPONENT_OFF", r.text
     assert client.get(f"{API}/issues/{i['issue_id']}", headers=ed["h"]).status_code == 200    # reads stay open
+
+
+# ---- links, step retire, the dashboard and the M3 tile (step C; criteria 4, 5, 7, 11, 14, 16, 17) ------------------
+def two_areas(client, ed):
+    """Two L1 areas (Sales, Finance), one process step each; returns the two steps' BRs."""
+    from tests.test_scope_api import node
+    from tests.test_step_retire import _br
+    out = []
+    for area, step_name in (("Sales", "Take order"), ("Finance", "Post invoice")):
+        a = node(client, ed, area)
+        b = node(client, ed, f"{area} flow", a["bfc_node_id"])
+        s = node(client, ed, step_name, b["bfc_node_id"], is_process=True)
+        out.append(_br(client, ed, s["bfc_node_id"]))
+    return out
+
+
+def link(client, ed, i, br, expect=201, headers=None):
+    r = client.post(f"{API}/issues/{i['issue_id']}/brs", headers=headers or ed["h"], json={"br_id": br["br_id"]})
+    assert r.status_code == expect, r.text
+    return r.json()
+
+
+def unlink(client, ed, i, lnk, headers=None, issue_id=None):
+    return client.delete(f"{API}/issues/{issue_id or i['issue_id']}/brs/{lnk['issue_br_id']}",
+                         headers=headers or ed["h"], params={"row_version": lnk["row_version"]})
+
+
+def dash(client, ed):
+    r = client.get(f"{API}/projects/{ed['p']}/issue-dashboard", headers=ed["h"])
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_links_span_brs_and_relink_restores_the_row(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    br1, br2 = two_areas(client, ed)
+    l1 = link(client, ed, i, br1)
+    link(client, ed, i, br2)
+    link(client, ed, i, br1, expect=409)                                                       # already linked
+    link(client, ed, i, {"br_id": 999999}, expect=422)
+    assert unlink(client, ed, i, l1).status_code == 204
+    again = link(client, ed, i, br1)
+    assert again["issue_br_id"] == l1["issue_br_id"]                                           # S1-7: same row
+    r = client.get(f"{API}/issues/{i['issue_id']}/brs", headers=ed["h"]).json()
+    assert [x["br_number"] for x in r] == sorted([br1["br_number"], br2["br_number"]])
+
+
+def test_an_issue_with_links_cannot_be_retired(client, ed):
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    br1, _ = two_areas(client, ed)
+    link(client, ed, i, br1)
+    rv = get_issue(client, ed, i)["row_version"]
+    r = client.delete(f"{API}/issues/{i['issue_id']}", headers=ed["h"], params={"row_version": rv})
+    assert r.status_code == 409 and br1["br_number"] in r.json()["detail"]                     # I-4
+
+
+def test_unlinking_another_issues_link_is_404_and_writes_nothing(client, ed, world, db):
+    """Criterion 11 (R1): the link is fetched under the issue in the path; another project's link is a 404."""
+    s = stakeholder(client, ed, "Anan")
+    mine = issue(client, ed, s)
+    br1, _ = two_areas(client, ed)
+    theirs_p = world["p_sales"]
+    ts = stakeholder(client, ed, "Zed", headers=world["admin"], project=theirs_p)
+    theirs = issue(client, ed, ts, headers=world["admin"], project=theirs_p)
+    a = client.post(f"{API}/projects/{theirs_p}/bfc-nodes", headers=world["admin"],
+                    json={"node_name": "Ops", "parent_bfc_node_id": None}).json()
+    b = client.post(f"{API}/projects/{theirs_p}/bfc-nodes", headers=world["admin"],
+                    json={"node_name": "Ops flow", "parent_bfc_node_id": a["bfc_node_id"]}).json()
+    st = client.post(f"{API}/projects/{theirs_p}/bfc-nodes", headers=world["admin"],
+                     json={"node_name": "Ship", "parent_bfc_node_id": b["bfc_node_id"], "is_process": True}).json()
+    their_br = next(x for x in client.get(f"{API}/projects/{theirs_p}/business-requirements",
+                                          headers=world["admin"]).json() if x["bfc_node_id"] == st["bfc_node_id"])
+    their_link = link(client, ed, theirs, their_br, headers=world["admin"])
+    link(client, ed, mine, their_br, expect=422)                                               # criterion 4
+    assert unlink(client, ed, mine, their_link, issue_id=mine["issue_id"]).status_code == 404
+    still = db.execute(text("SELECT is_active FROM issue_br WHERE issue_br_id = :i"),
+                       {"i": their_link["issue_br_id"]}).scalar_one()
+    assert still is True
+
+
+def test_a_step_retire_takes_the_link_and_names_the_issue_which_stays_live(client, ed):
+    from tests.test_step_retire import preview, restore, retire
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    br1, br2 = two_areas(client, ed)
+    link(client, ed, i, br1)
+    link(client, ed, i, br2)
+    p = preview(client, ed, br1["bfc_node_id"]).json()
+    assert p["issues"] == ["ISS-0001"] and not p["blockers"]                                   # criterion 5, I-3
+    assert retire(client, ed, br1["bfc_node_id"]).status_code in (200, 204)
+    assert get_issue(client, ed, i)["is_active"]                                               # the issue survives
+    live = [x["br_number"] for x in client.get(f"{API}/issues/{i['issue_id']}/brs", headers=ed["h"]).json()]
+    assert live == [br2["br_number"]]
+    r = restore(client, ed, br1["bfc_node_id"])
+    assert r.status_code in (200, 204), r.text
+    live = [x["br_number"] for x in client.get(f"{API}/issues/{i['issue_id']}/brs", headers=ed["h"]).json()]
+    assert live == sorted([br1["br_number"], br2["br_number"]])                                 # back with the step
+
+
+def test_a_step_restore_is_refused_while_its_issue_is_retired(client, ed):
+    from tests.test_step_retire import restore, retire
+    s = stakeholder(client, ed, "Anan")
+    i = issue(client, ed, s)
+    br1, _ = two_areas(client, ed)
+    link(client, ed, i, br1)
+    assert retire(client, ed, br1["bfc_node_id"]).status_code in (200, 204)
+    rv = get_issue(client, ed, i)["row_version"]
+    assert client.delete(f"{API}/issues/{i['issue_id']}", headers=ed["h"], params={"row_version": rv}).status_code == 204
+    r = restore(client, ed, br1["bfc_node_id"])
+    assert r.status_code == 409 and "ISS-0001" in r.json()["detail"], r.text                   # restore the issue first
+    assert r.headers.get("X-VB-Error") == "RESTORE_FIRST"                                       # schema §4 (sara C L6)
+
+
+def test_the_dashboard_counts_areas_raisers_overdue_and_agrees_with_the_list(client, ed):
+    """Criteria 7, 14, 16, 17: a two-area issue counts in both areas and once in the total; an unlinked one under
+    "No area"; DEFERRED counts as open and overdue; the tile's Critical counts CRITICAL only."""
+    a, b = stakeholder(client, ed, "Anan"), stakeholder(client, ed, "Bee")
+    br1, br2 = two_areas(client, ed)
+    both = issue(client, ed, a, "Both areas", severity_code="CRITICAL")
+    link(client, ed, both, br1)
+    link(client, ed, both, br2)
+    sales = issue(client, ed, a, "Sales only", severity_code="HIGH", issue_type_code="PROCESS")
+    link(client, ed, sales, br1)
+    loose = issue(client, ed, b, "No area", severity_code="LOW", raised_date="2026-01-01", target_date="2026-01-31")
+    assert edit(client, ed, loose, status_code="DEFERRED").status_code == 200
+    done = issue(client, ed, b, "Closed one", severity_code="CRITICAL")
+    assert resolve(client, ed, done).status_code == 200
+
+    d = dash(client, ed)
+    assert (d["open"], d["critical"], d["overdue"]) == (3, 1, 1)                                # 16, 17
+    assert d["severities"] == ["CRITICAL", "HIGH", "MEDIUM", "LOW"]                             # all four shown
+    cell = {r["severity_code"]: r["counts"] for r in d["by_severity_type"]}
+    assert (cell["CRITICAL"]["DATA"], cell["HIGH"]["PROCESS"], cell["LOW"]["DATA"]) == (1, 1, 1)
+    areas = {r["name"]: r["open"] for r in d["by_area"]}
+    assert areas == {"Sales": 2, "Finance": 1} and d["no_area"] == 1                            # 14: rows ≠ total
+    assert {r["name"]: r["open"] for r in d["by_raiser"]} == {"Anan": 2, "Bee": 1}
+
+    def nums(**q):
+        return [x["issue_number"] for x in client.get(f"{API}/projects/{ed['p']}/issues", headers=ed["h"],
+                                                      params={"open_only": True, **q}).json()]
+    by_area = {r["area_id"]: r["open"] for r in d["by_area"]}
+    for area_id, n in by_area.items():                                                          # 7: list agrees
+        assert len(nums(area=str(area_id))) == n
+    assert nums(area="none") == [loose["issue_number"]]
+    assert len(nums(severity="CRITICAL")) == d["critical"]
+    for r in d["by_raiser"]:
+        assert len(nums(raiser=r["stakeholder_id"])) == r["open"]
+    tile = client.get(f"{API}/projects/{ed['p']}/scope-summary", headers=ed["h"]).json()["totals"]
+    assert (tile["issues_open"], tile["issues_critical"]) == (3, 1)                             # M3: Critical only

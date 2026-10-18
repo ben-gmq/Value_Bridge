@@ -160,6 +160,10 @@ export const issueApi = {                                             // slice 1
   reopen: (id, body) => d(http.post(`${V}/issues/${id}/reopen`, body)),
   retire: (id, rowVersion) => del(`${V}/issues/${id}`, rowVersion),
   restore: (id) => d(http.patch(`${V}/issues/${id}/restore`)),
+  brs: (id) => d(http.get(`${V}/issues/${id}/brs`)),
+  link: (id, brId) => d(http.post(`${V}/issues/${id}/brs`, { br_id: brId })),
+  unlink: (id, linkId, rowVersion) => del(`${V}/issues/${id}/brs/${linkId}`, rowVersion),
+  dashboard: (projectId) => d(http.get(`${P(projectId)}/issue-dashboard`)),
 };
 
 export const orgApi = {

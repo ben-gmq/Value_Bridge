@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
-from services import baseline, process_flow
+from services import baseline, issue as issue_service, process_flow
 from services.consistency import consistency_check
 
 AGREED = {"CONFIRMED", "BASELINED"}
@@ -91,4 +91,7 @@ def summary(db: Session, project_id: int) -> dict:
     totals["freeze_errors"] = sum(len(v) for v in errors.values())
     totals["freeze_blocking"] = sum(len(v) for v in blocking.values())
     totals["freeze_warnings"] = sum(len(v) for v in warnings.values())
+    # M3 (slice 14, I-13): open issues, and of them severity CRITICAL only — the dashboard's own figures.
+    counts = issue_service.open_counts(issue_service.list_issues(db, project_id, open_only=True))
+    totals["issues_open"], totals["issues_critical"] = counts["open"], counts["critical"]
     return {"areas": out, "totals": totals}

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
                     BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
-                    ProjectComponent, ProjectTemplateComponent, Solution, Issue, Stakeholder)
+                    ProjectComponent, ProjectTemplateComponent, Solution, Issue, IssueBr, Stakeholder)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
@@ -109,6 +109,7 @@ FREEZE_GATES: dict[str, Gate] = {
     "application_solution": Gate(all_of=frozenset({"APPLICATION", "SOLUTION"})),
     "effort_rate": Gate(all_of=frozenset({"EFFORT"})),
     "issue": Gate(all_of=frozenset({"ISSUE"})),                                          # slice14 schema §3.5
+    "issue_br": Gate(all_of=frozenset({"ISSUE"})),
 }
 ALWAYS = Gate()
 
@@ -124,6 +125,7 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     BrSystemFlow: ("APPLICATION",),                         # D-61: a step restore brings flows back
     Stakeholder: ("ISSUE",),                                # I-9
     Issue: ("ISSUE",),
+    IssueBr: ("ISSUE",),                                    # a step restore brings issue links back (I-3)
 }
 DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 

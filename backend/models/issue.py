@@ -119,3 +119,39 @@ class Issue(AuditMixin, Base):
 
     def owning_project_id(self) -> int:
         return self.project_id
+
+
+class IssueBr(AuditMixin, Base):
+    """Issue × BR (§5.4 "ISSUE ↔ BR is many-to-many"). S1-5 / I-8: surrogate PK, full UK on the pair, so a re-link
+    restores the same row (S1-7). The live guard makes "a live link under a retired issue" impossible in the database;
+    BR liveness is the service's (as br_solution). Retires and restores with its BR's step (step_retire.OWNED_BY_BR,
+    I-3)."""
+
+    __tablename__ = "issue_br"
+
+    issue_br_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    issue_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    br_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    issue_is_active: Mapped[bool | None] = mapped_column(
+        Boolean, Computed("CASE WHEN is_active THEN TRUE END", persisted=True))
+
+    # Read-only: the two-ended label "ISS-0001 ↔ BR-0042" (DR1-P1).
+    issue_row = relationship("Issue", viewonly=True, primaryjoin="foreign(IssueBr.issue_id) == Issue.issue_id")
+    br_row = relationship("BusinessRequirement", viewonly=True,
+                          primaryjoin="foreign(IssueBr.br_id) == BusinessRequirement.br_id")
+
+    __table_args__ = (
+        UniqueConstraint("issue_id", "br_id", name="uq_ibr_grain"),
+        ForeignKeyConstraint(["issue_id", "project_id"], ["issue.issue_id", "issue.project_id"], name="fk_ibr_issue"),
+        ForeignKeyConstraint(["br_id", "project_id"], ["business_requirement.br_id", "business_requirement.project_id"],
+                             name="fk_ibr_br"),
+        ForeignKeyConstraint(["issue_id", "project_id", "issue_is_active"],
+                             ["issue.issue_id", "issue.project_id", "issue.is_active"], name="fk_ibr_issue_live",
+                             onupdate="NO ACTION"),
+        Index("ix_ibr_br", "br_id"),
+        Index("ix_ibr_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id

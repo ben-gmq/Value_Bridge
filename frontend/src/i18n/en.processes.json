@@ -195,6 +195,8 @@
   "processes.retireWithDependents": "Retire with its requirement and flows",
   "processes.retiredWithDependents": "Step retired with its requirement and flows.",
   "processes.retireKind.business_requirement": "Business requirement",
+  "processes.retireKind.issue_br": "Issue links ({n})",
+  "processes.retireStepIssues": "These issues lose their link to this requirement and stay on the project: {issues}",
   "processes.retireKind.br_data_entity": "Requirement data ({n})",
   "processes.retireKind.br_org_role": "Requirement roles ({n})",
   "processes.retireKind.bfc_node_data_entity": "Step data in and out ({n})",

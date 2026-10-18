@@ -49,6 +49,9 @@
   "home.nextFreeze": "Next freeze: blocking items",
   "home.nextFreezeNote": "Whole project · {warnings} warnings that never block ·",
   "home.openBaselines": "Open baselines",
+  "home.critical": "Critical",
+  "home.criticalNote": "Open issues of severity Critical, of {open} open.",
+  "home.openIssues": "Open issues",
   "home.bySolution": "Effort by solution",
   "home.bySolutionNone": "No rated function requirement is delivered through a solution yet.",
   "home.unassigned": "{n} days not delivered through a solution"
