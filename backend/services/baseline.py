@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import AppUser, Baseline, BusinessRequirement, Project
+from models import AppUser, Baseline, BusinessRequirement, Project, Stakeholder
 from services import access, audit, components, dfd_rule, freeze_set
 from services.code_master import resolve
 from services.consistency import FREEZE_BLOCKING_WARNINGS, INFORMATIONAL, WARNINGS, consistency_check
@@ -460,6 +460,9 @@ def diff(db: Session, project_id: int, a, b) -> dict:
             cache[BRFR] = _derive_links(lab)
             derived.append(name)
     out, summary = {}, {c: 0 for c in CHANGES}
+    # I-14 (Q-52): issues are counted apart from scope — resolving thirty issues is not thirty scope changes.
+    issue_summary = {c: 0 for c in CHANGES}
+    raiser = _raiser_names(db, project_id)                    # I-15: today's name, never frozen
     for e in FREEZE_SET:
         cols_a, cols_b = freeze_set.columns_for(e, _spec(a)), freeze_set.columns_for(e, _spec(b))
         entry = {"area": e.area, "component_on": {"a": e.gate.open(on_a), "b": e.gate.open(on_b)}}
@@ -507,15 +510,26 @@ def diff(db: Session, project_id: int, a, b) -> dict:
             else:
                 continue
             row = rb or ra
+            shown = (lambda r, c: raiser.get(r.get(c), r.get(c)) if c == "raised_by_stakeholder_id"
+                     else _shown(r, c))
             changes.append({"source_id": sid, "change": kind, "fields": fields, "moved": moved,
                             "label": (lb if rb else la).label(e.table, row),
-                            "before": {c: _shown(ra, c) for c in fields} if ra and fields else {},
-                            "after": {c: _shown(rb, c) for c in fields} if rb and fields else {}})
+                            "before": {c: shown(ra, c) for c in fields} if ra and fields else {},
+                            "after": {c: shown(rb, c) for c in fields} if rb and fields else {}})
             if not unfrozen:
-                summary[kind] += 1
+                (issue_summary if e.area == ISSUE_AREA else summary)[kind] += 1
         out[e.table] = {**entry, "status": "OK", "rows": changes, **extra, **unfrozen}
-    return {"from": _label_of(a), "to": _label_of(b), "summary": summary, "entities": out,
-            "_rows": (cache_a, cache_b)}
+    return {"from": _label_of(a), "to": _label_of(b), "summary": summary, "issue_summary": issue_summary,
+            "entities": out, "_rows": (cache_a, cache_b)}
+
+
+ISSUE_AREA = "ISSUE"
+
+
+def _raiser_names(db: Session, project_id: int) -> dict[int, str]:
+    """I-15 (Q-53): a baseline freezes the raiser's id only; a comparison shows today's name for it."""
+    return dict(db.execute(select(Stakeholder.stakeholder_id, Stakeholder.stakeholder_name)
+                           .where(Stakeholder.project_id == project_id)).all())
 
 
 def _shown(row: dict, col: str):
