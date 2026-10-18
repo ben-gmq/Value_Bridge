@@ -7,6 +7,8 @@
   "settings.organisationWhat": "Departments, divisions, sections and the roles in them",
   "settings.parties": "External parties",
   "settings.partiesWhat": "Customers, banks, regulators and suppliers that exchange data with a process",
+  "settings.stakeholders": "Stakeholders",
+  "settings.stakeholdersWhat": "The client's people and BPO staff who raise issues",
   "settings.building": "This screen is being built in Slice 1.",
   "settings.showRetired": "Show retired",
   "settings.retiredChip": "Retired",

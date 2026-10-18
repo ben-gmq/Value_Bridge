@@ -446,3 +446,9 @@ place.
   three to one home (`services/access.py` or a `services/locks.py`). (L4) `program._move_changes` is N+1 (up to 3
   queries per active staff user) and runs under the move confirm's locks — load both programs' members and the
   project's members in 3 queries before a client tenant has many users.
+- **2026-10-18 · slice 14 step A (`sara`; M1–M3 fixed in the step):** (L1) 0061's downgrade clears the behaviour of
+  every ISSUE_STATUS row, so a status a platform admin added later makes the re-upgrade refuse — clear only the five
+  seeded codes and refuse while another company status exists. (L2) `test_migration_0061_0062.py` covers the
+  project-tier refusal but not the live-hide refusal. (L3) the ISSUE switch-off blocker lists bare stakeholder ids;
+  label them `#<id>` like `lifecycle.LABELS`. (L4) `StakeholdersPage` does not show a failed org-unit load. (L5)
+  `CodeListsPage` keeps a third copy of the behaviour vocabularies — serve them from the API.

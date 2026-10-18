@@ -1,0 +1,20 @@
+{
+  "issues.stakeholder.add": "Add stakeholder",
+  "issues.stakeholder.addTitle": "Add stakeholder",
+  "issues.stakeholder.editTitle": "Edit stakeholder",
+  "issues.stakeholder.name": "Name",
+  "issues.stakeholder.jobTitle": "Job title",
+  "issues.stakeholder.orgUnit": "Org unit",
+  "issues.stakeholder.noUnit": "No org unit",
+  "issues.stakeholder.side": "Side",
+  "issues.stakeholder.client": "Client",
+  "issues.stakeholder.bpo": "BPO",
+  "issues.stakeholder.count": "{n} stakeholders",
+  "issues.stakeholder.count_one": "1 stakeholder",
+  "issues.stakeholder.none": "No stakeholders yet",
+  "issues.stakeholder.created": "Stakeholder added",
+  "issues.stakeholder.retired": "Stakeholder retired",
+  "issues.stakeholder.restored": "Stakeholder restored",
+  "issues.stakeholder.retireTitle": "Retire stakeholder",
+  "issues.stakeholder.retireBody": "Retire {name}? A stakeholder who raised a live issue cannot be retired."
+}

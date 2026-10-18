@@ -143,6 +143,14 @@ export const partyApi = {
   restore: (id) => d(http.patch(`${V}/external-entities/${id}/restore`)),
 };
 
+export const stakeholderApi = {                                       // slice 14 (§4.5)
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/stakeholders`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/stakeholders`, body)),
+  update: (id, body) => d(http.patch(`${V}/stakeholders/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/stakeholders/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/stakeholders/${id}/restore`)),
+};
+
 export const orgApi = {
   units: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-units`, { params: { include_retired: includeRetired } })),
   createUnit: (projectId, body) => d(http.post(`${P(projectId)}/org-units`, body)),

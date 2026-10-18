@@ -107,6 +107,8 @@ ROUTE_COMPONENTS = (
     ("/interface", "APPLICATION"),
     ("/bfc-nodes/{id}/applications", "AS_IS"),
     ("/copy-from/", "AS_IS"),
+    ("/stakeholders", "ISSUE"),                                              # slice 14, I-9
+    ("/issues", "ISSUE"),
 )
 # 7c (DR7-D1): these depend on the node's chart, so they must declare the DFD resolver. The performer
 # declares only its chart's own resolver, whatever the DFD setting (S10c-2, Ben 2026-10-14).

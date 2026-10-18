@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
                     BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
-                    ProjectComponent, ProjectTemplateComponent, Solution)
+                    ProjectComponent, ProjectTemplateComponent, Solution, Stakeholder)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
@@ -31,7 +31,7 @@ COMPONENT_REQUIRES: dict[str, frozenset[str]] = {
     "CHANGE_REQUEST": frozenset({"EFFORT"}),
 }
 # Components with screens today; the rest can be switched on but show "not yet available" (§7 risk 4).
-BUILT = frozenset({"SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "TO_BE_DFD", "AS_IS"})
+BUILT = frozenset({"SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD", "AS_IS"})
 OFF_HEADERS = {"X-VB-Error": "COMPONENT_OFF"}
 DEPTHS = ("KEYS_ONLY", "FULL")
 _SAMPLE = 10
@@ -68,6 +68,8 @@ COMPONENT_ROWS = {
                   _rows(BfcNodeTrigger, None, step_set="TO_BE")),
     # the as-is chart itself (D-47): its nodes carry everything else of it
     "AS_IS": (_rows(BfcNode, BfcNode.hier_code, BfcNode.bfc_set_code == "AS_IS"),),
+    # slice14 R10: live stakeholders too, so ISSUE cannot be switched off under them (labelled by id, R7)
+    "ISSUE": (_rows(Stakeholder, Stakeholder.stakeholder_id),),
 }
 
 
@@ -119,6 +121,7 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     BrSolution: ("SOLUTION",),
     BrFunctionRequirement: ("FUNCTION_REQUIREMENT",),       # slice10b §4.1: a step restore brings links back
     BrSystemFlow: ("APPLICATION",),                         # D-61: a step restore brings flows back
+    Stakeholder: ("ISSUE",),                                # I-9
 }
 DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 
