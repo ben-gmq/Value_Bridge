@@ -60,7 +60,7 @@ above them) on the schema `docs/slice15_phasing_schema.md`. Branch `ren/2026-10-
    - The Waves rail item and page (list, drag reorder, dates, status).
    - The solution page gains a "Waves" card (the split, edited and saved whole) and a "Depends on" card; the wave plan
      is a tab; the comparison area is named "Waves".
-   - Strings in `en.phasing.json`, kit components, links and API functions through `links.js` and `scope.js`.
+   - Strings in `en.waves.json`, kit components, links and API functions through `links.js` and `scope.js`.
    - Criterion 8 (rail item hidden when the component is off) and criterion 11: a test scans the phasing strings and
      the COMPONENT_OFF / proof wording for "phase".
 7. **Checks before merge.** Sara (baselines and the migration chain); the full suite (`pytest -m "" -n 4`, with the

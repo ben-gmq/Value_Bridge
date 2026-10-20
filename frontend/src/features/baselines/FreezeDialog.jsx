@@ -23,7 +23,10 @@ export function itemText(x) {
     return t(x.element_code ? 'baselines.dlg.ruleInvalid' : 'baselines.dlg.ruleMissing',
       { chart: t(`baselines.dlg.chart.${x.bfc_set_code}`) });
   }
-  return fmtValue(x.label ?? x.component ?? x.de_number ?? x.br_number ?? '');
+  // slice 15 (sara M-B): a wave split or a dependency is named by both its ends
+  if (x.solution_number && x.phase_code) return `${x.solution_number} ↔ ${x.phase_code}`;
+  if (x.solution_number && x.depends_on_solution_number) return `${x.solution_number} → ${x.depends_on_solution_number}`;
+  return fmtValue(x.label ?? x.component ?? x.de_number ?? x.br_number ?? x.solution_number ?? '');
 }
 
 function Lines({ title, lines, severity }) {

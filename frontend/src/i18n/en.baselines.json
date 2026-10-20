@@ -325,5 +325,9 @@
   "baselines.field.portion_pct": "Share of effort (%)",
   "baselines.field.depends_on_solution_id": "Needs solution",
   "baselines.field.start_date": "Start date",
-  "baselines.field.end_date": "End date"
+  "baselines.field.end_date": "End date",
+  "baselines.line.solution_phase_split_not_100": "Solutions whose wave shares do not total 100 %",
+  "baselines.line.solution_dependency_cycle": "Solutions in a dependency loop",
+  "baselines.line.solution_phase_under_inactive": "Wave splits under a retired solution or wave",
+  "baselines.line.solution_dependency_under_inactive": "Dependencies on a retired solution"
 }

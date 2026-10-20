@@ -24,7 +24,7 @@ import { WaveStatus } from './waveKit';
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
 // Add or edit a wave. The code is typed (no number series); the order is the list's, never the dates (schema §3.1).
-function WaveDialog({ projectId, wave, onClose, onDone }) {
+function WaveDialog({ projectId, wave, onClose, onDone, onStale }) {
   const [f, setF] = useState({ phase_code: wave?.phase_code ?? '', phase_name: wave?.phase_name ?? '',
     start_date: wave?.start_date ?? '', end_date: wave?.end_date ?? '', status_code: wave?.status_code ?? '' });
   const [error, setError] = useState('');
@@ -40,7 +40,7 @@ function WaveDialog({ projectId, wave, onClose, onDone }) {
         : phaseApi.create(projectId, body);
     },
     onSuccess: (row) => { onDone(row); onClose(); },
-    onError: (err) => setError(isStale(err) ? t('waves.stale') : errorText(err, t('common.saveFailed'))),
+    onError: (err) => (isStale(err) ? (onStale(), onClose()) : setError(errorText(err, t('common.saveFailed')))),
   });
   const ok = f.phase_code.trim() && f.phase_name.trim() && status;
   return (
@@ -164,6 +164,7 @@ function WaveList({ projectId, canEdit, notify }) {
         })}
       </Card>
       {editing && <WaveDialog projectId={projectId} wave={editing === 'new' ? null : editing} onClose={() => setEditing(null)}
+        onStale={() => { refresh(); setError(t('waves.stale')); }}
         onDone={(row) => { refresh(); notify(editing === 'new' ? t('waves.added', { code: row.phase_code }) : t('waves.saved')); }} />}
       <ConfirmDialog open={Boolean(retiring)} title={t('waves.retireTitle', { code: retiring?.phase_code ?? '' })}
         body={t('waves.retireBody')} confirmLabel={t('waves.retire')} busy={retire.isPending}

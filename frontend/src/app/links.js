@@ -95,6 +95,7 @@ export const keys = {
   phasePlan: (p) => ['phases', String(p), 'plan'],                                  // under phases(p)
   phaseSplit: (solId) => ['phase-split', String(solId)],
   solutionDeps: (solId) => ['solution-deps', String(solId)],
+  allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],
   roles: (p) => ['org-roles', String(p)],
   flows: (p) => ['process-flows', String(p)],                                       // every DFD of the project

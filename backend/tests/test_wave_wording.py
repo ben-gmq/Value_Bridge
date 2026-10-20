@@ -30,6 +30,21 @@ def test_the_wave_screens_and_labels_never_say_phase():
     assert [f"{k}: {v}" for k, v in shown.items() if PHASE.search(v)] == []
 
 
+def test_every_freeze_check_line_about_waves_has_wave_wording(db):
+    """Sara M-B (T5): a consistency line whose key says "phase" reaches the freeze dialog through its own label —
+    never through the key spelled out as words."""
+    from services.consistency import consistency_check
+    base = _strings("en.baselines.json")
+    keys = [k for k in consistency_check(None, db) if PHASE.search(k)]
+    assert len(keys) == 2                                                    # split_not_100 and under_inactive
+    labels = {k: base.get(f"baselines.line.{k}") for k in keys}
+    assert all(labels.values()), labels
+    assert [v for v in labels.values() if PHASE.search(v)] == []
+    others = {k: base.get(f"baselines.line.{k}") for k in ("solution_dependency_cycle",
+                                                            "solution_dependency_under_inactive")}
+    assert all(others.values()), others
+
+
 def test_the_component_label_and_every_refusal_say_wave():
     from seeds.seed_code_master import LIBRARY
     comps = dict(next(rows for cat, _, rows in LIBRARY if cat == "PROJECT_COMPONENT"))

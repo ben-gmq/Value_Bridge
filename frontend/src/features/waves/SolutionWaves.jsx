@@ -27,6 +27,7 @@ export function WaveSplitCard({ projectId, solution, canEdit, notify }) {
   const waves = useQuery({ queryKey: [...keys.phases(projectId), { retired: false }], queryFn: () => phaseApi.list(projectId) });
   const { getLabel } = useCodes(projectId, 'PHASE_STATUS');
   const [draft, setDraft] = useState(null);          // null = reading; else [{ phase_id, pct }]
+  const [basis, setBasis] = useState([]);            // sara M-A: the rows the draft was opened from (T1)
   const [error, setError] = useState('');
   const rows = split.data?.rows ?? [];
   const live = waves.data ?? [];
@@ -37,15 +38,20 @@ export function WaveSplitCard({ projectId, solution, canEdit, notify }) {
   };
   const save = useMutation({
     mutationFn: (next) => phaseApi.saveSplit(solution.solution_id, {
-      based_on: rows.map((r) => ({ solution_phase_id: r.solution_phase_id, row_version: r.row_version })),
+      based_on: basis,
       rows: next.map((r) => ({ phase_id: r.phase_id, portion_pct: String(r.pct).trim() })) }),
     onSuccess: () => { setDraft(null); setError(''); refresh(); notify(t('waves.split.saved')); },
-    onError: (err) => { refresh(); setError(isStale(err) || err?.response?.status === 409
-      ? errorText(err, t('waves.stale')) : errorText(err, t('common.saveFailed'))); },
+    onError: (err) => {
+      refresh();
+      const conflict = isStale(err) || err?.response?.status === 409;
+      if (conflict) setDraft(null);                  // re-open from the fresh rows, so the other save is seen
+      setError(conflict ? t('waves.split.stale') : errorText(err, t('common.saveFailed')));
+    },
   });
   const editable = canEdit && solution.is_active;
   const total = (draft ?? []).reduce((s, r) => s + (Number.isFinite(Number(r.pct)) ? cents(r.pct) : 0), 0);
-  const filled = (draft ?? []).every((r) => r.phase_id && String(r.pct).trim() !== '' && cents(r.pct) > 0);
+  const twoDp = (v) => /^\d+(\.\d{1,2})?$/.test(String(v).trim());
+  const filled = (draft ?? []).every((r) => r.phase_id && twoDp(r.pct) && cents(r.pct) > 0);
   const valid = draft && filled && (draft.length === 0 || total === 10000);
   const used = new Set((draft ?? []).map((r) => r.phase_id));
   const pickable = (cur) => live.filter((w) => w.phase_id === cur || (!used.has(w.phase_id) && w.status_code !== CANCELLED))
@@ -55,7 +61,8 @@ export function WaveSplitCard({ projectId, solution, canEdit, notify }) {
     <Card title={t('waves.split.title')} bodySx={{ gap: 1 }}
       action={editable && !draft && live.length > 0 && (
         <Button size="small" variant="outlined" onClick={() => {
-          setError(''); setDraft(rows.map((r) => ({ phase_id: r.phase_id, pct: fmtPct(r.portion_pct) })));
+          setError(''); setBasis(rows.map((r) => ({ solution_phase_id: r.solution_phase_id, row_version: r.row_version })));
+          setDraft(rows.map((r) => ({ phase_id: r.phase_id, pct: fmtPct(r.portion_pct) })));
         }}>{t('waves.split.edit')}</Button>)}>
       <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('waves.split.help')}</Typography>
       {(error || split.error) && <Alert severity="error" sx={ERR_SX}>{error || errorText(split.error)}</Alert>}
@@ -129,7 +136,7 @@ export function DependsOnCard({ projectId, solution, canEdit, notify }) {
   const neededBy = deps.data?.needed_by ?? [];
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.solutionDeps(solution.solution_id) });
-    qc.invalidateQueries({ queryKey: ['solution-deps'] });                 // the other end's "Needed by"
+    qc.invalidateQueries({ queryKey: keys.allSolutionDeps() });             // the other end's "Needed by"
     qc.invalidateQueries({ queryKey: keys.phasePlan(projectId) });
   };
   const fail = (err) => { refresh(); setError(isStale(err) ? t('waves.stale') : errorText(err, t('common.saveFailed'))); };

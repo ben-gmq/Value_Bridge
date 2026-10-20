@@ -234,9 +234,9 @@ def _pct(value) -> Decimal:
     try:
         d = Decimal(str(value))
     except (InvalidOperation, ValueError):
-        raise HTTPException(422, "portion_pct must be a number") from None
+        raise HTTPException(422, "A share must be a number") from None
     if not d.is_finite() or d.as_tuple().exponent < -2:
-        raise HTTPException(422, "portion_pct takes at most two decimals")
+        raise HTTPException(422, "A share takes at most two decimals")
     if d <= 0 or d > HUNDRED:
         raise HTTPException(422, "Each wave's share must be more than 0 % and at most 100 %")
     return d

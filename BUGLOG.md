@@ -466,3 +466,10 @@ place.
   if the exact lines ever stopped summing to it (only on corrupt data, e.g. a live FR under a retired solution) the
   gap would be spread silently — log a warning when they differ. (L6) body ids are plain `int`, so an id beyond
   bigint reaches PostgreSQL and returns a 500 — app-wide, a shared `Id = Field(gt=0, lt=2**63)`.
+- **2026-10-20 · slice 15 screens (`sara` step 6: no critical or high; M-A, M-B, L1, L2, L5–L7 fixed; and the
+  `ui-verifier` Waves check, 10 of 10, Evidence/2026-10-20/slice15/):** (L3) the Waves list works out "Current wave" in
+  the browser while the plan takes it from the server — return it from `GET /phases` so one rule serves both. (L4)
+  "Remove from all waves" saves at once with no confirm. (L8) a refused wave retire says "Retire these first" though
+  the remedy is to remove the splits (the shared lifecycle wording). (L9) the comparison's Object column is empty for
+  wave rows (their code, e.g. "W2", does not match the label splitter). (L10) the "Add wave" button and the split row
+  buttons lack an accessible name in some states.
