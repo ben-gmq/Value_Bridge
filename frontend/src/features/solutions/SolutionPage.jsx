@@ -7,6 +7,7 @@ import { solutionApi } from '../../api/scope';
 import { keys } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
+import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
 import { Card, SectionLabel, Segmented, Tag } from '../../components/kit';
@@ -18,6 +19,7 @@ import { FrTracePanel } from '../frs/FrTracePanel';
 import { AppLinkPanel } from '../applications/AppLinkPanel';
 import { CodeTitle, SaveState, TwoCol } from '../frs/frKit';
 import { SolutionMix } from './SolutionMix';
+import { DependsOnCard, WaveSplitCard } from '../waves/SolutionWaves';
 
 const pickSolution = (s) => ({ solution_name: s.solution_name ?? '', category_code: s.category_code,
   status_code: s.status_code, description: s.description ?? '', benefit_note: s.benefit_note ?? '',
@@ -32,6 +34,7 @@ export default function SolutionPage() {
   const sol = q.data;
   const { options: categoryOptions, getLabel: categoryLabel } = useCodes(projectId, 'SOLUTION_CATEGORY');
   const { options: statusOptions, getLabel: statusLabel } = useCodes(projectId, 'SOLUTION_STATUS');
+  const { isOn } = useComponents(projectId);
   const form = useEditForm(sol, pickSolution);
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
@@ -142,6 +145,11 @@ export default function SolutionPage() {
   const side = (
     <>
       <SolutionMix projectId={projectId} current={v.category_code} />
+      {isOn('PHASING') && (                                      /* slice 15: the split and the dependencies (W-1) */
+        <>
+          <WaveSplitCard projectId={projectId} solution={sol} canEdit={canEdit} notify={setNotice} />
+          <DependsOnCard projectId={projectId} solution={sol} canEdit={canEdit} notify={setNotice} />
+        </>)}
       <Card>
         {/* To-be allocation (D-8). An as-is only application cannot deliver a future solution (R2-D11). */}
         <AppLinkPanel projectId={projectId} title={t('applications.links.deliveredBy')}

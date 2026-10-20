@@ -36,6 +36,7 @@ import CodeListsPage from '../features/settings/CodeListsPage';
 import StakeholdersPage from '../features/settings/StakeholdersPage';
 import IssuesPage from '../features/issues/IssuesPage';
 import IssuePage from '../features/issues/IssuePage';
+import WavesPage from '../features/waves/WavesPage';
 import ComponentOff from '../features/common/ComponentOff';
 import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
@@ -59,6 +60,7 @@ const PAGES = [
   ['settings/rate-card', RateCardPage], ['settings/code-lists', CodeListsPage],
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
   ['issues', IssuesPage], ['issues/:issueId', IssuePage],
+  ['waves', WavesPage],                                                                            // slice 15
 ];
 
 // D-37: a screen of a component that is off shows why instead of its content. Any one listed
@@ -70,6 +72,7 @@ const NEEDS = {
   systems: ['APPLICATION'], 'systems/:appId': ['APPLICATION'],
   'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
   issues: ['ISSUE'], 'issues/:issueId': ['ISSUE'], 'settings/stakeholders': ['ISSUE'],
+  waves: ['PHASING'],
 };
 
 function Gated({ path, Screen }) {
