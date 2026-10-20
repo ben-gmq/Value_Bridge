@@ -1,7 +1,11 @@
 # Value Bridge — remaining work by phase and slice (2026-10-20)
 
-**For:** Ben · **Replaces** the 2026-10-16 two-stream plan (in git history at `daecb2f`). One grouping only:
-**phase → slice**. The function-by-function view stays in `docs/VB_スペック一覧.md`.
+**Words (P-1, Ben 2026-10-20) — the plan is phase → slice, nothing else:**
+- **Phase** — a milestone; the plan has four.
+- **Slice** — one piece of work that gets built inside a phase (14, 15, 1e, …).
+- **Wave** — only the in-app feature of slice 15 (a client's delivery wave), never a way of grouping this plan.
+
+**For:** Ben · **Replaces** the 2026-10-16 plan (in git history at `daecb2f`). The function-by-function view stays in `docs/VB_スペック一覧.md`.
 
 **Unit: person-days** — one working day of build time, covering the slice's spec, design review, build, tests and
 browser check. **Based on** the 2026-10-16 estimates, re-sized where a spec has since been written (slice 15: 2.5,

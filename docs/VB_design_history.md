@@ -513,6 +513,14 @@ design-auditor rounds 1–2 in the paper's §8.
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
+### Ben's ruling, 2026-10-20 — the planning words (P-1)
+
+Ben: *"We have wave, we have slice, and we have stream, so I don't know the relationship of these three."*
+- **P-1.** The plan is **phase → slice** and nothing else. A **phase** is a milestone (four of them, in
+  `docs/VB_remaining_work.md`); a **slice** is what gets built inside one. **"Stream"** is retired (the 2026-10-16
+  two-stream plan stays in git history). **"Wave"** means only the in-app delivery wave of slice 15 (D-18). §12.1 and
+  the §9 route table now carry phase numbers where they said "wave 1e…4"; slice ids (1e, 1f, 1g, 14…) are unchanged.
+
 ### Ben's rulings, 2026-10-18 — the Issue module (slice 14, Q-39…Q-54)
 
 Ben, via Ren: "Show me the issue module Q39 to Q54 … I will answer right now." Every recommendation taken except Q-39

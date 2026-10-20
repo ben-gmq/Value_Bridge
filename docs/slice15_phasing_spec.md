@@ -2,7 +2,7 @@
 
 **Status:** DRAFT — not approved, not built. Needs Ben's answers (Q-55…Q-62) and his OK. **Source of truth:**
 `docs/VB_design.md` (D-18; PHASE, SOLUTION_PHASE, SOLUTION_DEPENDENCY in §5.3; the phase plan report; criterion 68),
-plan row "Phasing and dependency" in `docs/VB_remaining_work.md` (stream B, after 1g; 2.5 days). **Schema:**
+plan row "Phasing and dependency" in `docs/VB_remaining_work.md` (Phase 2; 2.5 days). **Schema:**
 `docs/slice15_phasing_schema.md` (apple, 2026-10-16) — grain, DDL, the no-cycle lock, the effort split, retire rules,
 shadows at hash spec 6, migrations 0064–0066. This spec adds screens, routes, acceptance and grade.
 
