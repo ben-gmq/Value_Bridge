@@ -29,6 +29,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   legacy logic / output text into requirement lines once (idempotent per project), then
   `seeds.seed_effort_rate --actor-email <admin>` adds the Data migration rate cells (S11-5) to existing projects —
   before their next freeze, or their next diff counts four added rate rows.
+  **Slice 15 deploy:** `seed_code_master` stops while any project still holds its own wave status (a project-tier
+  PHASE_STATUS row or hide, now company-only — W-4); clear those with Ben, then re-run it.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·

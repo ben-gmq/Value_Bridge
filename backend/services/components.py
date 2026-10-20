@@ -18,20 +18,23 @@ from sqlalchemy.orm import Session
 
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
                     BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
-                    ProjectComponent, ProjectTemplateComponent, Solution, Issue, IssueBr, Stakeholder)
+                    ProjectComponent, ProjectTemplateComponent, Solution, Issue, IssueBr, Stakeholder, Phase,
+                    SolutionDependency, SolutionPhase)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
 ALL = ("SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD", "AS_IS",
-       "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST")
+       "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST", "PHASING")
 # OR-2 [Q-3, Q-4]: a component that reads another's tables needs it on. Code facts, not data.
 COMPONENT_REQUIRES: dict[str, frozenset[str]] = {
     "EFFORT": frozenset({"FUNCTION_REQUIREMENT"}),
     "BENEFIT": frozenset({"SOLUTION"}),
     "CHANGE_REQUEST": frozenset({"EFFORT"}),
+    "PHASING": frozenset({"SOLUTION"}),                                   # W-3: waves split solutions
 }
 # Components with screens today; the rest can be switched on but show "not yet available" (§7 risk 4).
-BUILT = frozenset({"SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD", "AS_IS"})
+BUILT = frozenset({"SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD", "AS_IS",
+                   "PHASING"})
 OFF_HEADERS = {"X-VB-Error": "COMPONENT_OFF"}
 DEPTHS = ("KEYS_ONLY", "FULL")
 _SAMPLE = 10
@@ -70,6 +73,9 @@ COMPONENT_ROWS = {
     "AS_IS": (_rows(BfcNode, BfcNode.hier_code, BfcNode.bfc_set_code == "AS_IS"),),
     # slice14 R10: live stakeholders too, so ISSUE cannot be switched off under them (labelled by id, R7)
     "ISSUE": (_rows(Issue, Issue.issue_number), _rows(Stakeholder, Stakeholder.stakeholder_id)),
+    # slice 15 R4: waves, splits and dependencies, so PHASING cannot be switched off under any of them
+    "PHASING": (_rows(Phase, Phase.phase_code), _rows(SolutionPhase, SolutionPhase.solution_phase_id),
+                _rows(SolutionDependency, SolutionDependency.solution_dependency_id)),
 }
 
 
@@ -110,6 +116,9 @@ FREEZE_GATES: dict[str, Gate] = {
     "effort_rate": Gate(all_of=frozenset({"EFFORT"})),
     "issue": Gate(all_of=frozenset({"ISSUE"})),                                          # slice14 schema §3.5
     "issue_br": Gate(all_of=frozenset({"ISSUE"})),
+    "phase": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),                            # slice15 schema §3.5
+    "solution_phase": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),
+    "solution_dependency": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),
 }
 ALWAYS = Gate()
 
@@ -126,6 +135,9 @@ ROW_COMPONENTS: dict[type, tuple[str, ...]] = {
     Stakeholder: ("ISSUE",),                                # I-9
     Issue: ("ISSUE",),
     IssueBr: ("ISSUE",),                                    # a step restore brings issue links back (I-3)
+    Phase: ("PHASING",),                                    # slice 15 schema §3.5
+    SolutionPhase: ("PHASING", "SOLUTION"),
+    SolutionDependency: ("PHASING", "SOLUTION"),
 }
 DFD_ROWS = (BfcNodeExternalFlow, BfcNodeTrigger)          # their component is their step's chart's DFD
 

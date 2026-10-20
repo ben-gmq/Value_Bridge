@@ -49,7 +49,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 OWNER_URL = os.environ["MIGRATION_DATABASE_URL"]
 # Every component on: a test project behaves as a pre-7a project did (D-37 backfill, Q-9).
 ALL_COMPONENTS = ["SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD",
-                  "AS_IS", "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST"]
+                  "AS_IS", "WBS", "BENEFIT", "RISK", "CHANGE_REQUEST", "PHASING"]
 # D-70 (slice13_schema §2.8 "fixture risk"): the test projects keep today's D-38 rule on both charts, as every project
 # existing at the 13b deploy does, so the freeze tests built on "trigger + output" keep their meaning. A new project
 # with no dfd_rule in its body starts with the recommended set (tests/test_dfd_rule.py covers that default).

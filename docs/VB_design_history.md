@@ -16,7 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open (2026-10-20: Q-86…Q-93 answered, AR-7…AR-13).
+Nothing open (2026-10-20: Q-86…Q-93 answered, AR-7…AR-13; Q-94 answered, W-10).
 
 
 ---
@@ -527,6 +527,14 @@ Ben, via Ren, 2026-10-20: he follows every recommendation in the spec. Slice 16'
 | AR-11 | **[Q-91] No archiving before the two years.** An earlier removal is a contract DELETE (Q15) | — |
 | AR-12 | **[Q-92] Projects already closed when slice 16 lands count from the migration day**, so nothing comes due on day one | — |
 | AR-13 | **[Q-93] (b): making someone a platform admin needs a second platform admin's approval** — it closes the gap for every four-eyes control, not only the purge. **(a) is the interim rule until (b) is built:** a four-eyes approval is refused when the approver's platform-admin grant was made by the requester or is under 30 days old | slice16_spec §19 U9 |
+
+### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
+
+Ben, via Ren, 2026-10-20: *"yes — keep the build as it is."*
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| W-10 | **[Q-94] A restored wave goes to the end of the order**, as a restored requirement line does; the restore is refused (409) only while a live wave holds its code. Raised by sara L1 on the slice 15 build | slice15_schema §6 ("409 if its code or `seq_no` is taken") |
 
 ### Ben's ruling, 2026-10-20 — the planning words (P-1)
 

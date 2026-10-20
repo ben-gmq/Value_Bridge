@@ -11,7 +11,7 @@ TEMPLATES: dict[str, tuple[str, ...]] = {
     "REQUIREMENTS_ONLY": ("ISSUE",),
     "DATA_AND_PROCESS": ("TO_BE_DFD", "AS_IS", "APPLICATION", "ISSUE"),
     "FULL_DELIVERY": ("SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE",
-                      "TO_BE_DFD", "BENEFIT", "RISK", "CHANGE_REQUEST", "WBS"),
+                      "TO_BE_DFD", "BENEFIT", "RISK", "CHANGE_REQUEST", "WBS", "PHASING"),
 }
 
 

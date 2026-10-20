@@ -166,6 +166,21 @@ export const issueApi = {                                             // slice 1
   dashboard: (projectId) => d(http.get(`${P(projectId)}/issue-dashboard`)),
 };
 
+export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
+  list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/phases`, { params: { include_retired: includeRetired } })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/phases`, body)),
+  update: (id, body) => d(http.patch(`${V}/phases/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/phases/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/phases/${id}/restore`)),
+  reorder: (projectId, order) => d(http.post(`${P(projectId)}/phases/reorder`, { order })),
+  plan: (projectId) => d(http.get(`${P(projectId)}/phase-plan`)),
+  split: (solutionId) => d(http.get(`${V}/solutions/${solutionId}/phase-split`)),
+  saveSplit: (solutionId, body) => d(http.put(`${V}/solutions/${solutionId}/phase-split`, body)),
+  deps: (solutionId) => d(http.get(`${V}/solutions/${solutionId}/dependencies`)),
+  link: (solutionId, body) => d(http.post(`${V}/solutions/${solutionId}/dependencies`, body)),
+  unlink: (solutionId, linkId, rowVersion) => del(`${V}/solutions/${solutionId}/dependencies/${linkId}`, rowVersion),
+};
+
 export const orgApi = {
   units: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/org-units`, { params: { include_retired: includeRetired } })),
   createUnit: (projectId, body) => d(http.post(`${P(projectId)}/org-units`, body)),

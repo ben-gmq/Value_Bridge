@@ -10,7 +10,7 @@ acceptance and grade. Where §9 and the text above it disagree, §9 wins.
 **Words (W-1).** A *wave* is a delivery wave within one project — "Wave 1: Finance + Procurement", "Wave 2:
 Manufacturing" — never the project lifecycle (analysis, design, build, test), which comes from the MS Project WBS
 import. **Every word a user sees says "Wave"**: the rail item, screen titles, labels, the plan, the comparison area,
-`en.phasing.json`. Inside the code the names stay `phase` — tables `phase` / `solution_phase` /
+`en.waves.json`. Inside the code the names stay `phase` — tables `phase` / `solution_phase` /
 `solution_dependency`, models, routes `/phases`, the component code `PHASING` — so the design's entity names hold.
 
 ## 1. Purpose
@@ -57,7 +57,7 @@ concurrent pair, since the advisory lock is the whole guarantee). **Grade 3** fo
 ## 5. Screens
 Rail item **Waves** under Control (component on): the wave list with drag reorder, dates and status; the solution page
 gains a "Waves" card (the split, edited and saved as a whole) and a "Depends on" card; the wave plan as a tab. Kit
-components; strings in `en.phasing.json`, every visible word "wave"; no mockup exists — nothing faked, Ben sees it in
+components; strings in `en.waves.json`, every visible word "wave"; no mockup exists — nothing faked, Ben sees it in
 the browser check.
 
 ## 6. Acceptance criteria

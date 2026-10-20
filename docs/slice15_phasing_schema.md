@@ -193,7 +193,7 @@ lock). A retire of an edge needs no lock: removing an edge cannot create a cycle
 | Event | Effect |
 |---|---|
 | **Phase retired** ("created in error" — the normal end is status COMPLETE / CANCELLED) | 409 while live `solution_phase` rows (names `SOL-… ↔ P…`) or, once WBS lands, live `wbs_item` links (Q4 of §5.3) |
-| **Phase restored** | via `lifecycle.restore`; 409 if its code or `seq_no` is taken by a live phase |
+| **Phase restored** | via `lifecycle.restore`, to the end of the order (a new `seq_no` after the last live wave); 409 only while a live wave holds its code (W-10) |
 | **Solution retired** | 409 while any live `solution_phase` **or** `solution_dependency` on **either** end (two FKs → two LINKS) — Q6 |
 | **Assignment removed** | only through the whole-split PUT (spec §10 T1): a live row whose wave leaves the split retires, a wave named again restores its row, the new set re-checked as 100 or empty; refused if the wave or the solution is retired |
 | **Dependency removed** | row retires, no lock needed; re-link restores it **only through `link_solution_dependency`** (cycle check) |

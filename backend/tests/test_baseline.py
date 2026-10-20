@@ -108,7 +108,7 @@ def test_freeze_snapshots_every_open_table_baselines_brs_and_audits(client, ed, 
     n = out["counts"]
     assert n["bfc_node"] == 4 and n["business_requirement"] == 2 and n["data_entity"] == 2
     assert n["br_data_entity"] == 4 and n["bfc_node_data_entity"] == 4 and n["br_solution"] == 1
-    assert n["function_requirement"] == 1 and n["effort_rate"] > 0 and n["project_component"] == 11
+    assert n["function_requirement"] == 1 and n["effort_rate"] > 0 and n["project_component"] == 12
     assert {x["status_code"] for x in brs(client, ed).values()} == {"BASELINED"}
     detail = client.get(f"{API}/baselines/{b['baseline_id']}", headers=ed["rv"]).json()
     assert detail["intact"] and detail["counts"] == n and "EFFORT" in detail["components"]

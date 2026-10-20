@@ -21,9 +21,15 @@ def test_a_clean_downgrade_and_upgrade_round_trip(client, ed, owner):
     assert q(owner, TABLES)[0][0] == 4
 
 
-def test_a_spec_5_baseline_without_issues_refuses_both_downgrades(client, ed, owner):
+def test_a_spec_5_baseline_without_issues_refuses_both_downgrades(client, ed, owner, monkeypatch):
+    from services import freeze_set
     scope(client, ed)
-    assert freeze(client, ed)["baseline"]["hash_spec_version"] == 5
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 5)                 # slice 15 moved current to 6
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 5)
+    try:
+        assert freeze(client, ed)["baseline"]["hash_spec_version"] == 5
+    finally:
+        monkeypatch.undo()
     with pytest.raises(Exception, match="hash spec 5"):
         command.downgrade(_cfg(), "0063")
     with pytest.raises(Exception, match="hash spec 5"):

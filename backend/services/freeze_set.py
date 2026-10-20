@@ -29,11 +29,13 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 5       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 6       # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
 #                             4: slice 11 — br_requirement_line (D-59), br_data_field (D-60b) and br_system_flow
 #                                (D-61) joined the set together (S11-6)
 #                             5: slice 14 — issue and issue_br joined the set together (I-5; one merge, S11-6)
+#                             6: slice 15 — phase, solution_phase and solution_dependency joined the set together
+#                                (D-18, W-8; one merge, S11-6)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -145,6 +147,14 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        label=("issue_number", "title"), since=5),
     # I-8: issue × BR, labelled by its ends; spec 5 with `issue` (one merge, S11-6).
     _e("issue_br", "ISSUE", ("issue_id", "br_id"), refs=(("issue_id", "issue"), ("br_id", BR)), since=5),
+    # slice 15 (schema §3.5, Q-58): code, name and dates hashed; seq_no a position (MOVED); the status copied, not
+    # hashed. Splits and dependencies labelled by their ends. Spec 6 for all three (one merge, S11-6).
+    _e("phase", "PHASE", ("phase_code", "phase_name", "start_date", "end_date"), ("seq_no",),
+       ("phase_code", "phase_name"), since=6),
+    _e("solution_phase", "PHASE", ("solution_id", "phase_id", "portion_pct"),
+       refs=(("solution_id", SOL), ("phase_id", "phase")), since=6),
+    _e("solution_dependency", "PHASE", ("solution_id", "depends_on_solution_id", "note"),
+       refs=(("solution_id", SOL), ("depends_on_solution_id", SOL)), since=6),
 )
 BY_TABLE = {e.table: e for e in FREEZE_SET}
 assert tuple(BY_TABLE) == SHADOWED, "FREEZE_SET and models.baseline.SHADOWED disagree"

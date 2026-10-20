@@ -270,7 +270,7 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
     marks = {"code": "ZQXCODE", "name": "Zqx secret project", "node": "Zqx hidden L1", "step": "Zqx hidden step",
              "de": "Zqx ledger", "field": "zqx_field", "sol": "Zqx solution", "fr": "Zqx form",
              "app": "ZQXAPP", "unit": "ZQXU", "role": "ZQXR", "ext": "Zqx bank", "baseline": "Zqx frozen note",
-             "stk": "Zqx stakeholder", "issue": "Zqx issue", "br": "Zqx statement"}
+             "stk": "Zqx stakeholder", "issue": "Zqx issue", "br": "Zqx statement", "wave": "Zqx wave"}
     p = client.post(f"{API}/projects", headers=h, json={
         "client_id": w["client_id"], "project_code": marks["code"], "project_name": marks["name"],
         "program_id": w["program_id"], "component_codes": ALL_COMPONENTS, "is_restricted": True}).json()
@@ -302,6 +302,15 @@ def _seed_restricted(client, w) -> tuple[int, dict, set[int]]:
                "stakeholder_id")                                                         # slice 14 (sara A M-1)
     iss = post(f"/projects/{pid}/issues", {"title": marks["issue"], "severity_code": "HIGH", "issue_type_code": "DATA",
                                            "raised_by_stakeholder_id": stk["stakeholder_id"]}, "issue_id")
+    # slice 15: a marked wave, the marked solution split into it, and a dependency on the marked solution
+    wv = post(f"/projects/{pid}/phases", {"phase_code": "ZQXW", "phase_name": marks["wave"],
+                                          "status_code": "PLANNED"}, "phase_id")
+    r = client.put(f"{API}/solutions/{sol['solution_id']}/phase-split", headers=h,
+                   json={"based_on": [], "rows": [{"phase_id": wv["phase_id"], "portion_pct": "100"}]})
+    assert r.status_code == 200, r.text
+    needs = post(f"/projects/{pid}/solutions", {"solution_name": "Zqx later", "category_code": "PROCESS"}, "solution_id")
+    post(f"/solutions/{needs['solution_id']}/dependencies", {"depends_on_solution_id": sol["solution_id"]},
+         "solution_dependency_id")
     assert step["is_process"]
     # slice 8: a frozen baseline, marked by its note — its step reads and writes data so the freeze passes
     de2 = post(f"/projects/{pid}/data-entities", {"de_name": "Zqx journal"}, "data_entity_id")
@@ -358,7 +367,10 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
                  "/api/v1/baselines/{id}", "/api/v1/projects/{project_id}/stakeholders",
                  "/api/v1/stakeholders/{id}", "/api/v1/projects/{project_id}/issues", "/api/v1/issues/{id}",
                  "/api/v1/projects/{project_id}/issue-dashboard",                  # names the raiser (slice 14)
-                 "/api/v1/issues/{id}/brs"):                                       # the linked BR's statement
+                 "/api/v1/issues/{id}/brs",                                        # the linked BR's statement
+                 "/api/v1/projects/{project_id}/phases", "/api/v1/phases/{id}",    # slice 15: the wave's name
+                 "/api/v1/projects/{project_id}/phase-plan", "/api/v1/solutions/{id}/phase-split",
+                 "/api/v1/solutions/{id}/dependencies"):                           # the prerequisite's name
         assert must in seen_by_admin, must                                              # positive control
     assert called > 200
     # slice 8 (sara L6): the parameterised baseline reads, as admin (positive) and as each non-member

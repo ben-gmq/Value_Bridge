@@ -7,6 +7,7 @@ import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined';
 import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOutlined';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined';
+import ViewTimelineOutlined from '@mui/icons-material/ViewTimelineOutlined';
 import DnsOutlined from '@mui/icons-material/DnsOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
@@ -56,6 +57,7 @@ export const NAV = [
     ['nav.volume', 'volume', SpeedOutlined],                              // D-67: as-is vs to-be time
     ['nav.baselines', 'baselines', LayersOutlined],
     ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
+    ['nav.waves', 'waves', ViewTimelineOutlined, ['PHASING']],           // slice 15 (W-1: "Wave" on screen)
   ] },
   { group: 'nav.group.admin', items: [
     ['nav.settings', 'settings', SettingsOutlined],

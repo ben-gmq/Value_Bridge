@@ -12,6 +12,7 @@ from models.diagram import DiagramLayout  # noqa: F401
 from models.effort import EffortRate  # noqa: F401
 from models.import_staging import ImportBatch, ImportRow  # noqa: F401
 from models.issue import Issue, IssueBr, Stakeholder  # noqa: F401
+from models.phase import Phase, SolutionDependency, SolutionPhase  # noqa: F401
 from models.function_requirement import (BrFunctionRequirement, FrInterface, FrInterfaceDataEntity,  # noqa: F401
                                          FunctionRequirement)
 from models.identity import AppUser, AuditEvent, ProgramMember, ProjectMember, UserAccessGrant  # noqa: F401

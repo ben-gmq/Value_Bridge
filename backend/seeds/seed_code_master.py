@@ -105,7 +105,7 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                                  ("EFFORT", "Effort & rate card"), ("ISSUE", "Issues"),
                                  ("TO_BE_DFD", "To-be DFD"), ("AS_IS", "As-is BFC + DFD"),
                                  ("WBS", "WBS"), ("BENEFIT", "Benefits"), ("RISK", "Risks"),
-                                 ("CHANGE_REQUEST", "Change requests")]),
+                                 ("CHANGE_REQUEST", "Change requests"), ("PHASING", "Waves")]),   # T5
     # OR-3: starting points for a new project's component set (contents: seed_project_templates).
     ("PROJECT_TEMPLATE", False, [("REQUIREMENTS_ONLY", "Requirements only"),
                                  ("DATA_AND_PROCESS", "Data & process"),
@@ -115,7 +115,24 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
 ]
 
 
+def company_only_breaches(db) -> list[str]:
+    """Slice 15 R8 (sara M2): PHASE_STATUS was project-editable until slice 15 made it company-only (W-4). A project
+    row or a live hide made before that would keep working, so the seed refuses to run while any exists and names
+    them; a platform admin clears them with Ben first. Empty on a clean database."""
+    from models import ProjectCodeVisibility
+    rows = [f"project {p}: own status {c}" for p, c in db.execute(select(CodeMaster.project_id, CodeMaster.code).where(
+        CodeMaster.category == "PHASE_STATUS", CodeMaster.project_id.is_not(None), CodeMaster.is_active))]
+    rows += [f"project {p}: hides {c}" for p, c in db.execute(
+        select(ProjectCodeVisibility.project_id, CodeMaster.code)
+        .join(CodeMaster, CodeMaster.code_id == ProjectCodeVisibility.code_id)
+        .where(CodeMaster.category == "PHASE_STATUS", ProjectCodeVisibility.is_active))]
+    return rows
+
+
 def seed(db) -> tuple[int, int]:
+    breaches = company_only_breaches(db)
+    if breaches:
+        raise SystemExit("Wave statuses are company-only now (W-4); clear these first:\n  " + "\n  ".join(breaches))
     added = updated = 0
     for category, is_system, rows in LIBRARY:
         for order, row in enumerate(rows, start=1):
