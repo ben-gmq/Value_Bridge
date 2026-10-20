@@ -4,7 +4,7 @@ A PHASE is a delivery wave within one project, shown as "Wave" on every screen (
 `phase`. Frozen from hash spec 6 (schema §7)."""
 from sqlalchemy import (
     BigInteger, CheckConstraint, Computed, Date, ForeignKey, ForeignKeyConstraint, Identity, Index, Numeric,
-    SmallInteger, String, UniqueConstraint, func, text,
+    SmallInteger, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,6 +74,33 @@ class SolutionPhase(AuditMixin, Base):
         CheckConstraint("portion_pct > 0 AND portion_pct <= 100", name="ck_solph_portion"),
         Index("ix_solph_phase", "phase_id", "project_id"),
         Index("ix_solph_project", "project_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class SolutionDependency(AuditMixin, Base):
+    """One edge: solution_id needs depends_on_solution_id (D-18). Never self (the one cycle a CHECK sees); every
+    other cycle is refused by services/phasing.link_solution_dependency under a per-project advisory lock (schema §4)
+    — the only writer of live edges, restores included. Composite FKs keep the graph inside one project."""
+
+    __tablename__ = "solution_dependency"
+
+    solution_dependency_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    depends_on_solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["solution_id", "project_id"], ["solution.solution_id", "solution.project_id"],
+                             name="fk_soldep_solution"),
+        ForeignKeyConstraint(["depends_on_solution_id", "project_id"], ["solution.solution_id", "solution.project_id"],
+                             name="fk_soldep_prereq"),
+        UniqueConstraint("solution_id", "depends_on_solution_id", name="uq_soldep_grain"),
+        CheckConstraint("solution_id <> depends_on_solution_id", name="ck_soldep_not_self"),
+        Index("ix_soldep_prereq", "depends_on_solution_id", "project_id"),
     )
 
     def owning_project_id(self) -> int:
