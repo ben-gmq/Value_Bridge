@@ -1,5 +1,10 @@
 # Slice 15 — Phasing and dependency: logical + physical schema (apple, 2026-10-16)
 
+**Status:** APPROVED by Ben 2026-10-18 with the spec (W-1…W-9, history §3). Revised the same day: users see
+**"Wave"** everywhere (W-1) while these tables, models and routes keep `phase`; a split totals exactly 100 % or is
+empty (W-5, replacing the "≤ 100" rule in §3.2 and §5); `PHASE_STATUS` is pinned and company-only (W-4);
+migrations are 0065–0067 and the hash spec 6, after slice 14 (W-8). §9 now records the rulings.
+
 Scope: the VB_remaining_work.md row **Phasing and dependency** (wave 3, D-18) — phases, the solution-to-phase
 split, prerequisite links with no cycles, the phase plan report. Source of truth: VB_design.md §2 entity list
 (`PHASE`, `SOLUTION_PHASE`, `SOLUTION_DEPENDENCY`), §4.12, §5.2 ER, §5.3 *PHASE / SOLUTION_PHASE /
@@ -9,8 +14,8 @@ SOLUTION_DEPENDENCY*, §5.4.3 (UNASSIGNED bucket), §6.1 rows 36–38, §6.2 FK_
 **Checked before modelling:** no `phase` / `solution_phase` / `solution_dependency` model or migration exists.
 `PHASE_STATUS` (PLANNED, IN_DELIVERY, COMPLETE, CANCELLED) is seeded, **project-editable** (`is_system=False`,
 seed_code_master.py l.112). There is **no phasing component** (`components.ALL`) and no `PHASE` number series
-(`numbering.SERIES`, the ten of R2-D14) — `phase_code` is typed, like a trigger name. `CURRENT_HASH_SPEC = 4`;
-slice 14 (Issue) takes spec 5 and migrations 0061–0063, so this slice takes **spec 6** and **0064–0066**.
+(`numbering.SERIES`, the ten of R2-D14) — `phase_code` is typed, like a trigger name. Slice 14 (Issue, merged
+2026-10-18) took spec 5 and migrations 0061–0064, so this slice takes **spec 6** and **0065–0067** (W-8).
 `requirement_volatility` (slice 1f) is not built.
 
 **Risk grade (for Lilly's spec line):** riskiest concern is **Grade 1 — the hash-spec bump** (a mistake changes
@@ -93,11 +98,12 @@ code-list re-point covers `status_code_id` with no extra work.
 | `project_id` | bigint | NOT NULL, FK `project` |
 | `solution_id` | bigint | NOT NULL; `fk_solph_solution (solution_id, project_id) → solution (uq_solution_project)` |
 | `phase_id` | bigint | NOT NULL; `fk_solph_phase (phase_id, project_id) → phase (uq_phase_project)` |
-| `portion_pct` | numeric(5,2) | NOT NULL; `ck_solph_portion CHECK (portion_pct > 0 AND portion_pct <= 100)` |
+| `portion_pct` | numeric(5,2) | NOT NULL; `ck_solph_portion CHECK (portion_pct > 0 AND portion_pct <= 100)` (one row; the per-solution total is §5's) |
 
 `uq_solph_grain UNIQUE (solution_id, phase_id)` full (re-assigning restores the row and its `source_id`, S1-7).
 Indexes `ix_solph_phase (phase_id, project_id)`, `ix_solph_project (project_id)`. **Σ live `portion_pct` per
-solution ≤ 100** is a cross-row rule, so it is service-enforced under a lock (§5); a CHECK cannot see other rows.
+solution = 100, or no live rows** (W-5) is a cross-row rule, so it is service-enforced under a lock on the whole saved
+set (§5); a CHECK cannot see other rows.
 
 ### 3.3 `solution_dependency` (`SolutionDependency`)
 | Column | Type | Constraints |
@@ -134,7 +140,7 @@ cross-project edge impossible, so the graph is always one project's.
 - `lifecycle.py`: `RESTORABLE += (Phase,)` only (§6); `LABELS`: `phase` (`P1 Foundation`), `solution_phase`
   (`SOL-0003 ↔ P1 (40%)`), `solution_dependency` (`SOL-0003 needs SOL-0001`) — both ends named (DR1-P1).
   `models/__init__.py` imports all three. **No `step_retire` change**: none of the tables points at a step or a BR.
-- `consistency_check` gains two proofs that must return 0: `solution_phase_over_100` and `solution_dependency_cycle`
+- `consistency_check` gains two proofs that must return 0: `solution_phase_split_not_100` (a live split that is neither 100 nor empty — W-5) and `solution_dependency_cycle`
   (recursive walk) — belt and braces behind the service rule, and freeze preconditions like the rest.
 
 ## 4. The no-cycle rule (D-18, criterion 67)
@@ -170,14 +176,17 @@ lock). A retire of an edge needs no lock: removing an edge cannot create a cycle
   stale and need re-deriving (and law 6 bars accepting derived days from a body).
 - **Effort of a solution** = Σ `effort_days` of its live, rated FRs (the `effort.summary` basis). FRs under a
   REJECTED solution are reported apart, as in the effort headline (S6c-8).
-- **Σ per solution ≤ 100, not = 100.** `assign_solution_phase` locks the solution row (`FOR NO KEY UPDATE`), sums the
-  other live assignments, and refuses 422 above 100. An exact-100 rule cannot be kept while a consultant moves 40%
-  from P1 to P2 one assignment at a time.
-- **Not yet split:** `phase_plan.effort_by_phase` = per phase Σ `portion_pct/100 × solution effort`; plus
-  **UNPHASED** = Σ `(100 − Σ portion)/100 × solution effort` (listed per solution); plus **UNASSIGNED** = FRs with
+- **Σ per solution = 100, or no rows (W-5).** The split is saved whole (`PUT /solutions/{id}/phase-split`, spec R2):
+  the service locks the solution row (`FOR NO KEY UPDATE`), checks every listed row's `row_version` and that no live row
+  is left unlisted, and refuses 422 unless the new set totals exactly 100 or is empty. Saving the whole set is what
+  makes the exact rule keepable — moving 40 % from W1 to W2 is one save, never an in-between state.
+- **Not yet split:** `phase_plan.effort_by_phase` = per wave Σ `portion_pct/100 × solution effort`; plus
+  **UNPHASED** = the effort of solutions with no split (listed per solution — a solution is wholly in waves or wholly
+  unphased, W-5); plus **UNASSIGNED** = FRs with
   no solution (§5.4.3 knock-on 1). Phases + UNPHASED + UNASSIGNED **= the effort headline** (Decimal, rounded only for
   display); a test pins the reconciliation. Unrated FRs are counted, never given days.
-- A freeze is **not** blocked by an incomplete split (a warning in the report); a split over 100 is impossible.
+- A freeze is **not** blocked by an unphased solution (a warning in the report); a split other than 100 is impossible.
+- **No FR ↔ wave link (W-2).** An FR's effort reaches a wave only through its one solution's split.
 
 ## 6. Retire rules (all soft delete; nothing cascades — law 1; `LINKS` derive from the FKs)
 
@@ -186,7 +195,7 @@ lock). A retire of an edge needs no lock: removing an edge cannot create a cycle
 | **Phase retired** ("created in error" — the normal end is status COMPLETE / CANCELLED) | 409 while live `solution_phase` rows (names `SOL-… ↔ P…`) or, once WBS lands, live `wbs_item` links (Q4 of §5.3) |
 | **Phase restored** | via `lifecycle.restore`; 409 if its code or `seq_no` is taken by a live phase |
 | **Solution retired** | 409 while any live `solution_phase` **or** `solution_dependency` on **either** end (two FKs → two LINKS) — Q6 |
-| **Assignment removed** | row retires; re-assign restores it, re-running the ≤ 100 check; refused if phase or solution retired |
+| **Assignment removed** | only through the whole-split PUT (spec §10 T1): a live row whose wave leaves the split retires, a wave named again restores its row, the new set re-checked as 100 or empty; refused if the wave or the solution is retired |
 | **Dependency removed** | row retires, no lock needed; re-link restores it **only through `link_solution_dependency`** (cycle check) |
 | **Step / BR retired** | no effect — none of these tables is in `OWNED_BY_STEP` / `OWNED_BY_BR`, and none needs to be |
 | **Component PHASING off** (Q1) | refused while live phases exist (OR-1) |
@@ -201,36 +210,25 @@ is a position column), a changed split or dates as CHANGED, a new prerequisite a
 
 | Id | Creates | Downgrade guard (raise; never drop people's data) |
 |---|---|---|
-| 0064 | `phase` + `baseline_phase` (+ `immutable_guards`) | refuse while any `baseline.hash_spec_version >= 6`; while `baseline_phase` has a row; while any `phase` row exists |
-| 0065 | `solution_phase` + shadow | the same three guards on its own tables |
-| 0066 | `solution_dependency` + shadow | the same three guards on its own tables |
+| 0065 | `phase` + `baseline_phase` (+ `immutable_guards`) | refuse while any `baseline.hash_spec_version >= 6`; while `baseline_phase` has a row; while any `phase` row exists |
+| 0066 | `solution_phase` + shadow | the same three guards on its own tables |
+| 0067 | `solution_dependency` + shadow | the same three guards on its own tables |
 
 No backfill and no seed migration (the component code is a seed, `seed_code_master` + `seed_project_templates`).
-0064–0066 share spec 6, so they reach `main` **in one merge** with the `freeze_set` bump (S11-6), taken after
-slice 14's spec 5. If Issue has not merged first, this slice takes spec 5 and Issue moves to 6 — never both.
+0065–0067 share spec 6, so they reach `main` **in one merge** with the `freeze_set` bump (S11-6), after slice 14's
+spec 5 (merged).
 
-## 9. Questions for Ben
+## 9. Ben's rulings (2026-10-18; the questions below were Q-55…Q-62)
 
-1. **Is phasing its own switchable component?** None exists; §6.1 says "gate set when built". (a) new component
-   `PHASING`, needs SOLUTION — like BENEFIT / RISK / WBS; (b) ride on SOLUTION, no new component; (c) always on.
-   **Recommend (a)**: every wave-2/3 module is optional (D-37), and (b) shows a Phases menu to projects that never
-   plan waves. Costs a seed line, a template line, and one more toggle.
-2. **Must a solution's split add up to 100%?** **Recommend ≤ 100 enforced, < 100 allowed** and shown as UNPHASED
-   in the phase plan (warning, never blocks a freeze); percent, not days (§5).
-3. **Can a project rename or retire phase statuses?** The report needs "current phase" (IN_DELIVERY) and must
-   skip CANCELLED — branching on a project-editable code breaks law 5. **Recommend** make `PHASE_STATUS`
-   `is_system` (labels still editable), as slice 14 Q1 proposes for issues. "Current" = the live IN_DELIVERY phase
-   with the lowest `seq_no`; a CANCELLED phase's assigned effort is shown on its own line and flagged; a new
-   assignment into a CANCELLED phase is refused.
-4. **What in a phase is agreed scope?** **Recommend** hash code, name and dates; `seq_no` as position (MOVED);
-   status copied, not hashed — moving P1 to IN_DELIVERY is progress, not a scope change.
-5. **Link rows: surrogate PK + full unique (S1-5) instead of §5.3's composite PKs?** **Recommend S1-5** (one
-   `source_id` per shadow row, re-link restores); the §5.3 lines are rewritten in the same commit.
-6. **Retiring a solution that is phased or has dependencies — refuse or take the links with it?** **Recommend
-   refuse** with the 409 naming them (law 1; same as `br_solution`, DR1-P1); unassign first.
-7. **Is "same phase" a dependency violation?** Criterion 68 says "at or before". **Recommend yes**: A is flagged
-   when its earliest live, non-cancelled phase `seq_no` ≤ its prerequisite's latest; a prerequisite with no phase
-   while A has one is flagged "prerequisite unscheduled".
-8. **The report's "volatile areas still in the current wave" needs `requirement_volatility` (slice 1f, not
-   built).** **Recommend** ship the phase plan without that section and add it when 1f lands (no faked element, D-51),
-   rather than holding phasing behind 1f.
+1. **Q-55 — (a)**, component `PHASING` needing SOLUTION (W-3); shown to users as "Waves".
+2. **Q-56 — percent, not days; revisited by Q-63 (W-5): exactly 100 % or empty**, saved whole. No partial split.
+3. **Q-57 — `PHASE_STATUS` pinned and company-only** (W-4): an FTC admin relabels, projects cannot add, override or
+   hide. "Current wave" = the live IN_DELIVERY wave with the lowest `seq_no`; a CANCELLED wave's effort is its own
+   flagged line (Q-64); new splits into a CANCELLED wave are refused.
+4. **Q-58 — yes**: code, name, dates hashed; `seq_no` a position (MOVED); status copied, not hashed.
+5. **Q-59 — S1-5 surrogate keys**; §5.3 rewritten in the approval commit.
+6. **Q-60 — refuse** with the 409 naming the links; unassign first.
+7. **Q-61 — yes**: same wave, or a prerequisite with no wave while the dependent has one, is a warning.
+8. **Q-62 — ship without "volatile areas"** until 1f lands.
+
+Also ruled: **W-2** no FR ↔ wave link; **Q-65** REJECTED with a split warns; **Q-66** live plan only.
