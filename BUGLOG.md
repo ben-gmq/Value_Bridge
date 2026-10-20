@@ -481,3 +481,10 @@ place.
   the remedy is to remove the splits (the shared lifecycle wording). (L9) the comparison's Object column is empty for
   wave rows (their code, e.g. "W2", does not match the label splitter). (L10) the "Add wave" button and the split row
   buttons lack an accessible name in some states.
+- **2026-10-21 · slice 16 step 1, `baseline_archive` (`sara`; no critical or high; M1 fixed — a row is born owed):**
+  (M2) no `test_migration_0068`: the backfill (one SCOPE per baseline by the freezer, one SIGNOFF per approved
+  baseline by the approver) and the downgrade refusal are untested — add a slow-marked migration test before the
+  0068 deploy. (M3) VB_design §6.6 ("no UPDATE on any `baseline_*` table") and CLAUDE.md law 2 read as if
+  `baseline_archive` were a shadow; it is not (column UPDATE, `fn_baseline_archive_guard`) — a one-line carve-out in
+  both, Ben's to approve. (L1) a written row's `row_version` may be set lower. (L2) an owed row may be written and
+  marked check-failed in one UPDATE.

@@ -22,4 +22,4 @@ from models.shared import CodeMaster, ProjectCodeVisibility, ProjectSequence  # 
 from models.solution import BrSolution, Solution  # noqa: F401
 from models.tenancy import (Client, Program, Project, ProjectComponent, ProjectDfdRule,  # noqa: F401
                             ProjectTemplateComponent)
-from models.baseline import SHADOW_TABLES, SHADOWED, Baseline  # noqa: F401,E402  last: shadows read every live table
+from models.baseline import SHADOW_TABLES, SHADOWED, Baseline, BaselineArchive  # noqa: F401,E402  last: shadows read every live table
