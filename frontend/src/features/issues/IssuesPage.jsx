@@ -104,27 +104,28 @@ export default function IssuesPage() {
   const name = Object.fromEntries(people.map((s) => [s.stakeholder_id, s.stakeholder_name]));
   const rows = q.data ?? [];
 
+  // Fits a 1280-px screen beside the rail (browser check 2026-10-20): the title and raiser flex, the rest are fixed.
   const columns = [
-    { field: 'issue_number', headerName: t('issues.field.number'), width: 120,
+    { field: 'issue_number', headerName: t('issues.field.number'), width: 105,
       renderCell: ({ row, value, tabIndex }) => (
         <Link component={RouterLink} to={links.issue(projectId, row.issue_id)} tabIndex={tabIndex}
           underline="hover" onClick={(e) => e.stopPropagation()}>
           <Code tone={row.is_active ? 'navy' : 'muted'}>{value}</Code></Link>) },
-    { field: 'title', headerName: t('issues.field.title'), flex: 1, minWidth: 220,
+    { field: 'title', headerName: t('issues.field.title'), flex: 2, minWidth: 180,
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Box component="span" sx={{ color: row.is_active ? 'inherit' : 'text.secondary' }}>{value}</Box>
           {!row.is_active && <Tag tone="neutral">{t('settings.retiredChip')}</Tag>}
         </Stack>) },
-    { field: 'severity_code', headerName: t('issues.field.severity'), width: 120,
+    { field: 'severity_code', headerName: t('issues.field.severity'), width: 105,
       renderCell: ({ value }) => <SeverityTag code={value} label={severityLabel(value)} /> },
-    { field: 'issue_type_code', headerName: t('issues.field.type'), width: 130, valueGetter: (v) => typeLabel(v) },
-    { field: 'status_code', headerName: t('issues.field.status'), width: 140,
+    { field: 'issue_type_code', headerName: t('issues.field.type'), width: 110, valueGetter: (v) => typeLabel(v) },
+    { field: 'status_code', headerName: t('issues.field.status'), width: 120,
       renderCell: ({ row }) => <IssueStatus issue={row} label={statusLabel(row.status_code)} size="sm" /> },
-    { field: 'raised_by_stakeholder_id', headerName: t('issues.field.raiser'), width: 170,
+    { field: 'raised_by_stakeholder_id', headerName: t('issues.field.raiser'), flex: 1, minWidth: 120,
       valueGetter: (v) => name[v] ?? '' },
-    { field: 'raised_date', headerName: t('issues.field.raisedDate'), width: 120 },
-    { field: 'target_date', headerName: t('issues.field.targetDate'), width: 120 },
+    { field: 'raised_date', headerName: t('issues.field.raisedDate'), width: 110 },
+    { field: 'target_date', headerName: t('issues.field.targetDate'), width: 110 },
   ];
 
   return (

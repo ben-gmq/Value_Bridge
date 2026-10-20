@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import LinkOffRounded from '@mui/icons-material/LinkOffRounded';
 import { errorText, isStale } from '../../api/client';
-import { brApi, issueApi } from '../../api/scope';
+import { bfcApi, brApi, issueApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { Card, Code, ListRow, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
@@ -16,6 +16,11 @@ export function IssueBrLinks({ projectId, issue, canEdit }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: keys.issueBrs(issue.issue_id), queryFn: () => issueApi.brs(issue.issue_id) });
   const brs = useQuery({ queryKey: keys.brs(projectId), queryFn: () => brApi.list(projectId), enabled: canEdit });
+  // A requirement with no statement yet is named by its process (browser check 2026-10-20): never a bare number.
+  const tree = useQuery({ queryKey: [...keys.tree(projectId), { retired: true }],
+    queryFn: () => bfcApi.tree(projectId, true) });
+  const nodes = new Map((tree.data ?? []).map((n) => [n.bfc_node_id, n]));
+  const describe = (b) => b.br_statement?.trim() || nodes.get(b.bfc_node_id)?.node_name || '';
   const [pick, setPick] = useState('');
   const [error, setError] = useState('');
   const rows = q.data ?? [];
@@ -36,7 +41,7 @@ export function IssueBrLinks({ projectId, issue, canEdit }) {
   });
   const linked = new Set(rows.map((r) => r.br_id));
   const options = (brs.data ?? []).filter((b) => b.is_active && !linked.has(b.br_id))
-    .map((b) => ({ value: b.br_id, label: `${b.br_number} ${b.br_statement ?? ''}`.trim() }));
+    .map((b) => ({ value: b.br_id, label: `${b.br_number} ${describe(b)}`.trim() }));
   const editable = canEdit && issue.is_active;
 
   return (
@@ -49,7 +54,7 @@ export function IssueBrLinks({ projectId, issue, canEdit }) {
           <Box component={RouterLink} to={links.requirement(projectId, r.br_id)}
             sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0, flex: 1, color: 'inherit', textDecoration: 'none' }}>
             <Code tone="purple">{r.br_number}</Code>
-            <Typography noWrap sx={{ fontSize: 13.5 }}>{r.br_statement ?? ''}</Typography>
+            <Typography noWrap sx={{ fontSize: 13.5 }}>{describe(r)}</Typography>
           </Box>
           {editable && (
             <Tooltip title={t('issues.links.remove')}>

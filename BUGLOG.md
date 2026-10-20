@@ -461,3 +461,11 @@ place.
   (L2) `issue.links_of` and the link route read each link's BR lazily, one query per link — load `br_row` with
   `selectinload`. (L3) the register's area filter lists only areas with open issues and drops the "As-is" prefix the
   dashboard shows. (L5) `DashboardOut` rows are untyped `list[dict]` — pin them as small models.
+- **2026-10-20 · slice 14 browser check (`ui-verifier`, Evidence/2026-10-20/slice14/; 9 of 10 pass, check 3 was the
+  brief's own date error; four defects fixed on `fix/2026-10-20_issue-screens`):** (L1) in the register a retired
+  issue's "Retired" chip is cut to "Retir…" beside a long title. (L2) the requirement picker opens empty with no
+  "nothing to link" text when every live requirement is already linked. (L3) the retire-step dialog's requirement
+  number is small low-contrast monospace. (L4) a retired issue shows its "Open" tag beside "Retired", which can read as
+  live. (L5) the date inputs show the browser's mm/dd/yyyy while the register shows 2026-10-20 (native input). (L6)
+  the retire-issue and retire-stakeholder dialogs word the blocker differently ("linked to requirements" / "a live
+  issue").

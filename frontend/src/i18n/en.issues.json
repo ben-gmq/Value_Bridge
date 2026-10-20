@@ -26,6 +26,7 @@
   "issues.raised": "{number} raised",
   "issues.needStakeholder": "Add the person who raised it under Settings → Stakeholders first.",
   "issues.problemNotPerson": "Describe the problem, not the person.",
+  "issues.resolutionHelp": "What was decided or changed, and where it is recorded.",
   "issues.raisedDateHelp": "Blank means today",
   "issues.field.number": "Number",
   "issues.field.title": "Title",
