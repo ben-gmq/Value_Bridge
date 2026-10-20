@@ -16,10 +16,6 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-94] Where does a restored wave go? (slice 15, raised 2026-10-20 by sara L1)** — schema §6 says a wave restore is
-  refused (409) when its old position is taken; after any new wave is added that is nearly always, so the wave could
-  never come back. As built, a restored wave goes to the end of the order (as a restored requirement line does) and is
-  refused only when a live wave holds its code. **Recommend:** keep the build; schema §6 is rewritten when Ben agrees.
 - **[Q-86…Q-93] The two-year project archive (slice 16, raised 2026-10-18 by AR-1's rework)** — eight questions, each
   with a recommendation, in `docs/slice16_archive_purge_spec.md` §15a and §19: what the project archive file holds
   beyond the frozen baselines and sign-offs, the activity history included (Q-86), when the two years start (Q-87), how
@@ -520,6 +516,14 @@ design-auditor rounds 1–2 in the paper's §8.
 | S12-1 | **Slice 12 KPI list approved as drafted** (`docs/slice12_kpis.md`). Ben: "let's go with that, I do not want too many in the beginning." Slice 12 adds only S7–S11 from the list; the Project-management view stays a card on the dashboard until it has more than one tile (the list's question 2) | D-58 |
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
+
+### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
+
+Ben, via Ren, 2026-10-20: *"yes — keep the build as it is."*
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| W-10 | **[Q-94] A restored wave goes to the end of the order**, as a restored requirement line does; the restore is refused (409) only while a live wave holds its code. Raised by sara L1 on the slice 15 build | slice15_schema §6 ("409 if its code or `seq_no` is taken") |
 
 ### Ben's ruling, 2026-10-20 — the planning words (P-1)
 
