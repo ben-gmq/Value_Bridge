@@ -17,14 +17,18 @@ def test_the_report_carries_the_purge_and_the_fieldless_entity_lines(client, ed,
                         "process_missing_input", "process_missing_output", "as_is_support_on_to_be",   # + 7c
                         "brfr_under_inactive", "fr_solution_outside_its_brs",                       # + 10b
                         "process_missing_data_in", "process_missing_order", "diagram_missing_external",
-                        "project_without_dfd_rule", "dfd_rule_invalid"}                             # + 13b
+                        "project_without_dfd_rule", "dfd_rule_invalid",                             # + 13b
+                        "solution_phase_split_not_100", "solution_dependency_cycle",                # + 15
+                        "solution_phase_under_inactive", "solution_dependency_under_inactive"}
     assert [e["de_name"] for e in out["entities_without_fields"]] == ["Lonely"]
     assert consistency_check(None, db)["entities_without_fields"] == []   # per project only
     # The must-be-empty lines (Slices 5 and 6a) are the ones that can refuse a freeze.
     must_be_empty = {"brsol_under_inactive", "fr_under_inactive_solution", "appsol_under_inactive",
                      "appnode_under_inactive", "as_is_allocated", "interface_under_inactive",
                      "brfr_under_inactive",                                   # + 10b (refuses the freeze)
-                     "project_without_dfd_rule", "dfd_rule_invalid"}          # + 13b (DR13-D3)
+                     "project_without_dfd_rule", "dfd_rule_invalid",          # + 13b (DR13-D3)
+                     "solution_phase_split_not_100", "solution_dependency_cycle",                   # + 15 (R1, T6)
+                     "solution_phase_under_inactive", "solution_dependency_under_inactive"}
     assert set(out) - consistency.INFORMATIONAL - consistency.WARNINGS \
         - consistency.FREEZE_BLOCKING_WARNINGS == must_be_empty
     assert all(out[k] == [] for k in must_be_empty)

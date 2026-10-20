@@ -461,3 +461,8 @@ place.
   (L2) `issue.links_of` and the link route read each link's BR lazily, one query per link — load `br_row` with
   `selectinload`. (L3) the register's area filter lists only areas with open issues and drops the "As-is" prefix the
   dashboard shows. (L5) `DashboardOut` rows are untyped `list[dict]` — pin them as small models.
+- **2026-10-20 · slice 15 backend, steps 1–5 (`sara`; no critical or high; M1, M2, L2, L3, L4 fixed in step 5;
+  L1 is Ben's, in the design history §1):** (L5) `phasing.plan` forces its displayed lines onto the effort headline;
+  if the exact lines ever stopped summing to it (only on corrupt data, e.g. a live FR under a retired solution) the
+  gap would be spread silently — log a warning when they differ. (L6) body ids are plain `int`, so an id beyond
+  bigint reaches PostgreSQL and returns a 500 — app-wide, a shared `Id = Field(gt=0, lt=2**63)`.

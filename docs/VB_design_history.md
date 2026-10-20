@@ -16,6 +16,10 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
+- **[Q-94] Where does a restored wave go? (slice 15, raised 2026-10-20 by sara L1)** — schema §6 says a wave restore is
+  refused (409) when its old position is taken; after any new wave is added that is nearly always, so the wave could
+  never come back. As built, a restored wave goes to the end of the order (as a restored requirement line does) and is
+  refused only when a live wave holds its code. **Recommend:** keep the build; schema §6 is rewritten when Ben agrees.
 - **[Q-86…Q-93] The two-year project archive (slice 16, raised 2026-10-18 by AR-1's rework)** — eight questions, each
   with a recommendation, in `docs/slice16_archive_purge_spec.md` §15a and §19: what the project archive file holds
   beyond the frozen baselines and sign-offs, the activity history included (Q-86), when the two years start (Q-87), how

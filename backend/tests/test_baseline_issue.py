@@ -44,7 +44,12 @@ def test_a_spec_4_baseline_keeps_its_digest_and_reads_issues_as_new_structure(cl
     assert detail["intact"] is True                                           # still verifies
     assert detail["counts"]["issue"] is None and detail["counts"]["issue_br"] is None   # never frozen, not 0
     assert freeze_set.digest(db, ed["p"], frozenset(), v4, 4) == before.content_digest
-    v5 = bid(freeze(client, ed))
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 5)                 # slice 15 moved current to 6
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 5)
+    try:
+        v5 = bid(freeze(client, ed))
+    finally:
+        monkeypatch.undo()
     assert _stored(db, v5).hash_spec_version == 5
     assert client.get(f"{API}/baselines/{v5}", headers=ed["h"]).json()["intact"] is True
     d = diff(client, ed, v4, v5)
