@@ -3,8 +3,8 @@
 A PHASE is a delivery wave within one project, shown as "Wave" on every screen (W-1); inside the code the names stay
 `phase`. Frozen from hash spec 6 (schema §7)."""
 from sqlalchemy import (
-    BigInteger, CheckConstraint, Computed, Date, ForeignKey, ForeignKeyConstraint, Identity, Index, SmallInteger,
-    String, UniqueConstraint, func, text,
+    BigInteger, CheckConstraint, Computed, Date, ForeignKey, ForeignKeyConstraint, Identity, Index, Numeric,
+    SmallInteger, String, UniqueConstraint, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +46,34 @@ class Phase(AuditMixin, Base):
               postgresql_where=text("is_active")),
         Index("uq_phase_seq_live", "project_id", "seq_no", unique=True, postgresql_where=text("is_active")),
         Index("ix_phase_status", "status_code_id"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
+class SolutionPhase(AuditMixin, Base):
+    """The share of one solution's current effort that lands in one wave (D-18, W-5). A solution's live rows total
+    exactly 100 or there are none — a cross-row rule kept by the whole-split PUT under a lock (schema §5). The grain is
+    unique in full, so re-assigning a wave restores its row and keeps its source_id (S1-7)."""
+
+    __tablename__ = "solution_phase"
+
+    solution_phase_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project.project_id"), nullable=False)
+    solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    phase_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    portion_pct = mapped_column(Numeric(5, 2), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["solution_id", "project_id"], ["solution.solution_id", "solution.project_id"],
+                             name="fk_solph_solution"),
+        ForeignKeyConstraint(["phase_id", "project_id"], ["phase.phase_id", "phase.project_id"],
+                             name="fk_solph_phase"),
+        UniqueConstraint("solution_id", "phase_id", name="uq_solph_grain"),
+        CheckConstraint("portion_pct > 0 AND portion_pct <= 100", name="ck_solph_portion"),
+        Index("ix_solph_phase", "phase_id", "project_id"),
+        Index("ix_solph_project", "project_id"),
     )
 
     def owning_project_id(self) -> int:
