@@ -5,7 +5,7 @@
 empty (W-5, replacing the "≤ 100" rule in §3.2 and §5); `PHASE_STATUS` is pinned and company-only (W-4);
 migrations are 0065–0067 and the hash spec 6, after slice 14 (W-8). §9 now records the rulings.
 
-Scope: the VB_remaining_work.md row **Phasing and dependency** (wave 3, D-18) — phases, the solution-to-phase
+Scope: the VB_remaining_work.md row **Phasing and dependency** (Phase 2, D-18) — phases, the solution-to-phase
 split, prerequisite links with no cycles, the phase plan report. Source of truth: VB_design.md §2 entity list
 (`PHASE`, `SOLUTION_PHASE`, `SOLUTION_DEPENDENCY`), §4.12, §5.2 ER, §5.3 *PHASE / SOLUTION_PHASE /
 SOLUTION_DEPENDENCY*, §5.4.3 (UNASSIGNED bucket), §6.1 rows 36–38, §6.2 FK_LIVENESS rows, §6.2 constraint grid

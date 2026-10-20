@@ -131,7 +131,7 @@ Grain of every other table, one sentence each:
 | `SOLUTION_PHASE` | (solution × phase) assignment |
 | `SOLUTION_DEPENDENCY` | (solution × prerequisite solution) |
 | `WBS_ITEM` | one imported MS Project task line in one project, keyed by its MS Project Unique ID (D-33, Q13). Schedule fields are owned by MS Project; VB edits only the Phase / Solution links and records progress against it (D-41). **Not baselined** |
-| *WBS progress update* | one dated progress record against one WBS line — % complete, actual start and finish, status, comment (D-41). Never overwritten. Named and modelled by `apple` when the WBS wave is specced (SC-4) |
+| *WBS progress update* | one dated progress record against one WBS line — % complete, actual start and finish, status, comment (D-41). Never overwritten. Named and modelled by `apple` when the WBS slice is specced (SC-4) |
 | `CONTROL_RULE` | (project × analysis) → threshold, owning role, escalation path |
 | `BASELINE` | frozen version of one project's scope at one point in time |
 | `DIAGRAM_LAYOUT` | (project × diagram type × scope × diagram object) → saved position and size, for the ERD and the DFD. Presentation, **not scope — not baselined** |
@@ -1455,7 +1455,7 @@ Multi-column PK markers on the remaining composite-key tables denote the composi
 composite notation, so each participating column is marked `PK`. Where a table has a surrogate PK, its
 design key is shown as a `UK (…)` note.
 
-**Build status.** The tables of the later waves — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `BENEFIT`,
+**Build status.** The tables of the later phases — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `BENEFIT`,
 `BENEFIT_SOLUTION`, `RISK`, `CHANGE_REQUEST`, `CR_IMPACT`, `DECISION`, `PHASE`, `SOLUTION_PHASE`,
 `SOLUTION_DEPENDENCY`, `WBS_ITEM`, `CONTROL_RULE` — are designed and not yet built. `FR_BFC_NODE` is retired
 and never built (SC-3); it is not drawn.
@@ -2327,7 +2327,7 @@ plan, the two links consultants own, and — separately — progress recorded in
   dated row**, never an overwrite, so progress over time is kept. VB progress updates are the reporting
   source and are never overwritten by a re-import; the imported actuals above are kept beside them, and the
   progress report flags lines where the two disagree. The progress-update table is named and modelled by
-  `apple` when the WBS wave is specced (SC-4); it is not drawn in §5.2 until then.
+  `apple` when the WBS slice is specced (SC-4); it is not drawn in §5.2 until then.
 - **Links (VB-edited, Q13).** `phase_id` and `solution_id`, each nullable (a line may link to either,
   both or neither), with composite FKs `(phase_id, project_id) → PHASE` and `(solution_id, project_id) →
   SOLUTION`, so a link cannot cross projects. A link to a solution not scheduled in the linked phase is a
@@ -3411,7 +3411,7 @@ a frozen diagram layout. The first two would change the shape of the model rathe
 **Every table is NET-NEW.** Value Bridge has no prior schema, so nothing is NEEDS-CHANGES and there is no
 migration from an earlier system. Row numbers are stable identifiers; tables added after the first
 inventory carry a letter suffix next to their group. **Built** means a migration exists today; the others
-are designed and arrive with their wave (§12).
+are designed and arrive with their slice (§12).
 
 | # | Table | Group | Carries `project_id` | Baselined (freeze gate, §6.1 shadows) | Built |
 |---|---|---|---|---|---|
@@ -4148,7 +4148,7 @@ the resulting JSON. Export writes the same format, so a flow round-trips. **A fi
 from — steps, performers, inputs, outputs, triggers and external flows — and no edges and no lanes** (D-38).
 `1.0` files are refused with "re-export from VB".
 
-<!-- CHECK: the full 2.0 JSON Schema is owed to the import slice (wave 1e, not built: bulk.TARGETS holds only DE/DF). The external-party list below is carried from 1.0, since slice7 §9.9 does not restate how a party is referenced. -->
+<!-- CHECK: the full 2.0 JSON Schema is owed to the import slice (slice 1e, not built: bulk.TARGETS holds only DE/DF). The external-party list below is carried from 1.0, since slice7 §9.9 does not restate how a party is referenced. -->
 
 ```json
 {
@@ -5532,7 +5532,7 @@ plan_vs_actual(user, project_id):
     "unlinked": lines with no phase, listed — never dropped
     headline_value = max slip_days across phases     # so a control rule can govern it
 ```
-`record_progress` and its columns follow D-41; `apple` models the progress-update table when the WBS wave is
+`record_progress` and its columns follow D-41; `apple` models the progress-update table when the WBS slice is
 specced (SC-4).
 
 **Not baselined** (D-33). The schedule is not agreed scope, and a re-plan is not a scope
@@ -6201,7 +6201,7 @@ import template generator, the import validator and the React dropdowns are thre
 same data. Each reads it through `resolve`, so a project that renames `HIGH` to `MAJOR` sees the same
 values in its template, its validator and its screens (criterion 47).
 
-**Labels are translated, codes are not** (D-44, wave 4): every seeded label gets an English,
+**Labels are translated, codes are not** (D-44, Phase 4): every seeded label gets an English,
 Japanese and Thai text, chosen by the user's language. The schema change for translated labels goes
 to `apple` before it is built.
 
@@ -6366,7 +6366,7 @@ guard that does not fit its path.**
 
 No `PATCH`, `PUT` or `DELETE` route exists on a baseline or a shadow table.
 
-**Routes owed to later waves** (§12.1). Each keeps the guard and level shown; a write names its
+**Routes owed to later phases** (§12.1). Each keeps the guard and level shown; a write names its
 component.
 
 | Method · Path | Guard | Request | Response / rule |
@@ -6381,7 +6381,7 @@ component.
 | `GET /projects/{project_id}/volume-summary` | project_ctx(VIEW) | — | per chart, hours and FTE per L1 / L2 area, as-is beside to-be, matched by code and name; unmatched areas with their reason; incomplete processes listed (Q-28) |
 | **Slice 11 — structured BR, attribute usage, system-to-system flows (D-59, D-60b, D-61)** | | | |
 | BR requirement lines · attribute ticks in the CRUD grid · BR system flows · "Create interface FR from these flows" | object_guard(BusinessRequirement, EDIT; flows: `APPLICATION`; the seeding action: `FUNCTION_REQUIREMENT` + `APPLICATION`) | line_kind_code, priority_code, line_text, seq_no · attribute ticks with the entity ticks in one request · data_entity_id, source/target application, flow_note | §4.3. Line numbers, the BR's priority and flow coverage are derived, never sent. `PATCH /business-requirements/{id}` then accepts `br_statement` and status only. Route shapes fixed by the slice 11 build |
-| **Wave 1e — imports 4b–4d** | | | |
+| **Phase 1 — slice 1e, imports 4b–4d** | | | |
 | `POST /projects/{project_id}/bulk/{target}/validate` for `business-requirements`, `function-requirements`, `issues` | project_ctx(EDIT) | as above | BRs keyed by **BR number**, `hier_code` a cross-check (R2-D1); FRs (R2-D6) create BR links from BR numbers (D-52) and never create a SOLUTION; `effort_days` is export-only. FR target needs `FUNCTION_REQUIREMENT` |
 | `GET /process-flow-json/schema` | authenticated | — | the `vb-process-flow/2.0` JSON Schema, an example, and the AI conversion prompt pack. The pack names **Claude or Microsoft Copilot under FTC's own accounts only** and opens with the personal-data removal step (D-25, D-36) |
 | `POST /projects/{project_id}/bulk/process-flow/validate` | project_ctx(EDIT; the anchor's set decides the component) | JSON file, **`anchor_bfc_node_id`, `mode`** (merge \| replace), chosen in the UI | `IMPORT_BATCH` + per-item errors and warnings. Steps carry performer, inputs, outputs, triggers and external flows; **no edges, no lanes**. An imperfect DFD imports with warnings (D-55). **A file whose anchor or mode disagrees with the route → 422, nothing staged** (R2-P3); a `1.0` file is refused. Body cap 2 MB. Commit adds `acknowledged_retires` in replace mode |
@@ -6389,31 +6389,31 @@ component.
 | **Issues and stakeholders (component `ISSUE` for issues)** | | | |
 | `GET/POST /projects/{project_id}/stakeholders` · `PATCH/DELETE /stakeholders/{id}` | project_ctx / object_guard(EDIT) | name, title, org_unit_id, is_bpo | client-side people with no login (D-4) |
 | `GET/POST /projects/{project_id}/issues` · `PATCH /issues/{id}` | project_ctx / object_guard(EDIT, `ISSUE`) | issue fields, br_ids | issue incl. generated `issue_number`; raiser and recorder both required (D8) |
-| **Wave 1f — reports, program roll-ups, PDF (D-42)** | | | |
+| **Phase 1 — slice 1f, reports and PDF (D-42); the program roll-ups are Phase 4** | | | |
 | `GET /projects/{project_id}/traceability` | project_ctx(VIEW) | — | step → BR → BR ↔ FR link → FR, with the FR's solution tag and its applications; untraced FRs grouped last |
 | `GET /projects/{project_id}/solution-matrix` · `/application-gap` · `/coverage` · `/consistency` | project_ctx(VIEW) | — | solutions by category × L1 area (D-7); as-is vs to-be backlog (D-8); the scope-gap report (§4.3); `hier_code` drift and completeness (D11) |
 | `GET /projects/{project_id}/interfaces/export` | project_ctx(VIEW) | filters | the interface list as `.xlsx`, through `escape_cell()` |
 | `GET /programs/{program_id}/dashboard` · `/counts` · `/interfaces` · `/effort` · `/control-status` · `/plan-vs-actual` | program_ctx(VIEW) | — | lists of `{project, result}`, one per project in the program visible to the caller, each built by the per-project report (R2-S2). A restricted project the caller is not on is omitted, uncounted |
 | `PATCH /programs/{program_id}` | platform_admin | program fields | program |
 | PDF export of each client-facing report | project_ctx(VIEW) | — | prints project, baseline version or "LIVE — not a baseline", time and author; audited (D-42, OR-8). Route shapes fixed by the 1f spec |
-| **Control rules and the control panel (D-19)** | | | |
+| **Phase 1 — control rules and the control panel (D-19)** | | | |
 | `GET/PUT /control-rules/defaults` | platform_admin | analysis_code, threshold, escalate, action | **the FTC house defaults** (`project_id IS NULL`); affect future projects only |
 | `GET/PUT /projects/{project_id}/control-rules` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
 | `GET /projects/{project_id}/control-panel` · `GET /projects/{project_id}/analysis/{analysis_code}` | project_ctx(VIEW) | — | **every analysis vs its rule → GREEN / FLAG / ESCALATE, with owner and action. The PMO's one screen**; any single analysis with its `headline_value` |
-| **Wave 1g — code maintenance** | | | |
+| **Slice 1g — code maintenance (built)** | | | |
 | `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / ADMIN) (G-5) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
 | `PUT /code-master/FR_TYPE` | platform_admin | as above | the global tier |
-| **Wave 2 — benefits, change requests, WBS** | | | |
+| **Phase 2 — benefits, change requests, decisions, WBS** | | | |
 | `GET/POST /projects/{project_id}/benefits` · `PATCH/DELETE /benefits/{id}` · `POST/DELETE /benefits/{id}/solutions` | `BENEFIT` | benefit fields; solution_id, contribution_pct | benefit incl. `BEN-0001` (D-14) |
 | `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per `measure_unit`** (D-14, R2-D12, Q9) |
 | `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2) |
 | `POST /change-requests/{id}/analyse` · `GET …/price` · `POST …/decide` | object_guard(ChangeRequest, EDIT) | seed objects · — · outcome, displaces_cr_id, rationale, alternative_rejected | the blast radius (`CR_IMPACT`); effort and benefit delta, phases hit, displacement candidates; the decision. **`decide` refuses net-positive effort with no displacement named (422)** and writes a `DECISION` row |
 | `GET/POST /projects/{project_id}/decisions` | project_ctx(VIEW / EDIT) | decision fields | the decision log (D-17); corrections are new rows |
 | `POST /projects/{project_id}/bulk/wbs/validate` · `GET /projects/{project_id}/wbs` · `PATCH /wbs-items/{id}` | project_ctx / object_guard(EDIT, `WBS`) | `.xlsx`, `import_mode` · filters · phase_id, solution_id, row_version | WBS keyed by MS Project Unique ID (D-33, R2-D15); **links only by PATCH** — any other field → 422 "Change it in MS Project and re-import". Progress updates are new dated rows, never overwritten by an import (D-41, OR-7); the progress report is generated from them |
-| **Wave 3 — risks and phasing** | | | |
+| **Phase 2 — risks, and the in-app waves of slice 15 (D-18)** | | | |
 | `GET/POST /projects/{project_id}/risks` · `PATCH /risks/{id}` · `POST /risks/{id}/materialise` | `RISK` | risk fields · description | risk incl. `RSK-0001`, derived `exposure_score` (D-15); materialise creates and links an issue and leaves the risk row |
 | `GET/POST /projects/{project_id}/phases` · `PATCH/DELETE /phases/{id}` · `PUT /solutions/{id}/phase-split` · `/dependencies` · `GET /projects/{project_id}/phase-plan` | project_ctx / object_guard(EDIT, PHASING) | phase fields · the whole split with row versions (W-5) · depends_on_solution_id | delivery waves and prerequisites, cycles rejected (D-18); effort by wave, dependency warnings |
-| **Before first client use** | | | |
+| **Phase 3 — before first client use** | | | |
 | `POST /projects/{project_id}/purge-requests` · `POST /purge-requests/{id}/approve` · `…/cancel` | platform_admin | kind (ARCHIVE / DELETE / DELETE_ARCHIVE), reason, `confirm_text` (client and project code) | the archive (AR-1) and contract-required deletion (Q15, §15.3) are **requested and approved in the app by two different platform admins**; an FTC operator then runs the purge script as `vb_owner` (AR-4). No HTTP route deletes |
 | client read-only login and the offline viewer file (D-43) | — | — | client viewers see their own project only; the offline file is generated from a frozen baseline at `EDIT`, never `VIEW`, after recorded client consent (OR-9). Routes fixed by that slice's spec |
 
@@ -7195,10 +7195,12 @@ decision are recorded in the design history, not here.
 
 ## 12. Delivery sequence and out of scope
 
-### 12.1 Waves — everything here is mandatory, only the order is a decision
+### 12.1 Phases and slices — everything here is mandatory, only the order is a decision
 
-D-13…D-19 and D-37…D-70 are **requirements, not a roadmap**. Nothing below is dropped; the waves
-exist because the model must be built in dependency order. **The wave line is Ben's to move.**
+D-13…D-19 and D-37…D-70 are **requirements, not a roadmap**. Nothing below is dropped; the phases
+exist because the model must be built in dependency order. **The phase line is Ben's to move.**
+A **phase** is a milestone; a **slice** is what gets built inside it (P-1). The current days per slice and per phase
+are in `docs/VB_remaining_work.md`. *Wave* is only the in-app delivery wave (D-18, slice 15), never a build grouping.
 
 **Ordering rules:**
 - **Spec before build (D-45).** No slice is built until the open rows touching it are answered
@@ -7210,31 +7212,32 @@ exist because the model must be built in dependency order. **The wave line is Be
   baseline frozen without `effort_days` is unpriced forever (A-38).
 - Migrations land only on `main`, in order, one per commit.
 
-| Wave | Slice | Contents | Status |
+| Phase | Slice | Contents | Status |
 |---|---|---|---|
-| **1a** | 7a | Project components and data model depth (D-37, D-39) | built |
-| **1b** | 7b | Access: admin / user / viewer, restricted projects (D-40) | built |
-| **1c** | 7c | One DFD: performer lanes, triggers, order from data, the as-is set (D-38, D-46, D-47, D-49) | built |
-| **1d** | 8 | Baseline freeze over the enabled components, client approval, diff (S8-1…S8-3) | built |
-| 1 | 9 | Every screen to the mockups: dark-first theme, left rail, the kit (D-51) | built |
-| 1 | 10a | The BR inside the function chart; the DFD screen (D-53, D-54) | built |
-| 1 | 10b | BR ↔ FR direct, solution optional, hash spec 2 (D-52, S10b-1…S10b-3) | built |
-| 1 | 10d | The ranked process panel; one RACI per process (D-63, D-64, S10d-1) | built |
-| 1 | 10c | Organisation and Systems in the rail, plain guidance and what starts a process on the panel, BR attributes (read-only), the performer recordable whatever the DFD setting, assigned-only projects (D-56, D-57, D-60a, D-62, S10c-2) | built; the one-off switch of existing projects is done project by project by an admin |
-| 1 | 13a | Solutions and Function requirements as two panel sections; the readiness light and the DFD marks (D-66, D-68, D-69). Until 13b the light follows the fixed rule (STARTED + DATA_OUT), under which yellow also blocks the freeze | built |
-| 1 | 13b | The DFD rule per chart: light, marks, warnings and the freeze driven by it; chart-order fallback (D-70, S13-1, S13-2) | built |
-| 1 | 13c | Process volume and FTE; hash spec 3 (D-67, S13-1) | built |
-| 1 | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | built |
-| 1 | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows, the Data migration FR type; hash spec 4 (D-59, D-60b, D-61, S11-1, S11-3, S11-5) | next |
-| 1 | 12 | The Scope dashboard's remaining KPIs S7–S11 and the Project-management card (D-58, S12-1, `docs/slice12_kpis.md`). Each tile appears when its wave lands | after 11; S1–S6 and M1 built with the 2026-10-16 screen work |
-| **Next** | — | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) and the control rules and control panel (D-19): right after slice 12, opening the next wave (SC-9) | — |
-| **1e** | — | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
-| **1f** | — | Reports, program roll-ups and PDF export (D-42) | — |
-| **1g** | — | Code maintenance | — |
-| **2** | — | Benefits (D-14) · change requests (D-16) · **WBS import + progress updates + progress report (D-33, D-41)** | — |
-| **3** | — | Risks (D-15) · decisions (D-17) · phasing and dependency (D-18) | — |
-| **4** | — | English / Japanese / Thai (D-44) · version comparison screen (D-50) | — |
-| **Before first client use** | — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · baseline archive file and `purge_project` (S8-1) · client read-only login and the offline viewer file (D-43) | — |
+| built | 7a | Project components and data model depth (D-37, D-39) | built |
+| built | 7b | Access: admin / user / viewer, restricted projects (D-40) | built |
+| built | 7c | One DFD: performer lanes, triggers, order from data, the as-is set (D-38, D-46, D-47, D-49) | built |
+| built | 8 | Baseline freeze over the enabled components, client approval, diff (S8-1…S8-3) | built |
+| built | 9 | Every screen to the mockups: dark-first theme, left rail, the kit (D-51) | built |
+| built | 10a | The BR inside the function chart; the DFD screen (D-53, D-54) | built |
+| built | 10b | BR ↔ FR direct, solution optional, hash spec 2 (D-52, S10b-1…S10b-3) | built |
+| built | 10d | The ranked process panel; one RACI per process (D-63, D-64, S10d-1) | built |
+| built | 10c | Organisation and Systems in the rail, plain guidance and what starts a process on the panel, BR attributes (read-only), the performer recordable whatever the DFD setting, assigned-only projects (D-56, D-57, D-60a, D-62, S10c-2) | built; the one-off switch of existing projects is done project by project by an admin |
+| built | 13a | Solutions and Function requirements as two panel sections; the readiness light and the DFD marks (D-66, D-68, D-69). Until 13b the light follows the fixed rule (STARTED + DATA_OUT), under which yellow also blocks the freeze | built |
+| built | 13b | The DFD rule per chart: light, marks, warnings and the freeze driven by it; chart-order fallback (D-70, S13-1, S13-2) | built |
+| built | 13c | Process volume and FTE; hash spec 3 (D-67, S13-1) | built |
+| built | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | built |
+| built | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows, the Data migration FR type; hash spec 4 (D-59, D-60b, D-61, S11-1, S11-3, S11-5) | built |
+| built | 12 | The Scope dashboard's remaining KPIs S7–S11 and the Project-management card (D-58, S12-1, `docs/slice12_kpis.md`). Each tile appears when its slice lands | built |
+| **1** | 14 | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) | built; browser check open |
+| **1** | — | The control rules and the control panel (D-19) (SC-9) | — |
+| **1** | 1e | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
+| **1** | 1f | Reports and PDF export (D-42) | — |
+| built | 1g | Code maintenance | built |
+| **2** | 15 | In-app waves and solution dependencies (D-18) | spec approved |
+| **2** | — | Benefits (D-14) · change requests (D-16) · risks (D-15) · decisions (D-17) · **WBS import + progress updates + progress report (D-33, D-41)** | — |
+| **3** | 16, — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · baseline archive file and `purge_project` (S8-1) · client read-only login and the offline viewer file (D-43) | — |
+| **4** | — | Program roll-ups (R2-S2) · English / Japanese / Thai (D-44) · version comparison screen (D-50) | — |
 
 The canvas (§7.14) is one component for the DFD and the ERD. Program roll-ups are built after the
 per-project reports they are made of (R2-S2).
@@ -7546,7 +7549,7 @@ route in `api/scope.js`. Screens link to each other only through these.
   drops (S10c-2).
 - **Two dashboards** (D-58): Scope (coverage and gaps, open warnings, effort by solution, change
   since the last baseline) and Project management (baselines and approvals, change requests,
-  risks, issues, WBS progress). Each tile appears when its wave lands, never with invented
+  risks, issues, WBS progress). Each tile appears when its slice lands, never with invented
   numbers.
 - **Engagement selector.** It lists only what `visible_project_ids(user)` and `visible_program_ids(user)` return, programs
   first with their projects. Program context (`/g/:programId`) shows only roll-ups; any
@@ -7555,7 +7558,7 @@ route in `api/scope.js`. Screens link to each other only through these.
 - **Screens follow their mockup's layout** (side panels, tiles, tags, level badges, RACI
   toggles); screens with no mockup (users, admin, settings, rate card, effort, interfaces,
   applications, WBS, control rules) compose the same kit. **Nothing is faked:** a mockup element
-  whose data or feature is not built yet (issues, history, search) is left out until its wave,
+  whose data or feature is not built yet (issues, history, search) is left out until its slice,
   not drawn empty or with invented values (D-51, S1-9).
 - **Edit controls hide through `app/useCanEdit.js`**, which reads the project's
   `my_access_level` from `GET /projects/{id}`, and components through `app/useComponents.js` —
@@ -7644,7 +7647,7 @@ canvas spike returned **GO**, with these rules:
 ### 14.8 Language
 
 The UI is in English today, and every string already goes through `t()`. **English, Japanese
-and Thai arrive in wave 4** (D-44): each user chooses a language, and PDFs and the offline viewer
+and Thai arrive in Phase 4** (D-44): each user chooses a language, and PDFs and the offline viewer
 file print in the language of the user who generates them. Every screen string and every seeded
 `code_master` label is translated; **content typed by consultants is never translated** and shows
 as typed. Client content is often Japanese, hence Noto Sans JP; Thai needs Noto Sans Thai beside

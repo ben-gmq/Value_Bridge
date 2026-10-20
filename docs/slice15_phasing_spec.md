@@ -2,7 +2,7 @@
 
 **Status:** APPROVED by Ben 2026-10-18 with his rulings W-1…W-9 (history §3; Q-55…Q-66 answered, §7). Not built.
 **Source of truth:** `docs/VB_design.md` (D-18; PHASE, SOLUTION_PHASE, SOLUTION_DEPENDENCY in §5.3; the wave plan
-report; criterion 68), plan row "Phasing and dependency" in `docs/VB_remaining_work.md` (stream B, after 1g; 2.5 days).
+report; criterion 68), plan row "Phasing and dependency" in `docs/VB_remaining_work.md` (Phase 2; 2.5 days).
 **Schema:** `docs/slice15_phasing_schema.md` (apple, 2026-10-16, revised 2026-10-18) — grain, DDL, the no-cycle lock,
 the effort split, retire rules, shadows at hash spec 6, migrations 0065–0067. This spec adds screens, routes,
 acceptance and grade. Where §9 and the text above it disagree, §9 wins.

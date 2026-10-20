@@ -6,7 +6,7 @@ current design wherever it and the text above it disagree.** Design review round
 draft (§17, §18); one more round covered only the 2026-10-18 changes (§19). **Source of truth:**
 `docs/VB_design.md` §15.3 (the evidence archive and contract-required deletion), the Q15 paragraph in §6, criteria 154–155,
 §6.6 (the two roles; "the owner role's secret is available only to the migration job"), plan row "Baseline archive file
-+ `purge_project`" in `docs/VB_remaining_work.md` (stream B, 2 days, no dependency). **Schema:**
++ `purge_project`" in `docs/VB_remaining_work.md` (Phase 3, 2 days, no dependency). **Schema:**
 `docs/slice16_archive_purge_schema.md` (apple, 2026-10-17). This spec adds the flow, the functions, routes, acceptance
 and the grade.
 
