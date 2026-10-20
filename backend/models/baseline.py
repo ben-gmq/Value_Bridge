@@ -20,6 +20,7 @@ import models.client_org  # noqa: F401
 import models.data_model  # noqa: F401
 import models.effort  # noqa: F401
 import models.function_requirement  # noqa: F401
+import models.phase  # noqa: F401
 import models.requirement  # noqa: F401
 import models.solution  # noqa: F401
 import models.tenancy  # noqa: F401
@@ -118,6 +119,7 @@ SHADOWED = ("org_unit", "org_role", "bfc_node", "data_entity", "data_field", "ex
             "application", "br_system_flow",
             "solution", "br_solution", "function_requirement", "br_function_requirement", "fr_interface", "fr_interface_data_entity",
             "application_solution", "application_bfc_node", "effort_rate", "project_component",
-            "issue", "issue_br")                                          # slice 14, hash spec 5 (I-5, I-8)
+            "issue", "issue_br",                                          # slice 14, hash spec 5 (I-5, I-8)
+            "phase", "solution_phase", "solution_dependency")             # slice 15, hash spec 6 (schema §3.5)
 
 SHADOW_TABLES = {name: shadow_table(Base.metadata.tables[name], Base.metadata) for name in SHADOWED}

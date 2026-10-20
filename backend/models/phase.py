@@ -65,6 +65,10 @@ class SolutionPhase(AuditMixin, Base):
     phase_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     portion_pct = mapped_column(Numeric(5, 2), nullable=False)
 
+    solution_row = relationship("Solution", viewonly=True,
+                                primaryjoin="foreign(SolutionPhase.solution_id) == Solution.solution_id")
+    phase_row = relationship("Phase", viewonly=True, primaryjoin="foreign(SolutionPhase.phase_id) == Phase.phase_id")
+
     __table_args__ = (
         ForeignKeyConstraint(["solution_id", "project_id"], ["solution.solution_id", "solution.project_id"],
                              name="fk_solph_solution"),
@@ -92,6 +96,11 @@ class SolutionDependency(AuditMixin, Base):
     solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     depends_on_solution_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
+
+    solution_row = relationship("Solution", viewonly=True,
+                                primaryjoin="foreign(SolutionDependency.solution_id) == Solution.solution_id")
+    prereq_row = relationship("Solution", viewonly=True,
+                              primaryjoin="foreign(SolutionDependency.depends_on_solution_id) == Solution.solution_id")
 
     __table_args__ = (
         ForeignKeyConstraint(["solution_id", "project_id"], ["solution.solution_id", "solution.project_id"],

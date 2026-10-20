@@ -34,11 +34,12 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
     | {("PROJECT_STATUS", "PLANNING")}
     | {("ISSUE_STATUS", c) for c in ("OPEN", "IN_PROGRESS", "RESOLVED", "DEFERRED", "CLOSED")}   # I-1: pinned
     | {("ISSUE_SEVERITY", "CRITICAL")}                              # I-13: the M3 tile counts it by code
+    | {("PHASE_STATUS", c) for c in ("IN_DELIVERY", "CANCELLED")}   # slice 15 R8: the plan reads them by code
     | {("FR_TYPE", t) for t, _ in FTC_DEFAULT_RATE_CARD}          # the rate card is keyed by them (R4)
     | {("FR_COMPLEXITY", c) for _, c in FTC_DEFAULT_RATE_CARD}
 )
 # §7.2, G-2, I-1: never overridden or hidden per project
-COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS"})
+COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS", "PHASE_STATUS"})   # + W-4
 BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS"})
 CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 
@@ -48,6 +49,7 @@ EXCLUDED: dict[tuple[str, str], str] = {
     ("user_access_grant", "project_role_code_id"): "retired table, SELECT-only (D-40)",
     ("project", "status_code_id"): "PROJECT_STATUS is company-only (G-2)",
     ("issue", "status_code_id"): "ISSUE_STATUS is company-only (I-1)",
+    ("phase", "status_code_id"): "PHASE_STATUS is company-only (W-4)",
     ("import_batch", "status_code_id"): "IMPORT_STATUS is a system category",
     ("project_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
     ("project_template_component", "component_code_id"): "PROJECT_COMPONENT is a system category",

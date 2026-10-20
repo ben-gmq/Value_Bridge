@@ -105,7 +105,7 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                                  ("EFFORT", "Effort & rate card"), ("ISSUE", "Issues"),
                                  ("TO_BE_DFD", "To-be DFD"), ("AS_IS", "As-is BFC + DFD"),
                                  ("WBS", "WBS"), ("BENEFIT", "Benefits"), ("RISK", "Risks"),
-                                 ("CHANGE_REQUEST", "Change requests")]),
+                                 ("CHANGE_REQUEST", "Change requests"), ("PHASING", "Waves")]),   # T5
     # OR-3: starting points for a new project's component set (contents: seed_project_templates).
     ("PROJECT_TEMPLATE", False, [("REQUIREMENTS_ONLY", "Requirements only"),
                                  ("DATA_AND_PROCESS", "Data & process"),

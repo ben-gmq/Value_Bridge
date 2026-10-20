@@ -10,7 +10,7 @@ must-be-empty lines. Slice 10b adds `brfr_under_inactive` (must be empty) and th
 from sqlalchemy.orm import Session
 
 from services import (application, components, consistency_data, dfd_rule, function_requirement, import_purge,
-                      interface, solution)
+                      interface, phasing, solution)
 
 # Lines that report an operations lapse, not scope drift: they never count toward the freeze
 # gate's has_errors (§7.12), so a forgotten purge run cannot block a baseline (sara M-2).
@@ -56,6 +56,11 @@ def consistency_check(project_id: int | None, db: Session) -> dict[str, list]:
         "project_without_dfd_rule": dfd_rule.without_rule(db, project_id),
         "dfd_rule_invalid": dfd_rule.invalid(db, project_id),
         "as_is_support_on_to_be": application.support_on_to_be(db, project_id),
+        # slice 15 (spec R1, T6), each must be empty: the split rule (W-5), the no-cycle rule (D-18) and the lock order
+        "solution_phase_split_not_100": phasing.split_not_100(db, project_id),
+        "solution_dependency_cycle": phasing.dependency_cycle(db, project_id),
+        "solution_phase_under_inactive": phasing.split_under_inactive(db, project_id),
+        "solution_dependency_under_inactive": phasing.dependency_under_inactive(db, project_id),
     }
 
 
