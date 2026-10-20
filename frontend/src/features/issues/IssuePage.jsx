@@ -17,6 +17,7 @@ import { t } from '../../i18n/t';
 import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
 import { CodeTitle, SaveState, TwoCol } from '../frs/frKit';
 import { IssueStatus, SeverityTag } from './issueKit';
+import { fmtDateTime } from '../baselines/baselineKit';
 import { IssueBrLinks } from './IssueBrLinks';
 
 const pick = (i) => ({ title: i.title, description: i.description ?? '', severity_code: i.severity_code,
@@ -43,7 +44,7 @@ function ResolveDialog({ issue, closedOptions, onClose, onDone, onStale }) {
           <SimpleSelect id="iss-resolve-status" label={t('issues.field.status')} value={status} onChange={setStatus}
             options={closedOptions} />
           <TextField id="iss-resolve-text" label={t('issues.field.resolution')} required multiline minRows={3} value={text}
-            onChange={(e) => setText(e.target.value)} helperText={t('issues.problemNotPerson')} />
+            onChange={(e) => setText(e.target.value)} helperText={t('issues.resolutionHelp')} />
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -192,7 +193,7 @@ export default function IssuePage() {
       ) : <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('issues.noResolution')}</Typography>}
       {issue.resolved_at && (
         <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-          {t('issues.resolvedAt', { when: new Date(issue.resolved_at).toLocaleString() })}</Typography>)}
+          {t('issues.resolvedAt', { when: fmtDateTime(issue.resolved_at) })}</Typography>)}
       {issue.resolution && !closed && (
         <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('issues.reopenedNote')}</Typography>)}
     </Card>
