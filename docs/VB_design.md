@@ -3531,7 +3531,8 @@ immutable table is a data-protection problem); `import_batch` / `import_row` (st
 `risk`, `change_request`, `cr_impact`, `decision`, `control_rule`.
 
 **Retention (AR-1):** while a project lives, no application path and no application grant can delete a baseline
-(§6.6). **Two years after the project closes** it is flagged for archiving and every platform admin is reminded
+(§6.6). **Two years after the project closes** (from `closed_on`, set the day its status enters a closed one, AR-8,
+AR-10) it is flagged for archiving and every platform admin is reminded
 weekly; archiving writes **one sealed, encrypted file holding the whole project** (its baselines and client
 sign-offs) and then removes the project through the four-eyes purge; the file is kept **until a client contract or
 Ben says delete it**, which is a separate, deliberate step (§15.3). **Contract wins (Q15):** where a client contract
@@ -4706,7 +4707,9 @@ one optional wall per project:
   not, at level `PLATFORM`, plus the platform-only functions (users, clients, creating projects and
   programs, moving a project between programs, restriction, components, data-model depth, FTE basis, the
   DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
-  rows. The FTC default rate card stays a fixed default in code (SC-10).
+  rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**; until that is
+  built, a four-eyes approval is refused when the approver's grant was made by the requester or is under 30
+  days old. The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
@@ -6149,7 +6152,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `BR_PRIORITY` | `MUST`, `SHOULD`, `COULD`, `WONT` (MoSCoW) | `BR_REQUIREMENT_LINE.priority_code`, nullable = not yet prioritised. The BR's own priority is the highest of its live lines, derived, never stored — **D-59** (slice 11) |
 | `BR_STATUS` | `DRAFT`, `CONFIRMED`, `BASELINED`, `SUPERSEDED` | `BUSINESS_REQUIREMENT.status_code`. `BASELINED` / `SUPERSEDED` are set only by the baseline freeze (S1-8) |
 | `FR_FULFILMENT_STATUS` | `SPECIFIED`, `ACCEPTED_BY_VENDOR`, `BUILT`, `TESTED`, `DEFERRED` | `FUNCTION_REQUIREMENT.fulfilment_status_code` — **the vendor boundary is this column, not a table** |
-| `PROJECT_STATUS` | `PLANNING`, `ACTIVE`, `ON_HOLD`, `CLOSED` | `PROJECT.status_code` |
+| `PROJECT_STATUS` | `PLANNING`, `ACTIVE`, `ON_HOLD` (open behaviour); `CLOSED` (closed behaviour) — company-only; entering a closed status sets `closed_on` (AR-8, AR-10) | `PROJECT.status_code` |
 | `BASELINE_STATUS` | `DRAFT`, `FROZEN`, `APPROVED`, `SUPERSEDED` — **`is_system`, not project-editable** | `BASELINE.status_code`. Code compares the values: a CR may target FROZEN or APPROVED, or the SUPERSEDED baseline carrying the agreed approval (Q8, SC-2, §5.3 CHANGE_REQUEST) |
 | `FIELD_DATA_TYPE` | `STRING`, `INTEGER`, `DECIMAL`, `DATE`, `DATETIME`, `BOOLEAN`, `TEXT`, `UUID` | `DATA_FIELD.data_type_code` (optional, D-26) |
 | `PROJECT_COMPONENT` | `SOLUTION`, `FUNCTION_REQUIREMENT`, `APPLICATION`, `EFFORT`, `ISSUE`, `TO_BE_DFD`, `AS_IS`, `WBS`, `BENEFIT`, `RISK`, `CHANGE_REQUEST` — **`is_system`, global only** | `PROJECT_COMPONENT.component_code` — **D-37**. Code branches on these codes; that is the same recorded exemption from VB law 5 as `SOLUTION_CATEGORY` and `APP_LIFECYCLE`, because a system category cannot be renamed or retired by a project. Dependencies (`COMPONENT_REQUIRES`) and live-row tests (`COMPONENT_ROWS`) are code constants in `services/components.py` |
@@ -7719,7 +7722,7 @@ back from one wrong freeze, and not evidence.
 |---|---|---|
 | Disaster recovery | Flexible Server point-in-time restore, geo-redundant backup | 35 days |
 | **Baseline evidence archive** | At every freeze, that baseline's snapshot rows and content hashes are written as one JSON file to write-once Blob Storage, **encrypted with that project's own key in Key Vault**; at each client approval, a second file with the sign-off (AR-4) | While the project lives, then inside the project archive (AR-2) |
-| **Project archive** | Two years after the project closes: **one sealed, encrypted file holding the whole project** — every baseline and sign-off — written and verified before the project is removed by the four-eyes purge (AR-1) | **Until a client contract or Ben says delete it**; deletion is its own four-eyes step that destroys the project's key (Q15 deletes earlier) |
+| **Project archive** | Two years after the project closes: **one sealed, encrypted file holding the whole project** — every baseline and sign-off, plus the live state at archiving marked "not a baseline — unsigned" and the activity history (AR-7) — written and verified before the project is removed by the four-eyes purge (AR-1) | **Until a client contract or Ben says delete it**; deletion is its own four-eyes step that destroys the project's key (Q15 deletes earlier) |
 | Logical dump | Monthly `pg_dump` to immutable Blob Storage | 13 months |
 
 - **Reversing one project** means restoring that project's baseline archive into a side
@@ -7729,7 +7732,10 @@ back from one wrong freeze, and not evidence.
   admin is reminded weekly until it is archived. Archiving keeps the project's key, so its files
   stay readable by FTC; only the separate deletion step destroys it. Storage is write-once by
   rights (the app may create and read, never overwrite or delete), not by a retention lock,
-  so the ordered deletion stays possible.
+  so the ordered deletion stays possible. The two years run from `closed_on`; reopening a closed project is a
+  platform-admin setting and clears it (AR-8); retiring a project closes it first (AR-10); projects already closed
+  when this lands count from the migration day (AR-12); nothing is archived before it is due (AR-11). Deleting the
+  project file takes the same four eyes as a purge and destroys the project's keys (AR-9).
 - **Contract-required deletion (Q15)** — the contract wins over the two-year archive.
   Each project's files are encrypted with its **own key**, so destroying the key makes every
   copy unreadable at once. `purge_project` is requested in the app by one platform admin with

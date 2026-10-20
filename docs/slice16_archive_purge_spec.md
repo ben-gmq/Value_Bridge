@@ -1,8 +1,8 @@
-# Slice 16 — Baseline and project archive files + `purge_project` (spec, rulings in; Q-86…Q-93 open)
+# Slice 16 — Baseline and project archive files + `purge_project` (spec, APPROVED by Ben 2026-10-20)
 
 **Status:** Ben ruled on Q-67…Q-85 on 2026-10-18 (AR-1…AR-6, history §3) and **replaced the five-year retention with a
-two-year archive (AR-1)**. Approved **except Q-86…Q-93**, which that rework raises (§15a); not built. **§15a is the
-current design wherever it and the text above it disagree.** Design review rounds 1–2 were spent on the 2026-10-17
+two-year archive (AR-1)**. **Approved 2026-10-20** with Ben's answers to Q-86…Q-93 (AR-7…AR-13, §20); not built. **§20, then §19, then §15a
+are the current design wherever they and the text above them disagree.** Design review rounds 1–2 were spent on the 2026-10-17
 draft (§17, §18); one more round covered only the 2026-10-18 changes (§19). **Source of truth:**
 `docs/VB_design.md` §15.3 (the evidence archive and contract-required deletion), the Q15 paragraph in §6, criteria 154–155,
 §6.6 (the two roles; "the owner role's secret is available only to the migration job"), plan row "Baseline archive file
@@ -285,7 +285,8 @@ this section:
      request, so a cancelled request's file never blocks or leaks into a later one), write-once, encrypted under the
      project's key like the per-baseline files. It holds every frozen baseline of the project exactly as its verified
      per-baseline file does (header, every shadow row as `::text`, hashes), every client sign-off file (Q-79), the
-     purge record so far, and whatever Q-86 decides about the live state;
+     purge record so far, the live state at archiving as text in a section marked "not a baseline — unsigned",
+     and the project's activity history (Q-86, AR-7);
    - **verifies that file** end to end on the exact bytes stored (decrypt, recompute every row hash and every digest,
      R6) and stops — nothing deleted — on any mismatch;
    - records the file's name, sha256 and size on the request, then runs the purge transaction unchanged (§7, S1–S9).
@@ -329,7 +330,7 @@ it, then deletes the project; the file decrypts afterwards and every baseline in
 needs four eyes and a reason; afterwards no file of the project decrypts. 24. With fewer than two live platform admins
 every purge kind refuses, and `/admin` warns.
 
-**New questions for Ben (raised by the rework).**
+**Questions raised by the rework — answered 2026-10-20, all as recommended (§20).**
 - **Q-86 — What does the project file hold beyond the frozen baselines and sign-offs?** A project can change after its
   last baseline. (a) only the baselines and sign-offs — anything after the last freeze is lost; (b) also the live state
   at archiving, every row as text in a section marked "not a baseline — unsigned"; (c) take a closing baseline first —
@@ -464,12 +465,12 @@ question (Q-93).
 | U6 | For DELETE_ARCHIVE the database checks four eyes and the 24 h wait only after the keys are gone (MEDIUM, S3) | A guarded `destroy_started_at` transition on `project_purge`, committed before the vault is touched, refused unless the request is an approved DELETE_ARCHIVE at least 24 h old; key destruction reads it. Whether client vaults keep deleted keys recoverable for a fixed window is recorded for the Azure work (D-35) with Q-71 |
 | U7 | The trigger enforces "recorded", not "verified" (LOW, S4) | Schema §12.4 reads "recorded, then delete"; criterion 22 is the proof that the script verifies before it records |
 | U8 | §1a was stale against §15a (MEDIUM, P5) | Fixed: §1a now states Input, Output, Validation and the maintenance loop per kind |
-| U9 | One platform admin can make a second admin account and approve their own request (HIGH, S2) | **Ben's question — Q-93.** Until answered, the guard refuses an approval by an admin whose platform-admin grant was made by the requester |
+| U9 | One platform admin can make a second admin account and approve their own request (HIGH, S2) | **Settled by AR-13 (§20).** Until (b) is built, the guard refuses an approval by an admin whose platform-admin grant was made by the requester |
 
 Criterion added: **25.** An ARCHIVE with a baseline whose current file is owed or check-failed stops before writing,
 naming it. **26.** The weekly check reports a held project file whose object or key no longer verifies.
 
-**Question for Ben added by this round.**
+**Question added by this round — answered 2026-10-20 (§20, AR-13).**
 - **Q-93 — How independent must the second admin be?** Today one platform admin can create a second admin account and
   approve their own deletion as that account, which defeats four eyes for the one step that destroys the last copy.
   (a) the approval is refused when the approver's platform-admin grant was made by the requester, or is under 30 days
@@ -483,3 +484,24 @@ naming it. **26.** The weekly check reports a held project file whose object or 
 - **Q-89 and Q-90 must be answered together:** under Q-89 (b) a project carries `closed_on` exactly when its status is a
   closed one, so a retired project that was never closed (Q-90) cannot simply be given a date. **Recommend:** retiring a
   project moves it to a closed status first (which sets `closed_on`), so the clock starts for it too.
+
+## 20. Ben's answers to Q-86…Q-93 (2026-10-20, history AR-7…AR-13) — the current design
+He follows every recommendation. Each is a build rule and wins over everything above.
+
+| Ruling | Build rule |
+|---|---|
+| **AR-7 (Q-86 b)** | The project file holds, after the baselines and sign-offs, a section marked **"not a baseline — unsigned"** with every live row of the project as text at archiving, **and the project's `audit_event` rows**. The verify step checks that section's digest like the others. Q-69 (b) still deletes the activity history from the database; it survives only inside the file. A DELETE purge writes no file |
+| **AR-8 (Q-87)** | `closed_on` is set by the service the day the status enters a closed one (local date, ICT), cleared when it leaves; closing again sets a new date. Leaving a closed status is PLATFORM (U2) |
+| **AR-9 (Q-88)** | DELETE_ARCHIVE as §15a (3) and U6: four eyes, a reason citing the contract clause or Ben's instruction, the 24 h wait, keys destroyed then files deleted; the `project_purge` row is kept forever |
+| **AR-10 (Q-89 b, Q-90)** | PROJECT_STATUS becomes a company-only behaviour category (OPEN / CLOSED; schema §12, migration 0070 is written). `ck_project_closed_on`: a closed project has `closed_on`, an open one has none. **Retiring a project first moves it to a closed status** (its `closed_on` set), in the same transaction; the retire is refused if no live closed status exists |
+| **AR-11 (Q-91)** | An ARCHIVE request is refused unless the project is due (`closed_on + 2 years <= local_today()`); an earlier removal is a DELETE |
+| **AR-12 (Q-92)** | Migration 0071's backfill: every project already closed gets `closed_on` = the migration day (ICT); every retired, never-closed project is moved to CLOSED with the same date (AR-10) |
+| **AR-13 (Q-93)** | **Interim rule (a), built in this slice:** an approval of any purge kind is refused when the approver's platform-admin grant was made by the requester, or is under 30 days old. The grant's maker and date are read from `audit_event` (the grant is already audited); a grant with no audit row counts as under 30 days. **(b), the two-admin approval of a platform-admin grant, is its own slice** in Phase 3 of `docs/VB_remaining_work.md`, specced separately; when it lands, (a) stays as a second check |
+
+**Criteria added.** **27.** Retiring a never-closed project closes it first and sets `closed_on`; it is due two years
+later. **28.** An approval by an admin whose grant was made by the requester, or is under 30 days old, is refused (all
+three kinds). **29.** The project file's unsigned section holds the live rows and the activity history, and its digest
+verifies. **30.** An ARCHIVE request for a project not yet due is refused.
+
+**Size.** Unchanged at about 3.5 days: migration 0070 and the backfill were already in the schema, and the interim rule
+is one check in the approval path.
