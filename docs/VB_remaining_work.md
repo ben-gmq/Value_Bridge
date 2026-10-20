@@ -42,11 +42,12 @@ and go first, while the specs owed in Phase 1 are drafted.
 | **Decisions** | Append-only decision log with rejected options; timeline by area | Owed | 1.5 |
 | **WBS import + progress** | Import from MS Project; link lines to wave and solution; dated progress; progress report; M5 tile | Owed | 3.5 |
 
-## Phase 3 — Ready for the first client (14 days)
+## Phase 3 — Ready for the first client (15 days)
 
 | Slice | Remaining tasks | Spec | Days |
 |---|---|---|---:|
-| **16 — Archive files + project purge** | Archive file of each frozen baseline; two-year project archive; four-eyes purge with the key kept. **Blocked on Ben: Q-86…Q-93** (what the file holds, when the two years start, how a file is deleted, what "closed" means, how independent the second admin must be — **Q-93 due this week**) | Approved except Q-86…Q-93 | 3.5 |
+| **16 — Archive files + project purge** | Archive file of each frozen baseline; two-year project archive (kept, with the live state and activity history); four-eyes purge with the key kept; the interim admin-independence check (Ben's answers 2026-10-20, AR-7…AR-13) | Approved | 3.5 |
+| **Platform-admin grant approval** | Making someone a platform admin needs a second platform admin's approval (AR-13, Q-93 b); covers every four-eyes control | Owed | 1 |
 | **Client read-only login + offline viewer** | Client staff see their own project only, after recorded consent; offline HTML file from a frozen baseline | Owed | 3 |
 | **Full review pass** | Sara's production-depth pass over everything since sign-off; the VB-005 backlog cleared or accepted with Ben, line by line | — | 2 |
 | **Azure** | Container Apps, PostgreSQL on private networking, Key Vault, the two database roles, upload limits, the 90-day purge job, Entra ID sign-in. **Needs from Ben:** subscription access and the sign-in decision | — | 4 |
@@ -69,11 +70,11 @@ and go first, while the specs owed in Phase 1 are drafted.
 |---|---:|---:|
 | 1 — Finish the scope core | 4 | 11.5 |
 | 2 — Delivery control modules | 6 | 16 |
-| 3 — Ready for the first client | 6 | 14 |
-| **To first client use (1–3)** | **16** | **41.5** |
+| 3 — Ready for the first client | 7 | 15 |
+| **To first client use (1–3)** | **17** | **42.5** |
 | 4 — After first client use | 3 | 9 |
-| **Everything in the design** | **19** | **50.5** |
+| **Everything in the design** | **20** | **51.5** |
 
 **Against the 2026-10-16 plan:** 9.5 days of it are done; slice 16 grew by 1.5 days in its spec (the two-year
-archive); the Issue module's browser check adds 0.5. Access slices A and B were added and done outside the plan.
-Built one slice at a time from 2026-10-21, 41.5 days reaches first client use around **mid-December 2026**.
+archive); the Issue module's browser check adds 0.5; the platform-admin grant approval (AR-13) adds 1. Access slices A and B were added and done outside the plan.
+Built one slice at a time from 2026-10-21, 42.5 days reaches first client use around **mid-December 2026**.

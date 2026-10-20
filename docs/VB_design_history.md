@@ -16,12 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **[Q-86…Q-93] The two-year project archive (slice 16, raised 2026-10-18 by AR-1's rework)** — eight questions, each
-  with a recommendation, in `docs/slice16_archive_purge_spec.md` §15a and §19: what the project archive file holds
-  beyond the frozen baselines and sign-offs, the activity history included (Q-86), when the two years start (Q-87), how
-  an archive file is deleted (Q-88), apple's four on what "closed" means and when the clock runs (Q-89…Q-92, Q-89 and
-  Q-90 to be answered together), and how independent the second admin must be (Q-93, from the design review). Slice 16 is not approved until they are
-  answered; slice 15 is (W-1…W-9).
+Nothing open (2026-10-20: Q-86…Q-93 answered, AR-7…AR-13).
 
 
 ---
@@ -40,6 +35,8 @@ Nothing here is in the spec yet.
   ISSUE, ISSUE_BR surrogate id) and §11 (issue status company-only with behaviour; four severities, CRITICAL pinned).
 - **2026-10-18** — Ben's wave and archive rulings W-1…W-9 and AR-1…AR-6 folded into §2, §4.12, §5.3, §6 (retention),
   §11, the API table, A-59 and §15.3 (two years after close, then one project archive file; Q12 retired).
+- **2026-10-20** — Ben's answers to Q-86…Q-93 (AR-7…AR-13) folded into §5 retention, §7.8 platform admin, §11
+  PROJECT_STATUS and §15.3; slice 16 spec and schema approved.
 
 ---
 
@@ -517,6 +514,20 @@ design-auditor rounds 1–2 in the paper's §8.
 | S11-3 | **[Q-17] One master list of systems.** Same answer (a): flows pick both ends from the Applications list (D-56) as built; no system of record per data entity | slice11_schema §3.3, §8 |
 | S-P | Purpose and Data processing: Purpose is the description on L1–L4 boxes; on processes both sit in the collapsed Description section (as built in 10d) | slice10d_spec §11 |
 
+### Ben's rulings, 2026-10-20 — the two-year project archive (slice 16, Q-86…Q-93)
+
+Ben, via Ren, 2026-10-20: he follows every recommendation in the spec. Slice 16's spec and schema are approved.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-7 | **[Q-86] (b): the project file also holds the live state at archiving**, every row as text in a section marked "not a baseline — unsigned", **and the project's activity history** (who changed what), so the archive keeps the full story; the DELETE purge still removes it everywhere | slice16_spec §15a (2) |
+| AR-8 | **[Q-87] The two years start on the day the project's status is set to a closed one, recorded as `closed_on`.** Reopening clears it; closing again restarts the two years | — |
+| AR-9 | **[Q-88] An archive file is deleted with the same four eyes as a purge** — one platform admin requests, a different one approves, the reason cites the contract clause or Ben's instruction — then the project's keys are destroyed, the files deleted, and the request record kept forever | — |
+| AR-10 | **[Q-89] (b): project statuses get an open / closed meaning** (a behaviour category, as issue statuses in I-1), so the database refuses a closed project without its date. **[Q-90] yes:** retiring a project moves it to a closed status first, which sets `closed_on`, so it comes due like any other | §11 PROJECT_STATUS (no behaviour) |
+| AR-11 | **[Q-91] No archiving before the two years.** An earlier removal is a contract DELETE (Q15) | — |
+| AR-12 | **[Q-92] Projects already closed when slice 16 lands count from the migration day**, so nothing comes due on day one | — |
+| AR-13 | **[Q-93] (b): making someone a platform admin needs a second platform admin's approval** — it closes the gap for every four-eyes control, not only the purge. **(a) is the interim rule until (b) is built:** a four-eyes approval is refused when the approver's platform-admin grant was made by the requester or is under 30 days old | slice16_spec §19 U9 |
+
 ### Ben's ruling, 2026-10-20 — the planning words (P-1)
 
 Ben: *"We have wave, we have slice, and we have stream, so I don't know the relationship of these three."*
@@ -775,7 +786,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice11_schema.md` | Slice 11 — structured BR, attribute usage, system-to-system flows (proposal) | 2026-10-12 |
 | `docs/slice14_issue_spec.md · slice14_issue_schema.md` | Slice 14 — Issue module (approved 2026-10-18, I-1…I-16) | 2026-10-18 |
 | `docs/slice15_phasing_spec.md · slice15_phasing_schema.md` | Slice 15 — waves (phasing) and solution dependencies (approved 2026-10-18, W-1…W-9) | 2026-10-18 |
-| `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-6; Q-86…Q-93 open) | 2026-10-18 |
+| `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-13; approved 2026-10-20) | 2026-10-18, 2026-10-20 |
 
 ---
 

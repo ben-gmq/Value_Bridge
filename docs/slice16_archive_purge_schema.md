@@ -1,6 +1,6 @@
 # Slice 16 — Baseline and project archive files + `purge_project`: logical + physical schema (apple, 2026-10-17; revised 2026-10-18)
 
-**Status: Ben's rulings are in (2026-10-18, history §3 AR-1…AR-6), and the design is approved except Q-86…Q-88** (spec
+**Status: Ben's rulings are in (2026-10-18, history §3 AR-1…AR-6), and Ben's answers to Q-86…Q-93 on 2026-10-20 (AR-7…AR-13, spec §20); the design is approved** (spec
 §15a). This schema also raises Q-89…Q-92 (§12.9). **§12 is the current design wherever it disagrees with §1–§11**,
 which are kept as the record of the 2026-10-17 draft and of design review round 1. The retention rule is AR-1's: two
 years after a project closes it is due for archiving, and the project archive file is kept until a client contract or
@@ -706,10 +706,10 @@ table or one change per migration, each its own commit, each reversible; every n
 | **0074** | the scoped bypass: `fn_purge_allows` (§12.4), `fn_reject_modification_purgeable`; re-point **every** `baseline_*` shadow trigger (the 28 plus slices 14–15's, read from the catalog, not counted by hand); replace `fn_baseline_header_guard` from the **latest** frozen-column list on `main` (0054's, or slice 15's if it changed it); `vb_ops.immutable_guards_v2` | refuse if any `project_purge` row is executed (a downgrade must not re-arm guards under a half-run purge); else restore the old triggers and the latest header guard | **yes** — law 2 exception (AR-4 Q-75) |
 | **0075** | **final.** `fn_reject_modification_audit_purgeable` (DELETE only under `fn_purge_allows`, and never an event of the named kept types: `PURGE_REQUESTED`, `PURGE_APPROVED`, `PURGE_CANCELLED`, `PURGE_ARCHIVE_WRITTEN`, `PROJECT_PURGED`, `PURGE_KEYS_DESTROYED`, `PURGE_ARCHIVE_DELETED` — §18 S8, by name, not pattern); re-point `trg_audit_event_immutable`; FK `audit_event → project` **kept** | re-point to `fn_reject_modification` — safe | **yes** — the audit log's immutability (AR-3) |
 
-Without Q-89 (b), 0070 is not written and 0071–0075 become 0070–0074. No migration drops data on upgrade; no
+Q-89 (b) was chosen (AR-10), so 0070 is written and the numbering 0068–0075 stands. No migration drops data on upgrade; no
 hash-spec bump.
 
-### 12.9 Questions for Ben raised by this revision (Q-86…Q-88 stay as spec §15a has them)
+### 12.9 Questions raised by this revision — answered 2026-10-20, all as recommended (AR-10…AR-12)
 
 Numbered as the next free ids in the history on 2026-10-18; renumber if another session took them first.
 - **Q-89 — How does VB know a project is "closed", so the two-year clock starts?** Today "Closed" is just one of four
