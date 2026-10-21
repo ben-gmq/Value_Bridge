@@ -8,9 +8,9 @@ every table, count, delete child before parent with each count checked, prove th
 names, mark the request executed (the 0072 guard re-checks four eyes, the 24 hours and two live admins at that moment)
 and write PROJECT_PURGED. Any failure rolls all of it back and leaves the request open.
 
-Not here yet: the ARCHIVE run (project file first) and destroying the keys after the commit — both wait for Ben's
-approval (2026-10-22). Until then a DELETE's key rows stay `destroyed_at IS NULL`: "keys outstanding", visible and
-retryable (schema §7 step 6)."""
+After the commit, `destroy_keys` writes the tombstone and destroys the project's keys (approved by Ben 2026-10-22);
+a key it could not destroy stays `destroyed_at IS NULL` — "keys outstanding", visible and retryable (schema §7 step 6).
+Not here yet: the ARCHIVE run (project file first) and the DELETE_ARCHIVE run."""
 import getpass
 import json
 import socket
@@ -260,11 +260,23 @@ def _delete(c: Connection, step, preds: dict[str, str], p: int) -> dict[str, int
     return dict(zip(step, got))
 
 
-def _key_names(c: Connection, p: int) -> dict[str, list[str]]:
-    """Read before baseline_archive goes (S8): every key ref of the project's files, plus this instance's name."""
-    instance = c.scalar(text("SELECT instance_id FROM vb_instance"))
-    if instance is None:
-        raise Refused("The database is not stamped (scripts.stamp_instance): its key names cannot be known.")
+def _instance(c: Connection) -> str:
+    """sara H2: the database's stamp must equal this host's VB_INSTANCE_ID (as the server and the writer require), so
+    a restored copy still stamped as production can never destroy production's keys."""
+    from config import get_settings
+    configured = get_settings().vb_instance_id
+    stamped = c.scalar(text("SELECT instance_id FROM vb_instance"))
+    if not configured or stamped is None:
+        raise Refused("VB_INSTANCE_ID is not set or the database is not stamped (scripts.stamp_instance).")
+    if stamped != configured:
+        raise Refused(f"VB_INSTANCE_ID is {configured!r} but this database is stamped {stamped!r}: "
+                      "re-stamp it deliberately first.")
+    return stamped
+
+
+def _key_names(c: Connection, p: int, instance: str) -> dict[str, list[str]]:
+    """Read before baseline_archive goes (S8): every key ref of the project's files, plus this instance's name. A ref
+    naming another project's key stops the run (sara H1: the app role can write an owed row's key_ref)."""
     names: dict[str, set[str]] = {key_name(instance, p): set()}
     # sara L-c: a cancelled ARCHIVE's project file keeps naming its key (schema §12.5); collect that one too.
     for (ref,) in c.execute(text("SELECT key_ref FROM baseline_archive WHERE project_id = :p AND key_ref IS NOT NULL "
@@ -273,6 +285,8 @@ def _key_names(c: Connection, p: int) -> dict[str, list[str]]:
         m = REF.match(ref)
         if not m:
             raise Refused(f"An archive file names a key the script cannot read: {ref!r}")
+        if not m.group(1).endswith(f"-proj-{p}"):
+            raise Refused(f"An archive record of this project names another project's key: {ref!r} — stop and call IS.")
         names.setdefault(m.group(1), set()).add(ref)
     return {n: sorted(refs) for n, refs in sorted(names.items())}
 
@@ -283,6 +297,7 @@ def execute(c: Connection, purge_id: int, executor_email: str, confirm: Callable
     if c.scalar(text("SELECT session_user")) != "vb_owner":
         raise Refused("Run this as the owner role (MIGRATION_DATABASE_URL), never as the app.")
     c.execute(text("SET LOCAL search_path = pg_catalog, public"))                      # sara L-b: bare table names
+    instance = _instance(c)
     executor = c.scalar(text("SELECT app_user_id FROM app_user WHERE lower(email) = lower(:e)"), {"e": executor_email})
     if executor is None:
         raise Refused("No user with that email.")
@@ -307,7 +322,7 @@ def execute(c: Connection, purge_id: int, executor_email: str, confirm: Callable
     if (confirm(plan) or "").strip() != plan.expected:                                 # R3: the client's code too
         raise Refused(f"The typed code did not match {plan.expected}; nothing was deleted.")
     c.execute(text("SELECT set_config('vb.purge_project_id', :p, true)"), {"p": str(p)})
-    keys = _key_names(c, p)
+    keys = _key_names(c, p, instance)
     for step in tables.steps:
         got = _delete(c, step, preds, p)
         for t, n in got.items():
@@ -328,8 +343,140 @@ def execute(c: Connection, purge_id: int, executor_email: str, confirm: Callable
               "project_code": proj.project_code, "client_code": proj.client_code, "reason": pp.reason,
               "requested_by_user_id": pp.requested_by_user_id, "approved_by_user_id": pp.approved_by_user_id,
               "counts": {t: n for t, n in plan.counts.items() if n}, "os_user": getpass.getuser(),
-              "host": socket.gethostname(), "keys_outstanding": sorted(keys)}
+              "host": socket.gethostname(), "keys_to_destroy": sorted(keys)}
     c.execute(text("INSERT INTO audit_event (event_type, app_user_id, target_table, target_id, detail) "
                    "VALUES ('PROJECT_PURGED', :u, 'project_purge', :i, CAST(:d AS jsonb))"),
               {"u": executor, "i": purge_id, "d": json.dumps(detail, sort_keys=True)})
     return plan
+
+
+# ---- after the commit: the tombstone, then the keys (schema §6, §7 step 6; spec §10 criterion 9; Q-71, S2) --------
+
+@dataclass
+class KeyResult:
+    key_name: str
+    destroyed: bool
+    was_present: bool | None = None
+    proof_object_name: str | None = None
+    note: str = ""
+
+
+def _envelope_key(store, obj: str) -> str | None:
+    """The key name an envelope names, or None for anything that is not one (sara M1: never raise on a stray object)."""
+    try:
+        env = json.loads(store.get(obj))
+        m = REF.match(env.get("key_ref", "")) if isinstance(env, dict) else None
+    except (ValueError, OSError, TypeError):
+        return None
+    return m.group(1) if m else None
+
+
+def _proof_before(store, keys, files: list[str], name: str) -> tuple[str | None, bool]:
+    """sara M1: choose the proof file before destroying. Returns (file, read-before): a file of this key that
+    decrypts now — or, on a retry where the key is already gone, one that already fails with the key unavailable."""
+    from services.archive import verify_file
+    gone = None
+    for obj in files:
+        if _envelope_key(store, obj) != name:
+            continue
+        why = verify_file(store.get(obj), keys)["first_mismatch"]
+        if why != "key: unavailable" and not (why or "").startswith(("envelope", "ciphertext")):
+            return obj, True
+        if why == "key: unavailable" and gone is None:
+            gone = obj
+    return gone, False
+
+
+def destroy_keys(eng, purge_id: int, executor_email: str, store, keys) -> list[KeyResult]:
+    """For an executed DELETE: write the tombstone (so no writer ever makes a key or a file for this project again),
+    then destroy this project's own key on this instance, prove a stored file that decrypted before no longer does,
+    and record it — one transaction per key, so a failure leaves it outstanding and this can simply be run again.
+    The database guard (0073) lets a key be marked destroyed only by its executed DELETE."""
+    from services.archive import verify_file
+    with eng.connect() as lock:                                          # sara L2: one run at a time per request
+        if lock.scalar(text("SELECT session_user")) != "vb_owner":
+            raise Refused("Run this as the owner role (MIGRATION_DATABASE_URL), never as the app.")
+        if not lock.scalar(text("SELECT pg_try_advisory_lock(hashtext('vb_purge_keys'), CAST(:i AS integer))"), {"i": purge_id}):
+            raise Refused("Another run is destroying this request's keys right now.")
+        try:
+            with eng.begin() as c:
+                instance = _instance(c)                                  # sara H2: this host's id, checked
+                pp = _one(c, "SELECT project_purge_id, purge_kind, project_id, executed_at, repurge_of_purge_id "
+                             "FROM project_purge WHERE project_purge_id = :i", i=purge_id)
+                if pp is None or pp.purge_kind != "DELETE" or pp.executed_at is None:
+                    raise Refused("Keys are destroyed only for a DELETE removal that has been carried out.")
+                executor = c.scalar(text("SELECT app_user_id FROM app_user WHERE lower(email) = lower(:e) "
+                                         "AND is_active AND is_platform_admin"), {"e": executor_email})
+                if executor is None:
+                    raise Refused("The person running the removal is not a live platform admin.")
+                rows = c.execute(text("SELECT key_name FROM project_purge_key WHERE project_purge_id = :i "
+                                      "AND destroyed_at IS NULL ORDER BY key_name"), {"i": purge_id}).scalars().all()
+            own = key_name(instance, pp.project_id)                      # sara H1: exactly this project's key
+            tomb = f"{instance}/purged/{pp.project_id}"
+            if store.exists(tomb):
+                named = json.loads(store.get(tomb)).get("project_purge_id")
+                if named not in (purge_id, pp.repurge_of_purge_id):        # sara L4: a re-purge's old tombstone
+                    raise Refused(f"A tombstone for this project names another removal: {tomb}")
+            else:
+                store.put_once(tomb, json.dumps({"project_purge_id": purge_id, "purge_kind": "DELETE",
+                                                 "executed_at": pp.executed_at.isoformat()}, sort_keys=True).encode())
+            files = store.names(f"{instance}/{pp.project_id}/")
+            out = []
+            for name in rows:
+                if name != own:                                          # S2 and H1: never another key
+                    out.append(KeyResult(name, False, note="not destroyed: not this project's key on this instance "
+                                                           "— for the operator"))
+                    continue
+                proof, read_before = _proof_before(store, keys, files, name)
+                was_present = keys.destroy(name)
+                if proof is not None and verify_file(store.get(proof), keys)["first_mismatch"] != "key: unavailable":
+                    raise Refused(f"{proof} still decrypts after its key was destroyed — stop and call IS.")
+                with eng.begin() as c:
+                    n = c.execute(text("UPDATE project_purge_key SET destroyed_at = now(), was_present = :w, "
+                                       "destroyed_by_purge_id = :i, proof_object_name = :o, "
+                                       "row_version = row_version + 1 WHERE project_purge_id = :i AND key_name = :n "
+                                       "AND destroyed_at IS NULL"),
+                                  {"w": was_present, "i": purge_id, "o": proof, "n": name}).rowcount
+                    if n != 1:
+                        raise Refused(f"The record of key {name} changed under this run.")
+                out.append(KeyResult(name, True, was_present, proof,
+                                     "" if read_before or proof is None else "proof file was already unreadable"))
+            _keys_destroyed_event(eng, purge_id, pp.project_id, executor)
+            return out
+        finally:
+            lock.execute(text("SELECT pg_advisory_unlock(hashtext('vb_purge_keys'), CAST(:i AS integer))"), {"i": purge_id})
+
+
+def _keys_destroyed_event(eng, purge_id: int, project_id: int, executor: int) -> None:
+    """sara L1: once no key of the request is outstanding, one PURGE_KEYS_DESTROYED event, written from the records."""
+    with eng.begin() as c:
+        left = c.scalar(text("SELECT count(*) FROM project_purge_key WHERE project_purge_id = :i "
+                             "AND destroyed_at IS NULL"), {"i": purge_id})
+        done = c.scalar(text("SELECT count(*) FROM audit_event WHERE event_type = 'PURGE_KEYS_DESTROYED' "
+                             "AND target_table = 'project_purge' AND target_id = :i"), {"i": purge_id})
+        if left or done:
+            return
+        keys_ = [dict(r._mapping) for r in c.execute(text(
+            "SELECT key_name, was_present, proof_object_name, destroyed_at::text FROM project_purge_key "
+            "WHERE project_purge_id = :i ORDER BY key_name"), {"i": purge_id})]
+        c.execute(text("INSERT INTO audit_event (event_type, app_user_id, target_table, target_id, detail) "
+                       "VALUES ('PURGE_KEYS_DESTROYED', :u, 'project_purge', :i, CAST(:d AS jsonb))"),
+                  {"u": executor, "i": purge_id, "d": json.dumps(
+                      {"project_purge_id": purge_id, "purged_project_id": project_id, "keys": keys_},
+                      sort_keys=True)})
+
+
+def remove(eng, purge_id: int, executor_email: str, confirm: Callable[[Plan], str], store, keys,
+           on_removed: Callable[[Plan], None] | None = None):
+    """The whole operator run: the removal in one transaction, then — only once it has committed — the keys. Nothing
+    is destroyed when the removal is refused or fails. `on_removed` hears of the commit before the key phase starts
+    (the script prints it, so an operator never mistakes a key failure for "nothing happened" — sara L3, N1)."""
+    if store is None or keys is None:
+        raise Refused("VB_ARCHIVE_DIR and VB_ARCHIVE_KEY_DIR must be set: the run ends by destroying the project's keys.")
+    with eng.begin() as c:
+        plan = execute(c, purge_id, executor_email, confirm)
+    if on_removed:
+        on_removed(plan)
+    return plan, destroy_keys(eng, purge_id, executor_email, store, keys)
+
+

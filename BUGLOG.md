@@ -525,3 +525,8 @@ place.
   criterion 10 checks the project's audit rows by `project_id` only — assert no non-kept event names the project by
   `target_table = 'project'`. (Accepted, sara M1 note) `current_user = 'vb_owner'` alone is not proven by a test: it
   needs an owner session under another role.
+- **2026-10-22 · slice 16, DELETE key destruction (`sara` ×2; H1, H2, M1, M2, L1–L4, N1, N2 fixed):** (L5) local key
+  destruction is a file delete — the deploy runbook keeps `VB_ARCHIVE_KEY_DIR` out of every backup, or criterion 9
+  holds only on paper. (tests) not yet exercised: a stray non-envelope object in the project's folder, the retry whose
+  proof file is already unreadable, the advisory-lock refusal and the exactly-one-row check, the re-purge tombstone,
+  and "exactly one PURGE_KEYS_DESTROYED after a retry".

@@ -2,6 +2,7 @@
 11, 12). Grade 1 — it destroys a client's data for good, so: every rule refuses with nothing deleted; a removal leaves
 no row of the project in any table, found by a catalog query rather than a hand list; every other row in the
 database is byte-identical afterwards; and a fault part-way rolls all of it back with the request still open."""
+import os
 from collections import Counter
 
 import pytest
@@ -18,7 +19,7 @@ from tests.test_scope_api import ed  # noqa: F401 — ed is a fixture
 
 
 @pytest.fixture
-def rich(client, world, ed, db, owner):
+def rich(client, world, ed, db, owner, monkeypatch):
     """The showcase project (frozen twice, every scope table) to remove; p_solo frozen; the world's other projects;
     two platform admins with a1 the requester and a2 (granted 31 days ago) the approver; a stamped database."""
     admin = db.scalar(select(AppUser).where(AppUser.email == "admin@example.test"))
@@ -29,6 +30,8 @@ def rich(client, world, ed, db, owner):
     a2 = world["users"]["owner"]
     promote(owner, a2)
     run(owner, "INSERT INTO vb_instance (instance_id) VALUES ('test-a')")
+    from config import get_settings
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")                    # this host's id (sara H2)
     client_id = run(owner, "SELECT client_id FROM project WHERE project_id = :p", p=victim)[0]
     for p in (victim, world["p_sales"]):                                               # code-list overrides
         for cat in ("ISSUE_TYPE", "PROJECT_COMPONENT"):
@@ -237,3 +240,181 @@ def test_the_delete_order_puts_children_first_and_the_project_with_its_code_over
     assert flat.index("audit_event") < flat.index("project")
     assert ("code_master", "project") in got.steps                                      # one statement (schema §8 row 13)
     assert "import_batch_id" in got.predicates["import_row"]
+
+
+# ---- the keys: destroyed only after the removal has committed (criterion 9; Q-71; Ben 2026-10-22) --------------
+
+@pytest.fixture
+def vault(rich, tmp_path, monkeypatch):
+    """This test's own throwaway archive and key folders, with every owed file of every baseline written."""
+    from config import get_settings
+    from services import archive
+    from services.archive_store import LocalKeys, LocalStore
+    s = get_settings()
+    monkeypatch.setattr(s, "vb_instance_id", "test-a")
+    monkeypatch.setattr(s, "vb_archive_dir", str(tmp_path / "files"))
+    monkeypatch.setattr(s, "vb_archive_key_dir", str(tmp_path / "keys"))
+    store, keys = LocalStore(tmp_path / "files"), LocalKeys(tmp_path / "keys")
+    assert archive.write_pending(store, keys, limit=100)["failed"] == 0
+    return {"store": store, "keys": keys, "root": tmp_path,
+            "mine": store.names(f"test-a/{rich['p']}/"), "theirs": store.names(f"test-a/{rich['world']['p_solo']}/")}
+
+
+def vault_state(v) -> tuple:
+    files = sorted(str(p.relative_to(v["root"])) for p in v["root"].rglob("*") if p.is_file())
+    return tuple(files)
+
+
+def verifies(v, name) -> str | None:
+    from services.archive import verify_file
+    return verify_file(v["store"].get(name), v["keys"])["first_mismatch"]
+
+
+def remove(rich, v, pp, typed=None):
+    return purge_run.remove(owner_engine(), pp, rich["a2_email"],
+                            lambda plan: plan.expected if typed is None else typed, v["store"], v["keys"])
+
+
+def test_a_removal_destroys_its_keys_after_the_commit_and_its_files_never_read_again(rich, vault, owner):
+    assert vault["mine"] and vault["theirs"]
+    assert all(verifies(vault, f) is None for f in vault["mine"] + vault["theirs"])
+    pp = request(rich)
+    plan, results = remove(rich, vault, pp)
+    name = f"vb-test-a-proj-{rich['p']}"
+    assert [(k.key_name, k.destroyed, k.was_present) for k in results] == [(name, True, True)]
+    assert results[0].proof_object_name in vault["mine"]
+    assert not list((vault["root"] / "keys").glob(f"{name}@*"))                         # gone, every version
+    assert all(verifies(vault, f) == "key: unavailable" for f in vault["mine"])
+    assert all(verifies(vault, f) is None for f in vault["theirs"])                     # another project untouched
+    assert vault["store"].exists(f"test-a/purged/{rich['p']}")                          # the tombstone
+    assert run(owner, "SELECT destroyed_at IS NOT NULL AND was_present AND destroyed_by_purge_id = :pp "
+                      "AND proof_object_name IS NOT NULL FROM project_purge_key WHERE project_purge_id = :pp",
+               pp=pp)[0]
+    ev = run(owner, "SELECT project_id, detail FROM audit_event WHERE event_type = 'PURGE_KEYS_DESTROYED'")
+    assert ev[0] is None and [(k["key_name"], k["was_present"]) for k in ev[1]["keys"]] == [(name, True)]
+
+
+@pytest.mark.parametrize("case", ["unapproved", "young", "wrong code", "fault part-way", "archive kind"])
+def test_a_refused_or_failed_removal_touches_no_key_and_no_file(rich, vault, owner, monkeypatch, case):
+    """Ren 2026-10-22: never before the approval and 24-hour conditions; a failed run leaves keys and files intact."""
+    pp = request(rich, kind="ARCHIVE" if case == "archive kind" else "DELETE", approve=case != "unapproved",
+                 hours=23.98 if case == "young" else 25)
+    if case == "fault part-way":
+        real, calls = purge_run._delete, []
+
+        def failing(c, step, preds, p):
+            calls.append(step)
+            if len(calls) == 12:
+                raise RuntimeError("forced failure part-way")
+            return real(c, step, preds, p)
+        monkeypatch.setattr(purge_run, "_delete", failing)
+    before = vault_state(vault)
+    with pytest.raises((purge_run.Refused, RuntimeError)):
+        remove(rich, vault, pp, typed="KAITO/CSR2" if case == "wrong code" else None)
+    assert vault_state(vault) == before
+    assert all(verifies(vault, f) is None for f in vault["mine"])
+    assert run(owner, "SELECT count(*) FROM project_purge_key")[0] == 0
+
+
+def test_keys_are_destroyed_only_for_a_delete_that_was_carried_out(rich, vault, owner):
+    pp = request(rich)
+    before = vault_state(vault)
+    with pytest.raises(purge_run.Refused, match="has been carried out"):
+        purge_run.destroy_keys(owner, pp, rich["a2_email"], vault["store"], vault["keys"])
+    with pytest.raises(purge_run.Refused, match="owner role"):
+        purge_run.destroy_keys(app_engine, pp, rich["a2_email"], vault["store"], vault["keys"])
+    assert vault_state(vault) == before
+
+
+def test_a_key_that_fails_to_go_stays_outstanding_and_a_second_run_finishes(rich, vault, owner, monkeypatch):
+    pp = request(rich)
+    real = vault["keys"].destroy
+    monkeypatch.setattr(vault["keys"], "destroy", lambda name: (_ for _ in ()).throw(OSError("vault unreachable")))
+    with pytest.raises(OSError):
+        remove(rich, vault, pp)
+    assert run(owner, "SELECT executed_at IS NOT NULL FROM project_purge WHERE project_purge_id = :pp", pp=pp)[0]
+    assert run(owner, "SELECT bool_and(destroyed_at IS NULL) FROM project_purge_key "
+                      "WHERE project_purge_id = :pp", pp=pp)[0]                       # outstanding, visible
+    assert vault["store"].exists(f"test-a/purged/{rich['p']}")                          # tombstone came first
+    monkeypatch.setattr(vault["keys"], "destroy", real)
+    results = purge_run.destroy_keys(owner, pp, rich["a2_email"], vault["store"], vault["keys"])
+    assert [k.destroyed for k in results] == [True]
+    assert all(verifies(vault, f) == "key: unavailable" for f in vault["mine"])
+
+
+def test_another_instances_key_is_never_destroyed(rich, vault, owner, monkeypatch):
+    """S2: a name outside this instance's prefix is reported for the operator and left alone."""
+    pp = request(rich)
+    real = purge_run._key_names
+    monkeypatch.setattr(purge_run, "_key_names",
+                        lambda c, p, i: {**real(c, p, i), f"vb-prod-proj-{p}": [f"vb-prod-proj-{p}@1"]})
+    other = vault["root"] / "keys" / f"vb-prod-proj-{rich['p']}@1"
+    other.write_bytes(os.urandom(32))
+    plan, results = remove(rich, vault, pp)
+    got = {k.key_name: k.destroyed for k in results}
+    assert got == {f"vb-prod-proj-{rich['p']}": False, f"vb-test-a-proj-{rich['p']}": True}
+    assert other.exists()
+    assert run(owner, "SELECT count(*) FROM project_purge_key WHERE destroyed_at IS NULL")[0] == 1
+    assert run(owner, "SELECT count(*) FROM audit_event WHERE event_type = 'PURGE_KEYS_DESTROYED'")[0] == 0
+
+
+def _solo_key(rich, vault):
+    return vault["root"] / "keys" / f"vb-test-a-proj-{rich['world']['p_solo']}@1"
+
+
+def test_an_archive_record_naming_another_projects_key_stops_the_removal(rich, vault, owner):
+    """sara H1: the app role can write an owed row's key_ref; a ref to another project's key stops the run before
+    anything is deleted, and that project's key survives."""
+    pp = request(rich)
+    solo = rich["world"]["p_solo"]
+    run(owner, "ALTER TABLE baseline_archive DISABLE TRIGGER trg_baseline_archive_guard; "
+               f"UPDATE baseline_archive SET key_ref = 'vb-test-a-proj-{solo}@1' WHERE baseline_id = "
+               f"(SELECT min(baseline_id) FROM baseline_archive WHERE project_id = {rich['p']}); "
+               "ALTER TABLE baseline_archive ENABLE TRIGGER trg_baseline_archive_guard")
+    before, files = snapshot(owner), vault_state(vault)
+    with pytest.raises(purge_run.Refused, match="another project's key"):
+        remove(rich, vault, pp)
+    assert snapshot(owner) == before and vault_state(vault) == files
+    assert _solo_key(rich, vault).exists()
+
+
+def test_only_this_projects_own_key_is_ever_destroyed(rich, vault, owner, monkeypatch):
+    """sara H1: even a recorded name of another project on this instance is reported, never destroyed."""
+    pp = request(rich)
+    solo = rich["world"]["p_solo"]
+    real = purge_run._key_names
+    monkeypatch.setattr(purge_run, "_key_names",
+                        lambda c, p, i: {**real(c, p, i), f"vb-test-a-proj-{solo}": [f"vb-test-a-proj-{solo}@1"]})
+    plan, results = remove(rich, vault, pp)
+    assert {k.key_name: k.destroyed for k in results} == {f"vb-test-a-proj-{rich['p']}": True,
+                                                          f"vb-test-a-proj-{solo}": False}
+    assert _solo_key(rich, vault).exists()
+    assert all(verifies(vault, f) is None for f in vault["theirs"])
+
+
+def test_a_host_whose_instance_id_differs_from_the_stamp_destroys_nothing(rich, vault, owner, monkeypatch):
+    """sara H2: a restored copy still stamped as another environment never runs a removal or touches a key."""
+    from config import get_settings
+    pp = request(rich)
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "other")
+    before, files = snapshot(owner), vault_state(vault)
+    with pytest.raises(purge_run.Refused, match="stamped"):
+        remove(rich, vault, pp)
+    assert snapshot(owner) == before and vault_state(vault) == files
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")
+    remove(rich, vault, pp)                                                             # the removal itself, then
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "other")
+    with pytest.raises(purge_run.Refused, match="stamped"):                             # a later key run checks too
+        purge_run.destroy_keys(owner, pp, rich["a2_email"], vault["store"], vault["keys"])
+
+
+def test_a_key_that_still_decrypts_stops_the_run_and_stays_outstanding(rich, vault, owner, monkeypatch):
+    """sara M2: the safety stop — a vault that says "destroyed" but still decrypts — is never recorded as destroyed."""
+    pp = request(rich)
+    monkeypatch.setattr(vault["keys"], "destroy", lambda name: True)                    # lies: removes nothing
+    with pytest.raises(purge_run.Refused, match="still decrypts"):
+        remove(rich, vault, pp)
+    assert run(owner, "SELECT bool_and(destroyed_at IS NULL) FROM project_purge_key "
+                      "WHERE project_purge_id = :pp", pp=pp)[0]
+    assert run(owner, "SELECT count(*) FROM audit_event WHERE event_type = 'PURGE_KEYS_DESTROYED'")[0] == 0
+    assert all(verifies(vault, f) is None for f in vault["mine"])

@@ -1,9 +1,9 @@
 """Where archive files and project keys live (slice16 spec §7, schema §6; §15a storage consequence; §17 R14, R16).
 
 Two small interfaces, so the writer runs unchanged on a local folder now and on Blob Storage + Key Vault with D-35:
-- ArchiveStore.put_once / get / exists — write-once by rights: create and read, never overwrite. Only the
+- ArchiveStore.put_once / get / exists / names — write-once by rights: create and read, never overwrite. Only the
   DELETE_ARCHIVE job deletes, and it is not here.
-- ProjectKeys.wrap / unwrap — one key per project per instance, named `vb-<instance>-proj-<project_id>` (ids only),
+- ProjectKeys.wrap / unwrap / destroy — one key per project per instance, named `vb-<instance>-proj-<project_id>` (ids only),
   created if absent and never replaced; every ref is versioned (`<name>@<version>`), so two writers racing on a
   first freeze end up under the same recorded version (criterion 18). Key material never enters the database.
 
@@ -78,6 +78,14 @@ class LocalStore:
     def exists(self, name: str) -> bool:
         return self._path(name).exists()
 
+    def names(self, prefix: str) -> list[str]:
+        """Every stored name under `<instance>/<project_id>/` (the purge's proof that a destroyed key reads nothing)."""
+        folder = self.root / prefix.rstrip("/")
+        if not folder.is_dir():
+            return []
+        return sorted(f"{prefix.rstrip('/')}/{p.name}" for p in folder.iterdir()
+                      if p.is_file() and not p.name.startswith(".tmp-"))
+
 
 class LocalKeys:
     def __init__(self, root: str | Path):
@@ -116,6 +124,18 @@ class LocalKeys:
 
     def unwrap(self, ref: str, wrapped: bytes) -> bytes:
         return aes_key_unwrap(self._key(ref), wrapped)
+
+    def destroy(self, name: str) -> bool:
+        """Remove every version of one project key (Key Vault: delete, then purge — Q-71). Only the owner-run purge
+        calls this, after its commit. Returns whether any version was there."""
+        if not REF.match(f"{name}@1"):
+            raise ValueError("not a key name")
+        found = self._versions(name)
+        for v in found:
+            (self.root / f"{name}@{v}").unlink()
+        if found:
+            _fsync_dir(self.root)
+        return bool(found)
 
 
 def from_settings(settings) -> tuple[LocalStore, LocalKeys] | None:
