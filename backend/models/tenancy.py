@@ -56,10 +56,13 @@ class Project(AuditMixin, Base):
     project_name: Mapped[str] = mapped_column(String(200), nullable=False)
     start_date: Mapped[date | None] = mapped_column(Date)
     end_date: Mapped[date | None] = mapped_column(Date)
-    status_code_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("code_master.code_id", use_alter=True, name="fk_project_status"),
-        nullable=False,
-    )
+    status_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # slice 16 (Q-89 b, 0071): the status's open / closed meaning, carried by fk_project_status, so the database holds
+    # closed_on to it without naming a code (law 5). Both set by services.project only.
+    status_category: Mapped[str] = mapped_column(String(40), Computed("'PROJECT_STATUS'", persisted=True))
+    status_behaviour: Mapped[str] = mapped_column(String(20), nullable=False)
+    # AR-8 (Q-87): the day (ICT) the status became a closed one — the start of the two-year archive clock.
+    closed_on: Mapped[date | None] = mapped_column(Date)
     # D-39: KEYS_ONLY or FULL. Read only through services.components.depth().
     data_model_depth: Mapped[str] = mapped_column(String(10), nullable=False, server_default="FULL")
     # OR-6: visible only to admins and live project_member rows. Read per request.
@@ -88,6 +91,11 @@ class Project(AuditMixin, Base):
         CheckConstraint("end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
                         name="ck_project_dates"),
         CheckConstraint("data_model_depth IN ('KEYS_ONLY', 'FULL')", name="ck_project_depth"),
+        ForeignKeyConstraint(["status_code_id", "status_category", "status_behaviour"],
+                             ["code_master.code_id", "code_master.category", "code_master.behaviour_code"],
+                             name="fk_project_status", onupdate="NO ACTION", use_alter=True),
+        CheckConstraint("(status_behaviour = 'CLOSED') = (closed_on IS NOT NULL)", name="ck_project_closed_on"),
+        Index("ix_project_closed_on", "closed_on", postgresql_where=text("closed_on IS NOT NULL")),
     )
 
     def owning_project_id(self) -> int:

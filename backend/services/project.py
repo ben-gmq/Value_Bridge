@@ -81,6 +81,7 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     p = Project(client_id=client_id, program_id=program_id,
                 project_code=project_code.strip().upper(), project_name=project_name.strip(),
                 start_date=start_date, end_date=end_date, status_code_id=status.code_id,
+                status_behaviour=status.behaviour_code,                 # slice 16: PLANNING is open (0070)
                 data_model_depth=data_model_depth, is_restricted=is_restricted,
                 created_by=actor.app_user_id)
     db.add(p)
