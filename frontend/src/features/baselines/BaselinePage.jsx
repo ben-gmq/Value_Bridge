@@ -95,6 +95,8 @@ export default function BaselinePage() {
   const [toast, setToast] = useState('');
   const q = useQuery({ queryKey: keys.baseline(baselineId), queryFn: () => baselineApi.get(baselineId) });
   const b = q.data;
+  const files = useQuery({ queryKey: keys.baselineArchive(baselineId), queryFn: () => baselineApi.archive(baselineId),
+    enabled: Boolean(b) });                               // slice 16: the archive files this baseline owes
   const entities = b ? Object.entries(b.counts) : [];
   const [entity, setEntity] = useState('bfc_node');
   return (
@@ -123,6 +125,14 @@ export default function BaselinePage() {
               <KV k={t('baselines.view.frozen')} v={t('baselines.frozenOn', { date: fmtDateTime(b.frozen_at), who: b.frozen_by ?? '' })} />
               {b.note && <KV k={t('baselines.view.note')} v={<Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>{b.note}</Box>} />}
               <KV k={t('baselines.view.depth')} v={t(`baselines.view.depth.${b.data_model_depth}`)} />
+              {(files.data ?? []).length > 0 && (
+                <KV k={t('removals.archive.label')} v={(
+                  <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap' }}>
+                    {files.data.map((f) => (
+                      <Tag key={f.archive_part} tone={{ WRITTEN: 'teal', OWED: 'neutral' }[f.status] ?? 'escalate'}>
+                        {`${t(`removals.archive.${f.archive_part}`)} · ${t(`removals.archive.${f.status}`)}`}</Tag>))}
+                  </Stack>)} />
+              )}
               {/* D-70 [Q-19]: the DFD rule each chart passed; a baseline frozen before 13b carries none — the D-38 rule */}
               {['TO_BE', 'AS_IS'].map((set) => {
                 const codes = set === 'TO_BE' ? b.dfd_rule_to_be : b.dfd_rule_as_is;

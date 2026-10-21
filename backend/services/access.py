@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import AppUser, Program, ProgramMember, Project, ProjectMember
+from models import AppUser, Program, ProgramMember, Project, ProjectMember, ProjectPurge
 
 LEVEL_RANK = {"VIEW": 1, "EDIT": 2, "ADMIN": 3, "PLATFORM": 4}
 KIND_BASE = {"USER": "EDIT", "VIEWER": "VIEW"}       # what staff get on an open project (D-40)
@@ -174,10 +174,33 @@ def require_project(db: Session, user: AppUser, project_id: int, min_level: str,
         # left out: some of them take the row FOR UPDATE themselves.
         db.execute(select(Project.project_id).where(Project.project_id == project_id)
                    .with_for_update(read=True, key_share=True))          # FOR KEY SHARE
+    if min_level != "VIEW":                              # slice 16 Q-73, R17: every write, platform settings included
+        require_not_pending(db, project_id)
     if component and rank_ok(min_level, "EDIT"):         # writes only, admins too (Q-20)
         from services import components
         components.require_on(db, project_id, component)
     return eff
+
+
+PENDING_HEADERS = {"X-VB-Error": "PURGE_PENDING"}
+
+
+def pending_project_ids(db: Session) -> set[int]:
+    """Every project with an open ARCHIVE or DELETE request — for the writes that reach many projects at once."""
+    return set(db.scalars(select(ProjectPurge.project_id).where(
+        ProjectPurge.purge_kind.in_(("ARCHIVE", "DELETE")), ProjectPurge.executed_at.is_(None),
+        ProjectPurge.cancelled_at.is_(None))))
+
+
+def require_not_pending(db: Session, project_id: int) -> None:
+    """Slice 16 (Q-73): while a request to remove this project is open, every write to it is refused (409
+    PURGE_PENDING), so the archive file and the purge see a project that no longer changes. Reads still work. Called by
+    require_project for every write level, and by the services behind platform-only writes that reach a project."""
+    if db.scalar(select(ProjectPurge.project_purge_id).where(
+            ProjectPurge.project_id == project_id, ProjectPurge.purge_kind.in_(("ARCHIVE", "DELETE")),
+            ProjectPurge.executed_at.is_(None), ProjectPurge.cancelled_at.is_(None)).limit(1)) is not None:
+        raise HTTPException(409, "A request to remove this project is open: it cannot be changed until the request "
+                                 "is cancelled", headers=PENDING_HEADERS)
 
 
 def visible_program_ids(db: Session, user: AppUser) -> set[int] | None:

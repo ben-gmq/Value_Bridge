@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { CodeListsView } from '../settings/CodeListsPage';
+import { RemovalsTab } from './RemovalsTab';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -321,7 +322,7 @@ function CompanyCodeLists() {
 }
 
 const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
-  ['admin.codeLists', CompanyCodeLists]];
+  ['admin.codeLists', CompanyCodeLists], ['removals.tab', RemovalsTab]];
 
 export default function AdminPage() {
   const [tab, setTab] = useState(0);

@@ -509,3 +509,7 @@ place.
 - **2026-10-21 · slice 17 design review (design-auditor D4, LOW):** "kept forever, no DELETE" does not cover
   `TRUNCATE` — an owner `TRUNCATE app_user CASCADE` empties `project_purge`, `project_purge_key` and (slice 17)
   `platform_admin_grant`; add a statement-level `BEFORE TRUNCATE` refusal outside test databases.
+- **2026-10-21 · slice 16 request screens (`sara`; H1 fixed — a company FR type waits while a removal is open; M2,
+  L1–L10 fixed):** (M1) the one-off operator backfills that loop over every project (`br_lines.py:136`,
+  `components.py:422`, `effort.py:76`, `dfd_rule.py:191`) do not skip a project with an open removal request — skip
+  `access.pending_project_ids()` and print the skipped codes.

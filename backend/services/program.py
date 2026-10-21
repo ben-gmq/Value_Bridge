@@ -88,6 +88,7 @@ def move_project_program(db: Session, actor: AppUser, project_id: int,
     p = db.get(Project, project_id)
     if p is None or not p.is_active:
         raise HTTPException(404, "Not found")
+    access.require_not_pending(db, project_id)              # slice 16 R17: a platform write the guard does not see
     if expected_from_program_id is not None and p.program_id != expected_from_program_id:
         raise HTTPException(404, "Not found")              # M1 — not in THIS program
     t = db.get(Program, target_program_id) if target_program_id else None

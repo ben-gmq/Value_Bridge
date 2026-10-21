@@ -19,7 +19,8 @@ PLATFORM_ROUTES = {("PUT", "/api/v1/projects/{project_id}/components"),
                    ("PUT", "/api/v1/projects/{project_id}/fte-basis"),
                    ("POST", "/api/v1/projects/{project_id}/dfd-rule/preview"),
                    ("PUT", "/api/v1/projects/{project_id}/dfd-rule"),
-                   ("PUT", "/api/v1/projects/{project_id}/restriction")}
+                   ("PUT", "/api/v1/projects/{project_id}/restriction"),
+                   ("POST", "/api/v1/projects/{project_id}/purge-requests")}       # slice 16 (spec §9)
 ADMIN_ROUTES = {("GET", "/api/v1/projects/{project_id}/access"),
                 ("GET", "/api/v1/projects/{project_id}/members"),
                 ("GET", "/api/v1/projects/{project_id}/member-candidates"),

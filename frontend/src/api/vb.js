@@ -18,6 +18,13 @@ export const api = {
   clients: () => d(http.get('/api/v1/clients')),
   createClient: (body) => d(http.post('/api/v1/clients', body)),
 
+  // slice 16: removal requests (execution is the operator's job, never a route)
+  purgeRequests: () => d(http.get('/api/v1/purge-requests')),
+  archiveOverview: () => d(http.get('/api/v1/admin/archive-overview')),
+  requestPurge: (projectId, body) => d(http.post(`/api/v1/projects/${projectId}/purge-requests`, body)),
+  requestArchiveDeletion: (archiveId, body) => d(http.post(`/api/v1/purge-requests/${archiveId}/delete-archive`, body)),
+  approvePurge: (id, body) => d(http.post(`/api/v1/purge-requests/${id}/approve`, body)),
+  cancelPurge: (id, body) => d(http.post(`/api/v1/purge-requests/${id}/cancel`, body)),
   projects: () => d(http.get('/api/v1/projects')),
   project: (id) => d(http.get(`/api/v1/projects/${id}`)),
   createProject: (body) => d(http.post('/api/v1/projects', body)),
