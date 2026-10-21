@@ -54,7 +54,7 @@ function Confirm({ action, onClose, onConfirm, busy, error }) {
       <Stack spacing={2}>
         {needsReason && (
           <TextField id="removal-reason" label={t('removals.new.reason')} value={reason} multiline minRows={2}
-            onChange={(e) => setReason(e.target.value)} inputProps={{ maxLength: 2000 }} />
+            onChange={(e) => setReason(e.target.value)} slotProps={{ htmlInput: { maxLength: 2000 } }} />
         )}
         {needsCodes && (
           <TextField id="removal-confirm" label={t('removals.confirm.label', { expected: action.expected })}
@@ -98,24 +98,28 @@ export function RemovalsTab({ notify }) {
     expected: `${p.client_code ?? clientCode(p.client_id)}/${p.project_code}` });
 
   const admins = overview.data?.live_platform_admins;
+  // ui-verifier check 8: the actions sit beside the state, and names wrap rather than truncate (who asked and who
+  // approved is the point of four eyes); rows grow to fit.
+  const twoLines = (v, who) => (v ? (
+    <Box sx={{ py: 1, lineHeight: 1.4, whiteSpace: 'normal' }}>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>{who}</Typography>
+      <Typography variant="caption">{when(v)}</Typography>
+    </Box>) : null);
   const columns = [
-    { field: 'purge_kind', headerName: t('removals.col.kind'), width: 150,
+    { field: 'purge_kind', headerName: t('removals.col.kind'), width: 120,
       valueGetter: (v) => t(`removals.kind.${v}`) },
-    { field: 'project_code', headerName: t('removals.col.project'), width: 160,
+    { field: 'project_code', headerName: t('removals.col.project'), width: 130,
       valueGetter: (v, r) => `${r.client_code}/${v}` },
-    { field: 'state', headerName: t('removals.col.state'), width: 250,
+    { field: 'state', headerName: t('removals.col.state'), flex: 1, minWidth: 190,
       renderCell: ({ row: r }) => (
-        <Status size="sm" tone={TONE[r.state]}>
-          {r.waiting ? t('removals.state.WAITING', { at: when(r.runnable_from) }) : t(`removals.state.${r.state}`)}
-        </Status>) },
-    { field: 'requested_at', headerName: t('removals.col.requested'), width: 220,
-      valueGetter: (v, r) => t('removals.by', { when: when(v), who: r.requested_by }) },
-    { field: 'approved_at', headerName: t('removals.col.approved'), width: 220,
-      valueGetter: (v, r) => (v ? t('removals.by', { when: when(v), who: r.approved_by }) : '') },
-    { field: 'reason', headerName: t('removals.col.reason'), flex: 1, minWidth: 200 },
-    { field: 'actions', headerName: '', width: 280, sortable: false,
+        <Box sx={{ py: 1, whiteSpace: 'normal' }}>
+          <Status size="sm" tone={TONE[r.state]} sx={{ whiteSpace: 'normal', height: 'auto', py: 0.5 }}>
+            {r.waiting ? t('removals.state.WAITING', { at: when(r.runnable_from) }) : t(`removals.state.${r.state}`)}
+          </Status>
+        </Box>) },
+    { field: 'actions', headerName: '', width: 205, sortable: false,
       renderCell: ({ row: r }) => (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', height: '100%', flexWrap: 'wrap', py: 1 }}>
           {r.state === 'OPEN' && r.requested_by_user_id !== myId && (
             <Button size="small" variant="contained" onClick={() => open('approve', r)}>{t('removals.approve')}</Button>
           )}
@@ -127,6 +131,12 @@ export function RemovalsTab({ notify }) {
               {t('removals.deleteArchive')}</Button>
           )}
         </Stack>) },
+    { field: 'requested_at', headerName: t('removals.col.requested'), width: 170,
+      renderCell: ({ row: r }) => twoLines(r.requested_at, r.requested_by) },
+    { field: 'approved_at', headerName: t('removals.col.approved'), width: 170,
+      renderCell: ({ row: r }) => twoLines(r.approved_at, r.approved_by) },
+    { field: 'reason', headerName: t('removals.col.reason'), flex: 1, minWidth: 110,
+      renderCell: ({ value }) => <Box sx={{ py: 1, whiteSpace: 'normal' }}>{value}</Box> },
   ];
 
   return (
@@ -177,7 +187,7 @@ export function RemovalsTab({ notify }) {
           {t('removals.new.submit')}</Button>
       </Card>
       <Card title={t('removals.list.title')} bodySx={{ px: 0, pb: 0, pt: 0.5 }}>
-        <DataGrid autoHeight rows={rows.data ?? []} columns={columns} getRowId={(r) => r.project_purge_id}
+        <DataGrid autoHeight getRowHeight={() => 'auto'} sx={{ '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center' } }} rows={rows.data ?? []} columns={columns} getRowId={(r) => r.project_purge_id}
           loading={rows.isLoading} disableRowSelectionOnClick hideFooter={(rows.data ?? []).length <= 25}
           localeText={{ noRowsLabel: t('removals.list.none') }} />
       </Card>
