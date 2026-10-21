@@ -488,7 +488,7 @@ place.
   `baseline_archive` were a shadow; it is not (column UPDATE, `fn_baseline_archive_guard`) — a one-line carve-out in
   both, Ben's to approve. (L1) a written row's `row_version` may be set lower. (L2) an owed row may be written and
   marked check-failed in one UPDATE.
-  (M2 done 2026-10-21: `tests/test_migration_0068_0069.py`.)
+  (M2 done 2026-10-21: `tests/test_migration_0068_0069.py`. M3 done 2026-10-21: Ben's AR-14, law 2 and design §6.6.)
 - **2026-10-21 · slice 16 step 2, archive writer + `vb_instance` (`sara`; H1 fixed — the backlog script checks the
   instance; M1, M2, L1, L2, L4 fixed):** (L3) `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` may point inside the repo and
   `.gitignore` has no archive entry — `archive_store.from_settings` should refuse a folder under the repo root.
