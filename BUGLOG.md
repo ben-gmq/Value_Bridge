@@ -31,6 +31,8 @@ place.
 - **Fix:** split the settings — the web server loads only `DATABASE_URL` (vb_app); alembic and the owner scripts read
   `MIGRATION_DATABASE_URL` themselves. Before the first non-local deploy (Azure, D-35).
 - **Severity:** HIGH, not reachable today (local only, no real data).
+- **Ben, 2026-10-21:** accepted until the first non-local deploy; stays HIGH and is a **hard blocker** for that deploy
+  (history, slice 17 rulings; design §15.2).
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 

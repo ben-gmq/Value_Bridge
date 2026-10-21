@@ -4715,9 +4715,12 @@ one optional wall per project:
   not, at level `PLATFORM`, plus the platform-only functions (users, clients, creating projects and
   programs, moving a project between programs, restriction, components, data-model depth, FTE basis, the
   DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
-  rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**; until that is
-  built, a four-eyes approval is refused when the approver's grant was made by the requester or is under 30
-  days old — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
+  rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**: one admin requests,
+  another approves, and neither may have requested or approved the other's own grant (AR-18); an account the
+  requester created qualifies only once its owner has set their own password (AR-21). The first two admins come from
+  the owner-run command line, recorded; after that only requests, or an owner-run recorded LEGACY grant (AR-16,
+  AR-19). Removing admin rights is one admin's action (AR-17). A purge approval additionally needs the approver's
+  grant to be at least 30 days old (AR-20) — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
@@ -7688,9 +7691,15 @@ target is confirmed.
   day does not cold-start. HTTPS ingress only. uvicorn runs with `--proxy-headers
   --forwarded-allow-ips=<ingress range>` so audit rows record the caller's address, not the
   proxy's (sara L11).
-- **First admin**: first-run setup is switched off in every Azure environment
-  (`ALLOW_FIRST_RUN_SETUP=false`); the first platform admin is created with
-  `python -m seeds.create_admin`, run by Ben as a one-off Container Apps Job (sara H1).
+- **First admins**: first-run setup is switched off in every Azure environment
+  (`ALLOW_FIRST_RUN_SETUP=false`); the first two platform admins are created with
+  `python -m seeds.create_admin` as the owner, run as a one-off Container Apps Job by the Fortience IS department and
+  recorded with who ran it (sara H1, AR-16, AR-22). Every later admin comes through a request another admin approves.
+- **Who holds production server access**: the **Fortience IS department** — the owner role, the operator jobs (migrations,
+  purge, LEGACY grants) and the database admin. Platform admins hold none of it (AR-22), so no single platform admin can
+  both approve inside the app and act on the database.
+- **The web server never loads the owner login** (VB-011, a hard blocker for the first non-local deploy): the API's
+  settings carry only `vb_app`; migrations and operator jobs read `MIGRATION_DATABASE_URL` in their own job.
 - **Database**: Azure Database for PostgreSQL Flexible Server (PostgreSQL 16), **private
   access only** — VNet-integrated, no public endpoint. The Container Apps environment sits
   in the same VNet.
@@ -7702,7 +7711,7 @@ target is confirmed.
   - `JWT_SECRET_KEY` lives in **Key Vault**. The Container App reads it through a Key Vault
     reference, with its managed identity holding only *Key Vault Secrets User*. It is never
     in plain app settings and never in the repo. The app refuses to start without it (§9.1).
-  - The Flexible Server admin account is break-glass only, held by Ben.
+  - The Flexible Server admin account is break-glass only, held by the Fortience IS department (AR-22).
 - **Database grants** (§6.6, R2-S9): `vb_app` has SELECT / INSERT / UPDATE, and DELETE only
   on `diagram_layout` and `import_row`. It has no UPDATE on `baseline_*`, `audit_event` or
   `decision`, a column-level UPDATE on `baseline` and `import_batch`, and no INSERT or UPDATE on

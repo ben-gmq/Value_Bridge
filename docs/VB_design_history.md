@@ -16,10 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **2026-10-21 · slice 17, platform-admin grant approval (AR-13 b):** Q-95…Q-104 in
-  `docs/slice17_admin_grant_spec.md` §15–§16 (the second admin's bootstrap, removal, what "independent" means, the
-  owner's LEGACY path, whether the 30-day rule outlives two-person grants, who holds production server access, where
-  the weekly admin check is read). Each has a recommendation; none is decided.
+Nothing open (2026-10-21: Q-95…Q-104 answered, AR-16…AR-23).
 
 
 ---
@@ -541,6 +538,22 @@ slice 16 build.
 | AR-14 | **`baseline_archive` is not a shadow.** It carries its own write-once guard and a column-level UPDATE for the writer and the weekly check; law 2's "no UPDATE on any `baseline_*` table" reads "on any shadow" (sara M3 on the slice 16 build) | design §6.6, CLAUDE.md law 2 |
 | AR-15 | **[AR-13 (a), interim] The first admin's creation counts as their platform-admin grant** (`FIRST_ADMIN_CREATED`, `ADMIN_CREATED_BY_CLI`), so after 30 days the setup admin may approve a request someone else raised; an admin with no grant on record at all still cannot approve | slice16_spec §20 AR-13 ("a grant with no audit row counts as under 30 days") |
 | — | **Migrations 0074 (scoped purge bypass) and 0075 (audit purge trigger) wait** until Ben has seen 0072–0073 running in the request screens | — |
+
+### Ben's rulings, 2026-10-21 — platform-admin grant approval (slice 17, Q-95…Q-104)
+
+Ben, via Ren, 2026-10-21: *"Follow her recommendations"*; on Q-103: *"it will be our Fortience IS department"*.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-16 | **[Q-95, Q-99] The first two admins come from the operator's command line, run by the owner and recorded with who ran it; once a second admin has ever existed, every admin comes through a request.** Dropping back to one admin does not reopen the command line: an owner-run, recorded LEGACY grant (reason, operator, never backdated outside a test or demo database) is the way back | slice17 spec §15, §16 P1, P4 |
+| AR-17 | **[Q-96] Removing admin rights stays a one-admin action** — the safe direction | — |
+| AR-18 | **[Q-97, Q-102] An approver is independent of the requester only if neither requested or approved the other's platform-admin grant** — both directions | AR-13 (a)'s "made by the requester" |
+| AR-19 | **[Q-98] The owner's LEGACY grant is recorded, carries a reason and the operator, and is never reachable by the app** | — |
+| AR-20 | **[Q-100] The 30-day rule stays for purge approvals only**; approving a new admin needs four eyes and AR-18, not 30 days | AR-13 (a) for grants |
+| AR-21 | **[Q-101] An admin may request admin rights for an account they created only after its owner has logged in and set their own password** | — |
+| AR-22 | **[Q-103] Production server access (the owner role, the operator jobs, the database admin) is held by the Fortience IS department, not by the platform admins.** The bootstrap and LEGACY paths therefore need someone other than a platform admin | design §15.2 ("run by Ben"), slice17 §16 S2 |
+| AR-23 | **[Q-104] The weekly admin check is read on the `/admin` page** (a card with slice 16's "last run" warning) **and in the operator's run log** | — |
+| — | **VB-011 accepted until the first non-local deploy**, tracked HIGH and a hard blocker for that deploy: the web server must not load the owner login | BUGLOG VB-011 |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
