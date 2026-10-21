@@ -4716,10 +4716,11 @@ one optional wall per project:
   programs, moving a project between programs, restriction, components, data-model depth, FTE basis, the
   DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
   rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**: one admin requests,
-  another approves, and neither may have requested or approved the other's own grant (AR-18); an account the
-  requester created qualifies only once its owner has set their own password (AR-21). The first two admins come from
-  the owner-run command line, recorded; after that only requests, or an owner-run recorded LEGACY grant (AR-16,
-  AR-19). Removing admin rights is one admin's action (AR-17). A purge approval additionally needs the approver's
+  another approves, and neither may have requested or approved the other's own grant (AR-18). Whoever created an
+  account counts as having made that admin: they may neither request nor approve its rights, and never pair with it
+  on any approval (AR-24). The first two admins come from the owner-run command line, recorded; after that only
+  requests, or an owner-run recorded LEGACY grant naming the admin who asked (AR-16, AR-19) — a fresh install's third
+  admin is one such grant by Fortience IS (AR-25). Removing admin rights is one admin's action (AR-17). A purge approval additionally needs the approver's
   grant to be at least 30 days old (AR-20) — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.

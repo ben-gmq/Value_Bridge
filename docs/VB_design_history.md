@@ -16,9 +16,12 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **2026-10-21 · slice 17 (after design review round 2):** Q-105 (a fresh install's third admin), Q-106 (a self-service
-  password change) and Q-107 (closing the creator's sock-puppet route, which makes Q-106's route unnecessary) in
-  `docs/slice17_admin_grant_spec.md` §17–§18. Recommendations given; none decided. (Q-95…Q-104 answered, AR-16…AR-23.)
+- **2026-10-22 · slice 17 schema rev 3 (apple):** Q-108 — which demo / UAT database names may backdate a LEGACY grant
+  (rev 3 recommends whole-name suffix patterns `vb_[token_]test_db[_gw<n>]` and `vb_[token_]uat_db` /
+  `vb_[token_]demo_db`; a UAT database named otherwise, e.g. `vb_uat_2026`, would lose backdating). Q-109 — the
+  `app_user` guard also refuses an app-made account that does not name a live platform admin as its creator, and makes
+  `created_by` unchangeable: a tightening of AR-24 (it is what keeps the creator rule from being edited away).
+  Recommendation: yes to both. `docs/slice17_admin_grant_schema.md` rev 3 §3.2, §4.
 
 
 ---
@@ -556,6 +559,18 @@ Ben, via Ren, 2026-10-21: *"Follow her recommendations"*; on Q-103: *"it will be
 | AR-22 | **[Q-103] Production server access (the owner role, the operator jobs, the database admin) is held by the Fortience IS department, not by the platform admins.** The bootstrap and LEGACY paths therefore need someone other than a platform admin | design §15.2 ("run by Ben"), slice17 §16 S2 |
 | AR-23 | **[Q-104] The weekly admin check is read on the `/admin` page** (a card with slice 16's "last run" warning) **and in the operator's run log** | — |
 | — | **VB-011 accepted until the first non-local deploy**, tracked HIGH and a hard blocker for that deploy: the web server must not load the owner login | BUGLOG VB-011 |
+
+**Same day, Q-105…Q-107.** Ben, via Ren: *"okay go do 1 and 3"* (1 = the slice 17 questions, answered by following
+Lilly's recommendations). Ren, 2026-10-22, on dropping a migration: *"OK to build, provided (a) no control in the spec
+Ben approved is weakened … (b) whatever the dropped migration used to enforce is enforced elsewhere (in the database,
+not only the app) and tested; (c) the migrations that change database guards are built and tested but NOT applied
+anywhere except your own throwaway database without Ben's click."*
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-24 | **[Q-107 a] Whoever created an account counts as having made that admin**: they may neither request nor approve its admin rights, and the creator is a maker in both independence checks, so a creator never pairs with an account they made, directly or through another admin. No self-service password route in slice 17 (Q-106 → b) | AR-21 |
+| AR-25 | **[Q-105 a] A fresh install's third admin is one recorded Fortience IS LEGACY grant naming the admin who asked** | — |
+| — | Slice 17 builds **three migrations (0076–0078)**, not four: the "owner set their own password" column is not needed under AR-24; schema rev 3 | slice17 schema rev 2 §8 |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 

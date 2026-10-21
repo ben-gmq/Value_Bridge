@@ -1,4 +1,4 @@
-# Slice 17 — Platform-admin grant approval (spec, questions answered 2026-10-21 — AR-16…AR-23; for Ben's OK after design review round 2)
+# Slice 17 — Platform-admin grant approval (spec, APPROVED by Ben 2026-10-21 — AR-16…AR-23, Q-105 a, Q-107 a; schema rev 3)
 
 **Source of truth:** `docs/VB_design.md` §9.10 access model ("Making someone a platform admin needs a second platform
 admin's approval (AR-13)"), §6.6; history AR-13 (Q-93 b), AR-15. Plan row "Platform-admin grant approval" in
@@ -116,8 +116,8 @@ button hidden for the requester and the target (presentation only; the guards re
 4. **AR-18, both directions:** an approver whose latest grant the requester requested or approved is refused, **and**
    an approver who requested or approved the requester's latest grant is refused. A grant approval needs no 30 days
    (AR-20): an independent approver granted yesterday may approve.
-5. **AR-20 for purges (slice 16 re-pointed, 0078):** a purge approval additionally needs the approver's latest grant to
-   be at least 30 days old; the purge guard reads `fn_admin_purge_independent`, never `audit_event`; 0078's copy of the
+5. **AR-20 for purges (slice 16 re-pointed, 0077):** a purge approval additionally needs the approver's latest grant to
+   be at least 30 days old; the purge guard reads `fn_admin_purge_independent`, never `audit_event`; 0077's copy of the
    purge guard equals the body at its parent revision (a test diffs it, N6 b).
 6. Reject (with a reason) and cancel close the request; a closed request never changes; the user can be requested
    again afterwards.
@@ -160,7 +160,7 @@ One migration per commit, reversible (apple's list) · `sara` before the commit 
 and the route-guard tests updated · strings via `t()` · independence is answered only by the database functions over
 `platform_admin_grant` — `fn_admin_grant_independent` (grant approvals) and `fn_admin_purge_independent` (purge
 approvals, + 30 days) — the guards and `access.grant_independent` call them, never re-implement them (§16 P3) ·
-run 0077 on a copy as the deploy will and confirm its NOTICEs reach the console (N3) ·
+run 0076 on a copy as the deploy will and confirm its NOTICEs reach the console (N3) ·
 full suite before merge · CLAUDE.md "Slice 17 deploy" line if the bootstrap rule changes an operator step.
 
 ## 15. Questions for Ben
@@ -230,7 +230,7 @@ everything above it.
 | **AR-17 (Q-96)** | Removal unchanged: one admin, a reason, the existing preview |
 | **AR-18 (Q-97, Q-102)** | `fn_admin_grant_independent(approver, requester)` is symmetric: false if the requester requested or approved the approver's latest grant, **or** the approver requested or approved the requester's latest grant |
 | **AR-19 (Q-98)** | LEGACY rows: owner only, reason and operator required, `approved_at` the database's time except on a test or demo database (§16 P4) |
-| **AR-20 (Q-100)** | Two checks, one function each: **grant approval** = four eyes + AR-18 (no 30 days); **purge approval** = four eyes + AR-18 + the approver's latest grant ≥ 30 days old. Migration 0078 re-points slice 16's purge guard to the purge check |
+| **AR-20 (Q-100)** | Two checks, one function each: **grant approval** = four eyes + AR-18 (no 30 days); **purge approval** = four eyes + AR-18 + the approver's latest grant ≥ 30 days old. Migration 0077 re-points slice 16's purge guard to the purge check |
 | **AR-21 (Q-101)** | A request is refused while the target's account was created by the requester and its owner has not yet logged in and set their own password — needs a "password set by its owner" fact on `app_user` (apple, schema) |
 | **AR-22 (Q-103)** | Production server access (owner role, operator jobs, database admin) is the Fortience IS department's, not a platform admin's (design §15.2). The bootstrap and LEGACY scripts are IS jobs |
 | **AR-23 (Q-104)** | The admin lines of the weekly check (§16 P2) appear on the `/admin` Removals tab beside slice 16's "last run" card, and in the operator's run log |
@@ -272,3 +272,12 @@ structural one goes to Ben.
   can come with the Azure sign-in work.
 - Q-105 stands: **recommend (a)**, a fresh install's third admin is one recorded IS LEGACY grant naming the admin who
   asked.
+
+## 19. Ben's answers to Q-105 and Q-107 (2026-10-21, "go do 1") and schema rev 3 — the current design
+Q-105 (a) and Q-107 (a), as recommended; Q-106 is therefore (b), no password route. Schema rev 3 (apple, 2026-10-22)
+drops the `password_set_by_owner_at` column and its migration: **three migrations, 0076–0078, all pausing for Ben**
+(Ren's OK 2026-10-22: no control weakened; what the dropped migration enforced is enforced in the database). The creator
+rule (AR-21) is enforced by the grant guard (request, LEGACY and approval refused for the account's creator), by both
+independence functions (the creator is a maker) and by the `app_user` guard (`created_by` never changes; an app-made
+account names a live admin). Schema rev 3 §"Rev 3 changes" maps each criterion of §10 to the database object that
+enforces it; §8 is the migration list. Two questions from rev 3 are with Ben (history §1).
