@@ -261,3 +261,29 @@ class ProjectPurge(Base):
         Index("uq_pp_archive_deleted", "archive_purge_id", unique=True,
               postgresql_where=text("executed_at IS NOT NULL")),
     )
+
+
+class ProjectPurgeKey(Base):
+    """One project key name recorded by a removal, and its destruction (slice16 schema §3.3, §12.6; 0073). Names and
+    versions only — never key material. A DELETE destroys its own keys; an ARCHIVE's are destroyed only by a later
+    DELETE_ARCHIVE. Written by the owner-run purge job alone; the app reads it."""
+    __tablename__ = "project_purge_key"
+
+    project_purge_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("project_purge.project_purge_id"),
+                                                  primary_key=True)
+    key_name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    key_refs: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
+    destroyed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    was_present: Mapped[bool | None] = mapped_column(Boolean)
+    destroyed_by_purge_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("project_purge.project_purge_id"))
+    proof_object_name: Mapped[str | None] = mapped_column(String(400))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+    __table_args__ = (
+        CheckConstraint("num_nonnulls(destroyed_at, was_present, destroyed_by_purge_id) IN (0, 3)",
+                        name="ck_ppk_destroyed"),
+        CheckConstraint("proof_object_name IS NULL OR destroyed_at IS NOT NULL", name="ck_ppk_proof"),
+        CheckConstraint("key_name ~ '^vb-[a-z0-9][a-z0-9-]{2,39}-proj-[0-9]+$'", name="ck_ppk_key_name"),
+    )
