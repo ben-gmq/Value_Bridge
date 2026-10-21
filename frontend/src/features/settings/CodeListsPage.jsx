@@ -17,7 +17,7 @@ import { SettingsCrumbs } from './settingsKit';
 // The behaviour vocabularies (code_master CHECKs, D-27, I-1): a new FR or RACI type or issue status needs one.
 const BEHAVIOURS = { FR_TYPE: ['FORM', 'INTERFACE', 'REPORT', 'BATCH', 'OTHER'],
   RACI_TYPE: ['RESPONSIBLE', 'ACCOUNTABLE', 'CONSULTED', 'INFORMED', 'SUPPORT', 'OTHER'],
-  ISSUE_STATUS: ['OPEN', 'CLOSED'] };
+  ISSUE_STATUS: ['OPEN', 'CLOSED'], PROJECT_STATUS: ['OPEN', 'CLOSED'] };
 
 // One add / rename dialog: a new code (with behaviour for FR and RACI types), or a new wording for an existing one.
 function CodeDialog({ open, title, hint, category, withCode, initial, onSubmit, onClose }) {

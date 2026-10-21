@@ -13,8 +13,9 @@ RETIRED_CATEGORIES = ("FLOW_TYPE", "PROJECT_ROLE")
 
 # (category, is_system, [(code, label) or (code, label, behaviour)])
 LIBRARY: list[tuple[str, bool, list[tuple]]] = [
-    ("PROJECT_STATUS", False, [("PLANNING", "Planning"), ("ACTIVE", "Active"),
-                               ("ON_HOLD", "On hold"), ("CLOSED", "Closed")]),
+    # slice 16 (Q-89 b, AR-10, migration 0070): a closed status starts the two-year archive clock
+    ("PROJECT_STATUS", False, [("PLANNING", "Planning", "OPEN"), ("ACTIVE", "Active", "OPEN"),
+                               ("ON_HOLD", "On hold", "OPEN"), ("CLOSED", "Closed", "CLOSED")]),
     ("RACI_TYPE", False, [("R", "Responsible", "RESPONSIBLE"), ("A", "Accountable", "ACCOUNTABLE"),
                           ("C", "Consulted", "CONSULTED"), ("I", "Informed", "INFORMED")]),
     ("FR_TYPE", False, [("FORM", "Form", "FORM"), ("INTERFACE", "Interface", "INTERFACE"),

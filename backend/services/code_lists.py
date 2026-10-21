@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import AppUser, CodeMaster, EffortRate, Project, ProjectCodeVisibility
-from models.shared import FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, RACI_BEHAVIOURS
+from models.shared import FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, PROJECT_STATUS_BEHAVIOURS, RACI_BEHAVIOURS
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
 from services import audit
 from services.code_master import resolve
@@ -40,7 +40,7 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
 )
 # §7.2, G-2, I-1: never overridden or hidden per project
 COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS", "PHASE_STATUS"})   # + W-4
-BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS"})
+BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS", "PROJECT_STATUS"})   # + Q-89 b
 CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 
 # R12: code columns the re-point never reaches, each with its reason. A code FK in neither this list nor the
@@ -91,7 +91,7 @@ def _behaviour(category: str, behaviour: str | None) -> str | None:
     if category in BEHAVIOUR_CATEGORIES and not behaviour:
         raise HTTPException(422, f"A {category} code needs a behaviour")
     allowed = {"FR_TYPE": FR_BEHAVIOURS, "RACI_TYPE": RACI_BEHAVIOURS,
-               "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS}.get(category)
+               "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS, "PROJECT_STATUS": PROJECT_STATUS_BEHAVIOURS}.get(category)
     if allowed and behaviour not in allowed:                        # sara 1g L7: a clear 422, not the CHECK's
         raise HTTPException(422, f"Behaviour must be one of {', '.join(allowed)}")
     if category not in BEHAVIOUR_CATEGORIES and behaviour:
