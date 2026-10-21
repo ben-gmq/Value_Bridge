@@ -177,6 +177,10 @@ def clean():
     yield
     with owner_engine().begin() as c:
         dirty = _dirty_tables(c)
+        if "vb_instance" in dirty:                           # slice 16 S9: a test stamped it; its guard refuses DELETE
+            dirty.discard("vb_instance")
+            c.execute(text("ALTER TABLE vb_instance DISABLE TRIGGER trg_vb_instance_guard; DELETE FROM vb_instance; "
+                           "ALTER TABLE vb_instance ENABLE TRIGGER trg_vb_instance_guard"))
         if not dirty:
             return
         frozen = {t for t in dirty if t == "audit_event" or t == "baseline" or t.startswith("baseline_")}

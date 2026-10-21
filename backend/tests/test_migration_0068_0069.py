@@ -1,9 +1,12 @@
 """Migration 0068 on real data (slice16 schema §3.1 / §12.3, Q-77; sara M2): the backfill owes one SCOPE file per
 existing baseline, authored by its freezer, and one SIGNOFF file per approved one, authored by its approver; the
-downgrade refuses once any file is written, and a clean downgrade and re-upgrade owes exactly the same files."""
+downgrade refuses once any file is written, and a clean downgrade and re-upgrade owes exactly the same files.
+Migration 0069 (vb_instance): its downgrade refuses once the database is stamped."""
 import pytest
 from alembic import command
 
+from scripts.stamp_instance import stamp
+from tests.conftest import OWNER_URL
 from tests.test_baseline import approve, bid, freeze, scope
 from tests.test_migration_0053 import _cfg, owner, q, x  # noqa: F401 — owner is a fixture
 from tests.test_scope_api import ed  # noqa: F401 — ed is a fixture
@@ -35,3 +38,11 @@ def test_a_written_file_refuses_the_downgrade(client, ed, owner):
     with pytest.raises(Exception, match="downgrade refused"):
         command.downgrade(_cfg(), "0067")
     assert q(owner, "SELECT count(*) FROM baseline_archive WHERE written_at IS NOT NULL")[0][0] == 1
+
+
+def test_a_stamped_database_refuses_the_0069_downgrade(owner):
+    """0069: the restore identity is never dropped with a stamp on it."""
+    stamp(OWNER_URL, "test-a", restamp=False)
+    with pytest.raises(Exception, match="stamped: downgrade refused"):
+        command.downgrade(_cfg(), "0068")
+    assert q(owner, "SELECT instance_id FROM vb_instance") == [("test-a",)]

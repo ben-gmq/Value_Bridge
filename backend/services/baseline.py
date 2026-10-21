@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import SessionLocal
 from models import AppUser, Baseline, BaselineArchive, BusinessRequirement, Project, Stakeholder
-from services import access, audit, components, dfd_rule, freeze_set
+from services import access, archive, audit, components, dfd_rule, freeze_set
 from services.code_master import resolve
 from services.consistency import FREEZE_BLOCKING_WARNINGS, INFORMATIONAL, WARNINGS, consistency_check
 from services.freeze_set import BY_TABLE, CURRENT_HASH_SPEC, FREEZE_SET
@@ -120,13 +120,14 @@ def freeze(user: AppUser, project_id: int, note: str | None, bump: str, confirm_
         try:
             out = _freeze(tx, user, project_id, note, bump, confirm_text, preview_digest)
             tx.commit()
-            return out
         except (IntegrityError, OperationalError) as exc:
             tx.rollback()
             # sara L1: only a concurrent freeze (unique) or a concurrent edit (serialization, deadlock) is "again"
             if getattr(exc.orig, "sqlstate", None) in ("23505", "40001", "40P01"):
                 raise HTTPException(409, RETRY) from exc
             raise
+    archive.write_soon(out["baseline"]["baseline_id"])  # slice 16: after the commit, best effort (criterion 4)
+    return out
 
 
 def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confirm_text: str,
@@ -266,6 +267,7 @@ def approve(db: Session, user: AppUser, b: Baseline, approver: str, approved_on:
                  detail={"version_label": b.version_label, "client_approver_name": approver,
                          "client_approved_on": approved_on.isoformat(), "reference": b.approval_reference})
     db.commit()
+    archive.write_soon(b.baseline_id)                   # slice 16: after the commit, best effort (criterion 4)
     db.refresh(b)
     return header(db, b)
 

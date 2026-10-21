@@ -31,6 +31,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   before their next freeze, or their next diff counts four added rate rows.
   **Slice 15 deploy:** `seed_code_master` stops while any project still holds its own wave status (a project-tier
   PHASE_STATUS row or hide, now company-only — W-4); clear those with Ben, then re-run it.
+  **Slice 16 deploy (every database, once):** after `upgrade head`, `scripts.stamp_instance <id>` (owner) and the same
+  id as `VB_INSTANCE_ID` in `.env`, or the server refuses to start; `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` point
+  outside the repo (unset = files stay owed); then `scripts.write_archives` writes the backlog (Q-77).
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·

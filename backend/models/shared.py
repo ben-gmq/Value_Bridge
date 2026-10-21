@@ -1,7 +1,9 @@
-"""Shared (§5.3): CODE_MASTER (two-tier, with behaviour) and PROJECT_SEQUENCE."""
+"""Shared (§5.3): CODE_MASTER (two-tier, with behaviour), PROJECT_SEQUENCE and VB_INSTANCE (slice 16)."""
+from datetime import datetime
+
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, ForeignKey, Identity, Index, Integer, String,
-    UniqueConstraint,
+    ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, String, Text,
+    UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,8 +11,7 @@ from models.base import AuditMixin, Base
 
 FR_BEHAVIOURS = ("FORM", "INTERFACE", "REPORT", "BATCH", "OTHER")
 RACI_BEHAVIOURS = ("RESPONSIBLE", "ACCOUNTABLE", "CONSULTED", "INFORMED", "SUPPORT", "OTHER")
-ISSUE_STATUS_BEHAVIOURS = ("OPEN", "CLOSED")          # slice14 §15 N1–N2, I-1 (migration 0061)
-SEQUENCE_CODES = ("DE", "BR", "FR", "ISSUE", "SOL", "BEN", "RSK", "CR", "DEC", "EXT")
+ISSUE_STATUS_BEHAVIOURS = ("OPEN", "CLOSED")          # slice14 §15 N1–N2, I-1 (migration 0061)SEQUENCE_CODES = ("DE", "BR", "FR", "ISSUE", "SOL", "BEN", "RSK", "CR", "DEC", "EXT")
 
 
 def _in(values: tuple[str, ...]) -> str:
@@ -47,8 +48,7 @@ class CodeMaster(AuditMixin, Base):
         CheckConstraint(f"category <> 'RACI_TYPE' OR behaviour_code IN ({_in(RACI_BEHAVIOURS)})",
                         name="ck_code_raci_behaviour"),
         CheckConstraint(f"category <> 'ISSUE_STATUS' OR behaviour_code IN ({_in(ISSUE_STATUS_BEHAVIOURS)})",
-                        name="ck_code_issue_status_behaviour"),
-        # Composite-FK target: category is in it because both vocabularies share OTHER (§5.3).
+                        name="ck_code_issue_status_behaviour"),        # Composite-FK target: category is in it because both vocabularies share OTHER (§5.3).
         UniqueConstraint("code_id", "category", "behaviour_code", name="uq_code_behaviour_target"),
         UniqueConstraint("code_id", "category", name="uq_code_category_target"),
     )
@@ -91,4 +91,22 @@ class ProjectSequence(Base):
 
     __table_args__ = (
         CheckConstraint(f"sequence_code IN ({_in(SEQUENCE_CODES)})", name="ck_sequence_code"),
+    )
+
+
+class VbInstance(Base):
+    """This database's archive identity (slice16 schema §3.4, §12.7; 0069): one row, stamped by the owner-run
+    scripts.stamp_instance, read by the app. Every archive file and key name starts with `instance_id`; a re-stamp
+    keeps the old ids in `prior_instance_ids`, whose tombstones still count (§18 S6). Not a business table."""
+
+    __tablename__ = "vb_instance"
+
+    one_row: Mapped[bool] = mapped_column(Boolean, primary_key=True, server_default="true")
+    instance_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_instance_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
+    stamped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("one_row", name="ck_vi_one_row"),
+        CheckConstraint("instance_id ~ '^[a-z0-9][a-z0-9-]{2,39}$'", name="ck_vi_instance_id"),
     )

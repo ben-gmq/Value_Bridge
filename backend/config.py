@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # Cloud environments create the first admin with `python -m seeds.create_admin`.
     allow_first_run_setup: bool = False
     enable_api_docs: bool = False          # M9: /docs, /redoc, /openapi.json off by default
+    # slice 16 (schema §3.4): must equal the vb_instance row stamped in the database; the server refuses to start
+    # otherwise (services/instance.check_startup). Archive files and keys live outside the repo, never in it.
+    vb_instance_id: str | None = None
+    vb_archive_dir: str | None = None       # write-once archive files (services/archive_store.LocalStore)
+    vb_archive_key_dir: str | None = None   # one key file per project and version (LocalKeys); never committed
 
     @property
     def email_domains(self) -> set[str]:
