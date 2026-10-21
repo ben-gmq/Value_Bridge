@@ -16,7 +16,9 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open (2026-10-21: Q-95…Q-104 answered, AR-16…AR-23).
+- **2026-10-21 · slice 17 (after design review round 2):** Q-105 (a fresh install's third admin), Q-106 (a self-service
+  password change) and Q-107 (closing the creator's sock-puppet route, which makes Q-106's route unnecessary) in
+  `docs/slice17_admin_grant_spec.md` §17–§18. Recommendations given; none decided. (Q-95…Q-104 answered, AR-16…AR-23.)
 
 
 ---

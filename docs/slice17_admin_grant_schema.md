@@ -1,51 +1,51 @@
-# Slice 17 — Platform-admin grant approval: logical + physical schema (apple, 2026-10-21)
+# Slice 17 — Platform-admin grant approval: logical + physical schema (apple, rev 2, 2026-10-21)
 
-**Status: DRAFT for Ben**, written against `docs/slice17_admin_grant_spec.md` (BR grid §4, functions §7, criteria §10).
-Q-95…Q-97 are modelled as recommended; §7 says what each other answer would change. Source of truth: VB_design.md §9.10,
-§6.6; history AR-13, AR-15; migration 0072 (`fn_project_purge_guard`); slice 16 schema §3.2 / §12.5 (the request-record
-pattern followed here: named actor pairs instead of `AuditMixin`, state derived from dates, guard for every role).
+**Status: for design review round 2**, against `docs/slice17_admin_grant_spec.md` §16 (round 1 "Fix now" rows) and §17
+(AR-16…AR-23, which win). Source of truth: VB_design.md §9.10, §6.6; history AR-13, AR-15, AR-16…AR-23; migration 0072
+(`fn_project_purge_guard`); slice 16 schema §3.2 (named actor pairs instead of `AuditMixin`, state from dates).
 
-**Checked before modelling.** `app_user` (`models/identity.py`) has `TimestampMixin`, `is_active`, `is_platform_admin`
-and no guard; vb_app can UPDATE every column. Three code paths make an admin today: `user_admin.set_platform_admin`
-(UPDATE, audit `PLATFORM_ADMIN_GRANTED`, actor = the one granter), `auth_service.first_run_setup` (INSERT, only with no
-user, `FIRST_ADMIN_CREATED`) and `seeds.create_admin` (INSERT, no limit, `ADMIN_CREATED_BY_CLI`). 0072's AR-13 (a)
-check reads the approver's latest of those three audit events. **That read is forgeable:** vb_app may INSERT
-`audit_event` with any `occurred_at` and any `detail` (BUGLOG VB-005, 2026-10-21 own note), so the app can write an
-aged grant row. Reading the requester from audit `detail` (the brief's option) would add a second forgeable field.
-**This design moves AR-13 onto the grant record**, whose times the database sets — see §5.
+**Checked before modelling.** `app_user` (`models/identity.py`) has `created_by`, `last_login_at`, `is_active`,
+`is_platform_admin`, no guard; vb_app can UPDATE every column. Admins are made today by `user_admin.set_platform_admin`
+(UPDATE), `auth_service.first_run_setup` (INSERT, empty table) and `seeds.create_admin` (INSERT, app URL, no limit).
+0072 reads AR-13 from `audit_event`, which vb_app can write with any time and detail (VB-005) — **this design moves
+AR-13 onto the grant record, whose times the database sets.** **There is no self-service password change in VB**
+(`routers/auth.py` has login, setup, me; every password is set by `create_user`, `first_run_setup`, `create_admin` or
+`seed_demo`) — AR-21 consequence in §5.
 
-**Risk grade: Grade 1** — the riskiest concern is the `app_user` guard: a gap lets one person make an admin who sees
-every client's data and can approve a purge.
+**Risk grade: Grade 1** — riskiest concern: the `app_user` guard (a gap lets one person make an admin who sees every
+client's data and can approve a purge).
 
 ## 1. Grain
 
 | Table | One row per … | Key | Notes |
 |---|---|---|---|
-| `platform_admin_grant` *(new)* | **way one user was made, or asked to be made, a platform admin**: a REQUEST (open → approved / rejected / cancelled), a BOOTSTRAP (Q-95 path, recorded by the database) or a LEGACY grant (an admin made before slice 17, backfilled once) | PK `platform_admin_grant_id`; ≤ 1 open REQUEST per `target_user_id` | kept forever; no DELETE for any role |
-| `app_user` *(guard added, no column)* | FTC staff member who can log in — unchanged | PK `app_user_id` | `is_platform_admin` stays the current state; the grant table records how it became true |
+| `platform_admin_grant` *(new)* | **way one user was made, or asked to be made, a platform admin**: REQUEST (open → approved / rejected / cancelled), BOOTSTRAP (AR-16, the first two) or LEGACY (owner-run, AR-19; or backfilled by 0077) | PK `platform_admin_grant_id`; ≤ 1 open REQUEST per target | kept forever; no DELETE for any role |
+| `app_user` *(one column, a guard)* | FTC staff member who can log in — unchanged | PK `app_user_id` | `is_platform_admin` stays the current state; the grant table records how it became true |
 
-**Why wider than the spec's "one row per request" (§3).** AR-13 needs *every* admin's grant time and grantors from a
-source the app cannot backdate. Requests alone cover only admins made after slice 17; bootstrap and pre-17 admins would
-still be read from `audit_event`, which is forgeable. Recording all three origins in one table gives AR-13 a single,
-database-dated source (§5). The origins share the same attributes, so a second table would only add a UNION.
+Wider than "one row per request" because AR-13/AR-18 need *every* admin's grant from a source the app cannot backdate.
 
 ## 2. ER diagram (changed part only)
 
 ```mermaid
 erDiagram
     APP_USER ||--o{ PLATFORM_ADMIN_GRANT : "is the target of"
-    APP_USER |o--o{ PLATFORM_ADMIN_GRANT : "requests (not BOOTSTRAP)"
+    APP_USER |o--o{ PLATFORM_ADMIN_GRANT : "requests"
     APP_USER |o--o{ PLATFORM_ADMIN_GRANT : "approves / rejects / cancels"
-    PLATFORM_ADMIN_GRANT }o..|| PROJECT_PURGE : "approver's latest grant read by AR-13 (a)"
+    AUDIT_EVENT |o..o| PLATFORM_ADMIN_GRANT : "source of a 0077 backfill row"
+    PLATFORM_ADMIN_GRANT }o..o{ PROJECT_PURGE : "read by fn_admin_purge_independent"
     PLATFORM_ADMIN_GRANT {
         bigint platform_admin_grant_id PK
         varchar grant_origin "REQUEST, BOOTSTRAP, LEGACY"
         bigint target_user_id FK
         text reason
+        varchar operator_name "who ran it: BOOTSTRAP by owner, LEGACY"
+        bigint source_audit_event_id FK "0077 backfill only"
+        timestamptz recorded_at "database time, always"
         timestamptz requested_at
-        bigint requested_by_user_id FK "NULL only for BOOTSTRAP"
-        timestamptz approved_at "set by the database"
+        bigint requested_by_user_id FK
+        timestamptz approved_at
         bigint approved_by_user_id FK "REQUEST only"
+        xid8 approved_xact "set by the database"
         timestamptz rejected_at
         bigint rejected_by_user_id FK
         text rejection_reason
@@ -54,8 +54,10 @@ erDiagram
     }
     APP_USER {
         bigint app_user_id PK
+        bigint created_by FK
         boolean is_active
         boolean is_platform_admin "false to true guarded"
+        timestamptz password_set_by_owner_at "new, AR-21"
     }
 ```
 
@@ -64,178 +66,229 @@ erDiagram
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `platform_admin_grant_id` | bigint identity | PK | |
-| `grant_origin` | varchar(10) | NOT NULL; `ck_pag_origin CHECK (grant_origin IN ('REQUEST','BOOTSTRAP','LEGACY'))`; never changes | **a CHECK list, not `code_master`** — the guard branches on it (law 5's purpose, the `purge_kind` precedent). Labels via `t()` |
+| `grant_origin` | varchar(10) | NOT NULL; `ck_pag_origin IN ('REQUEST','BOOTSTRAP','LEGACY')`; never changes | a CHECK list, not `code_master`: the guard branches on it (law 5's purpose, the `purge_kind` precedent). Labels via `t()` |
 | `target_user_id` | bigint | NOT NULL, FK `app_user` | the user made (or to be made) an admin |
-| `reason` | text | NOT NULL, `ck_pag_reason CHECK (btrim(reason) <> '')` | the requester's reason; BOOTSTRAP gets a fixed text from the trigger; LEGACY the audit `detail->>'rationale'`, else a fixed text |
-| `requested_at` | timestamptz | NOT NULL | REQUEST / BOOTSTRAP: forced `:= statement_timestamp()` on INSERT. LEGACY: the audit event's time, owner-written |
-| `requested_by_user_id` | bigint | FK `app_user`; `ck_pag_requester CHECK ((grant_origin = 'BOOTSTRAP') = (requested_by_user_id IS NULL))` | REQUEST: the proposing admin (from the token, law 6). LEGACY: the one person who granted it. BOOTSTRAP: nobody |
-| `approved_at`, `approved_by_user_id` | timestamptz, bigint | FK `app_user`; `ck_pag_approved` below | REQUEST: the second admin; the guard **forces** `approved_at := statement_timestamp()`. BOOTSTRAP / LEGACY: `approved_at = requested_at`, no approver |
-| `rejected_at`, `rejected_by_user_id`, `rejection_reason` | timestamptz, bigint, text | FK `app_user`; `num_nonnulls(…) IN (0,3)`; `btrim(rejection_reason) <> ''` | REQUEST only |
-| `cancelled_at`, `cancelled_by_user_id` | timestamptz, bigint | FK `app_user`; `num_nonnulls(…) IN (0,2)` | REQUEST only |
-| `updated_at`, `updated_by`, `row_version` | | as `audit_columns()` minus `is_active`/`deleted_*`/`created_*`; `updated_at_trigger` | optimistic lock for approve / reject / cancel |
+| `reason` | text | NOT NULL, not blank | REQUEST: the requester's; LEGACY: the operator's (AR-19); BOOTSTRAP: fixed text from the trigger; backfill: audit `detail->>'rationale'`, else fixed text |
+| `operator_name` | varchar(200) | `ck_pag_operator`: NULL for REQUEST, NOT NULL for LEGACY | **who ran it** (AR-16, AR-19): the IS operator (AR-22) — not an app user, so text, not an FK. BOOTSTRAP: set when run by the owner; NULL only for `first_run_setup`. Backfill: `'migration 0077'` |
+| `source_audit_event_id` | bigint | FK `audit_event`; set only by the 0077 backfill (guard refuses it elsewhere) | the event the backfill trusted (D2) |
+| `recorded_at` | timestamptz | NOT NULL; forced `:= statement_timestamp()` on INSERT | when the row was written — the weekly check's "after 0077" and backdating test (§6) |
+| `requested_at` | timestamptz | NOT NULL | REQUEST / BOOTSTRAP: forced `:= statement_timestamp()`. LEGACY: forced too, **except on a test/demo database** (§3.2). Backfill: the audit time |
+| `requested_by_user_id` | bigint | FK `app_user`; `ck_pag_requester CHECK (grant_origin <> 'REQUEST' OR requested_by_user_id IS NOT NULL)` | REQUEST: the proposing admin (token, law 6). BOOTSTRAP: the live admin who asked (`--actor-email`), NULL for the first admin. LEGACY: the admin who asked, if any (`--actor-email`); backfill: the audit actor |
+| `approved_at`, `approved_by_user_id`, `approved_xact` | timestamptz, bigint FK, xid8 | `ck_pag_approved` | REQUEST: the second admin; the guard forces `approved_at := statement_timestamp()`, `approved_xact := pg_current_xact_id()` (D1). BOOTSTRAP / LEGACY: born approved, `approved_at = requested_at`, `approved_xact` stamped, no approver |
+| `rejected_at`, `rejected_by_user_id`, `rejection_reason` | timestamptz, bigint FK, text | `num_nonnulls IN (0,3)`; reason not blank | REQUEST only; time forced |
+| `cancelled_at`, `cancelled_by_user_id` | timestamptz, bigint FK | `num_nonnulls IN (0,2)` | REQUEST only; time forced |
+| `updated_at`, `updated_by`, `row_version` | | as `audit_columns()` minus `is_active`/`deleted_*`/`created_*` | optimistic lock for approve / reject / cancel |
 
-**Checks**
-- `ck_pag_approved CHECK ((grant_origin = 'REQUEST' AND num_nonnulls(approved_at, approved_by_user_id) IN (0,2)) OR (grant_origin <> 'REQUEST' AND approved_at IS NOT NULL AND approved_by_user_id IS NULL))`
-- `ck_pag_four_eyes CHECK (approved_by_user_id <> requested_by_user_id AND approved_by_user_id <> target_user_id AND requested_by_user_id <> target_user_id)` (NULLs pass; the guard covers BOOTSTRAP)
-- `ck_pag_reject_not_requester CHECK (rejected_by_user_id <> requested_by_user_id)`
-- `ck_pag_one_end CHECK (num_nonnulls(approved_at, rejected_at, cancelled_at) <= 1)`
-- `ck_pag_request_only CHECK (grant_origin = 'REQUEST' OR num_nonnulls(rejected_at, cancelled_at) = 0)`
+**Checks.** `ck_pag_approved`: `(grant_origin = 'REQUEST' AND num_nonnulls(approved_at, approved_by_user_id,
+approved_xact) IN (0,3)) OR (grant_origin <> 'REQUEST' AND approved_at IS NOT NULL AND approved_xact IS NOT NULL AND
+approved_by_user_id IS NULL)` · `ck_pag_four_eyes`: approver ≠ requester, approver ≠ target, requester ≠ target (NULLs
+pass) · `ck_pag_reject_not_requester` · `ck_pag_one_end`: at most one of approved / rejected / cancelled ·
+`ck_pag_request_only`: rejected / cancelled only on REQUEST · `ck_pag_source`: `source_audit_event_id IS NULL OR
+grant_origin <> 'REQUEST'`.
 
 **Indexes.** `uq_pag_open (target_user_id) WHERE approved_at IS NULL AND rejected_at IS NULL AND cancelled_at IS NULL`
-(one open request per user; BOOTSTRAP/LEGACY are born approved, so never open). `ix_pag_target_granted (target_user_id,
-approved_at DESC) WHERE approved_at IS NOT NULL` — the AR-13 lookup.
+· `ix_pag_target_granted (target_user_id, approved_at DESC) WHERE approved_at IS NOT NULL` (the "latest grant" lookup).
 
-**Guard `fn_platform_admin_grant_guard`** (BEFORE INSERT OR UPDATE OR DELETE, every role; `search_path` pinned):
-- **DELETE:** always refused — the record is kept forever.
-- **INSERT REQUEST (born open):** approved / rejected / cancelled all NULL; `requested_at := statement_timestamp()`;
-  requester a live platform admin; target `is_active AND NOT is_platform_admin`.
-- **INSERT BOOTSTRAP:** only when `pg_trigger_depth() > 1` (i.e. from `trg_app_user_bootstrap_grant`, §4 — a plain
-  statement from the app runs at depth 1), target is a platform admin, no earlier grant row for the target;
-  `requested_at := approved_at := statement_timestamp()`.
-- **INSERT LEGACY:** only `session_user = 'vb_owner'` (the 0076 backfill; §7 Q-98); `approved_at = requested_at <=
-  statement_timestamp()`.
-- **UPDATE, every row:** `platform_admin_grant_id, grant_origin, target_user_id, reason, requested_*` never change; a
-  row with any of `approved_at / rejected_at / cancelled_at` set never changes again (closed rows fixed) — so BOOTSTRAP
-  and LEGACY rows never change.
-- **Approve** (`approved_*` NULL → value, once): open; approver a live platform admin ≠ requester ≠ target (CHECK too);
-  requester still a live admin; target `is_active AND NOT is_platform_admin`;
-  `fn_admin_grant_independent(NEW.approved_by_user_id, OLD.requested_by_user_id)` (§5, Q-97);
-  **`approved_at := statement_timestamp()`** whatever was sent.
-- **Reject** (once): open; live admin ≠ requester; reason not blank; `rejected_at := statement_timestamp()`.
-- **Cancel** (once): open; any live admin; `cancelled_at := statement_timestamp()`.
+### 3.1 Guard `fn_platform_admin_grant_guard` (BEFORE INSERT OR UPDATE OR DELETE, every role; `search_path` pinned)
+- **DELETE:** always refused.
+- **Every INSERT:** `recorded_at := statement_timestamp()`; `source_audit_event_id` must be NULL (the backfill runs
+  before the trigger exists); target `is_active AND NOT is_platform_admin` (BOOTSTRAP: the flag is already true).
+- **REQUEST (born open):** decision columns all NULL; `requested_at := statement_timestamp()`; requester a live admin;
+  **AR-21:** refused when `target.created_by = requested_by_user_id AND target.password_set_by_owner_at IS NULL`.
+- **BOOTSTRAP:** only when `pg_trigger_depth() > 1` (from `trg_app_user_bootstrap_grant`, §4; an app statement runs at
+  depth 1); no earlier grant row for the target; times forced; `approved_xact := pg_current_xact_id()`.
+- **LEGACY (AR-19):** only `session_user = 'vb_owner'`; `reason` and `operator_name` required; `approved_xact :=
+  pg_current_xact_id()`; times per §3.2. A deferred check (below) requires the flag set by commit.
+- **UPDATE:** identity, origin, target, reason, operator, source, `recorded_at`, `requested_*` never change; a closed
+  row never changes again (so BOOTSTRAP / LEGACY rows never change).
+- **Approve** (once): open; approver a live admin, ≠ requester, ≠ target; requester still a live admin; target live and
+  not an admin; **`fn_admin_grant_independent(NEW.approved_by_user_id, OLD.requested_by_user_id)`** (AR-18, AR-20 — no
+  30 days); forces `approved_at := statement_timestamp()`, `approved_xact := pg_current_xact_id()`.
+- **Reject** (once): open; live admin ≠ requester; reason; time forced. **Cancel** (once): open; any live admin; time forced.
 
-**Deferred check `trg_pag_grant_effective`** (CONSTRAINT TRIGGER AFTER UPDATE, DEFERRABLE INITIALLY DEFERRED): when a
-REQUEST was approved by the row's change, at commit the target must be `is_platform_admin AND is_active` — approval and
-flag land together or not at all (spec §7 "same transaction", held by the database, not by the service's discipline).
+**Deferred `trg_pag_grant_effective`** (CONSTRAINT TRIGGER AFTER INSERT OR UPDATE, DEFERRABLE INITIALLY DEFERRED): a
+REQUEST approved, or a LEGACY row inserted, by this transaction requires the target `is_platform_admin AND is_active` at
+commit — record and flag land together or not at all.
 
-**Grants:** vb_app SELECT, INSERT, column UPDATE on `approved_at, approved_by_user_id, rejected_at, rejected_by_user_id,
-rejection_reason, cancelled_at, cancelled_by_user_id, updated_by, row_version`. No DELETE (§6.6 list and the CI grant
-test gain the table). State is **derived** (Q-67 precedent): open / approved / rejected / cancelled from the dates.
+**Grants:** vb_app SELECT, INSERT, and column UPDATE on `approved_by_user_id, rejected_by_user_id, rejection_reason,
+cancelled_by_user_id, updated_by, row_version` only — the times and `approved_xact` are the database's, so the app is
+not granted them (rev 1 granted the time columns; dropped). No DELETE; the §6.6 list and the CI grant test gain the table.
+
+### 3.2 When a LEGACY row may carry an earlier date (AR-19, S3)
+The guard keeps owner-supplied `requested_at` / `approved_at` (equal, `<= statement_timestamp()`) **only when
+`current_database() ~* '(test|uat|demo)'`**; anywhere else both are overwritten with `statement_timestamp()`, so a
+LEGACY admin waits 30 days for purges like anyone. The guard reads `current_database()` itself — the server's own name
+for the connected database, which no URL parameter or setting can change (the seed_demo rule, sara H1). Test databases
+are `vb_test_db*`; demo/UAT ones already must contain `uat` or `demo`. Production's name is IS's (AR-22); as a second
+line, the weekly check lists every LEGACY row whose `approved_at < recorded_at` (backdated) — on production that is
+always a finding.
+
+**The single fixture path (S3):** `seeds/owner_grant.py::legacy_grant(owner_conn, user_id, reason, operator,
+actor_id=None, days=0)` — one transaction as `vb_owner`: INSERT LEGACY, then `UPDATE app_user SET is_platform_admin =
+true`. `tests.conftest.make_admin(owner, uid, days=…)` is a thin wrapper over it; `seed_demo` uses it for any admin
+beyond its first (whose creation on the empty demo database is the ordinary bootstrap); the IS "way back" script (AR-16)
+is a CLI over the same function, with `--reason`, `--operator`, `--actor-email`. Every test that flips the flag by SQL
+moves to it, slice 16's `test_project_purge_record` included.
 
 ## 4. The guard on `app_user`
 
-**`fn_app_user_admin_guard`** — BEFORE INSERT OR UPDATE OF `is_platform_admin, is_active` ON `app_user`, every role:
+**`fn_app_user_admin_guard`** — BEFORE INSERT OR UPDATE OF `is_platform_admin, is_active, password_set_by_owner_at`:
 
 ```sql
 IF TG_OP = 'INSERT' THEN
-  IF NEW.is_platform_admin THEN                                     -- Q-95 (a): the bootstrap
-    PERFORM pg_advisory_xact_lock(hashtext('vb.platform_admin_bootstrap'));  -- two CLI runs cannot both pass
-    IF (SELECT count(*) FROM public.app_user WHERE is_active AND is_platform_admin) >= 2 THEN
-      RAISE EXCEPTION 'a new user is born an admin only while fewer than two live platform admins exist (Q-95)'
-        USING ERRCODE = 'restrict_violation';
+  IF NEW.is_platform_admin THEN
+    IF NOT NEW.is_active THEN RAISE ... 'an admin is born active' (D3); END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('vb.platform_admin_bootstrap'));
+    IF session_user = 'vb_owner' THEN                                     -- seeds.create_admin (AR-16)
+      IF (SELECT count(DISTINCT target_user_id) FROM public.platform_admin_grant
+           WHERE approved_at IS NOT NULL) >= 2 THEN
+        RAISE ... 'two admins have already been granted: every further admin comes through a request (AR-16)';
+      END IF;
+    ELSIF EXISTS (SELECT 1 FROM public.app_user) THEN                     -- first_run_setup: empty table only
+      RAISE ... 'a new user is born an admin only on an empty database, or by the owner (AR-16)';
     END IF;
   END IF;
+  NEW.password_set_by_owner_at := CASE WHEN NEW.password_set_by_owner_at IS NULL THEN NULL
+                                       ELSE statement_timestamp() END;   -- §5
   RETURN NEW;
 END IF;
 IF NEW.is_platform_admin AND (NOT OLD.is_platform_admin OR (NEW.is_active AND NOT OLD.is_active)) THEN
   IF NOT EXISTS (SELECT 1 FROM public.platform_admin_grant g
-                  WHERE g.target_user_id = NEW.app_user_id AND g.grant_origin = 'REQUEST'
-                    AND g.approved_at >= transaction_timestamp()) THEN
-    RAISE EXCEPTION 'admin rights come only from an approved request in the same transaction (AR-13)'
-      USING ERRCODE = 'restrict_violation';
+                  WHERE g.target_user_id = NEW.app_user_id
+                    AND g.approved_xact = pg_current_xact_id()          -- D1: this transaction, nothing older
+                    AND (g.grant_origin = 'REQUEST'
+                         OR (g.grant_origin = 'LEGACY' AND session_user = 'vb_owner'))) THEN
+    RAISE ... 'admin rights come only from a grant approved in this transaction (AR-13)';
   END IF;
 END IF;
+-- password_set_by_owner_at: NULL → value only, in the same UPDATE as a password_hash change, forced to statement time
 RETURN NEW;
 ```
 
-**`trg_app_user_bootstrap_grant`** (AFTER INSERT, `WHEN (NEW.is_platform_admin)`) inserts the BOOTSTRAP row, so
-`first_run_setup` and `seeds.create_admin` need no code change to be recorded (AR-15 kept: their creation is their
-grant). Removal (true → false) is not guarded — Q-96.
+Counting **ever-granted** admins (distinct targets of approved rows, any origin) means removing or deactivating admins
+never reopens the command line (AR-16 / Q-99); the 0077 backfill counts, so an existing database with two admins is
+closed from the start. vb_app's only INSERT branch is the empty table, so `create_admin` run as the app role fails.
 
-**How the trigger sees "approved in this transaction" — the choice.**
-- **Rejected: a transaction-local setting** (`set_config('vb.…', id, true)`). Any session may set any custom `vb.*`
-  setting, so vb_app could set it without approving anything. It proves only that someone *said* so.
-- **Rejected: `xmin = pg_current_xact_id()`.** A SQLAlchemy savepoint (`begin_nested`) stamps the subtransaction id, so
-  a legitimate approval inside a savepoint would be refused; and it ties the rule to an internal.
-- **Chosen: the row and the clock.** `approved_at` is forced to `statement_timestamp()`, which within a transaction is
-  always `>= transaction_timestamp()`; every approval committed before this transaction began is strictly earlier. So
-  `approved_at >= transaction_timestamp()` finds this transaction's approval and **can never replay an old one** (e.g.
-  re-flag an admin removed last month). The one residual: a transaction that started later, approved the same user
-  four-eyes and committed first is also visible — harmless, because that approval is genuine and its own deferred
-  check requires the flag anyway. The app cannot forge `approved_at` (the guard overwrites it).
-- **Build note:** the service must `db.flush()` the grant UPDATE **before** setting the flag — SQLAlchemy's unit of work
-  may otherwise flush `app_user` (the FK parent) first, and the guard would refuse.
-- Reactivation is covered: a deactivated admin set `is_active = true` with the flag still true is "becoming a live
-  admin" and is refused without an approval. Clear the flag in the same UPDATE, or request.
+**`trg_app_user_bootstrap_grant`** (AFTER INSERT `WHEN (NEW.is_platform_admin)`) inserts the BOOTSTRAP row. As
+`vb_owner` it reads two transaction-local settings the CLI sets: `vb.operator` (required → `operator_name`) and
+`vb.grant_actor_id` (the `--actor-email` user → `requested_by_user_id`; **required, and must be a live admin, whenever a
+live admin exists** — P1). For vb_app (`first_run_setup`) both are ignored and stay NULL. A setting is acceptable here
+only because it is read under `session_user = 'vb_owner'`, which vb_app cannot become; the owner gains nothing it lacks.
+`seeds.create_admin` moves to `MIGRATION_DATABASE_URL` and gains `--actor-email` and `--operator`, plus a friendly
+pre-check of the same count. Removal (true → false) is not guarded (AR-17).
 
-## 5. AR-13 (a) on the grant record — Q-97 (replaces 0072's audit lookup)
+**"Approved in this transaction" (D1).** `pg_current_xact_id()` returns the **top-level** transaction id (xid8, never
+reused), also inside a SQLAlchemy savepoint; the grant guard writes it, the app cannot. Equality means a transaction
+left open cannot replay an approval from another transaction, and an old approval can never re-flag a removed admin.
+Rejected alternatives: a `vb.*` setting from vb_app (anyone may set one), the clock rule of rev 1 (D1's replay), `xmin`
+(subtransaction ids). **Build note:** `db.flush()` the grant UPDATE before setting the flag.
 
-One function owns the rule; both guards and `services/access.independent_approver` (via `SELECT
-fn_admin_grant_independent(:approver, :requester)`, never re-coded in Python) call it:
+**Reactivation (D3, corrected).** A deactivated user still flagged admin cannot be reactivated with the flag on (no
+approval exists for them), and cannot be requested either (the target must not be an admin). The way back: clear the
+flag in the same UPDATE as the reactivation, then request.
+
+## 5. AR-21 — "the owner has set their own password"
+
+**New column `app_user.password_set_by_owner_at timestamptz NULL`**: when the account's owner last chose their own
+password. Set (forced to statement time by the guard) by `first_run_setup` (the person typed it) and by a self-service
+password change. NULL from `create_user`, `create_admin` (IS types it, AR-22) and `seed_demo`. Existing rows stay NULL —
+true: every existing password was set by someone else or by first-run setup, which the backfill leaves NULL (unknowable).
+
+**No self-service password change exists**, so today the column stays NULL for every account an admin creates, and
+AR-21 reads in practice as: **an admin can never request admin rights for an account they created; another admin must
+request it.** Smallest model change is this one column plus the REQUEST check in §3.1. Making it reachable needs a
+"change my password" route (`POST /auth/me/password`, current + new password) and a small screen — **a scope question
+for Ben**: build it in slice 17, or accept the stricter interim rule until it exists. Honest limit: vb_app can write the
+column (with a fresh hash), so AR-21 is app-trusted like `created_by` — it stops a careless admin, not a compromised app
+(that is VB-011's ground).
+
+## 6. Independence — AR-18 and AR-20 (two functions; replace 0072's audit lookup)
 
 ```sql
 CREATE FUNCTION fn_admin_grant_independent(p_approver bigint, p_requester bigint) RETURNS boolean
 LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
-  SELECT COALESCE((
-    SELECT g.approved_at <= statement_timestamp() - interval '30 days'
-       AND p_requester IS DISTINCT FROM g.requested_by_user_id   -- Q-97: whoever proposed the approver's grant
-       AND p_requester IS DISTINCT FROM g.approved_by_user_id    --        and whoever approved it
-      FROM public.platform_admin_grant g
-     WHERE g.target_user_id = p_approver AND g.approved_at IS NOT NULL
-     ORDER BY g.approved_at DESC, g.platform_admin_grant_id DESC LIMIT 1), false) $$;
+  WITH latest AS (SELECT DISTINCT ON (target_user_id) target_user_id, requested_by_user_id, approved_by_user_id
+                    FROM public.platform_admin_grant
+                   WHERE target_user_id IN (p_approver, p_requester) AND approved_at IS NOT NULL
+                   ORDER BY target_user_id, approved_at DESC, platform_admin_grant_id DESC)
+  SELECT count(*) = 2                                       -- both have a grant on record (AR-15)
+     AND bool_and(CASE WHEN target_user_id = p_approver
+                       THEN p_requester IS DISTINCT FROM requested_by_user_id
+                        AND p_requester IS DISTINCT FROM approved_by_user_id
+                       ELSE p_approver  IS DISTINCT FROM requested_by_user_id
+                        AND p_approver  IS DISTINCT FROM approved_by_user_id END)
+    FROM latest $$;
+
+CREATE FUNCTION fn_admin_purge_independent(p_approver bigint, p_requester bigint) RETURNS boolean
+LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
+  SELECT fn_admin_grant_independent(p_approver, p_requester)
+     AND (SELECT approved_at FROM public.platform_admin_grant
+           WHERE target_user_id = p_approver AND approved_at IS NOT NULL
+           ORDER BY approved_at DESC, platform_admin_grant_id DESC LIMIT 1)
+         <= statement_timestamp() - interval '30 days' $$;
 ```
 
-No grant on record → `false` (AR-15's "an admin with no grant on record cannot approve" holds). In
-`fn_project_purge_guard` the block from `SELECT e.app_user_id, e.occurred_at INTO grant_by, grant_at FROM audit_event`
-through its `RAISE` becomes `IF NOT fn_admin_grant_independent(NEW.approved_by_user_id, OLD.requested_by_user_id) THEN
-RAISE … (AR-13, Q-97)`; the rest of 0072's body is copied **verbatim** as a frozen literal (the `FROZEN_0054` pattern —
-the migration does not import 0072). `GRANT_EVENTS` stay written to `audit_event` for people; no guard reads them any
-more. The VB-005 note (force `audit_event.occurred_at`) stops mattering for AR-13 but is still worth doing for the log.
+Grant approval = four eyes (CHECK + guard) + `fn_admin_grant_independent`; purge approval = four eyes +
+`fn_admin_purge_independent` (AR-20). Python never re-codes either: `services/access.independent_grant_approver` and
+`independent_purge_approver` each `SELECT` its function (slice 16's `independent_approver` callers move to the purge
+one). **0078** replaces, in `fn_project_purge_guard`, the block from `SELECT e.app_user_id, e.occurred_at INTO grant_by,
+grant_at FROM audit_event` through its `RAISE` with `IF NOT fn_admin_purge_independent(NEW.approved_by_user_id,
+OLD.requested_by_user_id) THEN RAISE … (AR-13, AR-18, AR-20)`; the rest of 0072's body is copied verbatim as a frozen
+literal (the `FROZEN_0054` pattern). No guard reads `audit_event` any more.
 
-## 6. Migrations (from 0076 — 0074/0075 are slice 16's, paused for Ben)
+A requester with no grant on record (an admin the backfill skipped) makes both functions false — conservative, and the
+D2 NOTICE names every such admin so IS can record a LEGACY grant for them before 0078 bites.
 
-One change per migration, own commit, reversible; the model joins `models/__init__.py` (law 10). **No hash-spec
-change:** nothing enters `freeze_set`, no table is shadowed, `app_user` gains no column — confirmed.
+## 7. Weekly check (P2 / AR-23) — no new table
 
-| Id | Does | Downgrade guard | Ben sees |
+The admin lines read existing rows only, and ride on slice 16's run record and its "last run" card on the `/admin`
+Removals tab: open REQUESTs with `requested_at` > 7 days old · REQUESTs approved in the last 7 days · live admins
+(`is_active AND is_platform_admin`) below two · every BOOTSTRAP / LEGACY row with `source_audit_event_id IS NULL`
+recorded in the last 7 days (i.e. written after 0077), flagging `approved_at < recorded_at` · removals
+(`audit_event` `PLATFORM_ADMIN_REMOVED`, display only — removal is not on the grant record, AR-17) and admin
+deactivations (`app_user.deleted_at`, flag true) in the last 7 days. Confirmed: no table and no index needed (a small
+table; the scans are trivial).
+
+## 8. Migrations (from 0076 — 0074 / 0075 stay slice 16's)
+
+One change per migration, own commit, reversible; the model joins `models/__init__.py` (law 10). **No hash-spec change:**
+nothing enters `freeze_set`, no table is shadowed (`app_user` is not in the freeze set — checked).
+
+| Id | Does | Downgrade | Pauses for Ben |
 |---|---|---|---|
-| **0076** | `platform_admin_grant` + checks, indexes, `fn_admin_grant_independent`, `fn_platform_admin_grant_guard`, `trg_pag_grant_effective`, grants; **backfill** (as vb_owner) one row per user with `is_platform_admin = true`: their latest of the three grant audit events → BOOTSTRAP for `FIRST_ADMIN_CREATED` / `ADMIN_CREATED_BY_CLI` (`requested_at = approved_at = occurred_at`), LEGACY for `PLATFORM_ADMIN_GRANTED` (`requested_by` = its actor); none → no row (cannot approve — as today). The backfill trusts audit history once, as of the migration | refuse if any REQUEST row exists (a four-eyes record would be lost); BOOTSTRAP/LEGACY rows are re-derivable from audit, so dropping them loses nothing | no (new table) |
-| **0077** | `fn_app_user_admin_guard` + `trg_app_user_admin_guard`; `trg_app_user_bootstrap_grant` | drop both — no data | **yes** — the access guard every admin passes through |
-| **0078** | `CREATE OR REPLACE fn_project_purge_guard`: 0072's body with the AR-13 block replaced (§5) | restore 0072's body verbatim — safe | **yes** — changes slice 16's four-eyes check |
+| **0076** | `app_user.password_set_by_owner_at` (nullable, no backfill) | refuse if any value is set (not re-derivable) | no — additive |
+| **0077** | `platform_admin_grant` + checks, indexes, both functions, `fn_platform_admin_grant_guard`, grants; **backfill** (as vb_owner, before the triggers are created) one row per flagged admin from their latest grant event: `FIRST_ADMIN_CREATED` / `ADMIN_CREATED_BY_CLI` → BOOTSTRAP (no requester), `PLATFORM_ADMIN_GRANTED` → LEGACY (requester = its actor); `approved_xact` = the migration's, `source_audit_event_id` set, `operator_name = 'migration 0077'`; **a NOTICE per admin backfilled (origin, source event id) and per admin skipped** (no event → no row → cannot approve or request-and-be-approved until IS records a LEGACY grant). **The backfill trusts audit history as of the migration day** (D2); no production database exists yet. Then the guard and deferred triggers | refuse if any row has `source_audit_event_id IS NULL` (a record written since would be lost); backfilled rows are re-derivable | **yes** — its NOTICE output is what Ben checks (D2) |
+| **0078** | `CREATE OR REPLACE fn_project_purge_guard`: 0072's body re-pointed to `fn_admin_purge_independent` (§6) | restore 0072's body verbatim | **yes** — changes slice 16's four-eyes check |
+| **0079** | `fn_app_user_admin_guard` + trigger; `trg_app_user_bootstrap_grant` | drop both — no data | **yes** — the access guard every admin passes through |
 
-Order matters: 0078 after 0076's backfill, or every existing admin would fail AR-13 the moment the lookup moves; 0077
-after 0076, as its guard reads the table. Deploy line for CLAUDE.md: none beyond `upgrade head` — the backfill runs in
-0076; `seeds.create_admin` gains its own count check (a friendly message) ahead of the guard.
+Order: 0078 and 0079 after 0077's backfill (else every existing admin fails AR-13 at once). Deploy line for CLAUDE.md
+("Slice 17 deploy"): read 0077's NOTICEs; `seeds.create_admin` now runs on the owner URL with `--operator`
+(`--actor-email` once an admin exists), and only while fewer than two admins have ever been granted.
 
-## 7. Where an answer would change the model
+## 9. Normalization notes
 
-- **Q-95 (b) — the single admin's first request approves itself:** drop the INSERT branch of the `app_user` guard and the
-  BOOTSTRAP origin for new admins; `ck_pag_four_eyes` moves into the guard with a "fewer than two live admins" exception.
-  Not recommended: permanent code for a one-time event.
-- **Q-96 yes — removal needs a second admin too:** add `grant_action varchar(6) CHECK IN ('GRANT','REVOKE')`; grain
-  becomes "one proposed change of admin rights"; `uq_pag_open` stays per user; the `app_user` guard gains the true →
-  false branch, and `set_platform_admin`'s preview hash moves onto the request. One column and one branch.
-- **Q-97 — only the requester counts:** drop the `approved_by_user_id` line in `fn_admin_grant_independent`. Nothing else.
-- **Q-98 (new) — how do the test harness and a future restore make a third admin?** The `app_user` guard binds `vb_owner`
-  too (criterion 7), and an approval needs an approver whose grant is 30 days old — a test cannot wait 30 days.
-  **Recommend** an owner-only LEGACY path: in one transaction, as `vb_owner`, insert a LEGACY row (backdated
-  `approved_at`), set `set_config('vb.legacy_admin_grant', <target id>, true)`, then set the flag; the `app_user` guard
-  allows it only when `session_user = 'vb_owner'`, the setting names the target and a LEGACY row for the target exists.
-  The setting is acceptable *here* because `session_user` cannot be forged by vb_app. It gives the owner nothing it
-  lacks (it can drop triggers), and every use is visible as a LEGACY row. Criterion 7 then reads "for vb_app, and for
-  vb_owner outside the recorded LEGACY path". Without it, test fixtures can seed admins only by bootstrap (two at most).
+- **1NF.** Atomic columns, no lists; each row identified by its surrogate key (no natural key — a user can be requested
+  many times). `operator_name` is a single name, not a list.
+- **2NF.** Single-column keys; no partial dependency possible.
+- **3NF.** People are FKs, never copied names or flags. State (open / approved / rejected / cancelled) is derived from
+  the dates; "admin since / granted by" from the latest approved row. `grant_origin` constrains *which* columns may be
+  set; it determines no value. `recorded_at` is not redundant with `requested_at`: they differ for backfilled and
+  test-backdated rows, which is exactly what the weekly check reads. `operator_name` is text because the operator (IS,
+  AR-22) is not an app user — if IS staff ever get accounts it becomes an FK. `password_set_by_owner_at` depends on the
+  user alone. **Not derived on purpose:** `is_platform_admin` stays stored (removals are not on the grant record,
+  AR-17); the guard keeps it consistent with the record.
 
-## 8. Normalization notes
+## 10. What this model means
 
-- **1NF.** Every column atomic; no arrays or lists; each row identified by its surrogate key (no natural key: the same
-  user can be requested many times).
-- **2NF.** Single-column key, so no partial dependency is possible.
-- **3NF.** No names, e-mails or flags of the people are copied — every actor column is an FK. State (open / approved /
-  rejected / cancelled) is **derived** from the dates, not stored; "admin since" and "granted by" are derived from the
-  latest approved row. `grant_origin` constrains *which* columns may be set (the CHECKs); it determines no value — not a
-  transitive dependency. **Deliberately not derived:** `app_user.is_platform_admin` could in principle come from grants
-  minus removals, but removals are not recorded here (Q-96 no); the flag stays the current state and the guard keeps it
-  consistent with the record.
-
-## 9. What this model means
-
-- **Rules the database now enforces, for every role:** nobody becomes an admin by UPDATE without a four-eyes approval
-  in the same transaction; a new account is born an admin only while fewer than two live admins exist; a request is
-  approved, rejected or cancelled once and then never changes; the approval time cannot be backdated; the approver's
-  own rights must be 30 days old and not given by the requester (in purges and in grants alike).
-- **What the app can do:** list requests, propose, decide, show "admin since / granted by" for every admin. **Cannot:**
-  remove the record, grant without a second admin, revive a removed admin from an old approval.
-- **Trade-offs.** The first two admins, and every admin they approve, wait 30 days before they can approve anything
-  (AR-13 applied to grants), so a new install cannot add a third admin for a month unless Ben accepts that or the Q-98
-  path is used. Deactivating admins down to one reopens the CLI bootstrap — by Q-95's own wording ("fewer than two
-  live"); worth a line in the weekly check.
+- **The database enforces, for every role:** no admin by UPDATE without a grant approved (REQUEST, four eyes, AR-18) or
+  owner-recorded (LEGACY) **in the same transaction**; a new account is born an admin only on an empty database or by
+  the owner while fewer than two admins have ever been granted; a request is decided once; no grant time can be
+  backdated outside a test/demo database; a purge approver's own grant is 30 days old and unlinked to the requester.
+- **The app can:** propose, decide, list requests, show "admin since / granted by / created by / password set by
+  owner" for every admin. **Cannot:** delete the record, grant alone, revive an admin from an old approval, reach the
+  BOOTSTRAP or LEGACY paths.
+- **Trade-offs.** (1) **Fresh-install deadlock** — see the disagreement in the hand-back: with AR-16 recording admin 1 as
+  the requester of admin 2's BOOTSTRAP, AR-18 makes admins 1 and 2 dependent on each other, so neither can approve a
+  request from the other; the third admin needs one IS LEGACY grant. (2) AR-21 without a password-change feature means
+  the creator of an account can never be its requester (§5). (3) A pre-17 admin the backfill skips cannot take part in
+  any approval until IS records a LEGACY grant for them.

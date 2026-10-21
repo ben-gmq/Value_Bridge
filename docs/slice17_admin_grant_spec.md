@@ -1,4 +1,4 @@
-# Slice 17 — Platform-admin grant approval (spec, DRAFT for Ben, 2026-10-21)
+# Slice 17 — Platform-admin grant approval (spec, questions answered 2026-10-21 — AR-16…AR-23; for Ben's OK after design review round 2)
 
 **Source of truth:** `docs/VB_design.md` §9.10 access model ("Making someone a platform admin needs a second platform
 admin's approval (AR-13)"), §6.6; history AR-13 (Q-93 b), AR-15. Plan row "Platform-admin grant approval" in
@@ -12,16 +12,19 @@ any other way.
 
 ## 1a. Interface
 - **Input:** a platform admin's request naming an active FTC user and a reason; a different platform admin's approval
-  or rejection; any platform admin's cancellation. Bootstrap only: the operator's `seeds.create_admin` while fewer than
-  two live platform admins exist (Q-95).
+  or rejection; any platform admin's cancellation. Owner-run by the Fortience IS department only (AR-22): the first two
+  admins through `seeds.create_admin` while fewer than two people have ever been granted (AR-16), and recorded LEGACY
+  grants (AR-19).
 - **Output:** on approval, the user is a platform admin in the same transaction, with one `PLATFORM_ADMIN_GRANTED`
   audit row naming requester and approver; the request record, kept forever. Removing admin rights is unchanged
   (one admin, a reason, the existing preview) — Q-96.
 - **Validation:** refused: a non-admin (403); no reason (422); the requester approving their own request, or the
   target approving a request about themselves (409); a second open request for the same user (409); a target who is
-  inactive or already an admin (409); an approval by an admin whose own grant fails AR-13 (a) (409, the slice 16 rule
-  applied here too — Q-97); any change of `app_user.is_platform_admin` from false to true that is not the approval of
-  an open request in the same transaction, or the bootstrap path — refused by the database for every role.
+  inactive or already an admin (409); an approval by an admin who is not independent of the requester in either
+  direction (409, AR-18 — no 30-day rule for grants, AR-20); a request for an account the requester created (409, AR-21
+  as settled by Q-107); any change of `app_user.is_platform_admin` from false to true that is not the approval of an
+  open request in the same transaction (`approved_xact`), the owner's BOOTSTRAP or a LEGACY grant — refused by the
+  database for every role.
 - **Archive:** every request row and its audit rows, forever; no client content in either (ids, codes, a reason).
 - **Maintenance loop:** the slice 16 weekly check adds the admin lines of §16 P2 (open requests > 7 days, recent
   grants, live admins below two, BOOTSTRAP / LEGACY rows after 0076, recent removals), read by every platform admin
@@ -45,14 +48,15 @@ State is derived from its dates (open, approved, rejected, cancelled). At most o
 |---|---|---|---|
 | `admin_grant.request` | `platform_admin_grant` | C | requester is a live platform admin (token); target active, not an admin, no open request; reason not blank → one open row; audit `PLATFORM_ADMIN_GRANT_REQUESTED` |
 | `admin_grant.request` | `app_user` | R | target's active / admin flags; requester re-read live |
-| `admin_grant.approve` | `platform_admin_grant` | U | open; approver ≠ requester, ≠ target; approver a live admin passing AR-13 (a) → `approved_*` set (time by the database) |
+| `admin_grant.approve` | `platform_admin_grant` | U | open; approver ≠ requester, ≠ target; approver a live admin, independent of the requester both ways (AR-18, `fn_admin_grant_independent`) → `approved_*` and `approved_xact` set by the database |
 | `admin_grant.approve` | `app_user` | U | target still active and not an admin → `is_platform_admin = true`, same transaction |
 | `admin_grant.approve` | `audit_event` | C | `PLATFORM_ADMIN_GRANTED`, actor = approver, detail {requested_by, grant id, reason} — for people to read; **AR-13 never reads it** (it reads `platform_admin_grant` through `fn_admin_grant_independent`, §16 P3) |
 | `admin_grant.reject` | `platform_admin_grant` | U | open; any live admin other than the requester → `rejected_*` + reason; audit |
 | `admin_grant.cancel` | `platform_admin_grant` | U | open; any live admin → `cancelled_*`; audit |
 | `admin_grant.list` | `platform_admin_grant`, `app_user` | R | open requests first, then decided; names of the people |
 | `user_admin.set_platform_admin` (existing) | `app_user` | U | **grant branch removed** (422 → "request it"); remove branch unchanged |
-| `seeds.create_admin` (existing CLI) | `app_user`, `audit_event` | C | allowed only while fewer than two live platform admins exist (Q-95); else refuses |
+| `seeds.create_admin` (existing CLI, moves to the owner URL) | `app_user`, `platform_admin_grant`, `audit_event` | C | owner only, while fewer than two people have ever been granted (AR-16, counted as the greater of grant rows and live flagged admins — N6 a); records operator and `--actor-email` on the BOOTSTRAP row |
+| `seeds.owner_grant.legacy_grant` (new IS CLI) | `platform_admin_grant`, `app_user` | C, U | owner only; reason, operator and the asking admin (`--actor-email`, N5) required; never backdated outside the named test / demo databases (AR-19, N4) |
 | `auth_service.first_run_setup` (existing) | `app_user` | C | unchanged — only when no user exists |
 | `archive.weekly_check` (slice 16, to come) | `platform_admin_grant` | R | lists open requests > 7 days and grants in the last 7 days |
 | (manual) the approving admin | — | — | confirms out of band that the person should hold the role (who asked for it, for which engagement) before approving |
@@ -73,7 +77,8 @@ admin_grant.request(db, actor, user_id, reason):            # services/admin_gra
 admin_grant.approve(db, actor, grant_id, row_version):
     g = open request for update, row_version matches else 409
     actor ≠ g.requested_by and actor ≠ g.target else 409 (four eyes)
-    access.independent_approver(db, actor, g.requested_by) else 409 (AR-13 a — the one function slice 16 uses too)
+    access.grant_independent(db, actor, g.requested_by) else 409   # calls fn_admin_grant_independent (AR-18);
+                                                                    # the guard calls it too — never re-coded in Python
     g.approved_by = actor                                   # the guard sets approved_at := statement_timestamp()
     target.is_platform_admin = True                          # the app_user guard checks this row is being approved
     audit PLATFORM_ADMIN_GRANTED {grant id, requested_by, reason}; commit
@@ -108,20 +113,32 @@ button hidden for the requester and the target (presentation only; the guards re
    already, the request is refused at creation instead).
 3. A different live admin approves → the user is an admin, `approved_at` is the database's time, one
    `PLATFORM_ADMIN_GRANTED` row names requester and approver.
-4. An approver whose own grant is under 30 days old, or was requested or approved by this requester, is refused
-   (AR-13 a, applied here as in slice 16 — Q-97).
-5. Reject (with a reason) and cancel close the request; a closed request never changes; the user can be requested
+4. **AR-18, both directions:** an approver whose latest grant the requester requested or approved is refused, **and**
+   an approver who requested or approved the requester's latest grant is refused. A grant approval needs no 30 days
+   (AR-20): an independent approver granted yesterday may approve.
+5. **AR-20 for purges (slice 16 re-pointed, 0078):** a purge approval additionally needs the approver's latest grant to
+   be at least 30 days old; the purge guard reads `fn_admin_purge_independent`, never `audit_event`; 0078's copy of the
+   purge guard equals the body at its parent revision (a test diffs it, N6 b).
+6. Reject (with a reason) and cancel close the request; a closed request never changes; the user can be requested
    again afterwards.
-6. `PATCH /users/{id}/platform-admin` with `true` → 422; removal works as before.
-7. **At the database, for `vb_app` (and `vb_owner` outside the recorded LEGACY path, Q-98):**
-   `UPDATE app_user SET is_platform_admin = true` — reactivating a deactivated admin included — is refused unless an
-   approved REQUEST for that user was approved in the same transaction; an INSERT of a user with
-   `is_platform_admin = true` is refused unless fewer than two live platform admins exist (the bootstrap, Q-95), and
-   records a BOOTSTRAP row.
-8. `seeds.create_admin` succeeds with zero or one live admin and refuses with two or more.
-9. The request record refuses DELETE for every role; the app role cannot backdate `approved_at`.
-10. The users page shows pending requests and their actions; seen in a browser (ui-verifier), side by side with the
-    admin mockup.
+7. `PATCH /users/{id}/platform-admin` with `true` → 422; removal works as before (AR-17).
+8. **At the database, for `vb_app`:** `UPDATE app_user SET is_platform_admin = true` — reactivating a deactivated admin
+   included — is refused unless a REQUEST for that user was approved **in this transaction** (`approved_xact =
+   pg_current_xact_id()`); one approved in an earlier transaction cannot be replayed (D1). An INSERT with the flag is
+   refused unless `app_user` is empty (`first_run_setup`). An INSERT of an inactive admin is refused for every role (D3).
+9. **The owner paths (AR-16, AR-19):** `seeds.create_admin` as the owner succeeds while fewer than two people have
+   ever been granted and refuses after — removing an admin never reopens it; it records the operator and the asking
+   admin. A LEGACY grant needs owner, reason, operator and asking admin; its `approved_at` is the database's time except
+   on a database whose name is exactly one of the named test / demo databases (N4).
+10. **AR-21 as settled by Q-107:** a request for an account the requester created → 409; (if Q-107 (a)) an approver who
+    created the target's account → 409, and an account's creator counts as having made that admin in the independence
+    functions.
+11. The grant record refuses DELETE for every role; neither role can backdate `approved_at`, `rejected_at`,
+    `cancelled_at`; the flag and an approval land together or neither (the deferred commit check).
+12. The weekly-check query lists live flagged admins with no approved grant row (N3), LEGACY rows without an asking
+    admin or with `approved_at < recorded_at` (N5, N4), and admins removed in the last 7 days (§16 P2).
+13. The users page shows pending requests and their actions, with the target's email, who created the account and
+    when, and the request's age; seen in a browser (ui-verifier).
 
 ## 11. Assumptions
 - `ASSUMPTION` A-17-1: removing admin rights stays a one-admin action — it is the safe direction (Q-96).
@@ -134,15 +151,16 @@ Two-person removal of admin rights (unless Q-96 says otherwise) · request expir
 kind (USER / VIEWER) · Entra ID group-based admin rights (Azure, D-35).
 
 ## 13. Grade and test depth
-**Grade 1** — a wrong answer grants access to every client's data. Proposed depth: criteria 1–9 as service and
-database tests for both roles (the guard proven directly, as slice 16's purge record); one browser pass (criterion
-10). A mutation harness is justified at this grade but is its own approved piece of work, not this slice.
+**Grade 1** — a wrong answer grants access to every client's data. Proposed depth: criteria 1–12 as service and
+database tests for both roles (the guards proven directly, as slice 16's purge record); one browser pass (criterion
+13). A mutation harness is justified at this grade but is its own approved piece of work, not this slice.
 
 ## 14. Build checklist
 One migration per commit, reversible (apple's list) · `sara` before the commit (grants, access) · `ROUTE_COMPONENTS`
-and the route-guard tests updated · strings via `t()` · AR-13 is answered only by the database function
-`fn_admin_grant_independent` over `platform_admin_grant` — in both guards and in `access.independent_approver`, which
-calls it rather than re-implementing it (§16 P3) ·
+and the route-guard tests updated · strings via `t()` · independence is answered only by the database functions over
+`platform_admin_grant` — `fn_admin_grant_independent` (grant approvals) and `fn_admin_purge_independent` (purge
+approvals, + 30 days) — the guards and `access.grant_independent` call them, never re-implement them (§16 P3) ·
+run 0077 on a copy as the deploy will and confirm its NOTICEs reach the console (N3) ·
 full suite before merge · CLAUDE.md "Slice 17 deploy" line if the bootstrap rule changes an operator step.
 
 ## 15. Questions for Ben
@@ -201,3 +219,56 @@ answers to Q-99…Q-104; whatever it leaves open is tracked and settled against 
   admins?** The bootstrap and LEGACY paths lean on it. (For the Azure work, D-35, with VB-011.)
 - **Q-104 — Where should the weekly admin check be read, given VB sends no e-mail?** **Recommend:** a card on the
   `/admin` page (with slice 16's "last run" warning) and the operator's run log.
+
+## 17. Ben's answers to Q-95…Q-104 (2026-10-21, history AR-16…AR-23) — the current design
+"Follow her recommendations"; Q-103: "it will be our Fortience IS department". Each is a build rule and wins over
+everything above it.
+
+| Ruling | Build rule |
+|---|---|
+| **AR-16 (Q-95, Q-99)** | The `app_user` INSERT-with-flag branch (and `seeds.create_admin`) works only as the owner, and only while **fewer than two admins have ever been granted** (counted from `platform_admin_grant`, any origin) — not "fewer than two live", so removing an admin never reopens it (§16 P1). It records who ran it on the BOOTSTRAP row. `first_run_setup` keeps working only on an empty `app_user` |
+| **AR-17 (Q-96)** | Removal unchanged: one admin, a reason, the existing preview |
+| **AR-18 (Q-97, Q-102)** | `fn_admin_grant_independent(approver, requester)` is symmetric: false if the requester requested or approved the approver's latest grant, **or** the approver requested or approved the requester's latest grant |
+| **AR-19 (Q-98)** | LEGACY rows: owner only, reason and operator required, `approved_at` the database's time except on a test or demo database (§16 P4) |
+| **AR-20 (Q-100)** | Two checks, one function each: **grant approval** = four eyes + AR-18 (no 30 days); **purge approval** = four eyes + AR-18 + the approver's latest grant ≥ 30 days old. Migration 0078 re-points slice 16's purge guard to the purge check |
+| **AR-21 (Q-101)** | A request is refused while the target's account was created by the requester and its owner has not yet logged in and set their own password — needs a "password set by its owner" fact on `app_user` (apple, schema) |
+| **AR-22 (Q-103)** | Production server access (owner role, operator jobs, database admin) is the Fortience IS department's, not a platform admin's (design §15.2). The bootstrap and LEGACY scripts are IS jobs |
+| **AR-23 (Q-104)** | The admin lines of the weekly check (§16 P2) appear on the `/admin` Removals tab beside slice 16's "last run" card, and in the operator's run log |
+| VB-011 | Accepted until the first non-local deploy; HIGH; a hard blocker for that deploy |
+
+**Schema rev 2 (apple, 2026-10-21)** folds §16 and §17 in: migrations 0076 (the owner-set-password fact on `app_user`),
+0077 (the grant table, independence functions, backfill with a NOTICE per admin — pauses for Ben), 0078 (slice 16's
+purge guard reads the purge check — pauses), 0079 (the `app_user` guard — pauses). Two questions it raised:
+- **Q-105 — A fresh install's third admin.** With AR-18 symmetric and the BOOTSTRAP row naming who ran it, the first
+  two admins are each "made by" the other, so neither can approve a request for a third (the same holds on today's
+  databases where admin 1 promoted admin 2). (a) the third admin is one recorded IS LEGACY grant (AR-19, no backdating)
+  — IS is the independent party (AR-22); (b) leave the maker off BOOTSTRAP rows, which re-opens §16 P1. **Recommend (a).**
+- **Q-106 — AR-21 needs "the owner set their own password", and VB has no self-service password change.** Until one
+  exists, an admin can never request rights for an account they created. (a) build `POST /auth/me/password` and a small
+  "change my password" screen in slice 17 (about half a day; sets `password_set_by_owner_at`); (b) leave it out — those
+  accounts go through an IS LEGACY grant. ~~Recommend (a)~~ — **withdrawn after round 2 (N1): see Q-107.**
+
+## 18. Design review round 2 of 2 — the last (design-auditor, 2026-10-21: 1 high, 3 medium, 1 low new)
+Round 1's P1, P3, P5, D1, D2, D3 and S3 are closed; P4 mostly; P2 and S1 partly; D4 tracked; S2 accepted by Ben
+(VB-011). Per the two-round cap there is no third review: what remains is settled against the running code, and the
+structural one goes to Ben.
+
+| # | Finding (rating) | Disposition |
+|---|---|---|
+| N1 | AR-21's "owner set their own password" can be produced by the creator, who types every initial password; and the rule binds only the requester — a creator can launder an account through a second admin and later approve their own purge as it (HIGH) | **Structural — a decision for Ben (Q-107).** The premise does not hold until sign-in is Entra ID (D-35) |
+| N2 | §10 and several body lines still stated replaced rules; no criterion for the new controls (MEDIUM) | **Fixed:** §1a, §4, §7, §10 (now 13 criteria, one per control), §13, §14 rewritten to rev 2 and AR-16…AR-23 |
+| N3 | 0077's NOTICE list of skipped admins may never reach the operator (MEDIUM) | **Fixed in design:** criterion 12 derives "live admin with no approved grant" from the tables; build checklist runs 0077 on a copy and confirms the NOTICEs show |
+| N4 | The backdating gate matches substrings of the database name ("latest", "evaluation") (MEDIUM) | **Fixed in design:** an exact list of the named test / demo databases (`vb_test_db` and its `_gw<n>` workers, names starting `vb_uat_` / `vb_demo_`); the IS CLI refuses `days` elsewhere (criterion 9) |
+| N5 | Q-105 (a) makes LEGACY the routine way to add an admin (LOW) | **Fixed in design:** the LEGACY CLI requires the asking admin; the weekly check lists LEGACY rows without one |
+| N6 | The AR-16 count can read low where the backfill skipped admins; 0078 copies a body that 0074/0075 may change (LOW) | **Fixed in design:** count the greater of grant rows and live flagged admins; 0078 copies the body at its parent revision and a test diffs it (criterion 5) |
+
+**Question for Ben from round 2 (replaces the Q-106 recommendation):**
+- **Q-107 — How is "the creator made a sock-puppet admin" closed?** VB has no way to give a person a password the
+  creating admin cannot see, so "the owner set their own password" proves nothing. (a) **the creator of an account
+  counts as having made that admin**: they may neither request nor approve its grant, and the account's creator is a
+  "maker" in both independence checks — so a creator can never pair with an account they made, directly or through
+  another admin; no password route is needed in slice 17 (Q-106 → (b)); (b) build the password route anyway and accept
+  the gap until Entra ID. **Recommend (a)** — it closes N1 with one more column read in two functions, and Q-106's route
+  can come with the Azure sign-in work.
+- Q-105 stands: **recommend (a)**, a fresh install's third admin is one recorded IS LEGACY grant naming the admin who
+  asked.
