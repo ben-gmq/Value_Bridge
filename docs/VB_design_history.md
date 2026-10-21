@@ -16,7 +16,10 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open (2026-10-20: Q-86…Q-93 answered, AR-7…AR-13; Q-94 answered, W-10).
+- **2026-10-21 · slice 17, platform-admin grant approval (AR-13 b):** Q-95…Q-104 in
+  `docs/slice17_admin_grant_spec.md` §15–§16 (the second admin's bootstrap, removal, what "independent" means, the
+  owner's LEGACY path, whether the 30-day rule outlives two-person grants, who holds production server access, where
+  the weekly admin check is read). Each has a recommendation; none is decided.
 
 
 ---
