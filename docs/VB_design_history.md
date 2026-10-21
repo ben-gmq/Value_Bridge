@@ -528,6 +528,17 @@ Ben, via Ren, 2026-10-20: he follows every recommendation in the spec. Slice 16'
 | AR-12 | **[Q-92] Projects already closed when slice 16 lands count from the migration day**, so nothing comes due on day one | — |
 | AR-13 | **[Q-93] (b): making someone a platform admin needs a second platform admin's approval** — it closes the gap for every four-eyes control, not only the purge. **(a) is the interim rule until (b) is built:** a four-eyes approval is refused when the approver's platform-admin grant was made by the requester or is under 30 days old | slice16_spec §19 U9 |
 
+### Ben's rulings, 2026-10-21 — slice 16 build questions
+
+Ben, via Ren, 2026-10-21: *"Please follow ladies' recommendations"* — every recommendation in Lilly's report on the
+slice 16 build.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-14 | **`baseline_archive` is not a shadow.** It carries its own write-once guard and a column-level UPDATE for the writer and the weekly check; law 2's "no UPDATE on any `baseline_*` table" reads "on any shadow" (sara M3 on the slice 16 build) | design §6.6, CLAUDE.md law 2 |
+| AR-15 | **[AR-13 (a), interim] The first admin's creation counts as their platform-admin grant** (`FIRST_ADMIN_CREATED`, `ADMIN_CREATED_BY_CLI`), so after 30 days the setup admin may approve a request someone else raised; an admin with no grant on record at all still cannot approve | slice16_spec §20 AR-13 ("a grant with no audit row counts as under 30 days") |
+| — | **Migrations 0074 (scoped purge bypass) and 0075 (audit purge trigger) wait** until Ben has seen 0072–0073 running in the request screens | — |
+
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
 Ben, via Ren, 2026-10-20: *"yes — keep the build as it is."*

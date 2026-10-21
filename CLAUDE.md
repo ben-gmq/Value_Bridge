@@ -101,8 +101,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
    DELETE grant, so this fails at the database, not in review.
    Nothing cascades except a process step: `services/step_retire.OWNED_BY_STEP` / `OWNED_BY_BR` are the only lists
    of rows that retire with something else; a new table that points at a step or a BR blocks until added to one.
-2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
-   trigger and the insert guard (`vb_ops.immutable_guards`), and shadows are **generated** by
+2. **Baselines are immutable** — every `baseline_*` shadow gets the `fn_reject_modification()`
+   trigger and the insert guard (`vb_ops.immutable_guards`); `baseline_archive` is **not** a shadow (the archive-file
+   outbox, its own write-once guard, design §6.6). Shadows are **generated** by
    `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
    that adds a column to a shadowed live table adds the shadow column **in the same migration** (the parity
    test in `tests/test_baseline.py` reads the database), and a shadow column's type is **never** ALTERed

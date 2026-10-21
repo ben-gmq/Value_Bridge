@@ -3744,9 +3744,17 @@ Grants, not code (S11, R2-S9). The application connects as `vb_app`; migrations 
   business table, and §5.6's "never write a hard-delete endpoint" is a **permission error**, not a review rule.
   `import_batch`, `project_member`, `program_member`, `user_access_grant` and `audit_event` get no DELETE: they are the import
   trail, the access history and the security log.
-- **No `UPDATE` on `decision`** (A-41), **on any `baseline_*` table**, or **on `audit_event`** (append-only by
+- **No `UPDATE` on `decision`** (A-41), **on any `baseline_*` shadow**, or **on `audit_event`** (append-only by
   grant and trigger; even the owner cannot UPDATE it). The reject triggers (§6.2) are the belt, the revoked
   grants the braces.
+- **`baseline_archive` is not a shadow** (it is the outbox of archive files a baseline owes, AR-2, Q-79): SELECT,
+  INSERT and a column-level `UPDATE` on the writer's and the weekly check's columns only; no DELETE.
+  `fn_baseline_archive_guard()` makes a written file's record fixed for every role except its check result, set
+  once.
+- **The removal records** (`project_purge`, `project_purge_key`, AR-1, AR-9, AR-13) are kept forever: `vb_app`
+  may request, approve, cancel and record the weekly check on `project_purge` (column-level `UPDATE`), and only
+  reads `project_purge_key`; recording a project file, destroying keys and executing a removal belong to the
+  owner-run job, and their guards refuse every other role. `vb_instance` is SELECT-only for `vb_app`.
 - **`baseline` (header): column-level `UPDATE` only on** `status_code_id`, the approval columns
   (`client_approver_name`, `client_approved_on`, `approval_note`, `approval_reference`, `approved_at`,
   `approved_by_user_id`), `updated_by` and `row_version`. The FROZEN → APPROVED → SUPERSEDED transitions (Q8,
@@ -4709,7 +4717,7 @@ one optional wall per project:
   DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
   rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**; until that is
   built, a four-eyes approval is refused when the approver's grant was made by the requester or is under 30
-  days old. The FTC default rate card stays a fixed default in code (SC-10).
+  days old — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
