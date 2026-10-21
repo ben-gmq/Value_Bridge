@@ -553,7 +553,7 @@ CREATE FUNCTION fn_purge_allows(p_project_id bigint) RETURNS boolean
 LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
   SELECT session_user = 'vb_owner' AND current_user = 'vb_owner'
      AND p_project_id IS NOT NULL
-     AND p_project_id::text = current_setting('vb.purge_project_id', true)
+     AND p_project_id::text IS NOT DISTINCT FROM current_setting('vb.purge_project_id', true)
      AND EXISTS (SELECT 1 FROM public.project_purge pp WHERE pp.project_id = p_project_id
                   AND pp.purge_kind IN ('ARCHIVE', 'DELETE')
                   AND pp.executed_at IS NULL AND pp.cancelled_at IS NULL
