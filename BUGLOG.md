@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-011 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-012 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -21,6 +21,16 @@ place.
 ---
 
 ## Open
+
+### VB-011 | The web app loads the owner database login, so a compromised app process defeats every database guard | OPEN
+- **Found:** 2026-10-21, design review of slice 17 (design-auditor S2, HIGH). Predates slices 16–17; both depend on it.
+- **What:** `backend/config.py` makes `migration_database_url` (vb_owner) a required setting of the running web
+  server. Any read of the server's environment (a path bug, a settings dump, code execution, a bad dependency) gives
+  the owner login, which can drop the purge and admin-grant triggers or take the owner-only paths (LEGACY grants,
+  purge execution).
+- **Fix:** split the settings — the web server loads only `DATABASE_URL` (vb_app); alembic and the owner scripts read
+  `MIGRATION_DATABASE_URL` themselves. Before the first non-local deploy (Azure, D-35).
+- **Severity:** HIGH, not reachable today (local only, no real data).
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
@@ -496,3 +506,6 @@ place.
 - **2026-10-21 · slice 16, 0072–0073 (`sara`; H1, H2, M1–M3, L1–L6 fixed):** (own note) `audit_event.occurred_at`
   is not forced by the database on INSERT, so the app role could write an aged grant row and pass AR-13's 30-day
   check — not reachable from any route; force `occurred_at := statement_timestamp()` in the audit insert guard.
+- **2026-10-21 · slice 17 design review (design-auditor D4, LOW):** "kept forever, no DELETE" does not cover
+  `TRUNCATE` — an owner `TRUNCATE app_user CASCADE` empties `project_purge`, `project_purge_key` and (slice 17)
+  `platform_admin_grant`; add a statement-level `BEFORE TRUNCATE` refusal outside test databases.
