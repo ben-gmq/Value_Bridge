@@ -183,8 +183,9 @@ def clean():
                            "ALTER TABLE vb_instance ENABLE TRIGGER trg_vb_instance_guard"))
         if not dirty:
             return
-        frozen = {t for t in dirty if t == "audit_event" or t == "baseline" or t.startswith("baseline_")}
-        if frozen - {"audit_event"}:
+        frozen = {t for t in dirty if t in ("audit_event", "baseline", "project_purge", "project_purge_key")
+                  or t.startswith("baseline_")}                 # slice 16: the purge records refuse DELETE too
+        if frozen - {"audit_event", "project_purge", "project_purge_key"}:          # sara L6: only a baseline
             frozen |= {r[0] for r in c.execute(text(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'baseline%'"))}
         if frozen:
