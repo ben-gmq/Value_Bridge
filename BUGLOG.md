@@ -515,3 +515,13 @@ place.
   L1–L10 fixed):** (M1) the one-off operator backfills that loop over every project (`br_lines.py:136`,
   `components.py:422`, `effort.py:76`, `dfd_rule.py:191`) do not skip a project with an open removal request — skip
   `access.pending_project_ids()` and print the skipped codes.
+- **2026-10-22 · slice 16, 0074–0075 and the DELETE run (`sara` ×2; no critical or high; M1–M3, M-A, L1–L5, L-b–L-d,
+  L-f, L-g fixed; a NULL from `fn_purge_allows` letting a key row through found by the full suite and fixed):**
+  (L6) the bypass names the role `vb_owner` literally — the Azure migration / purge login must be that role, or every
+  purge fails closed with "immutable"; one line in the deploy runbook. (L-a) for a table without `project_id`
+  (`import_row`) the purge proof falls back to the delete rule — add a test counting it by a hand-written join, with
+  import rows in two projects. (L-e) the operator's prompt waits inside the transaction holding the project lock — the
+  runbook says "answer promptly". (L-h) criterion 8's "baseline reads not blocked" has no concurrent-read test, and
+  criterion 10 checks the project's audit rows by `project_id` only — assert no non-kept event names the project by
+  `target_table = 'project'`. (Accepted, sara M1 note) `current_user = 'vb_owner'` alone is not proven by a test: it
+  needs an owner session under another role.

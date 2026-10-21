@@ -97,12 +97,15 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 
 ## The VB law (enforced in code; `sara` audits it)
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
-   `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
-   DELETE grant, so this fails at the database, not in review.
+   `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15: `scripts/purge_project.py` →
+   `services/purge_run`, as `vb_owner`). The app role has no DELETE grant, so this fails at the database, not in review.
+   A new table holding project rows needs no purge change; one without `project_id` or a reference towards a project
+   joins `purge_run.NO_PROJECT_DATA`, or every purge stops.
    Nothing cascades except a process step: `services/step_retire.OWNED_BY_STEP` / `OWNED_BY_BR` are the only lists
    of rows that retire with something else; a new table that points at a step or a BR blocks until added to one.
-2. **Baselines are immutable** — every `baseline_*` shadow gets the `fn_reject_modification()`
-   trigger and the insert guard (`vb_ops.immutable_guards`); `baseline_archive` is **not** a shadow (the archive-file
+2. **Baselines are immutable** — every `baseline_*` shadow gets the `fn_reject_modification_purgeable()`
+   trigger and the insert guard (`vb_ops.immutable_guards_v2` from 0074; only the scoped purge of one approved,
+   24-hour-old request may delete, `fn_purge_allows`; nobody updates); `baseline_archive` is **not** a shadow (the archive-file
    outbox, its own write-once guard, design §6.6). Shadows are **generated** by
    `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
    that adds a column to a shadowed live table adds the shadow column **in the same migration** (the parity

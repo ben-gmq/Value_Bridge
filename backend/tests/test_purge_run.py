@@ -1,0 +1,239 @@
+"""Slice 16: carrying out a DELETE removal (services/purge_run, scripts/purge_project; spec §10 criteria 6, 7, 8, 10,
+11, 12). Grade 1 — it destroys a client's data for good, so: every rule refuses with nothing deleted; a removal leaves
+no row of the project in any table, found by a catalog query rather than a hand list; every other row in the
+database is byte-identical afterwards; and a fault part-way rolls all of it back with the request still open."""
+from collections import Counter
+
+import pytest
+from sqlalchemy import select, text
+
+from database import engine as app_engine
+from models import AppUser
+from seeds.demo_showcase import build_showcase
+from services import purge_run
+from tests.conftest import PW
+from tests.test_baseline import bid, freeze, scope
+from tests.test_project_purge_record import INSERT, backdate, owner, promote, run  # noqa: F401 — owner is a fixture
+from tests.test_scope_api import ed  # noqa: F401 — ed is a fixture
+
+
+@pytest.fixture
+def rich(client, world, ed, db, owner):
+    """The showcase project (frozen twice, every scope table) to remove; p_solo frozen; the world's other projects;
+    two platform admins with a1 the requester and a2 (granted 31 days ago) the approver; a stamped database."""
+    admin = db.scalar(select(AppUser).where(AppUser.email == "admin@example.test"))
+    victim = build_showcase(db, admin, "example.test", PW)
+    db.commit()
+    scope(client, ed)
+    bid(freeze(client, ed))
+    a2 = world["users"]["owner"]
+    promote(owner, a2)
+    run(owner, "INSERT INTO vb_instance (instance_id) VALUES ('test-a')")
+    client_id = run(owner, "SELECT client_id FROM project WHERE project_id = :p", p=victim)[0]
+    for p in (victim, world["p_sales"]):                                               # code-list overrides
+        for cat in ("ISSUE_TYPE", "PROJECT_COMPONENT"):
+            run(owner, "INSERT INTO code_master (project_id, category, code, label, created_by) "
+                       "VALUES (:p, :c, 'LOCAL', 'Local', :u)", p=p, c=cat, u=admin.app_user_id)
+    return {"p": victim, "c": client_id, "a1": admin.app_user_id, "a2": a2, "world": world,
+            "a2_email": "owner@example.test", "code": "KAITO/CSR27"}
+
+
+def request(t, kind="DELETE", approve=True, hours=25):
+    pp = run(app_engine, INSERT.replace("'X'", "'CSR27'"), k=kind, p=t["p"], c=t["c"], r=t["a1"], a=None)[0]
+    if approve:
+        run(app_engine, "UPDATE project_purge SET approved_at = now(), approved_by_user_id = :u "
+                        "WHERE project_purge_id = :pp", u=t["a2"], pp=pp)
+        backdate(owner_engine(), pp, hours=hours)
+    return pp
+
+
+def owner_engine():
+    from tests.conftest import owner_engine as eng
+    return eng()
+
+
+def snapshot(eng) -> dict[str, Counter]:
+    """Every row of every table, as text — a multiset per table."""
+    with eng.connect() as c:
+        tables = [r[0] for r in c.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))]
+        return {t: Counter(r[0] for r in c.execute(text(f"SELECT md5(x::text) FROM {t} x"))) for t in tables}
+
+
+def purge(eng, pp, email, typed=None):
+    with eng.begin() as c:
+        return purge_run.execute(c, pp, email, lambda plan: plan.expected if typed is None else typed)
+
+
+def test_a_removal_takes_every_row_of_the_project_and_leaves_every_other_row_as_it_was(rich, owner):
+    pp = request(rich)
+    before = snapshot(owner)
+    plan = purge(owner, pp, rich["a2_email"])
+    after = snapshot(owner)
+    for t, rows in before.items():
+        gone, new = rows - after[t], after[t] - rows
+        if t in purge_run.KEEP or t == "audit_event":
+            continue
+        assert not new, f"{t} gained or changed rows"
+        assert sum(gone.values()) == plan.counts.get(t, 0), t                           # exactly the counted rows
+    assert sum((after["audit_event"] - before["audit_event"]).values()) == 1            # PROJECT_PURGED only
+    assert sum((before["audit_event"] - after["audit_event"]).values()) == plan.counts["audit_event"]
+    # Criterion 7, by a catalog query over every table: nothing with the project's id is left outside the keep list.
+    for (t,) in run_all(owner, "SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' "
+                               "AND column_name = 'project_id'"):
+        if t not in purge_run.KEEP:
+            assert run(owner, f"SELECT count(*) FROM {t} WHERE project_id = :p", p=rich["p"])[0] == 0, t
+    # The record: executed by a2, keys outstanding (destruction not yet approved), PROJECT_PURGED with no project_id.
+    assert run(owner, "SELECT executed_by_user_id = :u AND backups_age_out_on IS NOT NULL FROM project_purge "
+                      "WHERE project_purge_id = :pp", u=rich["a2"], pp=pp)[0]
+    assert run(owner, "SELECT count(*), bool_and(destroyed_at IS NULL) FROM project_purge_key "
+                      "WHERE project_purge_id = :pp", pp=pp) == (1, True)
+    ev = run(owner, "SELECT project_id, app_user_id, detail FROM audit_event WHERE event_type = 'PROJECT_PURGED'")
+    assert ev[0] is None and ev[1] == rich["a2"]
+    assert ev[2]["project_code"] == "CSR27" and ev[2]["client_code"] == "KAITO" and ev[2]["counts"]["project"] == 1
+    assert ev[2]["requested_by_user_id"] == rich["a1"] and ev[2]["approved_by_user_id"] == rich["a2"]
+    # Coverage: the removal really reached the scope, the baselines and their files.
+    reached = {t for t, n in plan.counts.items() if n}
+    assert {"project", "bfc_node", "business_requirement", "baseline", "baseline_archive", "baseline_bfc_node",
+            "code_master", "project_sequence", "project_component", "audit_event"} <= reached, sorted(reached)
+    print("tables the removal had no rows of:", sorted(set(plan.counts) - reached))
+
+
+def run_all(eng, sql, **kw):
+    with eng.begin() as c:
+        return c.execute(text(sql), kw).all()
+
+
+@pytest.mark.parametrize("case, msg", [
+    ("unapproved", "no second platform admin"), ("young", "less than 24 hours"),
+    ("requester runs", "requester cannot also run"), ("not an admin", "not a live platform admin"),
+    ("approver demoted", "no longer a live platform admin"), ("wrong code", "did not match"),
+    ("archive", "DELETE requests only"), ("no request", "no open removal request")])
+def test_every_rule_refuses_with_nothing_deleted(rich, owner, case, msg):
+    pp = request(rich, kind="ARCHIVE" if case == "archive" else "DELETE", approve=case != "unapproved",
+                 hours=23.98 if case == "young" else 25)
+    email = {"requester runs": "admin@example.test", "not an admin": "editor@example.test"}.get(case,
+                                                                                               rich["a2_email"])
+    if case == "approver demoted":
+        run(owner, "UPDATE app_user SET is_platform_admin = false WHERE app_user_id = :u", u=rich["a2"])
+        promote(owner, rich["world"]["users"]["outsider"])                             # still two admins
+        email = "outsider@example.test"
+    before = snapshot(owner)
+    with pytest.raises(purge_run.Refused, match=msg):
+        purge(owner, pp + 99 if case == "no request" else pp, email, typed="KAITO/CSR2" if case == "wrong code" else None)
+    after = snapshot(owner)
+    assert {t: r for t, r in after.items() if t != "app_user"} == {t: r for t, r in before.items() if t != "app_user"}
+
+
+def test_a_cancelled_request_is_refused_by_the_script_itself(rich, owner):
+    """sara L-g. (Its "fewer than two admins" line is a second wall: a live requester and a different live approver
+    already make two, so it cannot be reached on its own.)"""
+    pp = request(rich)
+    run(app_engine, "UPDATE project_purge SET cancelled_at = now(), cancelled_by_user_id = :u "
+                    "WHERE project_purge_id = :pp", u=rich["a1"], pp=pp)
+    before = snapshot(owner)
+    with pytest.raises(purge_run.Refused, match="no open removal request"):
+        purge(owner, pp, rich["a2_email"])
+    assert snapshot(owner) == before
+
+
+def test_a_cascading_reference_or_a_stray_delete_trigger_stops_the_run(rich, owner, monkeypatch):
+    """sara M-A: the proof counts rows, so nothing may change a row it does not count."""
+    pp = request(rich)
+    with owner.connect() as c:
+        tx = c.begin()
+        c.execute(text("CREATE TABLE test_cascade (id int PRIMARY KEY, stakeholder_id bigint "
+                       "REFERENCES stakeholder ON DELETE SET NULL)"))
+        with pytest.raises(purge_run.Refused, match="test_cascade"):
+            purge_run.execute(c, pp, rich["a2_email"], lambda plan: plan.expected)
+        tx.rollback()
+    monkeypatch.setattr(purge_run, "DELETE_GUARDS", ())
+    with pytest.raises(purge_run.Refused, match="trigger trg_baseline_"):
+        purge(owner, pp, rich["a2_email"])
+
+
+def test_a_template_pointing_at_this_projects_override_stops_the_run(rich, owner):
+    """The company template list may point at the library, never at a project's own code (`_library_refs_clear`)."""
+    pp = request(rich)
+    run(owner, "INSERT INTO project_template_component (template_code_id, component_code_id) "
+               "SELECT (SELECT code_id FROM code_master WHERE category = 'PROJECT_TEMPLATE' AND project_id IS NULL "
+               "        ORDER BY code_id LIMIT 1), code_id FROM code_master "
+               "WHERE category = 'PROJECT_COMPONENT' AND project_id = :p", p=rich["p"])
+    before = snapshot(owner)
+    with pytest.raises(purge_run.Refused, match="overrides"):
+        purge(owner, pp, rich["a2_email"])
+    assert snapshot(owner) == before
+
+
+def test_the_app_role_can_never_run_a_removal(rich):
+    pp = request(rich)
+    with pytest.raises(purge_run.Refused, match="owner role"):
+        purge(app_engine, pp, rich["a2_email"])
+
+
+def test_a_table_in_no_list_or_a_false_no_data_claim_stops_the_run(rich, owner, monkeypatch):
+    pp = request(rich)
+    monkeypatch.setattr(purge_run, "NO_PROJECT_DATA", tuple(t for t in purge_run.NO_PROJECT_DATA if t != "program"))
+    with pytest.raises(purge_run.Refused, match="Tables in no list"):
+        purge(owner, pp, rich["a2_email"])
+    monkeypatch.setattr(purge_run, "NO_PROJECT_DATA", (*purge_run.NO_PROJECT_DATA, "program", "stakeholder"))
+    with pytest.raises(purge_run.Refused, match="stakeholder"):
+        purge(owner, pp, rich["a2_email"])
+
+
+def test_a_wrong_predicate_part_way_rolls_everything_back_and_the_request_stays_open(rich, owner, monkeypatch):
+    """Schema §8's planted fault: a delete rule that reaches other projects' rows is counted by the same wrong rule,
+    so only the proof's independent rule (the table's own project_id) can catch it — after every table was deleted.
+    The whole transaction rolls back."""
+    pp = request(rich)
+    real = purge_run.classify
+
+    def wrong(c):
+        got = real(c)
+        got.predicates["project_member"] = "true"                                     # every project's members
+        return got
+    monkeypatch.setattr(purge_run, "classify", wrong)
+    before = snapshot(owner)
+    with pytest.raises(purge_run.Refused, match="project_member"):
+        purge(owner, pp, rich["a2_email"])
+    assert snapshot(owner) == before
+    assert run(owner, "SELECT executed_at IS NULL AND cancelled_at IS NULL FROM project_purge "
+                      "WHERE project_purge_id = :pp", pp=pp)[0]
+
+
+def test_a_failure_part_way_leaves_every_row_and_the_request_open(rich, owner, monkeypatch):
+    """Criterion 12: a fault forced after a dozen tables are already deleted rolls all of it back."""
+    pp = request(rich)
+    real, calls = purge_run._delete, []
+
+    def failing(c, step, preds, p):
+        calls.append(step)
+        if len(calls) == 12:
+            raise RuntimeError("forced failure part-way")
+        return real(c, step, preds, p)
+    monkeypatch.setattr(purge_run, "_delete", failing)
+    before = snapshot(owner)
+    with pytest.raises(RuntimeError, match="part-way"):
+        purge(owner, pp, rich["a2_email"])
+    assert snapshot(owner) == before
+    assert run(owner, "SELECT executed_at IS NULL FROM project_purge WHERE project_purge_id = :pp", pp=pp)[0]
+
+
+def test_the_project_setting_ends_with_the_transaction(rich, owner):
+    """sara L3: the scoped setting is transaction-local, so a reused owner connection never carries it on."""
+    pp = request(rich)
+    with owner.connect() as c:
+        with c.begin():
+            purge_run.execute(c, pp, rich["a2_email"], lambda plan: plan.expected)
+        assert c.scalar(text("SELECT current_setting('vb.purge_project_id', true)")) in ("", None)
+
+
+def test_the_delete_order_puts_children_first_and_the_project_with_its_code_overrides(owner):
+    with owner.connect() as c:
+        got = purge_run.classify(c)
+    flat = [t for s in got.steps for t in ((s,) if isinstance(s, str) else s)]
+    assert flat.index("baseline_archive") < flat.index("baseline")
+    assert flat.index("baseline_bfc_node") < flat.index("baseline")
+    assert flat.index("import_row") < flat.index("import_batch")
+    assert flat.index("audit_event") < flat.index("project")
+    assert ("code_master", "project") in got.steps                                      # one statement (schema §8 row 13)
+    assert "import_batch_id" in got.predicates["import_row"]
