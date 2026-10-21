@@ -493,3 +493,6 @@ place.
   instance; M1, M2, L1, L2, L4 fixed):** (L3) `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` may point inside the repo and
   `.gitignore` has no archive entry — `archive_store.from_settings` should refuse a folder under the repo root.
   (L5) `scripts.stamp_instance` writes no audit row — add `INSTANCE_STAMPED` (old id, new id, OS user).
+- **2026-10-21 · slice 16, 0072–0073 (`sara`; H1, H2, M1–M3, L1–L6 fixed):** (own note) `audit_event.occurred_at`
+  is not forced by the database on INSERT, so the app role could write an aged grant row and pass AR-13's 30-day
+  check — not reachable from any route; force `occurred_at := statement_timestamp()` in the audit insert guard.
