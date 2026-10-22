@@ -157,8 +157,9 @@ def test_only_the_latest_grant_counts_and_no_grant_is_too_recent(two, owner):
     pp = request(app_engine, two)
     approve = "UPDATE project_purge SET approved_at = now(), approved_by_user_id = :u WHERE project_purge_id = :pp"
     assert "AR-13" in refused(app_engine, approve, u=two["a2"], pp=pp)
-    run(owner, "UPDATE app_user SET is_platform_admin = true WHERE app_user_id = :u", u=two["staff"])   # no audit row
-    assert "AR-13" in refused(app_engine, approve, u=two["staff"], pp=pp)
+    # slice 17 (0078): an admin with no grant on record can no longer be made at all — not even by the owner
+    assert "approved in this transaction" in refused(owner, "UPDATE app_user SET is_platform_admin = true "
+                                                            "WHERE app_user_id = :u", u=two["staff"])
 
 
 def test_a_cancelled_request_is_fixed_and_frees_the_project(two, owner):

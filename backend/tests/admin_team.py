@@ -44,13 +44,10 @@ def owner_user(owner, email: str, kind: str = "USER") -> int:
 
 
 def legacy(owner, uid: int, asker: int, days: int = 0, operator: str = "IS test") -> int:
+    """The single fixture path (S3): the IS command's own function."""
+    from seeds.owner_grant import legacy_grant
     with owner.begin() as c:
-        g = c.execute(text("INSERT INTO platform_admin_grant (grant_origin, target_user_id, reason, operator_name, "
-                           "requested_by_user_id, requested_at) VALUES ('LEGACY', :u, 'IS grant for a test', :o, "
-                           ":a, now() - make_interval(days => :d)) RETURNING platform_admin_grant_id"),
-                      {"u": uid, "o": operator, "a": asker, "d": days}).scalar()
-        c.execute(text("UPDATE app_user SET is_platform_admin = true WHERE app_user_id = :u"), {"u": uid})
-    return g
+        return legacy_grant(c, uid, "IS grant for a test", operator, asker, days)
 
 
 def team(owner, world, days: int = 31) -> dict:

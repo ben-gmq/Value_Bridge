@@ -167,6 +167,8 @@ def set_platform_admin(db: Session, actor: AppUser, user_id: int, value: bool, r
     user = db.get(AppUser, user_id)
     if user is None or not user.is_active:
         raise HTTPException(404, "Not found")
+    if value:                                       # slice 17 (AR-13): granting is a request a second admin approves
+        raise HTTPException(422, "Make someone an admin through a request a second admin approves")
     if user.app_user_id == actor.app_user_id:
         raise HTTPException(422, "You cannot change your own administrator rights")
     if not rationale.strip():

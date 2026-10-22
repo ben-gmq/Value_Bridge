@@ -3,10 +3,10 @@ and their members. Grade 1: who can see a client's data. Replaces the D-32 grant
 import re
 
 from fastapi.routing import APIRoute
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
 
 from models import AuditEvent
-from tests.conftest import ALL_COMPONENTS, PW, login, restrict
+from tests.conftest import ALL_COMPONENTS, OWNER_URL, PW, login, restrict
 
 API = "/api/v1"
 
@@ -246,12 +246,16 @@ def test_platform_admin_is_a_separate_audited_act_and_removal_names_the_kind(cli
     assert r.status_code == 201 and r.json()["is_platform_admin"] is False
     uid, rv = r.json()["app_user_id"], r.json()["row_version"]
     url = f"{API}/users/{uid}/platform-admin"
-    assert client.patch(url, headers=w["admin"], json={
-        "is_platform_admin": True, "rationale": "", "row_version": rv}).status_code == 422
-    ok = client.patch(url, headers=w["admin"], json={
+    no = client.patch(url, headers=w["admin"], json={
         "is_platform_admin": True, "rationale": "Second admin for cover", "row_version": rv})
-    assert ok.status_code == 200 and ok.json()["is_platform_admin"] is True
-    rv = ok.json()["row_version"]
+    assert no.status_code == 422 and "request" in no.json()["detail"]                   # slice 17 (AR-13), criterion 7
+    from tests.test_project_purge_record import promote
+    owner = create_engine(OWNER_URL)
+    try:
+        promote(owner, uid)                                                             # an IS grant (AR-19)
+    finally:
+        owner.dispose()
+    rv = next(u for u in client.get(f"{API}/users", headers=w["admin"]).json() if u["app_user_id"] == uid)["row_version"]
     assert client.patch(url, headers=w["admin"], json={
         "is_platform_admin": False, "rationale": "Moved on", "row_version": rv}).status_code == 422
     r = client.patch(url, headers=w["admin"], json={

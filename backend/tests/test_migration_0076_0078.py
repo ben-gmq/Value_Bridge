@@ -45,6 +45,16 @@ def test_a_record_the_backfill_did_not_write_refuses_the_0076_downgrade(owner):
     assert q(owner, "SELECT count(*) FROM platform_admin_grant")[0][0] == 2
 
 
+def test_0078_round_trips_and_keeps_no_data(owner):
+    guards = ("SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_app_user_admin_guard', "
+              "'trg_app_user_bootstrap_grant')")
+    assert q(owner, guards)[0][0] == 2
+    command.downgrade(_cfg(), "0077")
+    assert q(owner, guards)[0][0] == 0
+    command.upgrade(_cfg(), "head")
+    assert q(owner, guards)[0][0] == 2
+
+
 # ---- 0077: the purge guard reads the grant record (criterion 5, N6 b) ------------------------------------------
 
 def _m0077():

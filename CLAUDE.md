@@ -34,6 +34,11 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   **Slice 16 deploy (every database, once):** after `upgrade head`, `scripts.stamp_instance <id>` (owner) and the same
   id as `VB_INSTANCE_ID` in `.env`, or the server refuses to start; `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` point
   outside the repo (unset = files stay owed); then `scripts.write_archives` writes the backlog (Q-77).
+  **Slice 17 deploy:** read 0076's NOTICEs (every admin recorded or skipped — a skipped one needs an IS grant); IS
+  confirms `SELECT fn_backdating_allowed()` is false on production. Admins are then made only by a request a second
+  admin approves; `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)
+  for the first two only; any other admin is an IS grant, `seeds.owner_grant` (AR-16, AR-25). Tests make admins only
+  through `tests/admin_team.py` (`promote`, `legacy`) — the flag cannot be set by SQL.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·

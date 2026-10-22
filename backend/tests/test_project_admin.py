@@ -263,14 +263,19 @@ def test_removing_admin_rights_shows_every_membership_that_comes_back_and_a_late
     oid, url = w["users"]["outsider"], f"{API}/users/{w['users']['outsider']}/platform-admin"
     restrict(client, w["admin"], w["p_solo"], {oid: "ADMIN"})
     assert _preview(client, w, oid, "USER", True)["comes_back"] == []        # granting admin revives nothing
-    ok = client.patch(url, headers=w["admin"], json={"is_platform_admin": True, "rationale": "cover",
-                                                      "row_version": _user(client, w, oid)["row_version"]})
-    assert ok.status_code == 200
+    from sqlalchemy import create_engine
+    from tests.conftest import OWNER_URL
+    from tests.test_project_purge_record import promote
+    owner = create_engine(OWNER_URL)
+    try:
+        promote(owner, oid)                                                   # slice 17: granted by an IS grant
+    finally:
+        owner.dispose()
     pv = _preview(client, w, oid, "USER", False)
     assert [(r["project_code"], r["level_before"], r["level_after"]) for r in pv["comes_back"]] == [
         ("SOLO", None, "ADMIN")]
     body = {"is_platform_admin": False, "rationale": "moved on", "user_kind": "USER",
-            "row_version": ok.json()["row_version"]}
+            "row_version": _user(client, w, oid)["row_version"]}
     assert client.patch(url, headers=w["admin"], json=body).json()["detail"].startswith("This change gives back")            # no hash
     _store(db, w["p_fin"], oid, "ADMIN")                                                     # appears after the preview
     assert client.patch(url, headers=w["admin"], json={**body, "confirm_hash": pv["confirm_hash"]}).json()["detail"].startswith("This change gives back")
