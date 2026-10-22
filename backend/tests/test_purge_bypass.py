@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from database import engine as app_engine
+from tests.admin_team import owner_user
 from tests.test_baseline import bid, freeze, scope
 from tests.test_project_purge_record import (INSERT, backdate, owner, promote, refused, run,  # noqa: F401 — fixture
                                               two)
@@ -43,7 +44,7 @@ def frozen(client, world, ed, owner):
     scope(client, other)
     b_other = bid(freeze(client, other))
     admins = run(owner, "SELECT app_user_id FROM app_user WHERE is_platform_admin ORDER BY 1")
-    a2 = world["users"]["owner"]
+    a2 = owner_user(owner, "a2.purge@example.test")                # not made by a1 (AR-24)
     promote(owner, a2)
     return {"p": ed["p"], "b": b, "other": world["p_sales"], "b_other": b_other, "a1": admins[0], "a2": a2,
             "c": world["client_id"]}

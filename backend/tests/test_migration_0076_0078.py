@@ -43,3 +43,45 @@ def test_a_record_the_backfill_did_not_write_refuses_the_0076_downgrade(owner):
     with pytest.raises(Exception, match="backfill did not write"):
         command.downgrade(_cfg(), "0075")
     assert q(owner, "SELECT count(*) FROM platform_admin_grant")[0][0] == 2
+
+
+# ---- 0077: the purge guard reads the grant record (criterion 5, N6 b) ------------------------------------------
+
+def _m0077():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0077_purge_guard_reads_grants.py"
+    spec = importlib.util.spec_from_file_location("m0077", path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+BODY = "SELECT prosrc FROM pg_proc WHERE proname = 'fn_project_purge_guard'"
+
+
+def test_the_purge_guard_is_0072s_body_with_one_block_swapped_and_reads_no_audit(owner):
+    m = _m0077()
+    at_head = q(owner, BODY)[0][0]
+    assert m._sha(at_head) == m.SHA_0077
+    assert "audit_event" not in at_head and "fn_admin_purge_independent" in at_head
+    command.downgrade(_cfg(), "0076")
+    old = q(owner, BODY)[0][0]
+    assert m._sha(old) == m.SHA_0072 and "audit_event" in old                           # 0072's, byte for byte
+    assert m._swap(old, m.OLD_DECLARE, m.NEW_DECLARE, m.OLD_BLOCK, m.NEW_BLOCK) == at_head
+    assert q(owner, "SELECT proconfig FROM pg_proc WHERE proname = 'fn_project_purge_guard'")[0][0] == \
+        ["search_path=pg_catalog, public"]
+    command.upgrade(_cfg(), "head")
+    assert q(owner, BODY)[0][0] == at_head
+
+
+def test_0077_refuses_to_replace_a_body_it_was_not_written_against(owner):
+    command.downgrade(_cfg(), "0076")
+    old = q(owner, BODY)[0][0]
+    x(owner, "CREATE OR REPLACE FUNCTION fn_project_purge_guard() RETURNS trigger LANGUAGE plpgsql "
+             "SET search_path = pg_catalog, public AS $g$" + old.replace("BEGIN", "BEGIN -- edited", 1) + "$g$")
+    with pytest.raises(Exception, match="not the body this migration was written against"):
+        command.upgrade(_cfg(), "0077")
+    x(owner, "CREATE OR REPLACE FUNCTION fn_project_purge_guard() RETURNS trigger LANGUAGE plpgsql "
+             "SET search_path = pg_catalog, public AS $g$" + old + "$g$")
+    command.upgrade(_cfg(), "head")

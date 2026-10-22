@@ -13,6 +13,7 @@ from models import AppUser
 from seeds.demo_showcase import build_showcase
 from services import purge_run
 from tests.conftest import PW
+from tests.admin_team import owner_user
 from tests.test_baseline import bid, freeze, scope
 from tests.test_project_purge_record import INSERT, backdate, owner, promote, run  # noqa: F401 — owner is a fixture
 from tests.test_scope_api import ed  # noqa: F401 — ed is a fixture
@@ -27,7 +28,7 @@ def rich(client, world, ed, db, owner, monkeypatch):
     db.commit()
     scope(client, ed)
     bid(freeze(client, ed))
-    a2 = world["users"]["owner"]
+    a2 = owner_user(owner, "a2.purge@example.test")                # not made by a1 (AR-24)
     promote(owner, a2)
     run(owner, "INSERT INTO vb_instance (instance_id) VALUES ('test-a')")
     from config import get_settings
@@ -38,7 +39,7 @@ def rich(client, world, ed, db, owner, monkeypatch):
             run(owner, "INSERT INTO code_master (project_id, category, code, label, created_by) "
                        "VALUES (:p, :c, 'LOCAL', 'Local', :u)", p=p, c=cat, u=admin.app_user_id)
     return {"p": victim, "c": client_id, "a1": admin.app_user_id, "a2": a2, "world": world,
-            "a2_email": "owner@example.test", "code": "KAITO/CSR27"}
+            "a2_email": "a2.purge@example.test", "code": "KAITO/CSR27"}
 
 
 def request(t, kind="DELETE", approve=True, hours=25):

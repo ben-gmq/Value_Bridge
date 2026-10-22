@@ -4,6 +4,7 @@ never re-arm the guards under a half-run purge."""
 import pytest
 from alembic import command
 
+from tests.admin_team import forget_grants
 from tests.test_migration_0053 import _cfg, owner, q  # noqa: F401 — owner is a fixture
 from tests.test_project_purge_record import approved, execute, promote, record_key, run, two  # noqa: F401 — fixture
 
@@ -36,6 +37,7 @@ def test_an_executed_purge_refuses_the_0074_downgrade(two, owner):
     record_key(owner, pp, two["p"], f"vb-test-a-proj-{two['p']}")
     run(owner, "DELETE FROM project WHERE project_id = :p", p=two["p"])                 # bare: no child rows
     execute(owner, two, pp)
+    forget_grants(owner)                                                                # slice 17: past 0076 first
     command.downgrade(_cfg(), "0074")                                                   # 0075 down is always safe
     with pytest.raises(Exception, match="a purge has been executed"):
         command.downgrade(_cfg(), "0073")

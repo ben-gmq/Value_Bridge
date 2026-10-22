@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from database import engine as app_engine
+from tests.admin_team import legacy, owner_user, seed_bootstrap
 from tests.conftest import OWNER_URL
 
 INSERT = ("INSERT INTO project_purge (purge_kind, project_id, client_id, project_code, reason, requested_by_user_id, "
@@ -36,7 +37,8 @@ def refused(eng, sql, **kw) -> str:
 
 @pytest.fixture
 def two(client, world, owner):
-    """Two live platform admins, a bare project (no child rows, so the owner can remove it here without 0074)."""
+    """The setup admin a1 (the requester), a2 — an account the owner made, so a1 is not its creator (AR-24) — still
+    staff until promoted, and a bare project (no child rows, so the owner can remove it here without 0074)."""
     a1, staff = run(owner, "SELECT array_agg(app_user_id ORDER BY app_user_id) FILTER (WHERE is_platform_admin), "
                            "array_agg(app_user_id ORDER BY app_user_id) FILTER (WHERE NOT is_platform_admin) "
                            "FROM app_user")
@@ -44,14 +46,25 @@ def two(client, world, owner):
                    "created_by) SELECT :c, 'BARE', 'Bare', code_id, behaviour_code, :u FROM code_master "
                    "WHERE category = 'PROJECT_STATUS' AND code = 'PLANNING' AND project_id IS NULL "
                    "RETURNING project_id", c=world["client_id"], u=a1[0])[0]
-    return {"a1": a1[0], "staff": staff[0], "a2": staff[1], "p": p, "c": world["client_id"]}
+    a2 = owner_user(owner, "a2.purge@example.test")
+    return {"a1": a1[0], "staff": staff[0], "a2": a2, "p": p, "c": world["client_id"]}
 
 
 def promote(owner, uid, by=None, days=31):
-    """A platform admin whose grant (AR-13) was made `days` ago by `by` (None: a system grant, never the requester)."""
-    run(owner, "UPDATE app_user SET is_platform_admin = true WHERE app_user_id = :u", u=uid)
-    run(owner, "INSERT INTO audit_event (event_type, app_user_id, target_table, target_id, occurred_at) VALUES "
-               "('PLATFORM_ADMIN_GRANTED', :by, 'app_user', :u, now() - make_interval(days => :d))", by=by, u=uid, d=days)
+    """Make `uid` a platform admin by the IS LEGACY path (slice 17, AR-19), granted `days` ago at the request of `by`
+    — None: an independent "IS asker" admin, never the setup admin, so the grant is made by nobody in the test's pair.
+    The setup admin gets its BOOTSTRAP record first. A re-grant first takes the rights away (AR-17)."""
+    a1 = run(owner, "SELECT app_user_id FROM app_user WHERE email = 'admin@example.test'")[0]
+    seed_bootstrap(owner, a1)
+    if by is None:
+        by = run(owner, "SELECT app_user_id FROM app_user WHERE email = 'is.asker@example.test'")
+        if by is None:
+            by = owner_user(owner, "is.asker@example.test")
+            legacy(owner, by, a1, days=400)
+        else:
+            by = by[0]
+    run(owner, "UPDATE app_user SET is_platform_admin = false WHERE app_user_id = :u AND is_platform_admin", u=uid)
+    legacy(owner, uid, by, days)
 
 
 def request(eng, t, kind="DELETE", archive=None, p=None):
@@ -127,6 +140,15 @@ def test_the_approver_s_rights_must_be_old_and_not_granted_by_the_requester(two,
         run(app_engine, approve, u=two["a2"], pp=pp)
     else:
         assert "AR-13" in refused(app_engine, approve, u=two["a2"], pp=pp)
+
+
+def test_an_approver_whose_account_the_requester_created_is_never_independent(two, owner):
+    """Slice 17 AR-24 through the purge guard (0077): staff's account was made by a1 through the API, so even an
+    independent IS grant 31 days old does not let staff approve a1's removal."""
+    promote(owner, two["staff"])
+    pp = request(app_engine, two)
+    assert "independent" in refused(app_engine, "UPDATE project_purge SET approved_at = now(), approved_by_user_id = "
+                                                ":u WHERE project_purge_id = :pp", u=two["staff"], pp=pp)
 
 
 def test_only_the_latest_grant_counts_and_no_grant_is_too_recent(two, owner):

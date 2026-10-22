@@ -13,6 +13,7 @@ import models
 from routers.guards import GUARD_KEY
 from tests.conftest import OWNER_URL, login
 from tests.test_access import _seed_restricted
+from tests.admin_team import owner_user
 from tests.test_project_purge_record import promote, run
 
 API = "/api/v1"
@@ -27,9 +28,10 @@ def owner():
 
 @pytest.fixture
 def two(client, world, owner):
-    """The setup admin requests; the owner user, made a platform admin 31 days ago, approves."""
-    promote(owner, world["users"]["owner"])
-    return {**world, "a2": login(client, "owner@example.test")}
+    """The setup admin requests; an account the owner made (so the setup admin is not its creator, AR-24), made a
+    platform admin 31 days ago by an independent IS grant, approves."""
+    promote(owner, owner_user(owner, "a2.purge@example.test"))
+    return {**world, "a2": login(client, "a2.purge@example.test")}
 
 
 def ask(client, h, pid, kind="DELETE", reason="Contract clause 9.2, signed 2026-10-01", confirm="ACME/SOLO"):
@@ -144,7 +146,7 @@ def test_approval_needs_the_typed_codes_a_second_independent_admin_and_shows_the
     ok = client.post(url, headers=two["a2"], json=body)
     assert ok.status_code == 200 and ok.json()["state"] == "APPROVED" and ok.json()["waiting"]
     rows = client.get(f"{API}/purge-requests", headers=two["admin"]).json()
-    assert [x["project_purge_id"] for x in rows] == [pp] and rows[0]["approved_by"] == "Owner"
+    assert [x["project_purge_id"] for x in rows] == [pp] and rows[0]["approved_by"] == "A2.Purge"
     assert client.get(f"{API}/purge-requests", headers=login(client, "editor@example.test")).status_code == 200
     assert client.get(f"{API}/purge-requests", headers=login(client, "reviewer@example.test")).status_code == 403
 
