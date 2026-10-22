@@ -55,6 +55,7 @@ export const keys = {
   accessChange: (u, kind, admin) => ['accessChange', String(u), kind, String(admin)],
   // slice 16: every removal write invalidates both; a project's own reads are untouched (it is only frozen)
   purgeRequests: () => ['purgeRequests'],
+  grantRequests: () => ['grantRequests'],              // slice 17; its writes also invalidate ['users']
   archiveOverview: () => ['archiveOverview'],
   baselineArchive: (b) => ['baselineArchive', String(b)],
   // The tree read carries each process's DFD light (D-68, slice 13a). DR13-D2, one choice: there is no separate

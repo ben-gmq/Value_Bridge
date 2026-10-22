@@ -12,6 +12,7 @@ import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { CodeListsView } from '../settings/CodeListsPage';
 import { RemovalsTab } from './RemovalsTab';
+import { PendingGrants, RequestGrantDialog } from './GrantRequests';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -87,6 +88,7 @@ function Users({ notify }) {
     is_platform_admin: !u.is_platform_admin, rationale: reason, row_version: u.row_version,
     user_kind: u.is_platform_admin ? fallbackKind : null, confirm_hash: adminBack.data?.confirm_hash ?? null }),
   ['users'], () => { setAdminChange(null); setReason(''); notify(t('admin.adminChanged')); });
+  const [grantFor, setGrantFor] = useState(null);
   const [kindChange, setKindChange] = useState(null);
   const kindBack = useComesBack(kindChange, 'USER', false);
   const setKind = useSave((u) => api.setUserKind(u.app_user_id, {
@@ -111,6 +113,9 @@ function Users({ notify }) {
         </FormControl>
         <Button variant="contained" disabled={create.m.isPending || !f.user_kind} onClick={() => create.m.mutate()}>{t('admin.createUser')}</Button>
       </FormRow>
+      <PendingGrants notify={notify} />
+      <RequestGrantDialog key={grantFor?.app_user_id ?? 'none'} user={grantFor} onClose={() => setGrantFor(null)}
+        notify={notify} />
       <GridCard {...grid} rows={users.data ?? []} getRowId={(r) => r.app_user_id}
         columns={[
           { field: 'app_user_id', headerName: t('admin.id'), width: 70 },
@@ -126,8 +131,11 @@ function Users({ notify }) {
                 <Button size="small" disabled={setKind.m.isPending}
                   onClick={() => (row.user_kind === 'USER' ? setKind.m.mutate(row) : setKindChange(row))}>
                   {row.user_kind === 'USER' ? t('admin.makeViewer') : t('admin.makeUser')}</Button>)}
-              <Button size="small" onClick={() => { setAdmin.setError(''); setAdminChange(row); }}>
-                {row.is_platform_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}</Button>
+              {row.is_platform_admin ? (
+                <Button size="small" onClick={() => { setAdmin.setError(''); setAdminChange(row); }}>
+                  {t('admin.removeAdmin')}</Button>
+              ) : (                                              // slice 17: a request a second admin decides
+                <Button size="small" onClick={() => setGrantFor(row)}>{t('grants.request')}</Button>)}
               <Button size="small" color="warning" onClick={() => setDeact(row)}>{t('admin.deactivate')}</Button>
             </Stack>) },
         ]} />

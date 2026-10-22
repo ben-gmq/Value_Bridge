@@ -12,7 +12,13 @@ export const api = {
   users: () => d(http.get('/api/v1/users')),
   createUser: (body) => d(http.post('/api/v1/users', body)),
   deactivateUser: (id) => d(http.patch(`/api/v1/users/${id}/deactivate`)),
-  setPlatformAdmin: (id, body) => d(http.patch(`/api/v1/users/${id}/platform-admin`, body)),
+  setPlatformAdmin: (id, body) => d(http.patch(`/api/v1/users/${id}/platform-admin`, body)),   // removal only (slice 17)
+  // slice 17: admin rights are a request a second, independent admin decides
+  grantRequests: () => d(http.get('/api/v1/admin/grant-requests')),
+  requestGrant: (userId, body) => d(http.post(`/api/v1/users/${userId}/grant-requests`, body)),
+  approveGrant: (id, body) => d(http.post(`/api/v1/grant-requests/${id}/approve`, body)),
+  rejectGrant: (id, body) => d(http.post(`/api/v1/grant-requests/${id}/reject`, body)),
+  cancelGrant: (id, body) => d(http.post(`/api/v1/grant-requests/${id}/cancel`, body)),
   setUserKind: (id, body) => d(http.patch(`/api/v1/users/${id}/kind`, body)),
   accessChangePreview: (id, body) => d(http.post(`/api/v1/users/${id}/access-change-preview`, body)),
   clients: () => d(http.get('/api/v1/clients')),
