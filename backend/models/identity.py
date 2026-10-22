@@ -37,6 +37,36 @@ class AppUser(TimestampMixin, Base):
                       CheckConstraint("user_kind IN ('USER', 'VIEWER')", name="ck_app_user_kind"))
 
 
+class PlatformAdminGrant(Base):
+    """One row per way one user was made, or asked to be made, a platform admin (slice17 schema rev 3, migration 0076):
+    a REQUEST one admin makes and a different, independent one decides; the BOOTSTRAP of the first two admins; or an
+    owner-run LEGACY grant. Kept forever. The database guard sets every time and refuses every out-of-order step; the
+    named actor pairs replace AuditMixin, as on project_purge. `approved_xact` (xid8) is the guard's alone: unmapped."""
+
+    __tablename__ = "platform_admin_grant"
+    ORIGINS = ("REQUEST", "BOOTSTRAP", "LEGACY")
+
+    platform_admin_grant_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    grant_origin: Mapped[str] = mapped_column(String(10), nullable=False)
+    target_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    operator_name: Mapped[str | None] = mapped_column(String(200))
+    source_audit_event_id: Mapped[int | None] = mapped_column(BigInteger)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    requested_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+
 class UserAccessGrant(AuditMixin, Base):
     """RETIRED by D-40 (migration 0038): history only, SELECT-only for the app role. It held one
     grant of one project role over one project or program (D-32); access is now user_kind plus

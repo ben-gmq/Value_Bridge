@@ -25,8 +25,8 @@ from services.archive_store import REF, key_name
 # Tables that hold rows of a project which survive its removal (schema §8).
 KEEP = ("project_purge", "project_purge_key")
 # Tables with no project_id and no reference towards a project; the classifier proves the claim every run.
-NO_PROJECT_DATA = ("alembic_version", "app_user", "client", "program", "program_member", "project_template_component",
-                   "vb_instance")
+NO_PROJECT_DATA = ("alembic_version", "app_user", "client", "platform_admin_grant", "program", "program_member",
+                   "project_template_component", "vb_instance")
 LIBRARY = "code_master"
 
 

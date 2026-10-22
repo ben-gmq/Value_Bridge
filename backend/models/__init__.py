@@ -15,7 +15,7 @@ from models.issue import Issue, IssueBr, Stakeholder  # noqa: F401
 from models.phase import Phase, SolutionDependency, SolutionPhase  # noqa: F401
 from models.function_requirement import (BrFunctionRequirement, FrInterface, FrInterfaceDataEntity,  # noqa: F401
                                          FunctionRequirement)
-from models.identity import AppUser, AuditEvent, ProgramMember, ProjectMember, UserAccessGrant  # noqa: F401
+from models.identity import AppUser, AuditEvent, PlatformAdminGrant, ProgramMember, ProjectMember, UserAccessGrant  # noqa: F401
 from models.requirement import (BrDataEntity, BrDataField, BrOrgRole, BrRequirementLine,  # noqa: F401
                                 BrSystemFlow, BusinessRequirement)
 from models.shared import CodeMaster, ProjectCodeVisibility, ProjectSequence, VbInstance  # noqa: F401
