@@ -180,8 +180,21 @@ class ProjectOut(Orm):
     is_restricted: bool
     working_days_per_year: int = 240                  # D-67: the FTE basis (slice 13c)
     hours_per_working_day: float = 8.0
+    status_code_id: int | None = None                 # slice 16 AR-8 / AR-10: the status, its meaning and its clock
+    status_behaviour: str | None = None
+    closed_on: date | None = None
     row_version: int
     my_access_level: str | None = None   # VIEW / EDIT / ADMIN / PLATFORM, single-project read (§8.6, D-71)
+
+
+class ProjectStatusIn(BaseModel):
+    status_code: str = Field(max_length=30)          # a PROJECT_STATUS code, never a label
+    row_version: int
+
+
+class ProjectRetireIn(BaseModel):
+    confirm_text: str = Field(max_length=30)         # the project code, typed again
+    row_version: int
 
 
 class ComponentOut(BaseModel):

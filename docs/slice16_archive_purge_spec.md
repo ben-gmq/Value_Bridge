@@ -161,8 +161,10 @@ None, if Q-67 goes as recommended: archive and purge state is derived from their
 | `POST /projects/{project_id}/purge-requests` | platform_admin | `reason`, `confirm_text` → the open request; writes to the project now 409 |
 | `POST /purge-requests/{id}/cancel` | platform_admin | → cancelled; writes allowed again |
 | `GET /purge-requests` | platform_admin | every purge record (no content: code, client, dates, actors, reason) |
-| `GET /projects/{project_id}/baselines/{id}/archive` | project_ctx(VIEW) | the archive row's status, name, size, written_at — never the file |
-| `GET /admin/archive-backlog` | platform_admin | owed rows (and their last error) across projects |
+| `GET /baselines/{id}/archive` | object_guard(Baseline, VIEW) | each part's current file: status, size, written_at — never the file (built 2026-10-21; the house object-route form) |
+| `GET /admin/archive-overview` | platform_admin | live platform admins (AR-5), projects due for archiving (AR-1), owed files and their last error across projects (built 2026-10-21; replaces `archive-backlog`) |
+| `POST /purge-requests/{id}/approve` | platform_admin | `confirm_text`, `row_version` → approved (R2, R3) |
+| `POST /purge-requests/{id}/delete-archive` | platform_admin | `reason`, `confirm_text` → a DELETE_ARCHIVE of that executed ARCHIVE (AR-9; the project is gone, so not a project route) |
 
 There is **no HTTP route that deletes**: execution is the operator script, as the owner role (design §6.6). The design's
 `POST /projects/{project_id}/purge` becomes the request route above (Q-74). A project with an open request refuses every

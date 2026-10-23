@@ -16,9 +16,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import AppUser, CodeMaster, EffortRate, Project, ProjectCodeVisibility
-from models.shared import FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, RACI_BEHAVIOURS
+from models.shared import FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, PROJECT_STATUS_BEHAVIOURS, RACI_BEHAVIOURS
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
-from services import audit
+from services import access, audit
 from services.code_master import resolve
 from services.lifecycle import soft_delete
 
@@ -40,7 +40,7 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
 )
 # §7.2, G-2, I-1: never overridden or hidden per project
 COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS", "PHASE_STATUS"})   # + W-4
-BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS"})
+BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS", "PROJECT_STATUS"})   # + Q-89 b
 CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 
 # R12: code columns the re-point never reaches, each with its reason. A code FK in neither this list nor the
@@ -91,7 +91,7 @@ def _behaviour(category: str, behaviour: str | None) -> str | None:
     if category in BEHAVIOUR_CATEGORIES and not behaviour:
         raise HTTPException(422, f"A {category} code needs a behaviour")
     allowed = {"FR_TYPE": FR_BEHAVIOURS, "RACI_TYPE": RACI_BEHAVIOURS,
-               "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS}.get(category)
+               "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS, "PROJECT_STATUS": PROJECT_STATUS_BEHAVIOURS}.get(category)
     if allowed and behaviour not in allowed:                        # sara 1g L7: a clear 422, not the CHECK's
         raise HTTPException(422, f"Behaviour must be one of {', '.join(allowed)}")
     if category not in BEHAVIOUR_CATEGORIES and behaviour:
@@ -291,6 +291,11 @@ def add_company_code(db: Session, actor: AppUser, category: str, code: str, labe
                                           CodeMaster.code == code)) is not None:
         raise HTTPException(409, f"{code} already exists in {category} — restore or rename it instead")
     _refuse_project_owned(db, category, code)
+    if category == "FR_TYPE" and (pending := access.pending_project_ids(db)):    # slice 16 R17: it writes to each
+        codes = sorted(db.scalars(select(Project.project_code).where(Project.project_id.in_(pending))))
+        raise HTTPException(409, f"A request to remove {', '.join(codes)} is open: a new FR type adds rate cells to "
+                                 "every project, so it waits until that request is cancelled or carried out",
+                            headers=access.PENDING_HEADERS)
     row = CodeMaster(project_id=None, category=category, code=code, label=label, behaviour_code=behaviour,
                      sort_order=sort_order if sort_order is not None else _next_sort(db, None, category),
                      created_by=actor.app_user_id)

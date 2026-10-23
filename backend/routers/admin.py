@@ -7,6 +7,8 @@ from models import AppUser
 from routers.guards import GuardedRouter, platform_admin
 from schemas.common import (AccessChangeIn, AccessChangePreviewOut, ClientIn, ClientOut, PlatformAdminIn, UserIn,
                             UserKindIn, UserOut)
+from schemas.admin_grant import GrantDecideIn, GrantRejectIn, GrantRequestIn
+from services import admin_grant
 from services import project as project_service
 from services import user_admin
 
@@ -41,6 +43,32 @@ def set_platform_admin(id: int, body: PlatformAdminIn, actor: AppUser = Depends(
                        db: Session = Depends(get_db)):
     return user_admin.set_platform_admin(db, actor, id, body.is_platform_admin, body.rationale,
                                          body.row_version, body.user_kind, body.confirm_hash)
+
+
+@router.get("/admin/grant-requests", **_admin.route)
+def list_grant_requests(db: Session = Depends(get_db)):
+    """Slice 17: every request for platform-admin rights, open first."""
+    return admin_grant.list_requests(db)
+
+
+@router.post("/users/{id}/grant-requests", status_code=201, **_admin.route)
+def request_grant(id: int, body: GrantRequestIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
+    return admin_grant.rows(db, [admin_grant.request(db, actor, id, body.reason)])[0]
+
+
+@router.post("/grant-requests/{id}/approve", **_admin.route)
+def approve_grant(id: int, body: GrantDecideIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
+    return admin_grant.rows(db, [admin_grant.approve(db, actor, id, body.row_version)])[0]
+
+
+@router.post("/grant-requests/{id}/reject", **_admin.route)
+def reject_grant(id: int, body: GrantRejectIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
+    return admin_grant.rows(db, [admin_grant.reject(db, actor, id, body.reason, body.row_version)])[0]
+
+
+@router.post("/grant-requests/{id}/cancel", **_admin.route)
+def cancel_grant(id: int, body: GrantDecideIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
+    return admin_grant.rows(db, [admin_grant.cancel(db, actor, id, body.row_version)])[0]
 
 
 @router.patch("/users/{id}/deactivate", response_model=UserOut, **_admin.route)

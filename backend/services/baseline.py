@@ -17,8 +17,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import AppUser, Baseline, BusinessRequirement, Project, Stakeholder
-from services import access, audit, components, dfd_rule, freeze_set
+from models import AppUser, Baseline, BaselineArchive, BusinessRequirement, Project, Stakeholder
+from services import access, archive, audit, components, dfd_rule, freeze_set
 from services.code_master import resolve
 from services.consistency import FREEZE_BLOCKING_WARNINGS, INFORMATIONAL, WARNINGS, consistency_check
 from services.freeze_set import BY_TABLE, CURRENT_HASH_SPEC, FREEZE_SET
@@ -120,13 +120,14 @@ def freeze(user: AppUser, project_id: int, note: str | None, bump: str, confirm_
         try:
             out = _freeze(tx, user, project_id, note, bump, confirm_text, preview_digest)
             tx.commit()
-            return out
         except (IntegrityError, OperationalError) as exc:
             tx.rollback()
             # sara L1: only a concurrent freeze (unique) or a concurrent edit (serialization, deadlock) is "again"
             if getattr(exc.orig, "sqlstate", None) in ("23505", "40001", "40P01"):
                 raise HTTPException(409, RETRY) from exc
             raise
+    archive.write_soon(out["baseline"]["baseline_id"])  # slice 16: after the commit, best effort (criterion 4)
+    return out
 
 
 def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confirm_text: str,
@@ -179,6 +180,7 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
     if prior is not None:
         prior.status_code_id = _code_id(tx, project_id, "BASELINE_STATUS", "SUPERSEDED")
         prior.updated_by = user.app_user_id
+    owe_archive(tx, b, "SCOPE", user.app_user_id)      # slice 16: the file is owed in the freeze transaction
     audit.record(tx, "BASELINE_FROZEN", actor_id=user.app_user_id, project_id=project_id,
                  target_table="baseline", target_id=b.baseline_id,
                  detail={"version_label": label, "hash_spec_version": CURRENT_HASH_SPEC, "components": sorted(on),
@@ -190,6 +192,15 @@ def _freeze(tx: Session, user: AppUser, project_id: int, note, bump: str, confir
     tx.flush()
     tx.refresh(b)
     return {"baseline": header(tx, b), "counts": n, "warnings": warnings}
+
+
+def owe_archive(tx: Session, b: Baseline, part: str, actor_id: int) -> None:
+    """Slice 16 (schema §12.3): record the archive file this baseline now owes — SCOPE at the freeze, SIGNOFF at
+    the client approval — in the caller's transaction, so a baseline can never exist without its owed row. The
+    writer (scripts.write_archives) fills it in later; its failure never touches the freeze."""
+    tx.add(BaselineArchive(baseline_id=b.baseline_id, archive_part=part, file_seq=1, project_id=b.project_id,
+                           format_version=BaselineArchive.FORMAT_VERSION, created_by=actor_id))
+    tx.flush()
 
 
 # S10b-3 step 1, DR10b-S4: WHICH rows each open warning was about, kept on the append-only freeze record. Business
@@ -249,11 +260,14 @@ def approve(db: Session, user: AppUser, b: Baseline, approver: str, approved_on:
     if b.status_code == "FROZEN":
         b.status_code_id = _code_id(db, b.project_id, "BASELINE_STATUS", "APPROVED")
     b.updated_by = user.app_user_id
+    db.flush()                                          # the guard reads the recorded approval
+    owe_archive(db, b, "SIGNOFF", user.app_user_id)     # Q-79: the sign-off file, owed with the approval
     audit.record(db, "BASELINE_APPROVED", actor_id=user.app_user_id, project_id=b.project_id,
                  target_table="baseline", target_id=b.baseline_id,
                  detail={"version_label": b.version_label, "client_approver_name": approver,
                          "client_approved_on": approved_on.isoformat(), "reference": b.approval_reference})
     db.commit()
+    archive.write_soon(b.baseline_id)                   # slice 16: after the commit, best effort (criterion 4)
     db.refresh(b)
     return header(db, b)
 

@@ -31,6 +31,19 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   before their next freeze, or their next diff counts four added rate rows.
   **Slice 15 deploy:** `seed_code_master` stops while any project still holds its own wave status (a project-tier
   PHASE_STATUS row or hide, now company-only — W-4); clear those with Ben, then re-run it.
+  **Slice 16 deploy (every database, once):** after `upgrade head`, `scripts.stamp_instance <id>` (owner) and the same
+  id as `VB_INSTANCE_ID` in `.env`, or the server refuses to start; `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` point
+  outside the repo (unset = files stay owed); then `scripts.write_archives` writes the backlog (Q-77). IS schedules
+  `scripts.weekly_check --actor-email <admin> --operator <name>` weekly (exit 1 = a file or held archive failed); the
+  Removals tab warns once its last run is over 8 days old (U5).
+  **Slice 17 deploy:** read 0076's NOTICEs (every admin recorded or skipped — a skipped one needs an IS grant); IS
+  confirms `SELECT fn_backdating_allowed()` is false on production. Admins are then made only by a request a second
+  admin approves; `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)
+  for the first two only; any other admin is an IS grant, `seeds.owner_grant` (AR-16, AR-25). IS also confirms the app
+  login has no TEMP on the database and no CREATE on `public`, and that the owner login is named exactly `vb_owner`
+  (the guards name it; another name fails closed). Tests make admins only
+  through `tests/admin_team.py` (`promote`, `legacy`) — the flag cannot be set by SQL (the one exception,
+  `test_app_user_admin_guard.unrecorded_admin`, switches the guards off to stage an admin 0076's backfill skipped).
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·
@@ -94,12 +107,16 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 
 ## The VB law (enforced in code; `sara` audits it)
 1. **No hard delete.** Soft delete (`is_active=false`) everywhere. The only hard deletes are
-   `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15, runs as `vb_owner`). The app role has no
-   DELETE grant, so this fails at the database, not in review.
+   `diagram_layout` (D-30), the 90-day `import_row` purge (Q14) and `purge_project` (Q15: `scripts/purge_project.py` →
+   `services/purge_run`, as `vb_owner`). The app role has no DELETE grant, so this fails at the database, not in review.
+   A new table holding project rows needs no purge change; one without `project_id` or a reference towards a project
+   joins `purge_run.NO_PROJECT_DATA`, or every purge stops.
    Nothing cascades except a process step: `services/step_retire.OWNED_BY_STEP` / `OWNED_BY_BR` are the only lists
    of rows that retire with something else; a new table that points at a step or a BR blocks until added to one.
-2. **Baselines are immutable** — every `baseline_*` table gets the `fn_reject_modification()`
-   trigger and the insert guard (`vb_ops.immutable_guards`), and shadows are **generated** by
+2. **Baselines are immutable** — every `baseline_*` shadow gets the `fn_reject_modification_purgeable()`
+   trigger and the insert guard (`vb_ops.immutable_guards_v2` from 0074; only the scoped purge of one approved,
+   24-hour-old request may delete, `fn_purge_allows`; nobody updates); `baseline_archive` is **not** a shadow (the archive-file
+   outbox, its own write-once guard, design §6.6). Shadows are **generated** by
    `services/baseline_shadow.py`, never hand-written. Migration 0048 froze them as literal DDL: a migration
    that adds a column to a shadowed live table adds the shadow column **in the same migration** (the parity
    test in `tests/test_baseline.py` reads the database), and a shadow column's type is **never** ALTERed

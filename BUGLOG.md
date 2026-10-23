@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-011 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-013 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -21,6 +21,32 @@ place.
 ---
 
 ## Open
+
+### VB-011 | The web app loads the owner database login, so a compromised app process defeats every database guard | OPEN
+- **Found:** 2026-10-21, design review of slice 17 (design-auditor S2, HIGH). Predates slices 16–17; both depend on it.
+- **What:** `backend/config.py` makes `migration_database_url` (vb_owner) a required setting of the running web
+  server. Any read of the server's environment (a path bug, a settings dump, code execution, a bad dependency) gives
+  the owner login, which can drop the purge and admin-grant triggers or take the owner-only paths (LEGACY grants,
+  purge execution).
+- **Fix:** split the settings — the web server loads only `DATABASE_URL` (vb_app); alembic and the owner scripts read
+  `MIGRATION_DATABASE_URL` themselves. Before the first non-local deploy (Azure, D-35).
+- **Severity:** HIGH, not reachable today (local only, no real data).
+- **Ben, 2026-10-21:** accepted until the first non-local deploy; stays HIGH and is a **hard blocker** for that deploy
+  (history, slice 17 rulings; design §15.2).
+
+### VB-012 | Nobody sees the weekly admin-check lines: no route and no card yet | OPEN — FIXED, awaiting Ben's close
+- **FIXED 2026-10-23, slice 16 weekly check:** `GET /admin/weekly-check` (platform admin) serves the lines with the
+  check's last run; the Weekly archive check card on the Removals tab shows them; `scripts.weekly_check` prints them
+  and records each run (audit `WEEKLY_CHECK_RAN`). Tests: `tests/test_weekly_check.py`.
+- **Found:** 2026-10-23, `sara` slice 17 review (M-2, deviation 4).
+- **What:** `services/admin_grant.weekly_admin_lines` reports open requests over 7 days, recent approvals, live admins
+  below two, admins with no grant record (the only standing view of the admins 0076's backfill skipped), owner grants,
+  LEGACY rows with no asker, removals and deactivations — all tested — but no route serves it and no screen shows it.
+  The design puts it on the Removals tab beside slice 16's weekly check (AR-23), which is not built.
+- **Fix:** with slice 16's weekly check: a platform-admin route and the card on the Removals tab, plus the operator's
+  run log line.
+- **Severity:** MEDIUM, not reachable today (local only, no real data). **Gate:** before the first non-local deploy,
+  beside VB-011.
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
@@ -481,3 +507,61 @@ place.
   the remedy is to remove the splits (the shared lifecycle wording). (L9) the comparison's Object column is empty for
   wave rows (their code, e.g. "W2", does not match the label splitter). (L10) the "Add wave" button and the split row
   buttons lack an accessible name in some states.
+- **2026-10-21 · slice 16 step 1, `baseline_archive` (`sara`; no critical or high; M1 fixed — a row is born owed):**
+  (M2) no `test_migration_0068`: the backfill (one SCOPE per baseline by the freezer, one SIGNOFF per approved
+  baseline by the approver) and the downgrade refusal are untested — add a slow-marked migration test before the
+  0068 deploy. (M3) VB_design §6.6 ("no UPDATE on any `baseline_*` table") and CLAUDE.md law 2 read as if
+  `baseline_archive` were a shadow; it is not (column UPDATE, `fn_baseline_archive_guard`) — a one-line carve-out in
+  both, Ben's to approve. (L1) a written row's `row_version` may be set lower. (L2) an owed row may be written and
+  marked check-failed in one UPDATE.
+  (M2 done 2026-10-21: `tests/test_migration_0068_0069.py`. M3 done 2026-10-21: Ben's AR-14, law 2 and design §6.6.)
+- **2026-10-21 · slice 16 step 2, archive writer + `vb_instance` (`sara`; H1 fixed — the backlog script checks the
+  instance; M1, M2, L1, L2, L4 fixed):** (L3) `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` may point inside the repo and
+  `.gitignore` has no archive entry — `archive_store.from_settings` should refuse a folder under the repo root.
+  (L5) `scripts.stamp_instance` writes no audit row — add `INSTANCE_STAMPED` (old id, new id, OS user).
+- **2026-10-21 · slice 16, 0072–0073 (`sara`; H1, H2, M1–M3, L1–L6 fixed):** (own note) `audit_event.occurred_at`
+  is not forced by the database on INSERT, so the app role could write an aged grant row and pass AR-13's 30-day
+  check — not reachable from any route; force `occurred_at := statement_timestamp()` in the audit insert guard.
+- **2026-10-21 · slice 17 design review (design-auditor D4, LOW):** "kept forever, no DELETE" does not cover
+  `TRUNCATE` — an owner `TRUNCATE app_user CASCADE` empties `project_purge`, `project_purge_key` and (slice 17)
+  `platform_admin_grant`; add a statement-level `BEFORE TRUNCATE` refusal outside test databases.
+- **2026-10-21 · slice 16 request screens (`sara`; H1 fixed — a company FR type waits while a removal is open; M2,
+  L1–L10 fixed):** (M1) the one-off operator backfills that loop over every project (`br_lines.py:136`,
+  `components.py:422`, `effort.py:76`, `dfd_rule.py:191`) do not skip a project with an open removal request — skip
+  `access.pending_project_ids()` and print the skipped codes.
+- **2026-10-22 · slice 16, 0074–0075 and the DELETE run (`sara` ×2; no critical or high; M1–M3, M-A, L1–L5, L-b–L-d,
+  L-f, L-g fixed; a NULL from `fn_purge_allows` letting a key row through found by the full suite and fixed):**
+  (L6) the bypass names the role `vb_owner` literally — the Azure migration / purge login must be that role, or every
+  purge fails closed with "immutable"; one line in the deploy runbook. (L-a) for a table without `project_id`
+  (`import_row`) the purge proof falls back to the delete rule — add a test counting it by a hand-written join, with
+  import rows in two projects. (L-e) the operator's prompt waits inside the transaction holding the project lock — the
+  runbook says "answer promptly". (L-h) criterion 8's "baseline reads not blocked" has no concurrent-read test, and
+  criterion 10 checks the project's audit rows by `project_id` only — assert no non-kept event names the project by
+  `target_table = 'project'`. (Accepted, sara M1 note) `current_user = 'vb_owner'` alone is not proven by a test: it
+  needs an owner session under another role.
+- **2026-10-22 · slice 16, DELETE key destruction (`sara` ×2; H1, H2, M1, M2, L1–L4, N1, N2 fixed):** (L5) local key
+  destruction is a file delete — the deploy runbook keeps `VB_ARCHIVE_KEY_DIR` out of every backup, or criterion 9
+  holds only on paper. (tests) not yet exercised: a stray non-envelope object in the project's folder, the retry whose
+  proof file is already unreadable, the advisory-lock refusal and the exactly-one-row check, the re-purge tombstone,
+  and "exactly one PURGE_KEYS_DESTROYED after a retry".
+- **2026-10-23 · slice 17 (`sara`; H-1, H-2, M-1, M-2 (tests; the card is VB-012), M-3 (test + deploy line), L-1–L-3,
+  L-5 (deploy line) fixed):** (L-4) a fifth test-only trigger bypass — `test_admin_grant_api` disables
+  `trg_platform_admin_grant_guard` to age a request, beside `seed_bootstrap`, `forget_grants` and the backfill-row and
+  unrecorded-admin helpers; all owner-only, on a test database, re-enabled in `finally`. (L-6) `tests/conftest.py`
+  accepts any database whose name contains "test" (`vb_latest_db` would pass) — reuse `fn_backdating_allowed`'s
+  whole-name pattern. (M-3 option) BOOTSTRAP could also require that the target row was inserted in this transaction,
+  so even a TEMP-capable session could not forge one.
+- **2026-10-23 · slice 16 project status, reopen, retire (`sara`; HIGH-1 refused by name, MEDIUM-1, LOW-1–LOW-3
+  fixed):** (LOW-4) moving between two closed statuses keeps `closed_on`, but the card offers only open statuses once
+  closed and no test covers it — add both when a second closed code exists. (LOW-5) the card labels the status from the
+  live code list, so a retired status code shows "—" — have `ProjectOut` carry the code. (browser) the "Project
+  retired" message was not caught on screen (same 3-second message as every admin action).
+- **2026-10-23 · slice 16 weekly archive check (`sara`; M1–M3, L1, L2, L6 fixed):** (L3) a held archive's error is the
+  backend's English sentence inside translated card text — return a code and translate it. (L4) "fewer than two admins"
+  is counted in both `purge.overview` and `admin_grant.weekly_admin_lines` — one owner of the count (the duplicate
+  alert was removed from the card 2026-10-23, FIXED, awaiting Ben's close). (L5) UNREADABLE (a hash-matching file that
+  is not an envelope) is not exercised; the script's exit code now has its test (2026-10-23, FIXED, awaiting Ben's close). (browser, 400px) the Requests grid cuts its columns
+  after State and the admin tab strip hides Code lists and Removals — not checked whether either scrolls.
+- **2026-10-23 · test speed, delete-based wipe and saved states (`sara`; HIGH, MEDIUM, five LOWs fixed):** both
+  remaining LOWs fixed the same day, awaiting Ben's close — `_restore_library` now calls `_cols`; the test-database
+  guard matches a name ending in `_test_db` instead of any name containing "test".

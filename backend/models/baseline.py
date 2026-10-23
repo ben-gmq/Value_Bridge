@@ -110,6 +110,59 @@ class Baseline(Base):
         return self.project_id
 
 
+class BaselineArchive(Base):
+    """One archive file owed or written for one part of one frozen baseline (slice16 schema §3.1, §12.3; 0068).
+    SCOPE is owed by the freeze, SIGNOFF by the client approval (Q-79), file_seq n + 1 by a failed check (§18 S5).
+    State is derived from the dates (Q-67); no soft delete (Q-68). trg_baseline_archive_guard keeps the key and a
+    written file's record fixed, for every role."""
+    __tablename__ = "baseline_archive"
+    PARTS = ("SCOPE", "SIGNOFF")
+    FORMAT_VERSION = 1
+
+    baseline_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    archive_part: Mapped[str] = mapped_column(String(10), primary_key=True)
+    file_seq: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default="1")
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    format_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    object_name: Mapped[str | None] = mapped_column(String(400))
+    file_sha256: Mapped[str | None] = mapped_column(CHAR(64))
+    byte_size: Mapped[int | None] = mapped_column(BigInteger)
+    key_ref: Mapped[str | None] = mapped_column(String(400))
+    written_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(2000))
+    check_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_check_error: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+    __table_args__ = (
+        ForeignKeyConstraint(["baseline_id", "project_id"], ["baseline.baseline_id", "baseline.project_id"],
+                             name="fk_ba_baseline"),
+        UniqueConstraint("object_name", name="uq_ba_object_name"),
+        Index("uq_ba_owed", "baseline_id", "archive_part", unique=True, postgresql_where=text("written_at IS NULL")),
+        Index("ix_ba_owed", "created_at", postgresql_where=text("written_at IS NULL")),
+        Index("ix_ba_project", "project_id"),
+        CheckConstraint("archive_part IN ('SCOPE', 'SIGNOFF')", name="ck_ba_part"),
+        CheckConstraint("file_seq >= 1", name="ck_ba_file_seq"),
+        CheckConstraint("format_version >= 1", name="ck_ba_format_version"),
+        CheckConstraint("file_sha256 ~ '^[0-9a-f]{64}$'", name="ck_ba_sha256"),
+        CheckConstraint("byte_size > 0", name="ck_ba_byte_size"),
+        CheckConstraint("attempt_count >= 0", name="ck_ba_attempts"),
+        CheckConstraint("num_nonnulls(object_name, file_sha256, byte_size, key_ref, written_at) IN (0, 5)",
+                        name="ck_ba_written_set"),
+        CheckConstraint("num_nonnulls(check_failed_at, last_check_error) IN (0, 2)", name="ck_ba_check_pair"),
+        CheckConstraint("check_failed_at IS NULL OR written_at IS NOT NULL", name="ck_ba_check_on_written"),
+    )
+
+    def owning_project_id(self) -> int:
+        return self.project_id
+
+
 # The live tables a baseline freezes, in freeze (FK) order (§6.1 less the unbuilt tables; slice8 §3.1).
 # br_function_requirement joined at hash spec 2 (slice10b §5.2), right after function_requirement.
 # services/freeze_set.FREEZE_SET carries the rest of each entry; a test asserts the two agree.

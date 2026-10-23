@@ -75,6 +75,17 @@ def immutable_guards(table: str) -> None:
     op.execute(f"REVOKE UPDATE ON {table} FROM vb_app")
 
 
+def immutable_guards_v2(table: str) -> None:
+    """immutable_guards from migration 0074 on (slice16 schema §4): the same guards, but the reject trigger calls
+    fn_reject_modification_purgeable(), which lets the owner-run purge of one approved, aged request delete this
+    project's frozen rows and nothing else. A shadow made with the old helper makes a purge fail loudly, never skip."""
+    op.execute(f"CREATE TRIGGER trg_{table}_immutable BEFORE UPDATE OR DELETE ON {table} "
+               f"FOR EACH ROW EXECUTE FUNCTION fn_reject_modification_purgeable()")
+    op.execute(f"CREATE TRIGGER trg_{table}_insert_guard AFTER INSERT ON {table} "
+               f"REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION fn_shadow_insert_guard()")
+    op.execute(f"REVOKE UPDATE ON {table} FROM vb_app")
+
+
 def drop_immutable_guards(table: str) -> None:
     op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_insert_guard ON {table}")
     op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_immutable ON {table}")

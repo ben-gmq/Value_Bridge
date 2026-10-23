@@ -16,7 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open (2026-10-20: Q-86…Q-93 answered, AR-7…AR-13; Q-94 answered, W-10).
+Nothing open.
 
 
 ---
@@ -527,6 +527,53 @@ Ben, via Ren, 2026-10-20: he follows every recommendation in the spec. Slice 16'
 | AR-11 | **[Q-91] No archiving before the two years.** An earlier removal is a contract DELETE (Q15) | — |
 | AR-12 | **[Q-92] Projects already closed when slice 16 lands count from the migration day**, so nothing comes due on day one | — |
 | AR-13 | **[Q-93] (b): making someone a platform admin needs a second platform admin's approval** — it closes the gap for every four-eyes control, not only the purge. **(a) is the interim rule until (b) is built:** a four-eyes approval is refused when the approver's platform-admin grant was made by the requester or is under 30 days old | slice16_spec §19 U9 |
+
+### Ben's rulings, 2026-10-21 — slice 16 build questions
+
+Ben, via Ren, 2026-10-21: *"Please follow ladies' recommendations"* — every recommendation in Lilly's report on the
+slice 16 build.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-14 | **`baseline_archive` is not a shadow.** It carries its own write-once guard and a column-level UPDATE for the writer and the weekly check; law 2's "no UPDATE on any `baseline_*` table" reads "on any shadow" (sara M3 on the slice 16 build) | design §6.6, CLAUDE.md law 2 |
+| AR-15 | **[AR-13 (a), interim] The first admin's creation counts as their platform-admin grant** (`FIRST_ADMIN_CREATED`, `ADMIN_CREATED_BY_CLI`), so after 30 days the setup admin may approve a request someone else raised; an admin with no grant on record at all still cannot approve | slice16_spec §20 AR-13 ("a grant with no audit row counts as under 30 days") |
+| — | **Migrations 0074 (scoped purge bypass) and 0075 (audit purge trigger) wait** until Ben has seen 0072–0073 running in the request screens | — |
+
+### Ben's rulings, 2026-10-21 — platform-admin grant approval (slice 17, Q-95…Q-104)
+
+Ben, via Ren, 2026-10-21: *"Follow her recommendations"*; on Q-103: *"it will be our Fortience IS department"*.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-16 | **[Q-95, Q-99] The first two admins come from the operator's command line, run by the owner and recorded with who ran it; once a second admin has ever existed, every admin comes through a request.** Dropping back to one admin does not reopen the command line: an owner-run, recorded LEGACY grant (reason, operator, never backdated outside a test or demo database) is the way back | slice17 spec §15, §16 P1, P4 |
+| AR-17 | **[Q-96] Removing admin rights stays a one-admin action** — the safe direction | — |
+| AR-18 | **[Q-97, Q-102] An approver is independent of the requester only if neither requested or approved the other's platform-admin grant** — both directions | AR-13 (a)'s "made by the requester" |
+| AR-19 | **[Q-98] The owner's LEGACY grant is recorded, carries a reason and the operator, and is never reachable by the app** | — |
+| AR-20 | **[Q-100] The 30-day rule stays for purge approvals only**; approving a new admin needs four eyes and AR-18, not 30 days | AR-13 (a) for grants |
+| AR-21 | **[Q-101] An admin may request admin rights for an account they created only after its owner has logged in and set their own password** | — |
+| AR-22 | **[Q-103] Production server access (the owner role, the operator jobs, the database admin) is held by the Fortience IS department, not by the platform admins.** The bootstrap and LEGACY paths therefore need someone other than a platform admin | design §15.2 ("run by Ben"), slice17 §16 S2 |
+| AR-23 | **[Q-104] The weekly admin check is read on the `/admin` page** (a card with slice 16's "last run" warning) **and in the operator's run log** | — |
+| — | **VB-011 accepted until the first non-local deploy**, tracked HIGH and a hard blocker for that deploy: the web server must not load the owner login | BUGLOG VB-011 |
+
+**Same day, Q-105…Q-107.** Ben, via Ren: *"okay go do 1 and 3"* (1 = the slice 17 questions, answered by following
+Lilly's recommendations). Ren, 2026-10-22, on dropping a migration: *"OK to build, provided (a) no control in the spec
+Ben approved is weakened … (b) whatever the dropped migration used to enforce is enforced elsewhere (in the database,
+not only the app) and tested; (c) the migrations that change database guards are built and tested but NOT applied
+anywhere except your own throwaway database without Ben's click."*
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-24 | **[Q-107 a] Whoever created an account counts as having made that admin**: they may neither request nor approve its admin rights, and the creator is a maker in both independence checks, so a creator never pairs with an account they made, directly or through another admin. No self-service password route in slice 17 (Q-106 → b) | AR-21 |
+| AR-25 | **[Q-105 a] A fresh install's third admin is one recorded Fortience IS LEGACY grant naming the admin who asked** | — |
+| — | Slice 17 builds **three migrations (0076–0078)**, not four: the "owner set their own password" column is not needed under AR-24; schema rev 3 | slice17 schema rev 2 §8 |
+
+**2026-10-23 — Q-108, Q-109 and the slice 17 spec.** Ben, via Ren: *"yes to slice 17"* — the spec as summarised in
+`docs/slice17_summary_for_ben.md`, with Q-108 and Q-109 as recommended.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-26 | **[Q-108] A LEGACY grant may carry an earlier date only on a database whose whole name is `vb_[token_]test_db[_gw<n>]`, `vb_[token_]uat_db` or `vb_[token_]demo_db`** (`fn_backdating_allowed`); everywhere else it is dated by the database | slice17 §18 N4's prefix list |
+| AR-27 | **[Q-109] An account's creator never changes, and an account made in the app names a live platform admin as its creator** — enforced by the database, so the creator rule (AR-24) cannot be edited away | — |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 

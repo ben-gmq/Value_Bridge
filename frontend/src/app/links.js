@@ -53,6 +53,12 @@ export const keys = {
   programMemberCandidates: (g) => ['programMemberCandidates', String(g)],
   codeLists: (p) => ['codeLists', String(p ?? 'company')],
   accessChange: (u, kind, admin) => ['accessChange', String(u), kind, String(admin)],
+  // slice 16: every removal write invalidates both; a project's own reads are untouched (it is only frozen)
+  purgeRequests: () => ['purgeRequests'],
+  grantRequests: () => ['grantRequests'],              // slice 17; its writes also invalidate ['users']
+  weeklyCheck: () => ['weeklyCheck'],                  // slice 16 U5: read only; the IS job writes
+  archiveOverview: () => ['archiveOverview'],
+  baselineArchive: (b) => ['baselineArchive', String(b)],
   // The tree read carries each process's DFD light (D-68, slice 13a). DR13-D2, one choice: there is no separate
   // readiness key — every writer of step I/O, external flows, trigger links, BR CRUD, step retire/restore,
   // make-process/demote and component toggles invalidates tree(p).

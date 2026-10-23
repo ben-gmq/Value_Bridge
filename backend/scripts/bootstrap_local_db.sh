@@ -11,6 +11,9 @@ fi
 : "${VB_EMAIL_DOMAINS:?Set VB_EMAIL_DOMAINS to the FTC email domain(s), e.g. VB_EMAIL_DOMAINS=fortience.com}"
 gen() { python3 -c 'import secrets; print(secrets.token_urlsafe(32))'; }
 OWNER_PW=$(gen); APP_PW=$(gen); JWT=$(gen)$(gen); ROWKEY=$(gen)$(gen)
+# slice 16 (S9): one archive identity per database, and archive folders outside the repo
+INSTANCE="local-$(python3 -c 'import secrets; print(secrets.token_hex(4))')"
+ARCHIVE_HOME="${HOME}/.vb-archive/${INSTANCE}"
 psql -v ON_ERROR_STOP=1 -d postgres -q <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='vb_owner') THEN CREATE ROLE vb_owner LOGIN; END IF;
@@ -34,5 +37,9 @@ JWT_SECRET_KEY=${JWT}
 ROW_TOKEN_KEY=${ROWKEY}
 FRONTEND_URL=http://localhost:5180
 ALLOWED_EMAIL_DOMAINS=${VB_EMAIL_DOMAINS}
+VB_INSTANCE_ID=${INSTANCE}
+VB_ARCHIVE_DIR=${ARCHIVE_HOME}/files
+VB_ARCHIVE_KEY_DIR=${ARCHIVE_HOME}/keys
 ENV
 echo "Created roles vb_owner, vb_app; databases vb_db, vb_test_db; wrote $ENV_FILE (mode 600)."
+echo "After alembic upgrade head: ./venv/bin/python -m scripts.stamp_instance ${INSTANCE}"

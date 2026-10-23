@@ -84,5 +84,19 @@
   "settings.home.open": "Open baselines",
   "settings.acc.people_one": "{n} person",
   "settings.codeLists": "Code lists",
-  "settings.codeListsWhat": "Statuses, priorities, FR types and the other lists, in this project's words"
+  "settings.codeListsWhat": "Statuses, priorities, FR types and the other lists, in this project's words",
+  "settings.status.title": "Project status",
+  "settings.status.open": "Open — no archive clock is running",
+  "settings.status.closedOn": "Closed on {date} — due for archiving two years later",
+  "settings.status.change": "Change status",
+  "settings.status.save": "Save status",
+  "settings.status.saved": "Status saved",
+  "settings.status.reopenTo": "Reopen as",
+  "settings.status.reopen": "Reopen",
+  "settings.status.reopened": "Project reopened",
+  "settings.status.adminReopens": "A closed project is reopened by a platform admin.",
+  "settings.status.closeTitle": "Close this project?",
+  "settings.status.closeBody": "Closing starts the two-year clock: two years from today the project comes due for archiving. Only a platform admin can reopen it.",
+  "settings.status.reopenTitle": "Reopen this project?",
+  "settings.status.reopenBody": "It was closed on {date}. Reopening stops the archive clock; closing it again starts two new years."
 }

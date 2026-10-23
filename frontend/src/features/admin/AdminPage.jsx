@@ -11,6 +11,8 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { CodeListsView } from '../settings/CodeListsPage';
+import { RemovalsTab } from './RemovalsTab';
+import { PendingGrants, RequestGrantDialog } from './GrantRequests';
 import { t } from '../../i18n/t';
 
 function useSave(fn, keys, onOk) {
@@ -86,6 +88,7 @@ function Users({ notify }) {
     is_platform_admin: !u.is_platform_admin, rationale: reason, row_version: u.row_version,
     user_kind: u.is_platform_admin ? fallbackKind : null, confirm_hash: adminBack.data?.confirm_hash ?? null }),
   ['users'], () => { setAdminChange(null); setReason(''); notify(t('admin.adminChanged')); });
+  const [grantFor, setGrantFor] = useState(null);
   const [kindChange, setKindChange] = useState(null);
   const kindBack = useComesBack(kindChange, 'USER', false);
   const setKind = useSave((u) => api.setUserKind(u.app_user_id, {
@@ -110,6 +113,9 @@ function Users({ notify }) {
         </FormControl>
         <Button variant="contained" disabled={create.m.isPending || !f.user_kind} onClick={() => create.m.mutate()}>{t('admin.createUser')}</Button>
       </FormRow>
+      <PendingGrants notify={notify} />
+      <RequestGrantDialog key={grantFor?.app_user_id ?? 'none'} user={grantFor} onClose={() => setGrantFor(null)}
+        notify={notify} />
       <GridCard {...grid} rows={users.data ?? []} getRowId={(r) => r.app_user_id}
         columns={[
           { field: 'app_user_id', headerName: t('admin.id'), width: 70 },
@@ -125,8 +131,11 @@ function Users({ notify }) {
                 <Button size="small" disabled={setKind.m.isPending}
                   onClick={() => (row.user_kind === 'USER' ? setKind.m.mutate(row) : setKindChange(row))}>
                   {row.user_kind === 'USER' ? t('admin.makeViewer') : t('admin.makeUser')}</Button>)}
-              <Button size="small" onClick={() => { setAdmin.setError(''); setAdminChange(row); }}>
-                {row.is_platform_admin ? t('admin.removeAdmin') : t('admin.makeAdmin')}</Button>
+              {row.is_platform_admin ? (
+                <Button size="small" onClick={() => { setAdmin.setError(''); setAdminChange(row); }}>
+                  {t('admin.removeAdmin')}</Button>
+              ) : (                                              // slice 17: a request a second admin decides
+                <Button size="small" onClick={() => setGrantFor(row)}>{t('grants.request')}</Button>)}
               <Button size="small" color="warning" onClick={() => setDeact(row)}>{t('admin.deactivate')}</Button>
             </Stack>) },
         ]} />
@@ -270,6 +279,7 @@ function Projects({ notify }) {
   const empty = { client_id: '', project_code: '', project_name: '', program_id: '', template_code: '',
     component_codes: [], data_model_depth: 'FULL', is_restricted: 'yes' };   // D-62: assigned consultants only
   const [f, setF] = useState(empty);
+  const [retiring, setRetiring] = useState(null);
   const navigate = useNavigate();
   const { m, error } = useSave(() => api.createProject({ ...f, program_id: f.program_id || null,
     is_restricted: f.is_restricted === 'yes',
@@ -311,8 +321,31 @@ function Projects({ notify }) {
       <GridCard {...grid} rows={projects.data ?? []} getRowId={(r) => r.project_id}
         columns={[{ field: 'project_code', headerName: t('admin.code'), width: 140 },
                   { field: 'project_name', headerName: t('admin.name'), flex: 1 },
-                  { field: 'program_id', headerName: t('admin.program'), width: 140, valueGetter: (v) => programCode(v) }]} />
+                  { field: 'program_id', headerName: t('admin.program'), width: 140, valueGetter: (v) => programCode(v) },
+                  { field: 'closed_on', headerName: t('admin.closedOn'), width: 130, valueGetter: (v) => v ?? '' },
+                  { field: 'x', headerName: '', width: 110, sortable: false, renderCell: ({ row }) => (
+                    <Button size="small" color="warning" onClick={() => setRetiring(row)}>{t('admin.retire')}</Button>) }]} />
+      <RetireProject project={retiring} onClose={() => setRetiring(null)} notify={notify} />
     </>
+  );
+}
+
+// Slice 16 (AR-10, Q-90): retiring closes the project first (its archive clock starts), then retires it.
+function RetireProject({ project, onClose, notify }) {
+  const [typed, setTyped] = useState('');
+  const { m, error, setError } = useSave((p) => api.retireProject(p.project_id, {
+    confirm_text: typed.trim(), row_version: p.row_version }), ['projects'],
+  () => { setTyped(''); onClose(); notify(t('admin.retired')); });
+  if (!project) return null;
+  return (
+    <ConfirmDialog open title={t('admin.retireTitle', { code: project.project_code })}
+      body={t(project.closed_on ? 'admin.retireBodyClosed' : 'admin.retireBodyOpen', { date: project.closed_on })}
+      confirmLabel={t('admin.retire')} busy={m.isPending || typed.trim() !== project.project_code}
+      onClose={() => { setTyped(''); setError(''); onClose(); }} onConfirm={() => m.mutate(project)}>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      <TextField id="retire-confirm" label={t('admin.retireConfirm', { code: project.project_code })} value={typed}
+        onChange={(e) => setTyped(e.target.value)} fullWidth />
+    </ConfirmDialog>
   );
 }
 
@@ -321,7 +354,7 @@ function CompanyCodeLists() {
 }
 
 const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
-  ['admin.codeLists', CompanyCodeLists]];
+  ['admin.codeLists', CompanyCodeLists], ['removals.tab', RemovalsTab]];
 
 export default function AdminPage() {
   const [tab, setTab] = useState(0);

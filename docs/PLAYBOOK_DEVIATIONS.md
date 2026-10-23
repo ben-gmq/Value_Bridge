@@ -43,6 +43,8 @@ Each deviation is deliberate, has a reason, and is cited in the design spec
 | 15 | `BRAND` lives in `frontend/src/theme/brand.js`, not at the top of `App.jsx` | scaffold §5 | Tokens for two themes plus the FTC chrome; one module every screen imports. Still the single source of truth | §14.2 |
 | 16 | First-run setup is **off by default** (`ALLOW_FIRST_RUN_SETUP`); cloud environments create the first admin with `python -m seeds.create_admin` | scaffold §1 first-run setup | An anonymous setup endpoint on a fresh Azure database would let the first caller become platform admin (sara H1) | §15.4 |
 | 17 | Platform-admin rights are granted by a separate, audited action with a reason, never by a checkbox on user creation | scaffold §1 two roles | An admin sees every client; the change must be deliberate and on the record (sara M7) | §7.10 |
+| 18 | A removal's kind (`project_purge.purge_kind`: ARCHIVE / DELETE / DELETE_ARCHIVE) and a baseline file's part (`baseline_archive.archive_part`: SCOPE / SIGNOFF) are CHECK lists, not `code_master`, and the request screen lists ARCHIVE / DELETE in code | §9.3 lookups in `code_master` | The purge job, the database guards and the writer branch on them; a kind an admin could add would reach a branch nobody wrote (law 5's purpose, Q-67). Labels via `t()` | slice16 schema §12.3, §12.5 |
+| 19 | `purge_project` hard-deletes a project's rows | §9.7 soft delete | Q15 / AR-1: a client contract or the two-year archive requires the data gone; only the owner-run job, after four eyes and 24 hours, under the scoped database exception (0074, Ben's) | CLAUDE.md law 1; slice16 spec §7 |
 
 ## Process
 

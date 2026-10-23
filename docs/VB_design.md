@@ -3744,9 +3744,17 @@ Grants, not code (S11, R2-S9). The application connects as `vb_app`; migrations 
   business table, and §5.6's "never write a hard-delete endpoint" is a **permission error**, not a review rule.
   `import_batch`, `project_member`, `program_member`, `user_access_grant` and `audit_event` get no DELETE: they are the import
   trail, the access history and the security log.
-- **No `UPDATE` on `decision`** (A-41), **on any `baseline_*` table**, or **on `audit_event`** (append-only by
+- **No `UPDATE` on `decision`** (A-41), **on any `baseline_*` shadow**, or **on `audit_event`** (append-only by
   grant and trigger; even the owner cannot UPDATE it). The reject triggers (§6.2) are the belt, the revoked
   grants the braces.
+- **`baseline_archive` is not a shadow** (it is the outbox of archive files a baseline owes, AR-2, Q-79): SELECT,
+  INSERT and a column-level `UPDATE` on the writer's and the weekly check's columns only; no DELETE.
+  `fn_baseline_archive_guard()` makes a written file's record fixed for every role except its check result, set
+  once.
+- **The removal records** (`project_purge`, `project_purge_key`, AR-1, AR-9, AR-13) are kept forever: `vb_app`
+  may request, approve, cancel and record the weekly check on `project_purge` (column-level `UPDATE`), and only
+  reads `project_purge_key`; recording a project file, destroying keys and executing a removal belong to the
+  owner-run job, and their guards refuse every other role. `vb_instance` is SELECT-only for `vb_app`.
 - **`baseline` (header): column-level `UPDATE` only on** `status_code_id`, the approval columns
   (`client_approver_name`, `client_approved_on`, `approval_note`, `approval_reference`, `approved_at`,
   `approved_by_user_id`), `updated_by` and `row_version`. The FROZEN → APPROVED → SUPERSEDED transitions (Q8,
@@ -4707,9 +4715,15 @@ one optional wall per project:
   not, at level `PLATFORM`, plus the platform-only functions (users, clients, creating projects and
   programs, moving a project between programs, restriction, components, data-model depth, FTE basis, the
   DFD rule, global codes — D-71). Platform admins are the only holders of `PLATFORM` and hold no membership
-  rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**; until that is
-  built, a four-eyes approval is refused when the approver's grant was made by the requester or is under 30
-  days old. The FTC default rate card stays a fixed default in code (SC-10).
+  rows. **Making someone a platform admin needs a second platform admin's approval (AR-13)**: one admin requests,
+  another approves, and neither may have requested or approved the other's own grant (AR-18). Whoever created an
+  account counts as having made that admin: they may neither request nor approve its rights, and never pair with it
+  on any approval (AR-24); an account's creator never changes, and an account made in the app names a live platform
+  admin as its creator (AR-27). The first two admins come from the owner-run command line, recorded; after that only
+  requests, or an owner-run recorded LEGACY grant naming the admin who asked (AR-16, AR-19) — a fresh install's third
+  admin is one such grant by Fortience IS (AR-25), dated by the database except on a named test or demo database
+  (AR-26). Removing admin rights is one admin's action (AR-17). A purge approval additionally needs the approver's
+  grant to be at least 30 days old (AR-20) — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
@@ -7680,9 +7694,15 @@ target is confirmed.
   day does not cold-start. HTTPS ingress only. uvicorn runs with `--proxy-headers
   --forwarded-allow-ips=<ingress range>` so audit rows record the caller's address, not the
   proxy's (sara L11).
-- **First admin**: first-run setup is switched off in every Azure environment
-  (`ALLOW_FIRST_RUN_SETUP=false`); the first platform admin is created with
-  `python -m seeds.create_admin`, run by Ben as a one-off Container Apps Job (sara H1).
+- **First admins**: first-run setup is switched off in every Azure environment
+  (`ALLOW_FIRST_RUN_SETUP=false`); the first two platform admins are created with
+  `python -m seeds.create_admin` as the owner, run as a one-off Container Apps Job by the Fortience IS department and
+  recorded with who ran it (sara H1, AR-16, AR-22). Every later admin comes through a request another admin approves.
+- **Who holds production server access**: the **Fortience IS department** — the owner role, the operator jobs (migrations,
+  purge, LEGACY grants) and the database admin. Platform admins hold none of it (AR-22), so no single platform admin can
+  both approve inside the app and act on the database.
+- **The web server never loads the owner login** (VB-011, a hard blocker for the first non-local deploy): the API's
+  settings carry only `vb_app`; migrations and operator jobs read `MIGRATION_DATABASE_URL` in their own job.
 - **Database**: Azure Database for PostgreSQL Flexible Server (PostgreSQL 16), **private
   access only** — VNet-integrated, no public endpoint. The Container Apps environment sits
   in the same VNet.
@@ -7694,7 +7714,7 @@ target is confirmed.
   - `JWT_SECRET_KEY` lives in **Key Vault**. The Container App reads it through a Key Vault
     reference, with its managed identity holding only *Key Vault Secrets User*. It is never
     in plain app settings and never in the repo. The app refuses to start without it (§9.1).
-  - The Flexible Server admin account is break-glass only, held by Ben.
+  - The Flexible Server admin account is break-glass only, held by the Fortience IS department (AR-22).
 - **Database grants** (§6.6, R2-S9): `vb_app` has SELECT / INSERT / UPDATE, and DELETE only
   on `diagram_layout` and `import_row`. It has no UPDATE on `baseline_*`, `audit_event` or
   `decision`, a column-level UPDATE on `baseline` and `import_batch`, and no INSERT or UPDATE on

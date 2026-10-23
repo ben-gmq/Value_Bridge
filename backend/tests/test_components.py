@@ -237,8 +237,9 @@ def test_backfill_touches_only_projects_with_no_component_rows(client, world, db
     eng = create_engine(OWNER_URL)                # a pre-7a project: inserted with no components
     with eng.begin() as c:                        # and no PROJECT_CREATED component list
         legacy = c.execute(text(
-            "INSERT INTO project (client_id, project_code, project_name, status_code_id, created_by) "
-            "SELECT :c, 'OLD', 'Old', code_id, 1 FROM code_master WHERE category = 'PROJECT_STATUS' "
+            "INSERT INTO project (client_id, project_code, project_name, status_code_id, status_behaviour, "
+            "created_by) SELECT :c, 'OLD', 'Old', code_id, behaviour_code, 1 FROM code_master "
+            "WHERE category = 'PROJECT_STATUS' "
             "AND code = 'PLANNING' AND project_id IS NULL RETURNING project_id"),
             {"c": world["client_id"]}).scalar_one()
     eng.dispose()

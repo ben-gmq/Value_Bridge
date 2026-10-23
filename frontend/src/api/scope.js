@@ -349,6 +349,7 @@ export const scopeSummaryApi = {
 // it freezes exactly what the person reviewed (DR8-P2).
 export const baselineApi = {
   list: (projectId) => d(http.get(`${P(projectId)}/baselines`)),
+  archive: (baselineId) => d(http.get(`/api/v1/baselines/${baselineId}/archive`)),     // slice 16: status only
   next: (projectId, bump) => d(http.get(`${P(projectId)}/baselines/next`, { params: { bump } })),
   freeze: (projectId, body) => d(http.post(`${P(projectId)}/baselines/freeze`, body)),
   diff: (projectId, from, to, priced) =>
