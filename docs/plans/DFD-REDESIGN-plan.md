@@ -1,6 +1,9 @@
 # DFD redesign — plan for Ren / Ben (2026-10-23)
 
-**Status: plan only. Nothing is built until Ren answers.** Ben, after trying the busy demo: *"I am kind of okay with the
+**Status: ON HOLD (Ben 2026-10-23: "Withdrawing approach for DFD. Hold on to this because I don't want to spend 5-7
+days").** No slice starts until Ben says so. His answers so far, kept as plan notes: decision 1 withdrawn for now;
+decision 2 **yes** — a store may appear once per lane that uses it, marked as a repeat, still one record ("basically
+fine"); decision 3 **yes** — lane order and height saved for everyone on that diagram ("isn't urgent"). Ben, after trying the busy demo: *"I am kind of okay with the
 screen but DFD I think need to improve more… Swim lane need to be adjustable, flow need to look more clean… connectors
 should be straight and need to be round only on the edge, not s curve."*
 
