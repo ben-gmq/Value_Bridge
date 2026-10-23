@@ -94,6 +94,35 @@ def test_the_owners_command_line_records_who_ran_it_and_who_asked(client, owner)
         create("third@example.test", actor=first)
 
 
+def unrecorded_admin(owner, email: str) -> int:
+    """Test-only: a flagged admin with no grant record — what 0076's backfill leaves when it skips someone."""
+    run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_admin_guard")
+    run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_bootstrap_grant")
+    try:
+        return run(owner, "INSERT INTO app_user (email, password_hash, display_name, is_platform_admin, user_kind) "
+                          "VALUES (:e, 'x', 'Skipped', true, 'USER') RETURNING app_user_id", e=email)[0]
+    finally:
+        run(owner, "ALTER TABLE app_user ENABLE TRIGGER trg_app_user_bootstrap_grant")
+        run(owner, "ALTER TABLE app_user ENABLE TRIGGER trg_app_user_admin_guard")
+
+
+def test_live_admins_with_no_record_still_close_the_command_line(client, owner):
+    """sara M-1, N6: the AR-16 count is the greater of everyone ever granted and the live admins — a database whose
+    backfill skipped an admin is still closed at two."""
+    with owner.begin() as c:
+        c.execute(text("SELECT set_config('vb.operator', 'IS op', true)"))
+        c.execute(text("INSERT INTO app_user (email, password_hash, display_name, is_platform_admin, user_kind) "
+                       "VALUES ('first@example.test', 'x', 'F', true, 'USER')"))
+    skipped = unrecorded_admin(owner, "skipped@example.test")
+    assert run(owner, "SELECT count(*) FROM platform_admin_grant")[0] == 1                # only one ever granted
+    with pytest.raises(DBAPIError, match="already been granted"):
+        with owner.begin() as c:
+            c.execute(text("SELECT set_config('vb.operator', 'IS op', true), set_config('vb.grant_actor_id', :a, "
+                           "true)"), {"a": str(skipped)})
+            c.execute(text("INSERT INTO app_user (email, password_hash, display_name, is_platform_admin, "
+                           "user_kind) VALUES ('third@example.test', 'x', 'T', true, 'USER')"))
+
+
 def test_an_accounts_creator_is_permanent_and_an_app_made_account_names_a_live_admin(t, owner):
     """Criterion 10 (AR-24): created_by never changes, for either role; the app may not make an account in nobody's
     name or a non-admin's."""

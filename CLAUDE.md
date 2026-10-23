@@ -37,7 +37,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   **Slice 17 deploy:** read 0076's NOTICEs (every admin recorded or skipped — a skipped one needs an IS grant); IS
   confirms `SELECT fn_backdating_allowed()` is false on production. Admins are then made only by a request a second
   admin approves; `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)
-  for the first two only; any other admin is an IS grant, `seeds.owner_grant` (AR-16, AR-25). Tests make admins only
+  for the first two only; any other admin is an IS grant, `seeds.owner_grant` (AR-16, AR-25). IS also confirms the app
+  login has no TEMP on the database and no CREATE on `public`, and that the owner login is named exactly `vb_owner`
+  (the guards name it; another name fails closed). Tests make admins only
   through `tests/admin_team.py` (`promote`, `legacy`) — the flag cannot be set by SQL.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).

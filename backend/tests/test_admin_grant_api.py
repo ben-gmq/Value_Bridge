@@ -130,3 +130,37 @@ def test_the_weekly_check_reads_its_lines_from_the_record(client, t, owner, db):
     assert got == [("BOOTSTRAP", False), ("LEGACY", True), ("LEGACY", True)]          # a1's setup; a2, a3 by IS,
                                                                                         # backdated on a test DB (N4)
     assert lines["legacy_without_asker"] == []
+
+
+def test_every_weekly_line_reports_what_it_names(client, t, owner, db):
+    """sara M-2, criterion 12: each line made non-empty by the event it names — an approval, an admin with no record
+    (0076 skipped them), a LEGACY row with no asker (backfilled), a removal, a deactivation, and fewer than two."""
+    from tests.test_app_user_admin_guard import unrecorded_admin
+    tgt = owner_user(owner, "tgt@example.test")
+    g = ask(client, t["h1"], tgt).json()
+    decide(client, t["h3"], g)
+    skipped = unrecorded_admin(owner, "skipped@example.test")
+    asker_less = unrecorded_admin(owner, "backfilled@example.test")
+    run(owner, "ALTER TABLE platform_admin_grant DISABLE TRIGGER trg_platform_admin_grant_guard")
+    try:                                                         # test-only: what 0076's backfill writes
+        lg = run(owner, "INSERT INTO platform_admin_grant (grant_origin, target_user_id, reason, operator_name, "
+                        "source_audit_event_id, requested_at, approved_at, approved_xact) VALUES ('LEGACY', :u, 'x', "
+                        "'migration 0076', 1, now(), now(), pg_current_xact_id()) RETURNING platform_admin_grant_id",
+                 u=asker_less)[0]
+    finally:
+        run(owner, "ALTER TABLE platform_admin_grant ENABLE TRIGGER trg_platform_admin_grant_guard")
+    rv = next(u for u in client.get(f"{API}/users", headers=t["h1"]).json() if u["app_user_id"] == tgt)["row_version"]
+    assert client.patch(f"{API}/users/{tgt}/platform-admin", headers=t["h1"], json={
+        "is_platform_admin": False, "rationale": "Moved on", "row_version": rv, "user_kind": "USER"}).status_code == 200
+    assert client.patch(f"{API}/users/{t['a2']}/deactivate", headers=t["h1"]).status_code == 200
+    db.expire_all()
+    lines = admin_grant.weekly_admin_lines(db)
+    assert lines["approved_last_7_days"] == [g["grant_id"]]
+    assert lines["admins_without_a_grant"] == [skipped]
+    assert lines["legacy_without_asker"] == [lg]
+    assert lines["admins_removed_last_7_days"] == [tgt]
+    assert lines["admins_deactivated_last_7_days"] == [t["a2"]]
+    assert lines["live_admins_below_two"] is False
+    for uid in (t["a3"], skipped, asker_less):
+        run(owner, "UPDATE app_user SET is_active = false, deleted_at = now() WHERE app_user_id = :u", u=uid)
+    assert admin_grant.weekly_admin_lines(db)["live_admins_below_two"] is True        # a1 alone

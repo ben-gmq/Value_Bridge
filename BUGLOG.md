@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-012 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-013 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -33,6 +33,17 @@ place.
 - **Severity:** HIGH, not reachable today (local only, no real data).
 - **Ben, 2026-10-21:** accepted until the first non-local deploy; stays HIGH and is a **hard blocker** for that deploy
   (history, slice 17 rulings; design §15.2).
+
+### VB-012 | Nobody sees the weekly admin-check lines: no route and no card yet | OPEN
+- **Found:** 2026-10-23, `sara` slice 17 review (M-2, deviation 4).
+- **What:** `services/admin_grant.weekly_admin_lines` reports open requests over 7 days, recent approvals, live admins
+  below two, admins with no grant record (the only standing view of the admins 0076's backfill skipped), owner grants,
+  LEGACY rows with no asker, removals and deactivations — all tested — but no route serves it and no screen shows it.
+  The design puts it on the Removals tab beside slice 16's weekly check (AR-23), which is not built.
+- **Fix:** with slice 16's weekly check: a platform-admin route and the card on the Removals tab, plus the operator's
+  run log line.
+- **Severity:** MEDIUM, not reachable today (local only, no real data). **Gate:** before the first non-local deploy,
+  beside VB-011.
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
@@ -530,3 +541,10 @@ place.
   holds only on paper. (tests) not yet exercised: a stray non-envelope object in the project's folder, the retry whose
   proof file is already unreadable, the advisory-lock refusal and the exactly-one-row check, the re-purge tombstone,
   and "exactly one PURGE_KEYS_DESTROYED after a retry".
+- **2026-10-23 · slice 17 (`sara`; H-1, H-2, M-1, M-2 (tests; the card is VB-012), M-3 (test + deploy line), L-1–L-3,
+  L-5 (deploy line) fixed):** (L-4) a fifth test-only trigger bypass — `test_admin_grant_api` disables
+  `trg_platform_admin_grant_guard` to age a request, beside `seed_bootstrap`, `forget_grants` and the backfill-row and
+  unrecorded-admin helpers; all owner-only, on a test database, re-enabled in `finally`. (L-6) `tests/conftest.py`
+  accepts any database whose name contains "test" (`vb_latest_db` would pass) — reuse `fn_backdating_allowed`'s
+  whole-name pattern. (M-3 option) BOOTSTRAP could also require that the target row was inserted in this transaction,
+  so even a TEMP-capable session could not forge one.

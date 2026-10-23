@@ -94,6 +94,63 @@ def test_four_eyes_and_independence_decide_an_approval(t, owner):
     assert tuple(row) == (t["a3"], True, True)
     assert "decided grant never changes" in refused(owner, "UPDATE platform_admin_grant SET approved_at = "
                                                            "'2020-01-01' WHERE platform_admin_grant_id = :g", g=g)
+    # sara H-1, AR-18: the APPROVER of a grant is one of its makers too — tgt and a3 never pair, either way
+    ind, pur = "SELECT fn_admin_grant_independent(:a, :b)", "SELECT fn_admin_purge_independent(:a, :b)"
+    assert run(owner, ind, a=tgt, b=t["a3"])[0] is False and run(owner, ind, a=t["a3"], b=tgt)[0] is False
+    assert run(owner, pur, a=t["a3"], b=tgt)[0] is False
+    assert run(owner, ind, a=tgt, b=t["a2"])[0] is True                               # nobody else is blocked
+
+
+def test_a_grant_approval_needs_no_30_days(t, owner):
+    """sara L-1, AR-20: an independent admin granted today approves a grant at the guard (purges keep the 30 days)."""
+    fresh = owner_user(owner, "fresh@example.test")
+    legacy(owner, fresh, t["a2"], days=0)                                              # independent of a1
+    tgt = owner_user(owner, "tgt@example.test")
+    approve(t, request(t, tgt), tgt, by=fresh)
+    assert run(owner, "SELECT is_platform_admin FROM app_user WHERE app_user_id = :u", u=tgt)[0] is True
+
+
+def test_outside_a_test_or_demo_database_a_legacy_grant_is_dated_now(t, owner):
+    """sara H-2, AR-19, N4: the guard asks fn_backdating_allowed — made false for one rolled-back transaction, a
+    40-day-old date is overwritten; and even where backdating is allowed, a future date is clamped to now."""
+    legacy_sql = ("INSERT INTO platform_admin_grant (grant_origin, target_user_id, reason, operator_name, "
+                  "requested_by_user_id, requested_at) VALUES ('LEGACY', :u, 'x', 'IS', :a, "
+                  "now() + CAST(:shift AS interval)) "
+                  "RETURNING approved_at > now() - interval '1 minute' AND approved_at <= statement_timestamp()")
+    with owner.connect() as c:
+        tx = c.begin()
+        c.execute(text("CREATE OR REPLACE FUNCTION public.fn_backdating_allowed() RETURNS boolean LANGUAGE sql "
+                       "SET search_path = pg_catalog, public, pg_temp AS $$ SELECT false $$"))
+        tgt = c.execute(text("INSERT INTO app_user (email, password_hash, display_name) VALUES "
+                             "('old@example.test', 'x', 'Old') RETURNING app_user_id")).scalar_one()
+        assert c.execute(text(legacy_sql), {"u": tgt, "a": t["a3"], "shift": "-40 days"}).scalar_one() is True
+        tx.rollback()                                                                  # the function comes back too
+    assert run(owner, "SELECT fn_backdating_allowed()")[0] is True
+    tgt = owner_user(owner, "future@example.test")
+    with owner.begin() as c:
+        assert c.execute(text(legacy_sql), {"u": tgt, "a": t["a3"], "shift": "1 day"}).scalar_one() is True
+        c.execute(text("UPDATE app_user SET is_platform_admin = true WHERE app_user_id = :u"), {"u": tgt})
+
+
+def test_a_legacy_grant_without_the_flag_does_not_commit(t, owner):
+    """sara L-2: the record and the flag land together for LEGACY too."""
+    tgt = owner_user(owner, "noflag@example.test")
+    with pytest.raises(DBAPIError, match="land together"):
+        run(owner, "INSERT INTO platform_admin_grant (grant_origin, target_user_id, reason, operator_name, "
+                   "requested_by_user_id) VALUES ('LEGACY', :u, 'x', 'IS', :a)", u=tgt, a=t["a3"])
+
+
+def test_the_app_role_updates_only_the_deciding_columns_and_cannot_make_temporary_objects(db):
+    """sara L-3 and M-3: the column grant is pinned, and vb_app has no TEMP / CREATE — the BOOTSTRAP depth check and
+    0072's search_path rely on it (the deploy line says so too)."""
+    cols = {r[0] for r in db.execute(text(
+        "SELECT column_name FROM information_schema.column_privileges WHERE grantee = 'vb_app' "
+        "AND table_name = 'platform_admin_grant' AND privilege_type = 'UPDATE'"))}
+    assert cols == {"approved_by_user_id", "rejected_by_user_id", "rejection_reason", "cancelled_by_user_id",
+                    "updated_by", "row_version"}
+    assert not db.scalar(text("SELECT has_table_privilege('vb_app', 'platform_admin_grant', 'DELETE')"))
+    assert not db.scalar(text("SELECT has_database_privilege('vb_app', current_database(), 'TEMP')"))
+    assert not db.scalar(text("SELECT has_schema_privilege('vb_app', 'public', 'CREATE')"))
 
 
 def test_independence_is_symmetric_counts_the_creator_and_purges_need_30_days(t, owner):
