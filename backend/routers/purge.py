@@ -8,7 +8,7 @@ from database import get_db
 from models import AppUser, Baseline
 from routers.guards import GuardedRouter, authenticated, object_guard, platform_admin, project_ctx
 from schemas.purge import ArchiveDeletionIn, PurgeApproveIn, PurgeCancelIn, PurgeRequestIn
-from services import purge
+from services import purge, weekly_check
 
 router = GuardedRouter(tags=["purge"])
 _admin = platform_admin()
@@ -48,6 +48,13 @@ def list_purge_requests(db: Session = Depends(get_db)):
 @router.get("/admin/archive-overview", **_admin.route)
 def archive_overview(db: Session = Depends(get_db)):
     return purge.overview(db)
+
+
+@router.get("/admin/weekly-check", **_admin.route)
+def weekly_check_card(db: Session = Depends(get_db)):
+    """U5, AR-23, VB-012: the last weekly run's line (stale after 8 days), held archives whose last check failed, and
+    the platform-admin lines, read live."""
+    return weekly_check.card(db)
 
 
 @router.get("/baselines/{id}/archive", **_b_reader.route)
