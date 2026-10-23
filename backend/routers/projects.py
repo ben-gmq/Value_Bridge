@@ -10,9 +10,10 @@ from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, Componen
                             DfdRuleOut, DfdRulePreviewIn, DfdRulePreviewOut,
                             EffectiveAccessOut, MemberIn, MemberOut, MemberPatch, PersonOut,
                             ProgramIn, ProgramMemberOut, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
+                            ProjectRetireIn, ProjectStatusIn,
                             RestrictionIn, RestrictionOut, TemplateOut)
 from schemas.process_flow import FteBasisIn, FteBasisOut, VolumeSummaryOut
-from services import access, code_master, components, dfd_rule, process_volume
+from services import access, code_master, components, dfd_rule, process_volume, project_status
 from services import program as program_service
 from services import project as project_service
 
@@ -59,6 +60,29 @@ def update_project(project_id: int, body: ProjectPatch, db: Session = Depends(ge
     fields = body.model_dump(exclude_unset=True, exclude={"row_version"})
     return project_service.update_project(db, user, project_service.get_project(db, project_id),
                                           body.row_version, fields)
+
+
+# ---- status, the archive clock and retiring (slice 16: AR-8, AR-10, U2) ----
+@router.patch("/projects/{project_id}/status", response_model=ProjectOut, **_editor.route)
+def set_project_status(project_id: int, body: ProjectStatusIn, user: AppUser = Depends(_auth.dep),
+                       db: Session = Depends(get_db)):
+    """Closing starts the two-year archive clock; leaving a closed status is /reopen, a platform admin's."""
+    return project_status.set_status(db, user, project_service.get_project(db, project_id), body.status_code,
+                                     body.row_version)
+
+
+@router.post("/projects/{project_id}/reopen", response_model=ProjectOut, **_platform.route)
+def reopen_project(project_id: int, body: ProjectStatusIn, user: AppUser = Depends(_auth.dep),
+                   db: Session = Depends(get_db)):
+    return project_status.reopen(db, user, project_service.get_project(db, project_id), body.status_code,
+                                 body.row_version)
+
+
+@router.post("/projects/{project_id}/retire", response_model=ProjectOut, **_platform.route)
+def retire_project(project_id: int, body: ProjectRetireIn, user: AppUser = Depends(_auth.dep),
+                   db: Session = Depends(get_db)):
+    return project_status.retire(db, user, project_service.get_project(db, project_id), body.confirm_text,
+                                 body.row_version)
 
 
 @router.get("/projects/{project_id}/code-master/{category}", response_model=list[CodeOut],
