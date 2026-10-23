@@ -96,9 +96,9 @@ def test_the_owners_command_line_records_who_ran_it_and_who_asked(client, owner)
 
 def unrecorded_admin(owner, email: str) -> int:
     """Test-only: a flagged admin with no grant record — what 0076's backfill leaves when it skips someone."""
-    run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_admin_guard")
-    run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_bootstrap_grant")
-    try:
+    try:                                                         # sara N-1: both disables inside the try
+        run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_admin_guard")
+        run(owner, "ALTER TABLE app_user DISABLE TRIGGER trg_app_user_bootstrap_grant")
         return run(owner, "INSERT INTO app_user (email, password_hash, display_name, is_platform_admin, user_kind) "
                           "VALUES (:e, 'x', 'Skipped', true, 'USER') RETURNING app_user_id", e=email)[0]
     finally:
