@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { Box, Typography } from '@mui/material';
+import { Box, Snackbar, Typography } from '@mui/material';
+import { ProjectStatusCard } from './ProjectStatusCard';
 import { Page } from '../../components/Page';
 import { links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
@@ -15,8 +17,11 @@ export default function SettingsPage() {
   const { projectId } = useParams();
   const { isOn } = useComponents(projectId);
   const canAdmin = useCanAdmin();     // the Access card: project admins too (D-71)
+  const [note, setNote] = useState('');
   return (
     <Page title={t('settings.title')} subtitle={t('settings.subtitle')}>
+      <ProjectStatusCard projectId={projectId} notify={setNote} />
+      <Snackbar open={Boolean(note)} autoHideDuration={4000} onClose={() => setNote('')} message={note} />
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}>
         {ITEMS.filter(([, , need, adminOnly]) => (!need || isOn(need)) && (!adminOnly || canAdmin)).map(([key, to]) => (
           <Box key={key} component={RouterLink} to={to(projectId)} sx={(th) => ({ display: 'flex', flexDirection: 'column', gap: 0.5,

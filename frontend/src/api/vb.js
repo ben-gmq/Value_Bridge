@@ -35,6 +35,10 @@ export const api = {
   project: (id) => d(http.get(`/api/v1/projects/${id}`)),
   createProject: (body) => d(http.post('/api/v1/projects', body)),
   updateProject: (id, body) => d(http.patch(`/api/v1/projects/${id}`, body)),
+  // slice 16: status and its archive clock; reopen and retire are a platform admin's
+  setProjectStatus: (id, body) => d(http.patch(`/api/v1/projects/${id}/status`, body)),
+  reopenProject: (id, body) => d(http.post(`/api/v1/projects/${id}/reopen`, body)),
+  retireProject: (id, body) => d(http.post(`/api/v1/projects/${id}/retire`, body)),
   projectTemplates: () => d(http.get('/api/v1/project-templates')),
   componentCatalogue: () => d(http.get('/api/v1/project-components')),
   components: (id) => d(http.get(`/api/v1/projects/${id}/components`)),
