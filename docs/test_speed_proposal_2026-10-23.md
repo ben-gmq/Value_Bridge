@@ -39,6 +39,13 @@ Only this run's own connections were changed (an environment variable); the serv
 The full-suite run with the setting was cut off at 77% when the session ended, so its total is a projection, not a
 measurement; option A's own full run gives the real figure.
 
+## Result of option A (approved and built 2026-10-23, `0a0f6df`)
+Ben: "Yes go with A". Measured on a quiet machine: **full run 705 s → 690 s (−2%)**, 1021 passed. The ~27% projected
+above was wrong — the cut-off run had not yet reached the slowest files, which run last — so A does little for the
+four-worker full run. It does save 25–35% on a single-process run (the everyday `pytest`, one file at a time), and it
+changes no test, so it stays. What limits the four-worker run is therefore not the commit wait; finding that out is the
+first step of B (below), before any build.
+
 ## Options
 
 **(A) Test connections don't wait for the disk on commit** — recommended now.
