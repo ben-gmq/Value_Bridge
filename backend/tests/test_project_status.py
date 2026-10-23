@@ -109,6 +109,38 @@ def test_retiring_an_open_project_closes_it_first_so_its_clock_starts(client, w,
     assert events(owner, "PROJECT_RETIRED")[-1]["to"] == "CLOSED"
 
 
+def test_retiring_is_refused_by_name_while_the_project_has_members(client, w, owner):
+    """sara HIGH-1: a live member holds the project live (fk_pm_live_project); the refusal names them, before anything
+    changes — the status stays as it was."""
+    from tests.conftest import restrict
+    restrict(client, w["admin"], w["p"], {w["users"]["editor"]: "EDIT"})
+    r = client.post(f"{API}/projects/{w['p']}/retire", headers=w["admin"],
+                    json={"confirm_text": "SOLO", "row_version": project(client, w)["row_version"]})
+    assert r.status_code == 409 and "Remove the project's members first (Editor)" in r.json()["detail"]
+    assert project(client, w)["closed_on"] is None
+
+
+def test_a_retired_project_takes_no_further_status_change(client, w, owner):
+    """sara MEDIUM-1: reopening a retired project would stop its clock for good, so it never came due (AR-10)."""
+    rv = project(client, w)["row_version"]
+    retired = client.post(f"{API}/projects/{w['p']}/retire", headers=w["admin"],
+                          json={"confirm_text": "SOLO", "row_version": rv}).json()
+    for path, body in (("reopen", {"status_code": "ACTIVE"}), ("retire", {"confirm_text": "SOLO"})):
+        r = client.post(f"{API}/projects/{w['p']}/{path}", headers=w["admin"],
+                        json={**body, "row_version": retired["row_version"]})
+        assert r.status_code == 409 and "retired" in r.json()["detail"], (path, r.text)
+    with owner.connect() as c:
+        assert c.execute(text("SELECT closed_on FROM project WHERE project_id = :p"), {"p": w["p"]}).scalar() \
+            == local_today()
+
+
+def test_a_stale_editor_reopening_is_told_who_may_before_being_told_to_refresh(client, w):
+    """sara LOW-1: 404 → 403 → 409."""
+    set_status(client, w, "CLOSED")
+    r = client.patch(f"{API}/projects/{w['p']}/status", headers=w["ed"], json={"status_code": "ACTIVE", "row_version": 1})
+    assert r.status_code == 403
+
+
 def test_retiring_a_closed_project_keeps_its_date(client, w, owner):
     set_status(client, w, "CLOSED")
     with owner.begin() as c:

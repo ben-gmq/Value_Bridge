@@ -548,3 +548,8 @@ place.
   accepts any database whose name contains "test" (`vb_latest_db` would pass) — reuse `fn_backdating_allowed`'s
   whole-name pattern. (M-3 option) BOOTSTRAP could also require that the target row was inserted in this transaction,
   so even a TEMP-capable session could not forge one.
+- **2026-10-23 · slice 16 project status, reopen, retire (`sara`; HIGH-1 refused by name, MEDIUM-1, LOW-1–LOW-3
+  fixed):** (LOW-4) moving between two closed statuses keeps `closed_on`, but the card offers only open statuses once
+  closed and no test covers it — add both when a second closed code exists. (LOW-5) the card labels the status from the
+  live code list, so a retired status code shows "—" — have `ProjectOut` carry the code. (browser) the "Project
+  retired" message was not caught on screen (same 3-second message as every admin action).

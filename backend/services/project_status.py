@@ -11,13 +11,14 @@ code (law 5).
   comes due like any other; refused when no live closed status exists (AR-10, Q-90).
 Every change is audited; the weekly check (not built) reads PROJECT_REOPENED for "reopened since the last run"."""
 from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import AppUser, CodeMaster, Project
-from services import audit
+from models import AppUser, CodeMaster, Project, ProjectMember, UserAccessGrant
+from services import access, audit
 from services.baseline import local_today
 from services.code_master import resolve, validate_required_code
-from services.lifecycle import soft_delete
+from services.lifecycle import lock, soft_delete
 
 CATEGORY = "PROJECT_STATUS"
 
@@ -25,6 +26,16 @@ CATEGORY = "PROJECT_STATUS"
 def _fresh(project: Project, row_version: int) -> None:
     if project.row_version != row_version:
         raise HTTPException(409, "Updated by another user. Please refresh.")
+
+
+def _live(db: Session, project: Project) -> None:
+    """sara MEDIUM-1, LOW-2: a retired project takes no status change (reopening it would stop its clock for good, and
+    it would never come due); and the row is locked, then re-checked for an open removal request (Q-73), so a request
+    opened while this runs cannot slip past the guard's earlier check."""
+    lock(db, project)
+    if not project.is_active:
+        raise HTTPException(409, "The project is retired")
+    access.require_not_pending(db, project.project_id)
 
 
 def _move(project: Project, new: CodeMaster) -> None:
@@ -50,13 +61,14 @@ def _current(db: Session, project: Project) -> CodeMaster:
 
 def set_status(db: Session, actor: AppUser, project: Project, code: str | None, row_version: int) -> Project:
     """An editor's status change. Leaving a closed status is refused here (403): that is `reopen`, a platform admin's."""
-    _fresh(project, row_version)
+    _live(db, project)
     new = validate_required_code(db, None, CATEGORY, code, "status_code")
-    before = _current(db, project)
+    if project.status_behaviour == "CLOSED" and new.behaviour_code != "CLOSED":       # sara LOW-1: 403 before 409
+        raise HTTPException(403, "Reopening a closed project is for a platform admin: it stops the archive clock")
+    _fresh(project, row_version)
     if new.code_id == project.status_code_id:
         raise HTTPException(409, f"The project is already {new.label}")
-    if project.status_behaviour == "CLOSED" and new.behaviour_code != "CLOSED":
-        raise HTTPException(403, "Reopening a closed project is for a platform admin: it stops the archive clock")
+    before = _current(db, project)
     _move(project, new)
     project.updated_by = actor.app_user_id
     _event(db, "PROJECT_STATUS_CHANGED", actor, project, before, new)
@@ -66,6 +78,7 @@ def set_status(db: Session, actor: AppUser, project: Project, code: str | None, 
 
 def reopen(db: Session, actor: AppUser, project: Project, code: str | None, row_version: int) -> Project:
     """U2: a platform admin moves a closed project back to an open status; `closed_on` is cleared."""
+    _live(db, project)
     _fresh(project, row_version)
     new = validate_required_code(db, None, CATEGORY, code, "status_code")
     if project.status_behaviour != "CLOSED":
@@ -82,10 +95,21 @@ def reopen(db: Session, actor: AppUser, project: Project, code: str | None, row_
 
 
 def retire(db: Session, actor: AppUser, project: Project, confirm_text: str | None, row_version: int) -> Project:
-    """AR-10 / Q-90: closed first (the clock starts), then retired, in one transaction."""
+    """AR-10 / Q-90: closed first (the clock starts), then retired, in one transaction. sara HIGH-1: refused, by name,
+    while the project still has live members or legacy access grants — the database holds those to a live project
+    (fk_pm_live_project, fk_grant_live_project), and ending them with the retire would be a design change (Ben's)."""
+    _live(db, project)
     _fresh(project, row_version)
     if (confirm_text or "").strip() != project.project_code:
         raise HTTPException(422, f"Type the project code to confirm: {project.project_code}")
+    holders = db.scalars(select(AppUser.display_name).join(ProjectMember, ProjectMember.app_user_id == AppUser.app_user_id)
+                         .where(ProjectMember.project_id == project.project_id, ProjectMember.is_active)
+                         .order_by(AppUser.display_name)).all()
+    grants = db.scalar(select(func.count()).select_from(UserAccessGrant).where(
+        UserAccessGrant.project_id == project.project_id, UserAccessGrant.is_active))
+    if holders or grants:
+        who = ", ".join(holders) + (f" and {grants} legacy access grant(s)" if grants else "")
+        raise HTTPException(409, f"Remove the project's members first ({who}): a retired project keeps none")
     before = _current(db, project)
     after = before
     if project.status_behaviour != "CLOSED":

@@ -8,7 +8,6 @@ import { Alert, Button, FormControl, InputLabel, MenuItem, Select, Stack, Typogr
 import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
 import { keys } from '../../app/links';
-import { useAuth } from '../../app/AuthContext';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -17,7 +16,6 @@ import { t } from '../../i18n/t';
 
 export function ProjectStatusCard({ projectId, notify }) {
   const qc = useQueryClient();
-  const { isAdmin } = useAuth();
   const canEdit = useCanEdit();
   const p = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId) });
   const { codes, options, getLabel } = useCodes(projectId, 'PROJECT_STATUS');
@@ -40,7 +38,8 @@ export function ProjectStatusCard({ projectId, notify }) {
   // Closed: only a platform admin may move it, and only to an open status (U2). The server decides either way.
   const choices = options(current?.code).filter((c) => c.code_id !== p.data.status_code_id
     && (!closed || c.behaviour_code !== 'CLOSED'));
-  const mayChange = closed ? isAdmin : canEdit;
+  const platform = p.data.my_access_level === 'PLATFORM';            // sara LOW-3: the server's level for this project
+  const mayChange = closed ? platform : canEdit;
   const goingClosed = codes.find((c) => c.code === pick)?.behaviour_code === 'CLOSED';
   return (
     <Card title={t('settings.status.title')} sx={{ mb: 2 }}>
@@ -66,7 +65,7 @@ export function ProjectStatusCard({ projectId, notify }) {
           </>
         )}
       </Stack>
-      {closed && !isAdmin && (
+      {closed && !platform && (
         <Typography sx={{ mt: 1, fontSize: 12.5, color: 'text.secondary' }}>{t('settings.status.adminReopens')}</Typography>)}
       <ConfirmDialog open={confirm}
         title={t(closed ? 'settings.status.reopenTitle' : 'settings.status.closeTitle')}
