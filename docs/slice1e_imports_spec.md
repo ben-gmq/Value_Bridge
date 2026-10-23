@@ -197,7 +197,7 @@ first half, Q-9) and "a row pointing at a summary node is an error" (§7.1). Plu
 - **Q-2** FR interface detail: exported read-only (source and target app), not imported in 1e-a. *Recommended: defer.*
 - **Q-3** BR links on FR and issue rows are add-only; removal on screen. *Recommended: yes.*
 - **Q-4** Issue raiser must already exist (name + org unit); no "pick or create" in the preview yet. *Recommended: yes.*
-- **Q-5** A blank solution cell on an existing FR leaves the tag unchanged (the design's "blank clears" would move its
+- **Q-5** A blank solution or complexity cell on an existing FR leaves it unchanged (the design's "blank clears" would move its
   effort to Unassigned unseen). *Recommended: unchanged; clearing on screen.*
 - **Q-6** Re-uploading a committed file, or a likely duplicate row: warn (passable) or block. *Recommended: warn.*
 - **Q-7** A status typed on a new FR or issue row is honoured (not dropped). *Recommended: honour.*
@@ -227,3 +227,18 @@ reversal → added link ids kept, §1a · P7 size → 2,000-row cap, drift query
 · D2 blank solution → Q-5 · D3 raiser → keep-if-unchanged, org unit, pin · D4 hidden codes → picker rule · D5 106 vs 133
 → Q-9 · D6 freeze staleness → message · S1 components → per-row and template/export checks, moved into services ·
 S2 AI egress → 1e-b spec. Round 2 re-checks these changes only.
+
+Round 2 (final, 2026-10-24): all 17 closed, nothing structural; 8 new (2 MEDIUM, 6 LOW), taken into the build as
+follows and tracked against the running code from here:
+- **N1** (MEDIUM) `fr_type_code` is required on a new FR row; `issue_type_code` and `severity_code` on a new issue row;
+  a complexity change on an FR whose type is retired is a row error "change the type first". Criterion 4 becomes a
+  property test: every row that validates clean commits.
+- **N3** (MEDIUM) a blank complexity cell on an existing FR leaves it unchanged, as a blank solution does (**Q-5 now
+  covers both**); clearing a rating is done on screen.
+- **N5** a blank solution or complexity on an existing FR is not a change: never "cleared" in the preview.
+- **N2** the links-at-export MAC covers the row token's claims (project, table, row, row_version) plus the link list.
+- **N6** a link removed on screen since export is an error only when the file still lists it.
+- **N4** a new issue with a non-OPEN open status: `raise_issue` → `update_issue(status)`; criterion 12 covers issues.
+- **N7** the weekly check's import line is information only and never changes its exit code.
+- **N8** a blank raiser unit matches only stakeholders with no unit; an ambiguous match is a row error naming the
+  candidates and pointing to the issue screen.
