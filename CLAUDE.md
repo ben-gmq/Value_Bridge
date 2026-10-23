@@ -33,7 +33,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   PHASE_STATUS row or hide, now company-only — W-4); clear those with Ben, then re-run it.
   **Slice 16 deploy (every database, once):** after `upgrade head`, `scripts.stamp_instance <id>` (owner) and the same
   id as `VB_INSTANCE_ID` in `.env`, or the server refuses to start; `VB_ARCHIVE_DIR` / `VB_ARCHIVE_KEY_DIR` point
-  outside the repo (unset = files stay owed); then `scripts.write_archives` writes the backlog (Q-77).
+  outside the repo (unset = files stay owed); then `scripts.write_archives` writes the backlog (Q-77). IS schedules
+  `scripts.weekly_check --actor-email <admin> --operator <name>` weekly (exit 1 = a file or held archive failed); the
+  Removals tab warns once its last run is over 8 days old (U5).
   **Slice 17 deploy:** read 0076's NOTICEs (every admin recorded or skipped — a skipped one needs an IS grant); IS
   confirms `SELECT fn_backdating_allowed()` is false on production. Admins are then made only by a request a second
   admin approves; `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)

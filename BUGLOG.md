@@ -34,7 +34,10 @@ place.
 - **Ben, 2026-10-21:** accepted until the first non-local deploy; stays HIGH and is a **hard blocker** for that deploy
   (history, slice 17 rulings; design §15.2).
 
-### VB-012 | Nobody sees the weekly admin-check lines: no route and no card yet | OPEN
+### VB-012 | Nobody sees the weekly admin-check lines: no route and no card yet | OPEN — FIXED, awaiting Ben's close
+- **FIXED 2026-10-23, slice 16 weekly check:** `GET /admin/weekly-check` (platform admin) serves the lines with the
+  check's last run; the Weekly archive check card on the Removals tab shows them; `scripts.weekly_check` prints them
+  and records each run (audit `WEEKLY_CHECK_RAN`). Tests: `tests/test_weekly_check.py`.
 - **Found:** 2026-10-23, `sara` slice 17 review (M-2, deviation 4).
 - **What:** `services/admin_grant.weekly_admin_lines` reports open requests over 7 days, recent approvals, live admins
   below two, admins with no grant record (the only standing view of the admins 0076's backfill skipped), owner grants,
