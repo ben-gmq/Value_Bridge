@@ -40,8 +40,9 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.types import Text
 
 from config import get_settings
-from models import DataEntity, DataField, ImportBatch, ImportRow
+from models import BfcNode, BusinessRequirement, DataEntity, DataField, ImportBatch, ImportRow
 from services import audit, code_master, components, errors, xlsx
+from services import business_requirement as br_service
 from services import data_entity as de_service
 
 OPERATIONAL_SQLSTATES = frozenset({"40001", "40P01", "55P03", "57014"})    # 4a-R7
@@ -904,10 +905,161 @@ def _df_apply(ctx: Ctx, rows: list[Staged]) -> None:
 DATA_FIELD = Target("DATA_FIELD", "data-fields", "Data fields", DataField.__tablename__,
                     DF_COLUMNS, DF_COMPARE, _df_export_rows, _df_current, _df_validate, _df_apply)
 
+# ---- shared by the slice 1e targets (spec §7.0) ----------------------------------------------
+
+def picker_codes(db: Session, project_id: int, category: str) -> set[str]:
+    """The codes a new or changed value may take: the project's picker list, hidden codes left out (D4, R5)."""
+    return {r.code for r in code_master.resolve(db, project_id, category, for_picker=True)}
+
+
+def changed(current, value) -> bool:
+    return not _same(current, value)
+
+
+# ---- BUSINESS_REQUIREMENT (slice 1e-a, spec §7.1) -----------------------------------------------
+
+BR_COLUMNS = (
+    Column("br_number", "BR number", max_len=20, width=12),
+    Column("hier_code", "Chart code (check only)", max_len=40, width=12),
+    Column("step_name", "Process step (read only)", max_len=200, width=32),
+    Column("br_statement", "Statement", max_len=4000, width=60),
+    Column("status_code", "Status", max_len=40, category="BR_STATUS", width=16),
+    Column("row_token", "Row token (do not edit)", max_len=200, protected=True, width=14),
+)
+BR_COMPARE = ("br_statement", "status_code")
+
+
+def _brs_with_steps(db: Session, project_id: int, numbers: list[str] | None = None, lock: bool = False):
+    """(BR, its step) for this project's live BRs — every one, or those numbered; locked for a commit."""
+    q = (select(BusinessRequirement, BfcNode)
+         .join(BfcNode, (BfcNode.bfc_node_id == BusinessRequirement.bfc_node_id)
+               & (BfcNode.project_id == BusinessRequirement.project_id))
+         .where(BusinessRequirement.project_id == project_id, BusinessRequirement.is_active)
+         .order_by(BusinessRequirement.br_number))
+    if numbers is not None:
+        q = q.where(BusinessRequirement.br_number.in_(numbers))
+    if lock:
+        q = q.with_for_update(of=BusinessRequirement)
+    return db.execute(q.execution_options(populate_existing=True)).all()
+
+
+def _br_values(br) -> dict:
+    return {"br_statement": br.br_statement, "status_code": br.status_code}
+
+
+def _br_export_rows(db: Session, project_id: int) -> list[dict]:
+    return [{"br_number": br.br_number, "hier_code": node.hier_code, "step_name": node.node_name, **_br_values(br),
+             "row_token": row_token(project_id, BusinessRequirement.__tablename__, br.br_id, br.row_version)}
+            for br, node in _brs_with_steps(db, project_id)]
+
+
+def _br_current(db: Session, project_id: int, ids: list[int]) -> dict[int, dict]:
+    if not ids:
+        return {}
+    rows = db.scalars(select(BusinessRequirement).where(BusinessRequirement.project_id == project_id,
+                                                       BusinessRequirement.br_id.in_(ids)))
+    return {br.br_id: _br_values(br) for br in rows}
+
+
+def _br_validate(ctx: Ctx, rows: list[Staged]) -> None:
+    first: dict[str, int] = {}
+    for r in rows:
+        number = r.cells["br_number"]
+        if number is None:
+            if not any(e["column"] == "br_number" for e in r.errors):
+                r.errors.append(msg("BR_NUMBER_REQUIRED", "BRs are created with their step — use the flow import "
+                                    "to add steps.", "br_number"))
+            continue
+        number = r.cells["br_number"] = number.strip().upper()
+        if number in first:
+            r.errors.append(msg("DUPLICATE_KEY", f"{number} also appears on row {first[number]}.", "br_number",
+                                key=number, first_row=first[number]))
+            continue
+        first[number] = r.sheet_row_no
+        r.business_key = number
+    found = {br.br_number: (br, node) for br, node in
+             _brs_with_steps(ctx.db, ctx.project_id, sorted(first), lock=ctx.for_commit)} if first else {}
+    statuses = picker_codes(ctx.db, ctx.project_id, "BR_STATUS")
+    for r in rows:
+        number = r.business_key
+        if number is None or r.errors:
+            continue
+        hit = found.get(number)
+        if hit is None:
+            r.errors.append(msg("NOT_FOUND", f"{number} is not a live BR of this project.", "br_number", key=number))
+            continue
+        br, node = hit
+        tok = r.token
+        if tok is None:
+            if r.cells["row_token"] is None:
+                r.errors.append(msg("EXPORT_FIRST", f"{number}: export first to update. A BR row needs the row "
+                                    "token from an export.", "br_number", key=number))
+            continue
+        if tok.row_id != br.br_id:
+            r.errors.append(msg("TOKEN_ROW_MISMATCH", f"This row's token belongs to another BR, not {number}: the "
+                                "rows were sorted or shifted. Re-export.", "br_number", key=number))
+            continue
+        current = _br_values(br)
+        if br.row_version != tok.row_version:
+            stale = [k for k in BR_COMPARE if changed(current[k], r.cells[k])]
+            if stale == ["status_code"] and current["status_code"] in br_service.SYSTEM_SET_STATUSES:     # D6
+                r.errors.append(msg("FROZEN_SINCE_EXPORT", f"{number}: a baseline was frozen since your export. "
+                                    "Re-export.", "status_code", key=number))
+            elif stale:
+                for k in stale:
+                    r.errors.append(msg("ROW_STALE", f"{number} changed since export. Current value: "
+                                        f"{_q(current[k])}", k, key=number, current=current[k]))
+            else:
+                r.errors.append(msg("ROW_STALE", f"{number} changed since export. Re-export.", None, key=number))
+            continue
+        if r.cells["hier_code"] is not None and r.cells["hier_code"] != node.hier_code:
+            r.errors.append(msg("MOVED_SINCE_EXPORT", f"{number} moved since export: now {node.hier_code}, file "
+                                f"says {r.cells['hier_code']}. Re-export.", "hier_code", key=number,
+                                current=node.hier_code))                              # R2-D1, criterion 117
+            continue
+        if r.cells["step_name"] is not None and changed(node.node_name, r.cells["step_name"]):
+            r.warnings.append(msg("STEP_NAME_IGNORED", "Step names change on the chart; this one was ignored.",
+                                  "step_name"))
+        r.target_id, r.target_row_version = br.br_id, br.row_version
+        diff = [k for k in BR_COMPARE if changed(current[k], r.cells[k])]
+        if "br_statement" in diff and r.cells["br_statement"] is None:
+            r.errors.append(msg("REQUIRED", "A BR's statement cannot be cleared.", "br_statement"))
+        if "status_code" in diff:
+            new = r.cells["status_code"]
+            if new is None:
+                r.errors.append(msg("REQUIRED", "A BR needs a status.", "status_code"))
+            elif new in br_service.SYSTEM_SET_STATUSES:
+                r.errors.append(msg("SYSTEM_SET", f"{new} is set by the baseline freeze, not by hand.",
+                                    "status_code", value=new))
+            elif new not in statuses:
+                r.errors.append(msg("CODE_UNKNOWN", f"{_q(new)} is not a status this project offers.",
+                                    "status_code", value=new))
+        r.verdict = "UPDATE" if diff else "MATCH"
+
+
+def _br_apply(ctx: Ctx, rows: list[Staged]) -> None:
+    for r in rows:
+        if r.verdict != "UPDATE":
+            continue
+        ctx.current_row = r
+        br = ctx.db.get(BusinessRequirement, r.target_id)                # locked by the re-validation
+        current = _br_values(br)
+        r.before = {**current, "row_version": br.row_version}
+        fields = {"br_statement": r.cells["br_statement"]} if changed(current["br_statement"],
+                                                                       r.cells["br_statement"]) else {}
+        status = r.cells["status_code"] if changed(current["status_code"], r.cells["status_code"]) else None
+        br_service.update_br(ctx.db, ctx.actor_id, br, r.target_row_version, fields, status, commit=False)
+    ctx.current_row = None
+
+
+BUSINESS_REQUIREMENT = Target("BUSINESS_REQUIREMENT", "business-requirements", "Business requirements",
+                              "business_requirement", BR_COLUMNS, BR_COMPARE, _br_export_rows, _br_current,
+                              _br_validate, _br_apply)
+
 # A workbook of several targets' sheets, one batch per sheet (S4-12): template and export only.
 BOOKS: dict[str, tuple[Target, ...]] = {"data-model": (DATA_ENTITY, DATA_FIELD)}
 
-TARGETS: dict[str, Target] = {t.slug: t for t in (DATA_ENTITY, DATA_FIELD)}
+TARGETS: dict[str, Target] = {t.slug: t for t in (DATA_ENTITY, DATA_FIELD, BUSINESS_REQUIREMENT)}
 BY_CODE: dict[str, Target] = {t.code: t for t in TARGETS.values()}
 
 
