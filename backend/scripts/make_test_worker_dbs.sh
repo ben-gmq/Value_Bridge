@@ -3,8 +3,8 @@
 # test database named in backend/.env (TEST_DATABASE_URL), owned by vb_owner with the same grants as
 # bootstrap_local_db.sh. Existing ones are left alone. Usage, from backend/:  ./scripts/make_test_worker_dbs.sh 4
 #
-# Optional, for speed, on THROWAWAY TEST databases only (never vb_db or any dev / demo / UAT database):
-#   psql -d postgres -c "ALTER DATABASE <test db>_gw0 SET synchronous_commit = off"   (one per worker database)
+# The harness (tests/conftest.py) already makes its own connections commit without waiting for the disk; nothing to set
+# on the databases themselves.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 N="${1:-4}"

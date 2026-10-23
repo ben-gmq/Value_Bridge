@@ -25,6 +25,11 @@ os.environ["DATABASE_URL"] = _for_worker(_app_url)
 os.environ["MIGRATION_DATABASE_URL"] = _for_worker(_owner_url)
 os.environ["ALLOWED_EMAIL_DOMAINS"] = "example.test"
 os.environ["ALLOW_FIRST_RUN_SETUP"] = "true"
+# Ben 2026-10-23 (docs/test_speed_proposal_2026-10-23.md, option A): every connection this test process opens — app,
+# owner, alembic — commits without waiting for the disk. libpq reads PGOPTIONS per connection, so only these sessions
+# change; the server, its other databases and the app's own setting do not. A crash can lose the last moment of test
+# data (never corrupt it), and every run wipes it anyway. Measured: ~25-35% off the full run.
+os.environ["PGOPTIONS"] = f"{os.environ.get('PGOPTIONS', '')} -c synchronous_commit=off".strip()
 # slice 16 (S9): never a host's archive folders or identity; archive tests stamp and set their own temporary ones
 for _k in ("VB_INSTANCE_ID", "VB_ARCHIVE_DIR", "VB_ARCHIVE_KEY_DIR"):
     os.environ[_k] = ""
