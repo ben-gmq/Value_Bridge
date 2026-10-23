@@ -46,6 +46,33 @@ four-worker full run. It does save 25–35% on a single-process run (the everyda
 changes no test, so it stays. What limits the four-worker run is therefore not the commit wait; finding that out is the
 first step of B (below), before any build.
 
+## What limits the four-worker run (measured 2026-10-23, Ben: "1. Yes")
+One instrumented full run (585 s; the same suite measured 585–705 s across today's runs, so ±15% is noise):
+- **Not uneven workers:** all four were busy ~570 s and finished within 12 s of each other.
+- **Not the processor or the disk's capacity:** the machine sat 71% idle; waiting on the disk only 5%.
+- **It is waiting for one kind of disk sync, one at a time.** Time splits: preparing data 40%, the tests 25%, **clearing
+  data 35% (808 s)**. When the cleanup login is working, 73% of that time it is waiting on `DataFileImmediateSync` —
+  PostgreSQL forcing each freshly emptied table and index file to disk, which is what `TRUNCATE` does and option A
+  cannot touch.
+- **Where:** 182 tests (those that freeze a baseline or change a code list) take the harness's "empty the whole group"
+  path and spend 1–5 s each clearing up — **674 s of the 808 s**. Emptying the baseline group alone (39 tables, 123
+  indexes) costs **645 ms**; deleting the same rows costs **~1 ms** (measured on this worktree's test database).
+
+## Option C — clear test data by deleting rows, not emptying tables (proposed)
+- What: the harness's cleanup (`tests/conftest.py` `clean()`) deletes rows children-first — as it already does for most
+  tables — also for the append-only group (their guard triggers switched off inside that one cleanup transaction, as the
+  owner, on test databases only — the harness already does exactly this for `vb_instance`), and for the library path
+  (delete and re-copy only the library rows a test changed). `TRUNCATE` stays only as the fallback for a cycle of
+  references that has no column to clear first.
+- Proof that every test still starts from the same fresh state: after each cleanup the harness re-checks that every table
+  is empty and every id counter restarted, and fails the run if not; then the full suite twice.
+- Saves: most of the 674 s → **about 2–2½ minutes off the full run** (≈ 10–11½ → 8–9 min), and the same share of every
+  everyday run.
+- Effort: **about half a day.** Risk: low–medium — test plumbing only; the guards stay on everywhere except inside the
+  test cleanup transaction, and production code does not change. Sara reviews it (it switches a guard off, even in a test).
+- After C: re-measure. Then B (the removal tests build their sample once) and a fifth/sixth worker (the machine is mostly
+  idle) are each a short measurement before any build.
+
 ## Options
 
 **(A) Test connections don't wait for the disk on commit** — recommended now.
