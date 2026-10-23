@@ -12,6 +12,7 @@ import { useAuth } from '../../app/AuthContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card, Status } from '../../components/kit';
 import { t } from '../../i18n/t';
+import { WeeklyCheckCard } from './WeeklyCheckCard';
 
 const TONE = { OPEN: 'caution', APPROVED: 'caution', EXECUTED: 'neutral', CANCELLED: 'neutral' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '');
@@ -145,6 +146,7 @@ export function RemovalsTab({ notify }) {
       {admins !== undefined && admins < 2 && (
         <Alert severity="warning" sx={{ mb: 2 }}>{t('removals.fewAdmins', { n: admins })}</Alert>
       )}
+      <WeeklyCheckCard />
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <Card title={t('removals.due.title')} sx={{ flex: 1 }}>
           {(overview.data?.due_for_archiving ?? []).length === 0

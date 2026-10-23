@@ -27,6 +27,7 @@ export const api = {
   // slice 16: removal requests (execution is the operator's job, never a route)
   purgeRequests: () => d(http.get('/api/v1/purge-requests')),
   archiveOverview: () => d(http.get('/api/v1/admin/archive-overview')),
+  weeklyCheck: () => d(http.get('/api/v1/admin/weekly-check')),
   requestPurge: (projectId, body) => d(http.post(`/api/v1/projects/${projectId}/purge-requests`, body)),
   requestArchiveDeletion: (archiveId, body) => d(http.post(`/api/v1/purge-requests/${archiveId}/delete-archive`, body)),
   approvePurge: (id, body) => d(http.post(`/api/v1/purge-requests/${id}/approve`, body)),

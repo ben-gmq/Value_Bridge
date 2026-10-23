@@ -51,5 +51,17 @@
   "removals.archive.WRITTEN": "written",
   "removals.archive.OWED": "owed",
   "removals.archive.FAILING": "failing",
-  "removals.archive.CHECK_FAILED": "check failed"
+  "removals.archive.CHECK_FAILED": "check failed",
+  "removals.weekly.title": "Weekly archive check",
+  "removals.weekly.never": "The weekly archive check has never run. Ask Fortience IS to schedule it.",
+  "removals.weekly.stale": "The weekly archive check last ran {when} — more than 8 days ago. Ask Fortience IS why.",
+  "removals.weekly.line": "Last run {when}: {due} due for archiving · {reopened} reopened · {owed} file(s) owed · {failed} file(s) failed their check · {held} archived project(s) checked, {heldFailing} failing · {removals} removal(s) unfinished",
+  "removals.weekly.heldFailing": "The archive of {code} failed its check on {when}: {error}. It is the only copy — call Fortience IS now.",
+  "removals.weekly.adminsBelowTwo": "Fewer than two live platform admins: no removal and no admin request can be approved.",
+  "removals.weekly.noGrant": "{n} live platform admin(s) have no grant on record and can approve nothing until Fortience IS records one.",
+  "removals.weekly.oldRequests": "{n} request(s) for admin rights have waited more than 7 days.",
+  "removals.weekly.recentGrants": "{n} admin request(s) approved in the last 7 days.",
+  "removals.weekly.ownerGrants": "{n} admin grant(s) recorded by Fortience IS in the last 7 days ({backdated} back-dated).",
+  "removals.weekly.noAsker": "{n} recorded admin grant(s) name no asking admin.",
+  "removals.weekly.removedAdmins": "Last 7 days: {removed} admin(s) had their rights removed, {deactivated} deactivated."
 }
