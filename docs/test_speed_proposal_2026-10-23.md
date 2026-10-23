@@ -58,7 +58,26 @@ One instrumented full run (585 s; the same suite measured 585–705 s across tod
   path and spend 1–5 s each clearing up — **674 s of the 808 s**. Emptying the baseline group alone (39 tables, 123
   indexes) costs **645 ms**; deleting the same rows costs **~1 ms** (measured on this worktree's test database).
 
-## Option C — clear test data by deleting rows, not emptying tables (proposed)
+## Done (Ben 2026-10-23: "reevaluate as soon as possible and fix it") — full run 705 s → 385 s
+| Run (4 workers, 1021 tests, all passed) | Wall |
+|---|---|
+| This morning, before any change | 705 s (11 min 45 s) |
+| A (commits not waiting) | 585–690 s |
+| A + C (delete rows instead of emptying tables, the one reference cycle broken) | 528 s |
+| A + C + B (the removal tests' showcase built once per worker, restored with a row-for-row proof), after Sara's fixes | **385 s (6 min 25 s)** |
+
+- **C** is as proposed below, plus the one reference cycle in the schema (a project's code overrides ↔ its status code)
+  broken by deleting the overrides just before the projects, so that path no longer falls back to `TRUNCATE`.
+- **B**: `conftest.save_state` / `restore_state`; the removal tests went 266 s → 46 s on one worker. Each restore proves
+  itself (every saved table equal row for row by md5, no other rows, every id counter equal) or the test stops.
+- **Sara** (one HIGH, fixed): the saved copies were named like the real tables, so migration tests that look a table up
+  by name in any schema could see them; copies are now `s_<table>` and every saved state is dropped at session start
+  and end. Also fixed: refuse to save a state whose build changed the shared library (MEDIUM); a 10 s lock timeout on
+  the wipe and restore; only triggers in their default mode are switched off and back on (LOWs). Two LOWs to VB-005.
+- The workers now finish within 3 s of each other; the machine is ~70% idle, so a fifth/sixth worker is the next cheap
+  measurement if a further cut is wanted.
+
+## Option C — clear test data by deleting rows, not emptying tables (built)
 - What: the harness's cleanup (`tests/conftest.py` `clean()`) deletes rows children-first — as it already does for most
   tables — also for the append-only group (their guard triggers switched off inside that one cleanup transaction, as the
   owner, on test databases only — the harness already does exactly this for `vb_instance`), and for the library path

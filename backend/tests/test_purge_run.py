@@ -12,7 +12,7 @@ from database import engine as app_engine
 from models import AppUser
 from seeds.demo_showcase import build_showcase
 from services import purge_run
-from tests.conftest import PW
+from tests.conftest import PW, has_state, restore_state, save_state
 from tests.admin_team import owner_user
 from tests.test_baseline import bid, freeze, scope
 from tests.test_project_purge_record import INSERT, backdate, owner, promote, run  # noqa: F401 — owner is a fixture
@@ -22,7 +22,15 @@ from tests.test_scope_api import ed  # noqa: F401 — ed is a fixture
 @pytest.fixture
 def rich(client, world, ed, db, owner, monkeypatch):
     """The showcase project (frozen twice, every scope table) to remove; p_solo frozen; the world's other projects;
-    two platform admins with a1 the requester and a2 (granted 31 days ago) the approver; a stamped database."""
+    two platform admins with a1 the requester and a2 (granted 31 days ago) the approver; a stamped database.
+    Built once per worker, then restored for every later test (conftest.save_state / restore_state, which prove the
+    copy row for row): the build is ~8-12 s of services, the restore well under one. `world` and `ed` still run first,
+    on a fresh database, so their ids and logins are the build's own."""
+    from config import get_settings
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")                    # this host's id (sara H2)
+    if has_state("rich"):
+        restore_state("rich")
+        return {**_RICH, "world": world}
     admin = db.scalar(select(AppUser).where(AppUser.email == "admin@example.test"))
     victim = build_showcase(db, admin, "example.test", PW)
     db.commit()
@@ -31,15 +39,18 @@ def rich(client, world, ed, db, owner, monkeypatch):
     a2 = owner_user(owner, "a2.purge@example.test")                # not made by a1 (AR-24)
     promote(owner, a2)
     run(owner, "INSERT INTO vb_instance (instance_id) VALUES ('test-a')")
-    from config import get_settings
-    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")                    # this host's id (sara H2)
     client_id = run(owner, "SELECT client_id FROM project WHERE project_id = :p", p=victim)[0]
     for p in (victim, world["p_sales"]):                                               # code-list overrides
         for cat in ("ISSUE_TYPE", "PROJECT_COMPONENT"):
             run(owner, "INSERT INTO code_master (project_id, category, code, label, created_by) "
                        "VALUES (:p, :c, 'LOCAL', 'Local', :u)", p=p, c=cat, u=admin.app_user_id)
-    return {"p": victim, "c": client_id, "a1": admin.app_user_id, "a2": a2, "world": world,
-            "a2_email": "a2.purge@example.test", "code": "KAITO/CSR27"}
+    _RICH.update({"p": victim, "c": client_id, "a1": admin.app_user_id, "a2": a2,
+                  "a2_email": "a2.purge@example.test", "code": "KAITO/CSR27"})
+    save_state("rich")
+    return {**_RICH, "world": world}
+
+
+_RICH: dict = {}
 
 
 def request(t, kind="DELETE", approve=True, hours=25):

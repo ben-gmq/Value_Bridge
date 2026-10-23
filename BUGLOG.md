@@ -562,3 +562,7 @@ place.
   owner of the count. (L5) no test of the script's exit code (1 on a failed file or held archive, else 0); UNREADABLE
   (a hash-matching file that is not an envelope) is not exercised. (browser, 400px) the Requests grid cuts its columns
   after State and the admin tab strip hides Code lists and Removals — not checked whether either scrolls.
+- **2026-10-23 · test speed, delete-based wipe and saved states (`sara`; HIGH, MEDIUM, three LOWs fixed):** (LOW)
+  `conftest._restore_library` repeats `_cols`' column query — call `_cols(c, SNAPSHOT, t, t)`. (LOW, pre-existing) the
+  test-database guard at the top of `tests/conftest.py` is a substring match on "test" (`vb_latest` would pass) — match
+  `_test_db(_gw\d+)?$`.
