@@ -103,6 +103,15 @@ def _step_through(cfg) -> None:
     with owner_engine().connect() as c:
         current = c.execute(text("SELECT to_regclass('public.alembic_version') IS NOT NULL")).scalar() and \
             c.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    if current:
+        # A run killed before its teardown leaves rows behind, and the downgrades that guard kept records (purge
+        # requests 0072/0073, grant records 0076) rightly refuse to drop them. This is a test database whose every
+        # table goes on the way down anyway: start from empty.
+        with owner_engine().begin() as c:
+            tables = c.execute(text("SELECT string_agg(quote_ident(tablename), ', ') FROM pg_tables "
+                                    "WHERE schemaname = 'public' AND tablename <> 'alembic_version'")).scalar()
+            if tables:
+                c.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     for _ in chain[chain.index(current):] if current in chain else []:
         command.downgrade(cfg, "-1")
     for rev in reversed(chain):
