@@ -53,6 +53,7 @@
   "removals.archive.FAILING": "failing",
   "removals.archive.CHECK_FAILED": "check failed",
   "removals.weekly.title": "Weekly archive check",
+  "removals.weekly.loadFailed": "The weekly archive check's status could not be loaded. Reload the page; if it stays, call Fortience IS.",
   "removals.weekly.never": "The weekly archive check has never run. Ask Fortience IS to schedule it.",
   "removals.weekly.stale": "The weekly archive check last ran {when} — more than 8 days ago. Ask Fortience IS why.",
   "removals.weekly.line": "Last run {when}: {due} due for archiving · {reopened} reopened · {owed} file(s) owed · {failed} file(s) failed their check · {held} archived project(s) checked, {heldFailing} failing · {removals} removal(s) unfinished",

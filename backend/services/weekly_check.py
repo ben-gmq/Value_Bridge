@@ -34,10 +34,24 @@ KEY_GONE = "the project key no longer unwraps the file"
 UNREADABLE = "the stored file is not a readable archive envelope"
 
 
+class Unreachable(RuntimeError):
+    """The archive or key folder is not where the records say (wrong host, typo, share not mounted): nothing is
+    checked, so a mis-set folder never marks a file failed for good (sara M1)."""
+
+
+def check_reachable(db: Session, store, keys, instance_id: str) -> None:
+    """Both folders exist, and once anything is recorded written, this instance's folder exists in the store."""
+    for root in (store.root, keys.root):
+        if not root.is_dir():
+            raise Unreachable(f"{root} is not a folder on this host")
+    if (_current_written(db) or _held(db)) and not (store.root / instance_id).is_dir():
+        raise Unreachable(f"{store.root} holds no folder for instance {instance_id}: the wrong archive folder?")
+
+
 def _stored(store, name: str, size: int, sha: str) -> tuple[bytes | None, str | None]:
     try:
         blob = store.get(name)
-    except (FileNotFoundError, OSError, ValueError):
+    except (FileNotFoundError, ValueError):                                    # any other OSError stops the run
         return None, MISSING
     if len(blob) != size or hashlib.sha256(blob).hexdigest() != sha:
         return blob, DIFFERS
@@ -78,31 +92,42 @@ def check_files(db: Session, store, actor_id: int) -> list[dict]:
 
 
 def _held(db: Session) -> list[ProjectPurge]:
-    deleted = select(ProjectPurge.archive_purge_id).where(ProjectPurge.purge_kind == "DELETE_ARCHIVE",
-                                                         ProjectPurge.executed_at.is_not(None))
+    """Executed archives not deleted — and not being deleted: once a DELETE_ARCHIVE has started destroying keys, its
+    archive is an unfinished removal, not a failing one (sara L2)."""
+    deleted = select(ProjectPurge.archive_purge_id).where(
+        ProjectPurge.purge_kind == "DELETE_ARCHIVE", ProjectPurge.cancelled_at.is_(None),
+        ProjectPurge.executed_at.is_not(None) | ProjectPurge.destroy_started_at.is_not(None))
     return list(db.scalars(select(ProjectPurge).where(
         ProjectPurge.purge_kind == "ARCHIVE", ProjectPurge.executed_at.is_not(None),
         ProjectPurge.project_purge_id.not_in(deleted)).order_by(ProjectPurge.project_purge_id)))
 
 
-def _unwraps(blob: bytes, keys) -> bool:
+def _unwrap_error(blob: bytes, keys) -> str | None:
     try:
         env = json.loads(blob)
-        keys.unwrap(env["key_ref"], base64.b64decode(env["wrapped_data_key"]))
-        return True
-    except Exception:                                                          # noqa: BLE001 — any failure: not readable
-        return False
+        ref, wrapped = env["key_ref"], base64.b64decode(env["wrapped_data_key"])
+    except Exception:                                                          # noqa: BLE001 — any failure: not an envelope
+        return UNREADABLE
+    try:
+        keys.unwrap(ref, wrapped)
+        return None
+    except Exception:                                                          # noqa: BLE001 — KeyMissing or a failed unwrap
+        return KEY_GONE
 
 
-def check_held(db: Session, store, keys) -> list[dict]:
-    """2. U1: the only copy of an archived project — its object, its size and sha256, and its key."""
+def check_held(db: Session, store, keys, actor_id: int) -> list[dict]:
+    """2. U1: the only copy of an archived project — its object, its size and sha256, and its key. A failure is also
+    audited, so a later passing run (which clears the error column) cannot erase it (sara M2)."""
     out = []
     for p in _held(db):
         blob, why = _stored(store, p.archive_object_name, p.archive_byte_size, p.archive_sha256)
-        if why is None and not _unwraps(blob, keys):
-            why = KEY_GONE
+        if why is None:
+            why = _unwrap_error(blob, keys)
         p.archive_checked_at, p.archive_check_error = func.now(), why          # the guard sets the clock
-        p.row_version += 1
+        p.updated_by, p.row_version = actor_id, p.row_version + 1
+        if why is not None:
+            audit.record(db, "ARCHIVE_HELD_CHECK_FAILED", actor_id=actor_id, target_table="project_purge",
+                         target_id=p.project_purge_id, detail={"project_code": p.project_code, "error": why})
         db.commit()
         out.append({"project_purge_id": p.project_purge_id, "project_code": p.project_code, "ok": why is None,
                     "error": why})
@@ -164,7 +189,7 @@ def run(db: Session, store, keys, actor_id: int, operator: str) -> dict:
     """One weekly run: the checks, the report, and its line — recorded even when there is nothing to say (U5)."""
     since = last_run(db)["ran_at"]
     failed = check_files(db, store, actor_id)
-    held = check_held(db, store, keys)
+    held = check_held(db, store, keys, actor_id)
     rep = report(db, since) | {"failed_files": failed, "held_archives": held}
     summary = {"due": len(rep["due_for_archiving"]), "reopened": len(rep["reopened_since_last_run"]),
                "owed_files": sum(o["owed_files"] for o in rep["owed_files"]), "failed_files": len(failed),
@@ -173,6 +198,6 @@ def run(db: Session, store, keys, actor_id: int, operator: str) -> dict:
                "admins_without_a_grant": len(rep["admin"]["admins_without_a_grant"]),
                "open_admin_requests_over_7_days": len(rep["admin"]["open_over_7_days"])}
     audit.record(db, EVENT, actor_id=actor_id, target_table="weekly_check",
-                 detail={"summary": summary, "operator": operator})
+                 detail={"summary": summary, "operator": operator[:200]})
     db.commit()
     return rep | {"summary": summary}

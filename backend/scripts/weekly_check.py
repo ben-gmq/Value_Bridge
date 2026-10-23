@@ -62,6 +62,10 @@ def main() -> None:
                                                 AppUser.is_active, AppUser.is_platform_admin))
         if actor is None:
             raise SystemExit("--actor-email must name a live platform admin (the check's owner, Q-84).")
+        try:
+            weekly_check.check_reachable(db, *target, get_settings().vb_instance_id)
+        except weekly_check.Unreachable as exc:
+            raise SystemExit(f"Nothing checked: {exc}. Run it on the host that holds the archive folders.") from exc
         rep = weekly_check.run(db, *target, actor.app_user_id, a.operator)
     print("\n".join(_lines(rep)))
     if a.json:

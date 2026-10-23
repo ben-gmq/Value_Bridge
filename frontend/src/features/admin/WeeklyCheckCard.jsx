@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Stack, Typography } from '@mui/material';
 import { api } from '../../api/vb';
+import { errorText } from '../../api/client';
 import { keys } from '../../app/links';
 import { Card } from '../../components/kit';
 import { t } from '../../i18n/t';
@@ -13,6 +14,8 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
 export function WeeklyCheckCard() {
   const q = useQuery({ queryKey: keys.weeklyCheck(), queryFn: api.weeklyCheck });
+  // a failed load is said, never hidden: a missing warning card reads as nothing to worry about (sara M3)
+  if (q.isError) return <Alert severity="error" sx={{ mb: 2 }}>{errorText(q.error, t('removals.weekly.loadFailed'))}</Alert>;
   if (!q.data) return null;
   const { last_run: run, held_failing: held, admin } = q.data;
   const s = run.summary;

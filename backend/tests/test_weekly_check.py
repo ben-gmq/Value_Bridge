@@ -50,6 +50,11 @@ def scope_row(db, f, seq=1):
                                                    BaselineArchive.file_seq == seq))
 
 
+def events(db, kind: str) -> list[tuple]:
+    return [tuple(r) for r in db.execute(text("SELECT target_id, detail->>'error' FROM audit_event "
+                                              "WHERE event_type = :k ORDER BY audit_event_id"), {"k": kind})]
+
+
 def overwrite(f, name: str, data: bytes) -> None:
     path = f["store"].root / name
     os.chmod(path, 0o644)
@@ -78,6 +83,7 @@ def test_a_damaged_file_is_marked_and_its_replacement_owed_then_written(frozen, 
     rep = run(db, frozen)
     assert [(x["baseline_id"], x["error"], x["replacement_file_seq"]) for x in rep["failed_files"]] == \
         [(frozen["b"], why, 2)]
+    assert events(db, "ARCHIVE_CHECK_FAILED") == [(frozen["b"], why)]
     assert scope_row(db, frozen).check_failed_at is not None and scope_row(db, frozen).last_check_error == why
     assert scope_row(db, frozen, 2).written_at is None                                 # owed
     again = run(db, frozen)
@@ -125,8 +131,52 @@ def test_a_held_project_archive_is_checked_and_a_lost_key_or_file_reported(froze
     assert rep["held_archives"][0]["error"] == weekly_check.KEY_GONE and rep["summary"]["held_failing"] == 1
     card = client.get(f"{API}/admin/weekly-check", headers=frozen["world"]["admin"]).json()
     assert [h["error"] for h in card["held_failing"]] == [weekly_check.KEY_GONE]
+    assert events(db, "ARCHIVE_HELD_CHECK_FAILED") == [(pp, weekly_check.KEY_GONE)]     # kept past a later pass
     overwrite(frozen, name, b"tampered")
     assert run(db, frozen)["held_archives"][0]["error"] == weekly_check.DIFFERS
+
+
+def test_an_archive_being_deleted_is_not_reported_failing(frozen, db, owner):
+    """Sara L2: once an approved DELETE_ARCHIVE starts destroying keys, the lost key is the deletion, not a failure."""
+    pp, _, ref = _held_archive(owner, frozen)
+    with owner.begin() as c:
+        c.execute(text("ALTER TABLE project_purge DISABLE TRIGGER trg_project_purge_guard"))
+    try:
+        with owner.begin() as c:
+            c.execute(text(
+                "INSERT INTO project_purge (purge_kind, archive_purge_id, project_id, client_id, project_code, reason, "
+                "requested_by_user_id, requested_at, approved_by_user_id, approved_at, destroy_started_at) "
+                "VALUES ('DELETE_ARCHIVE', :pp, 999, :c, 'GONE', 'contract end', :a, now(), :b, now(), now())"),
+                {"pp": pp, "c": frozen["world"]["client_id"], "a": frozen["admin"],
+                 "b": frozen["world"]["users"]["owner"]})
+    finally:
+        with owner.begin() as c:
+            c.execute(text("ALTER TABLE project_purge ENABLE TRIGGER trg_project_purge_guard"))
+    frozen["keys"].destroy(ref.split("@")[0])
+    rep = run(db, frozen)
+    assert rep["held_archives"] == [] and rep["summary"]["held_failing"] == 0
+    assert events(db, "ARCHIVE_HELD_CHECK_FAILED") == []
+
+
+def test_a_mis_set_folder_checks_nothing(frozen, db, tmp_path):
+    """Sara M1: a wrong, empty or unreadable folder stops the run before any file is marked failed for good."""
+    from services.archive_store import LocalKeys, LocalStore
+    instance = scope_row(db, frozen).object_name.split("/")[0]
+    weekly_check.check_reachable(db, frozen["store"], frozen["keys"], instance)          # the right folders pass
+    (tmp_path / "empty").mkdir()
+    for store, keys in [(LocalStore(tmp_path / "typo"), frozen["keys"]), (frozen["store"], LocalKeys(tmp_path / "x")),
+                        (LocalStore(tmp_path / "empty"), frozen["keys"])]:
+        with pytest.raises(weekly_check.Unreachable):
+            weekly_check.check_reachable(db, store, keys, instance)
+    path = frozen["store"].root / scope_row(db, frozen).object_name
+    os.chmod(path, 0)
+    try:
+        with pytest.raises(PermissionError):
+            run(db, frozen)
+    finally:
+        os.chmod(path, 0o444)
+    db.rollback()
+    assert scope_row(db, frozen).check_failed_at is None and events(db, "ARCHIVE_CHECK_FAILED") == []
 
 
 def test_the_report_names_due_reopened_and_unfinished_projects(frozen, db, owner, client):

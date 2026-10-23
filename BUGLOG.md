@@ -556,3 +556,9 @@ place.
   closed and no test covers it — add both when a second closed code exists. (LOW-5) the card labels the status from the
   live code list, so a retired status code shows "—" — have `ProjectOut` carry the code. (browser) the "Project
   retired" message was not caught on screen (same 3-second message as every admin action).
+- **2026-10-23 · slice 16 weekly archive check (`sara`; M1–M3, L1, L2, L6 fixed):** (L3) a held archive's error is the
+  backend's English sentence inside translated card text — return a code and translate it. (L4) "fewer than two admins"
+  shows twice on the Removals tab, counted in `purge.overview` and `admin_grant.weekly_admin_lines` — one alert, one
+  owner of the count. (L5) no test of the script's exit code (1 on a failed file or held archive, else 0); UNREADABLE
+  (a hash-matching file that is not an envelope) is not exercised. (browser, 400px) the Requests grid cuts its columns
+  after State and the admin tab strip hides Code lists and Removals — not checked whether either scrolls.
