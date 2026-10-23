@@ -1,4 +1,4 @@
-# Slice 17 — Platform-admin grant approval (spec, APPROVED by Ben 2026-10-21 — AR-16…AR-23, Q-105 a, Q-107 a; schema rev 3)
+# Slice 17 — Platform-admin grant approval (spec, APPROVED by Ben 2026-10-21 and 2026-10-23 — AR-16…AR-27; schema rev 3)
 
 **Source of truth:** `docs/VB_design.md` §9.10 access model ("Making someone a platform admin needs a second platform
 admin's approval (AR-13)"), §6.6; history AR-13 (Q-93 b), AR-15. Plan row "Platform-admin grant approval" in
@@ -280,4 +280,6 @@ drops the `password_set_by_owner_at` column and its migration: **three migration
 rule (AR-21) is enforced by the grant guard (request, LEGACY and approval refused for the account's creator), by both
 independence functions (the creator is a maker) and by the `app_user` guard (`created_by` never changes; an app-made
 account names a live admin). Schema rev 3 §"Rev 3 changes" maps each criterion of §10 to the database object that
-enforces it; §8 is the migration list. Two questions from rev 3 are with Ben (history §1).
+enforces it; §8 is the migration list. **Ben OK'd the spec on 2026-10-23 ("yes to slice 17"), with Q-108 and Q-109 as
+recommended (history AR-26, AR-27).** The three migrations still pause for his click before any database other than a
+throwaway test database.

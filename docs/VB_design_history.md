@@ -16,12 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **2026-10-22 · slice 17 schema rev 3 (apple):** Q-108 — which demo / UAT database names may backdate a LEGACY grant
-  (rev 3 recommends whole-name suffix patterns `vb_[token_]test_db[_gw<n>]` and `vb_[token_]uat_db` /
-  `vb_[token_]demo_db`; a UAT database named otherwise, e.g. `vb_uat_2026`, would lose backdating). Q-109 — the
-  `app_user` guard also refuses an app-made account that does not name a live platform admin as its creator, and makes
-  `created_by` unchangeable: a tightening of AR-24 (it is what keeps the creator rule from being edited away).
-  Recommendation: yes to both. `docs/slice17_admin_grant_schema.md` rev 3 §3.2, §4.
+Nothing open.
 
 
 ---
@@ -571,6 +566,14 @@ anywhere except your own throwaway database without Ben's click."*
 | AR-24 | **[Q-107 a] Whoever created an account counts as having made that admin**: they may neither request nor approve its admin rights, and the creator is a maker in both independence checks, so a creator never pairs with an account they made, directly or through another admin. No self-service password route in slice 17 (Q-106 → b) | AR-21 |
 | AR-25 | **[Q-105 a] A fresh install's third admin is one recorded Fortience IS LEGACY grant naming the admin who asked** | — |
 | — | Slice 17 builds **three migrations (0076–0078)**, not four: the "owner set their own password" column is not needed under AR-24; schema rev 3 | slice17 schema rev 2 §8 |
+
+**2026-10-23 — Q-108, Q-109 and the slice 17 spec.** Ben, via Ren: *"yes to slice 17"* — the spec as summarised in
+`docs/slice17_summary_for_ben.md`, with Q-108 and Q-109 as recommended.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-26 | **[Q-108] A LEGACY grant may carry an earlier date only on a database whose whole name is `vb_[token_]test_db[_gw<n>]`, `vb_[token_]uat_db` or `vb_[token_]demo_db`** (`fn_backdating_allowed`); everywhere else it is dated by the database | slice17 §18 N4's prefix list |
+| AR-27 | **[Q-109] An account's creator never changes, and an account made in the app names a live platform admin as its creator** — enforced by the database, so the creator rule (AR-24) cannot be edited away | — |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
