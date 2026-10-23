@@ -45,14 +45,17 @@ def test_a_record_the_backfill_did_not_write_refuses_the_0076_downgrade(owner, k
     assert q(owner, "SELECT count(*) FROM platform_admin_grant")[0][0] == 2
 
 
-def test_0078_round_trips_and_keeps_no_data(owner):
+def test_0078_round_trips_and_leaves_the_grant_record_alone(client, world, owner):
+    """sara MEDIUM-1: a downgrade that does not pass 0076 meets the real grant rows — 0078's must not touch them."""
     guards = ("SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_app_user_admin_guard', "
               "'trg_app_user_bootstrap_grant')")
-    assert q(owner, guards)[0][0] == 2
+    grants = "SELECT target_user_id, grant_origin, approved_at FROM platform_admin_grant ORDER BY 1"
+    before = q(owner, grants)
+    assert q(owner, guards)[0][0] == 2 and [r[1] for r in before] == ["BOOTSTRAP"]       # the setup admin's
     command.downgrade(_cfg(), "0077")
-    assert q(owner, guards)[0][0] == 0
+    assert q(owner, guards)[0][0] == 0 and q(owner, grants) == before
     command.upgrade(_cfg(), "head")
-    assert q(owner, guards)[0][0] == 2
+    assert q(owner, guards)[0][0] == 2 and q(owner, grants) == before
 
 
 # ---- 0077: the purge guard reads the grant record (criterion 5, N6 b) ------------------------------------------

@@ -31,12 +31,6 @@ def seed_bootstrap(owner, uid: int) -> None:
         run(owner, "ALTER TABLE platform_admin_grant ENABLE TRIGGER trg_platform_admin_grant_guard")
 
 
-def forget_grants(owner) -> None:
-    """Test-only: a migration test that steps below 0076 to prove an older guard empties the grant record first (0076's
-    own downgrade refuses while records it did not write exist — proven in test_migration_0076_0078)."""
-    run(owner, "TRUNCATE platform_admin_grant")
-
-
 def owner_user(owner, email: str, kind: str = "USER") -> int:
     return run(owner, "INSERT INTO app_user (email, password_hash, display_name, user_kind) "
                       "VALUES (:e, :h, :n, :k) RETURNING app_user_id",

@@ -90,19 +90,33 @@ def schema():
     owner_engine().dispose()
 
 
-# Slice 17: a test world records its first admin's grant (0078's trigger), and 0076's downgrade rightly refuses to drop
-# grant records it did not write. A migration test steps below 0076 to prove an OLDER migration, so in tests only every
-# downgrade first empties the grant record; 0076's own refusal test keeps it (`keep_grants`). Upgrading through 0076
-# again re-derives the setup admin's record from the audit history (the backfill).
+# Slice 17 (test-only deviation, beside the other grant bypasses on VB-005): a test world records its first admin's grant
+# (0078's trigger), and 0076's downgrade rightly refuses to drop grant records it did not write. A migration test steps
+# below 0076 to prove an OLDER migration, so a downgrade that PASSES THROUGH 0076 first empties the grant record — and
+# only that one (sara MEDIUM-1: a 0078-or-later downgrade still meets the real rows). 0076's own refusal test keeps them
+# (`keep_grants`). Caveat (sara LOW-2): going back up through 0076 rebuilds the grants from the audit history, so their
+# dates become the audit events' and a LEGACY asker the event's actor — a test that steps down and up must not rely on
+# grant ages or makers afterwards.
 _real_downgrade = command.downgrade
 _KEEP_GRANTS = {"on": False}
 
 
+def _crosses_0076(cfg, revision) -> bool:
+    from alembic.script import ScriptDirectory
+    with owner_engine().connect() as c:
+        if not c.execute(text("SELECT to_regclass('public.platform_admin_grant')")).scalar():
+            return False
+        current = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    script = ScriptDirectory.from_config(cfg)
+    target = {"-1": script.get_revision(current).down_revision, "base": None}.get(revision, revision)
+    removed = [s.revision for s in script.iterate_revisions(current, target)]       # current down to, not incl., target
+    return "0076" in removed
+
+
 def _downgrade(cfg, revision, *a, **kw):
-    if not _KEEP_GRANTS["on"]:
+    if not _KEEP_GRANTS["on"] and _crosses_0076(cfg, revision):
         with owner_engine().begin() as c:
-            if c.execute(text("SELECT to_regclass('public.platform_admin_grant')")).scalar():
-                c.execute(text("TRUNCATE platform_admin_grant"))
+            c.execute(text("TRUNCATE platform_admin_grant"))
     return _real_downgrade(cfg, revision, *a, **kw)
 
 
