@@ -32,7 +32,7 @@ def test_the_backfill_records_each_admin_it_can_prove_and_skips_the_rest(owner):
     assert unproven not in [r[0] for r in rows]                                        # D2: named in a NOTICE only
 
 
-def test_a_record_the_backfill_did_not_write_refuses_the_0076_downgrade(owner):
+def test_a_record_the_backfill_did_not_write_refuses_the_0076_downgrade(owner, keep_grants):
     command.downgrade(_cfg(), "0075")
     a = run(owner, USER, e="a@example.test", a=True)[0]
     x(owner, EVENT, t="FIRST_ADMIN_CREATED", by=a, u=a, d=None, days=90)

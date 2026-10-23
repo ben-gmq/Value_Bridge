@@ -7,6 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 from models.base import AuditMixin, Base, TimestampMixin
 
@@ -37,14 +38,29 @@ class AppUser(TimestampMixin, Base):
                       CheckConstraint("user_kind IN ('USER', 'VIEWER')", name="ck_app_user_kind"))
 
 
+class Xid8(UserDefinedType):
+    """PostgreSQL's 64-bit transaction id (pg_current_xact_id()), for platform_admin_grant.approved_xact."""
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "xid8"
+
+
 class PlatformAdminGrant(Base):
     """One row per way one user was made, or asked to be made, a platform admin (slice17 schema rev 3, migration 0076):
     a REQUEST one admin makes and a different, independent one decides; the BOOTSTRAP of the first two admins; or an
     owner-run LEGACY grant. Kept forever. The database guard sets every time and refuses every out-of-order step; the
-    named actor pairs replace AuditMixin, as on project_purge. `approved_xact` (xid8) is the guard's alone: unmapped."""
+    named actor pairs replace AuditMixin, as on project_purge. `approved_xact` (xid8) is set by the guard alone; the app
+    never writes it (no grant), it is mapped only so the model describes the whole table."""
 
     __tablename__ = "platform_admin_grant"
     ORIGINS = ("REQUEST", "BOOTSTRAP", "LEGACY")
+    __table_args__ = (
+        Index("uq_pag_open", "target_user_id", unique=True,
+              postgresql_where=text("approved_at IS NULL AND rejected_at IS NULL AND cancelled_at IS NULL")),
+        Index("ix_pag_target_granted", "target_user_id", text("approved_at DESC"),
+              postgresql_where=text("approved_at IS NOT NULL")),
+    )
 
     platform_admin_grant_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     grant_origin: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -57,6 +73,7 @@ class PlatformAdminGrant(Base):
     requested_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    approved_xact = mapped_column(Xid8)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejected_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     rejection_reason: Mapped[str | None] = mapped_column(Text)

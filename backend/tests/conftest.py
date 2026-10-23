@@ -90,6 +90,33 @@ def schema():
     owner_engine().dispose()
 
 
+# Slice 17: a test world records its first admin's grant (0078's trigger), and 0076's downgrade rightly refuses to drop
+# grant records it did not write. A migration test steps below 0076 to prove an OLDER migration, so in tests only every
+# downgrade first empties the grant record; 0076's own refusal test keeps it (`keep_grants`). Upgrading through 0076
+# again re-derives the setup admin's record from the audit history (the backfill).
+_real_downgrade = command.downgrade
+_KEEP_GRANTS = {"on": False}
+
+
+def _downgrade(cfg, revision, *a, **kw):
+    if not _KEEP_GRANTS["on"]:
+        with owner_engine().begin() as c:
+            if c.execute(text("SELECT to_regclass('public.platform_admin_grant')")).scalar():
+                c.execute(text("TRUNCATE platform_admin_grant"))
+    return _real_downgrade(cfg, revision, *a, **kw)
+
+
+command.downgrade = _downgrade
+
+
+@pytest.fixture
+def keep_grants():
+    """For a test that proves 0076's downgrade refusal: grant records stay through the downgrade."""
+    _KEEP_GRANTS["on"] = True
+    yield
+    _KEEP_GRANTS["on"] = False
+
+
 def _step_through(cfg) -> None:
     """Every migration down to base and back up to head, ONE REVISION PER COMMAND. alembic/env.py runs a multi-step
     command in a single transaction, so `downgrade base` held a lock on every table and index at once; four xdist
