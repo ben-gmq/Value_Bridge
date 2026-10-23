@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import create_engine, select, text
 
 from models import AuditEvent, SHADOW_TABLES
+from services.baseline import local_today
 from services.baseline_shadow import parity_problems, shadow_table
 from services.freeze_set import FREEZE_SET
 from tests.conftest import OWNER_URL, login
@@ -302,7 +303,7 @@ def test_priced_diff_nets_added_and_removed_effort(client, ed):
 
 def approve(client, ed, b, expect=200, headers=None, **over):
     cur = client.get(f"{API}/baselines/{b}", headers=ed["h"]).json()
-    body = {"client_approver_name": "K. Tanaka", "client_approved_on": date.today().isoformat(),
+    body = {"client_approver_name": "K. Tanaka", "client_approved_on": local_today().isoformat(),
             "approval_note": "Signed at steering", "approval_reference": "SOW-12 annex B",
             "row_version": cur["row_version"], **over}
     r = client.post(f"{API}/baselines/{b}/approve", headers=headers or ed["h"], json=body)
@@ -342,8 +343,8 @@ def test_the_signed_version_can_be_approved_after_a_checkpoint_freeze(client, ed
 def test_an_approval_date_must_fall_between_the_freeze_and_today(client, ed):
     scope(client, ed)
     v10 = bid(freeze(client, ed))
-    approve(client, ed, v10, client_approved_on=(date.today() + timedelta(days=2)).isoformat(), expect=422)
-    approve(client, ed, v10, client_approved_on=(date.today() - timedelta(days=2)).isoformat(), expect=422)
+    approve(client, ed, v10, client_approved_on=(local_today() + timedelta(days=2)).isoformat(), expect=422)
+    approve(client, ed, v10, client_approved_on=(local_today() - timedelta(days=2)).isoformat(), expect=422)
     approve(client, ed, v10, client_approver_name="   ", expect=422)
 
 
