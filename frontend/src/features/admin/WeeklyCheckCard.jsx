@@ -1,6 +1,7 @@
 // Slice 16 U5 / AR-23, slice 17 VB-012: the weekly archive check's card on the Removals tab. It shows when the check
 // last ran (and warns if never, or over 8 days ago), what that run counted, any held project archive whose last check
-// failed (U1), and the platform-admin lines read live. The check itself is Fortience IS's weekly job
+// failed (U1), and the platform-admin lines read live — except "fewer than two admins", which the tab already shows
+// above this card (one alert, VB-005). The check itself is Fortience IS's weekly job
 // (scripts.weekly_check); nothing on this card writes.
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Stack, Typography } from '@mui/material';
@@ -35,7 +36,6 @@ export function WeeklyCheckCard() {
           <Alert key={h.project_purge_id} severity="error">
             {t('removals.weekly.heldFailing', { code: h.project_code, error: h.error, when: when(h.checked_at) })}
           </Alert>))}
-        {admin.live_admins_below_two && <Alert severity="warning">{t('removals.weekly.adminsBelowTwo')}</Alert>}
         {admin.admins_without_a_grant.length > 0 && (
           <Alert severity="warning">{t('removals.weekly.noGrant', { n: admin.admins_without_a_grant.length })}</Alert>)}
         {admin.open_over_7_days.length > 0 && (

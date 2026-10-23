@@ -215,6 +215,22 @@ def test_a_run_over_eight_days_old_reads_as_stale(frozen, db, owner, client):
     assert weekly_check.last_run(db)["stale"] is False
 
 
+def test_the_script_exits_1_only_when_a_file_or_held_archive_failed(frozen, db, monkeypatch, capsys):
+    """VB-005 (sara L5): IS schedules the script and alerts on its exit code — 0 when all is well, 1 on a failure."""
+    from scripts import weekly_check as script
+
+    def main_exit():
+        monkeypatch.setattr("sys.argv", ["weekly_check", "--actor-email", "admin@example.test", "--operator", "IS"])
+        with pytest.raises(SystemExit) as out:
+            script.main()
+        return out.value.code
+    assert main_exit() == 0
+    row = scope_row(db, frozen)
+    overwrite(frozen, row.object_name, b"x" + frozen["store"].get(row.object_name)[1:])
+    assert main_exit() == 1
+    assert "FAILED   baseline" in capsys.readouterr().out
+
+
 def test_the_operator_report_prints_every_section(frozen, db, owner):
     from scripts.weekly_check import _lines
     _held_archive(owner, frozen)

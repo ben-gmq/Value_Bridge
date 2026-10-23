@@ -558,11 +558,10 @@ place.
   retired" message was not caught on screen (same 3-second message as every admin action).
 - **2026-10-23 · slice 16 weekly archive check (`sara`; M1–M3, L1, L2, L6 fixed):** (L3) a held archive's error is the
   backend's English sentence inside translated card text — return a code and translate it. (L4) "fewer than two admins"
-  shows twice on the Removals tab, counted in `purge.overview` and `admin_grant.weekly_admin_lines` — one alert, one
-  owner of the count. (L5) no test of the script's exit code (1 on a failed file or held archive, else 0); UNREADABLE
-  (a hash-matching file that is not an envelope) is not exercised. (browser, 400px) the Requests grid cuts its columns
+  is counted in both `purge.overview` and `admin_grant.weekly_admin_lines` — one owner of the count (the duplicate
+  alert was removed from the card 2026-10-23, FIXED, awaiting Ben's close). (L5) UNREADABLE (a hash-matching file that
+  is not an envelope) is not exercised; the script's exit code now has its test (2026-10-23, FIXED, awaiting Ben's close). (browser, 400px) the Requests grid cuts its columns
   after State and the admin tab strip hides Code lists and Removals — not checked whether either scrolls.
-- **2026-10-23 · test speed, delete-based wipe and saved states (`sara`; HIGH, MEDIUM, three LOWs fixed):** (LOW)
-  `conftest._restore_library` repeats `_cols`' column query — call `_cols(c, SNAPSHOT, t, t)`. (LOW, pre-existing) the
-  test-database guard at the top of `tests/conftest.py` is a substring match on "test" (`vb_latest` would pass) — match
-  `_test_db(_gw\d+)?$`.
+- **2026-10-23 · test speed, delete-based wipe and saved states (`sara`; HIGH, MEDIUM, five LOWs fixed):** both
+  remaining LOWs fixed the same day, awaiting Ben's close — `_restore_library` now calls `_cols`; the test-database
+  guard matches a name ending in `_test_db` instead of any name containing "test".

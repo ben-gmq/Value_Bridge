@@ -1,6 +1,7 @@
 """Test harness. Runs against vb_test_db: migrations as vb_owner, the app as vb_app — so a
 missing grant fails a test instead of hiding behind owner privileges."""
 import os
+import re
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -11,8 +12,9 @@ _env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
 # created beforehand by scripts/make_test_worker_dbs.sh — the suite wipes its database, so workers never share one.
 _worker = os.environ.get("PYTEST_XDIST_WORKER")
 _app_url, _owner_url = make_url(_env["TEST_DATABASE_URL"]), make_url(_env["TEST_MIGRATION_DATABASE_URL"])
-# The session starts by downgrading the database to nothing (sara M3): refuse anything that is not one test database.
-if "test" not in (_app_url.database or "") or _app_url.database != _owner_url.database:
+# The session starts by downgrading the database to nothing (sara M3): refuse anything that is not one test database —
+# a name ending in `_test_db` (vb_test_db, vb_<slice>_test_db), never one that merely contains "test" (VB-005).
+if not re.search(r"_test_db$", _app_url.database or "") or _app_url.database != _owner_url.database:
     raise SystemExit(f"TEST_DATABASE_URL / TEST_MIGRATION_DATABASE_URL must name the same test database "
                      f"(got {_app_url.database!r} / {_owner_url.database!r}) — refusing to run.")
 
@@ -202,11 +204,7 @@ def _dirty_tables(c) -> set[str]:
 def _restore_library(c) -> None:
     """Copy the snapshot back with its ids, and leave each identity where the seed command left it (next = max + 1)."""
     for t in LIBRARY:
-        cols = ", ".join(r[0] for r in c.execute(text(
-            "SELECT s.column_name FROM information_schema.columns s JOIN information_schema.columns p "
-            "ON p.table_schema = 'public' AND p.table_name = s.table_name AND p.column_name = s.column_name "
-            "WHERE s.table_schema = :s AND s.table_name = :t AND p.is_generated <> 'ALWAYS' "
-            "ORDER BY s.ordinal_position"), {"s": SNAPSHOT, "t": t}))
+        cols = _cols(c, SNAPSHOT, t, t)
         c.execute(text(f"INSERT INTO {t} ({cols}) OVERRIDING SYSTEM VALUE SELECT {cols} FROM {SNAPSHOT}.{t}"))
     _reset_library_ids(c)
 
