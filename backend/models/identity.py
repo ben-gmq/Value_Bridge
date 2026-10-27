@@ -74,6 +74,8 @@ class PlatformAdminGrant(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     approved_xact = mapped_column(Xid8)
+    # 0079: approved while the installation's setting was one approver; set by the guard alone, never by the app
+    approved_single_owner: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejected_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     rejection_reason: Mapped[str | None] = mapped_column(Text)

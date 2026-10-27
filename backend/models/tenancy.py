@@ -209,6 +209,8 @@ class ProjectPurge(Base):
     requested_by_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
+    # 0079: approved while the installation's setting was one approver; set by the guard alone
+    approved_single_owner: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"))
     destroy_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -225,7 +227,9 @@ class ProjectPurge(Base):
         CheckConstraint("purge_kind IN ('ARCHIVE', 'DELETE', 'DELETE_ARCHIVE')", name="ck_pp_kind"),
         CheckConstraint("btrim(reason) <> ''", name="ck_pp_reason"),
         CheckConstraint("num_nonnulls(approved_at, approved_by_user_id) IN (0, 2)", name="ck_pp_approved"),
-        CheckConstraint("approved_by_user_id <> requested_by_user_id", name="ck_pp_four_eyes"),
+        CheckConstraint("approved_by_user_id <> requested_by_user_id OR approved_single_owner",
+                        name="ck_pp_four_eyes"),                                                 # 0079
+        CheckConstraint("NOT approved_single_owner OR approved_at IS NOT NULL", name="ck_pp_single_owner"),
         CheckConstraint("num_nonnulls(cancelled_at, cancelled_by_user_id) IN (0, 2)", name="ck_pp_cancelled"),
         CheckConstraint("num_nonnulls(executed_at, executed_by_user_id) IN (0, 2)", name="ck_pp_executed"),
         CheckConstraint("num_nonnulls(cancelled_at, executed_at) <= 1", name="ck_pp_one_end"),

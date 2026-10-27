@@ -26,7 +26,7 @@ from services.archive_store import REF, key_name
 KEEP = ("project_purge", "project_purge_key")
 # Tables with no project_id and no reference towards a project; the classifier proves the claim every run.
 NO_PROJECT_DATA = ("alembic_version", "app_user", "client", "platform_admin_grant", "program", "program_member",
-                   "project_template_component", "vb_instance")
+                   "project_template_component", "vb_instance", "vb_instance_setting_log")
 LIBRARY = "code_master"
 
 

@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, String, Text,
+    ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, SmallInteger, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -110,8 +110,31 @@ class VbInstance(Base):
     instance_id: Mapped[str] = mapped_column(String(40), nullable=False)
     prior_instance_ids: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
     stamped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # 0079 (docs/approvers_setting_spec.md): NULL = undeclared (read as SHARED); one-way; written only by the owner
+    installation_kind: Mapped[str | None] = mapped_column(String(20))
+    approvers_required: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="2")
 
     __table_args__ = (
         CheckConstraint("one_row", name="ck_vi_one_row"),
         CheckConstraint("instance_id ~ '^[a-z0-9][a-z0-9-]{2,39}$'", name="ck_vi_instance_id"),
+        CheckConstraint("installation_kind IS NULL OR installation_kind IN ('SHARED', 'LOCAL_SINGLE_OWNER')",
+                        name="ck_vi_kind"),
+        CheckConstraint("approvers_required IN (1, 2) AND (approvers_required = 2 OR "
+                        "installation_kind IS NOT DISTINCT FROM 'LOCAL_SINGLE_OWNER')", name="ck_vi_approvers"),
     )
+
+
+class VbInstanceSettingLog(Base):
+    """One append-only row per change of this installation's kind or approvers setting (0079), written by a trigger on
+    vb_instance — no path changes the setting without one. Not a business table; the app reads it only."""
+
+    __tablename__ = "vb_instance_setting_log"
+
+    vb_instance_setting_log_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    kind_from: Mapped[str | None] = mapped_column(String(20))
+    kind_to: Mapped[str | None] = mapped_column(String(20))
+    approvers_from: Mapped[int | None] = mapped_column(SmallInteger)
+    approvers_to: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    operator_name: Mapped[str | None] = mapped_column(Text)
+    db_session_user: Mapped[str] = mapped_column(Text, nullable=False)
