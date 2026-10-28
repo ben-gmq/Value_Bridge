@@ -14,6 +14,7 @@ import { useAuth } from '../../app/AuthContext';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { t } from '../../i18n/t';
+import { useApprovers } from './useApprovers';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
@@ -82,8 +83,10 @@ export function PendingGrants({ notify }) {
   const myId = me?.user?.app_user_id;
   const q = useQuery({ queryKey: keys.grantRequests(), queryFn: api.grantRequests });
   const [action, setAction] = useState(null);
+  const { alone } = useApprovers();
   const open = (q.data ?? []).filter((r) => r.state === 'OPEN');
-  const mine = (r) => r.requested_by_user_id === myId || r.target_user_id === myId;
+  // AR-28: the user themselves never approves; the requester may only while the single-owner setting is on
+  const mine = (r) => r.target_user_id === myId || (!alone && r.requested_by_user_id === myId);
   return (
     <Card title={t('grants.pending.title')} sx={{ mb: 2 }} bodySx={{ px: 0, pb: 0, pt: 0.5 }}>
       {q.error && <Alert severity="error" sx={{ m: 2 }}>{errorText(q.error, t('grants.loadFailed'))}</Alert>}

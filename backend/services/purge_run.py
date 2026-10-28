@@ -20,13 +20,14 @@ from typing import Callable
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from services import instance
 from services.archive_store import REF, key_name
 
 # Tables that hold rows of a project which survive its removal (schema §8).
 KEEP = ("project_purge", "project_purge_key")
 # Tables with no project_id and no reference towards a project; the classifier proves the claim every run.
 NO_PROJECT_DATA = ("alembic_version", "app_user", "client", "platform_admin_grant", "program", "program_member",
-                   "project_template_component", "vb_instance")
+                   "project_template_component", "vb_instance", "vb_instance_setting_log")
 LIBRARY = "code_master"
 
 
@@ -74,6 +75,7 @@ def _live_admin(c: Connection, uid: int | None) -> bool:
 def _check_request(c: Connection, purge_id: int, executor_id: int):
     """Criterion 6 and S7, read again inside the transaction; the 0072 guard checks the same at execution."""
     pp = _one(c, "SELECT project_purge_id, purge_kind, project_id, reason, requested_by_user_id, approved_by_user_id, "
+                 "approved_single_owner, "
                  "approved_at, cancelled_at, executed_at, (approved_at <= now() - interval '24 hours' OR repurge_of_purge_id IS NOT NULL) AS aged "
                  "FROM project_purge WHERE project_purge_id = :i FOR UPDATE", i=purge_id)
     if pp is None or pp.cancelled_at is not None or pp.executed_at is not None:
@@ -84,15 +86,19 @@ def _check_request(c: Connection, purge_id: int, executor_id: int):
         raise Refused("The request has no second platform admin's approval.")
     if not pp.aged:
         raise Refused("The approval is less than 24 hours old.")
-    if pp.approved_by_user_id == pp.requested_by_user_id:
+    quorum = c.scalar(text("SELECT public.fn_approvers_required()"))     # 0079: 1 only on a single-owner install
+    if pp.approved_single_owner and quorum == 2:                            # A-Q5
+        raise Refused("This request was approved alone under the single-owner setting, which is now off: a second "
+                      "platform admin must approve it again.")
+    if pp.approved_by_user_id == pp.requested_by_user_id and not pp.approved_single_owner:
         raise Refused("The requester approved their own request.")
     if not (_live_admin(c, pp.requested_by_user_id) and _live_admin(c, pp.approved_by_user_id)):
         raise Refused("The requester or the approver is no longer a live platform admin.")
-    if c.scalar(text("SELECT count(*) FROM app_user WHERE is_active AND is_platform_admin")) < 2:
+    if c.scalar(text("SELECT count(*) FROM app_user WHERE is_active AND is_platform_admin")) < quorum:
         raise Refused("Fewer than two live platform admins.")
     if not _live_admin(c, executor_id):
         raise Refused("The person running the removal is not a live platform admin.")
-    if executor_id == pp.requested_by_user_id:
+    if executor_id == pp.requested_by_user_id and quorum == 2:             # A-Q2: a sole admin may run it under 1
         raise Refused("The requester cannot also run the removal.")
     return pp
 
@@ -265,12 +271,16 @@ def _instance(c: Connection) -> str:
     a restored copy still stamped as production can never destroy production's keys."""
     from config import get_settings
     configured = get_settings().vb_instance_id
-    stamped = c.scalar(text("SELECT instance_id FROM vb_instance"))
+    row = c.execute(text("SELECT instance_id, installation_kind FROM vb_instance")).first()
+    stamped = row[0] if row else None
     if not configured or stamped is None:
         raise Refused("VB_INSTANCE_ID is not set or the database is not stamped (scripts.stamp_instance).")
     if stamped != configured:
         raise Refused(f"VB_INSTANCE_ID is {configured!r} but this database is stamped {stamped!r}: "
                       "re-stamp it deliberately first.")
+    why = instance.kind_mismatch(row[1], get_settings().vb_installation_kind)       # sara M2: A-Q3 here too
+    if why:
+        raise Refused(why)
     return stamped
 
 

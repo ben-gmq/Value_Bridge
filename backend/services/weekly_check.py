@@ -182,7 +182,8 @@ def report(db: Session, since) -> dict:
     ov = purge.overview(db)
     return {"due_for_archiving": ov["due_for_archiving"], "reopened_since_last_run": _reopened_since(db, since),
             "owed_files": ov["archive_backlog"], "unfinished_removals": _unfinished_removals(db),
-            "live_platform_admins": ov["live_platform_admins"], "admin": admin_grant.weekly_admin_lines(db)}
+            "live_platform_admins": ov["live_platform_admins"], "approvers_required": ov["approvers_required"],
+            "admin": admin_grant.weekly_admin_lines(db)}
 
 
 def run(db: Session, store, keys, actor_id: int, operator: str) -> dict:

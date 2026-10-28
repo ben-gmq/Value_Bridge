@@ -14,7 +14,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from models import AppUser, AuditEvent, PlatformAdminGrant
-from services import audit
+from services import audit, instance
 
 STALE_AFTER = timedelta(days=7)                          # §7 / P2: the weekly check names older open requests
 
@@ -46,7 +46,7 @@ def request(db: Session, actor: AppUser, user_id: int, reason: str | None) -> Pl
         raise HTTPException(404, "Not found")
     if not target.is_active or target.is_platform_admin:
         raise HTTPException(409, f"{target.display_name} is not an active user without admin rights")
-    if target.created_by == actor.app_user_id:
+    if target.created_by == actor.app_user_id and instance.approvers_required(db) == 2:      # 0079: AR-24 under 2
         raise HTTPException(409, "You created this account, so a request for its admin rights must come from "
                                  "another admin (AR-24)")
     g = PlatformAdminGrant(grant_origin="REQUEST", target_user_id=user_id, reason=reason,
@@ -74,11 +74,12 @@ def _open(db: Session, grant_id: int, row_version: int) -> PlatformAdminGrant:
 def approve(db: Session, actor: AppUser, grant_id: int, row_version: int) -> PlatformAdminGrant:
     g = _open(db, grant_id, row_version)
     target = db.get(AppUser, g.target_user_id)
-    if actor.app_user_id in (g.requested_by_user_id, g.target_user_id):
+    alone = instance.approvers_required(db) == 1          # 0079: the single-owner setting (the guard decides again)
+    if actor.app_user_id == g.target_user_id or (not alone and actor.app_user_id == g.requested_by_user_id):
         raise HTTPException(409, "four eyes: a different admin approves, never the requester or the user themselves")
-    if target.created_by == actor.app_user_id:
+    if not alone and target.created_by == actor.app_user_id:
         raise HTTPException(409, "You created this account, so you cannot approve its admin rights (AR-24)")
-    if not independent(db, actor.app_user_id, g.requested_by_user_id):
+    if not alone and not independent(db, actor.app_user_id, g.requested_by_user_id):
         raise HTTPException(409, "You and the requester are not independent: one of you made the other an admin or "
                                  "created their account (AR-18, AR-24)")
 
@@ -86,12 +87,14 @@ def approve(db: Session, actor: AppUser, grant_id: int, row_version: int) -> Pla
         g.approved_by_user_id = actor.app_user_id                            # the guard sets the time and xact
         g.updated_by, g.row_version = actor.app_user_id, g.row_version + 1
     _guarded(db, decide)                                                     # the approval first, then the flag
+    db.refresh(g, ["approved_single_owner"])                                 # 0079: set by the guard, read back
     _guarded(db, lambda: setattr(target, "is_platform_admin", True))
     target.updated_by = actor.app_user_id
     audit.record(db, "PLATFORM_ADMIN_GRANTED", actor_id=actor.app_user_id, target_table="app_user",
                  target_id=target.app_user_id,
                  detail={"origin": "REQUEST", "grant_id": g.platform_admin_grant_id,
-                         "requested_by": g.requested_by_user_id, "rationale": g.reason})
+                         "requested_by": g.requested_by_user_id, "rationale": g.reason,
+                         "approved_alone": g.approved_single_owner})        # 0079: as the guard recorded it
     _guarded(db, db.commit)
     db.refresh(g)
     return g
@@ -158,6 +161,7 @@ def rows(db: Session, grants: list[PlatformAdminGrant]) -> list[dict]:
                     "requested_at": g.requested_at, "requested_by": name(g.requested_by_user_id),
                     "requested_by_user_id": g.requested_by_user_id, "age_days": (now - g.requested_at).days,
                     "approved_at": g.approved_at, "approved_by": name(g.approved_by_user_id),
+                    "approved_alone": g.approved_single_owner,                         # 0079
                     "rejected_at": g.rejected_at, "rejected_by": name(g.rejected_by_user_id),
                     "rejection_reason": g.rejection_reason,
                     "cancelled_at": g.cancelled_at, "cancelled_by": name(g.cancelled_by_user_id),
@@ -188,7 +192,7 @@ def weekly_admin_lines(db: Session) -> dict:
                              if state(g) == "OPEN" and g.grant_origin == "REQUEST" and now - g.requested_at > STALE_AFTER],
         "approved_last_7_days": [g.platform_admin_grant_id for g in grants
                                  if g.grant_origin == "REQUEST" and g.approved_at and g.approved_at >= week],
-        "live_admins_below_two": len(admins) < 2,
+        "live_admins_below_two": len(admins) < instance.approvers_required(db),      # 0079: the setting, not 2
         "admins_without_a_grant": sorted(a.app_user_id for a in admins if a.app_user_id not in granted),
         "owner_grants_last_7_days": [{"grant_id": g.platform_admin_grant_id, "origin": g.grant_origin,
                                       "backdated": g.approved_at < g.recorded_at}

@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card, Status } from '../../components/kit';
 import { t } from '../../i18n/t';
 import { WeeklyCheckCard } from './WeeklyCheckCard';
+import { useApprovers } from './useApprovers';
 
 const TONE = { OPEN: 'caution', APPROVED: 'caution', EXECUTED: 'neutral', CANCELLED: 'neutral' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '');
@@ -69,6 +70,7 @@ function Confirm({ action, onClose, onConfirm, busy, error }) {
 
 export function RemovalsTab({ notify }) {
   const { me } = useAuth() ?? {};
+  const { alone } = useApprovers();                       // AR-28: the requester approves only while the setting is 1
   const myId = me?.user?.app_user_id;
   const rows = useQuery({ queryKey: keys.purgeRequests(), queryFn: api.purgeRequests });
   const overview = useQuery({ queryKey: keys.archiveOverview(), queryFn: api.archiveOverview });
@@ -117,11 +119,14 @@ export function RemovalsTab({ notify }) {
           <Status size="sm" tone={TONE[r.state]} sx={{ whiteSpace: 'normal', height: 'auto', py: 0.5 }}>
             {r.waiting ? t('removals.state.WAITING', { at: when(r.runnable_from) }) : t(`removals.state.${r.state}`)}
           </Status>
+          {r.approved_alone && (
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('removals.approvedAlone')}</Typography>
+          )}
         </Box>) },
     { field: 'actions', headerName: '', width: 205, sortable: false,
       renderCell: ({ row: r }) => (
         <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', height: '100%', flexWrap: 'wrap', py: 1 }}>
-          {r.state === 'OPEN' && r.requested_by_user_id !== myId && (
+          {r.state === 'OPEN' && (alone || r.requested_by_user_id !== myId) && (
             <Button size="small" variant="contained" onClick={() => open('approve', r)}>{t('removals.approve')}</Button>
           )}
           {(r.state === 'OPEN' || r.state === 'APPROVED') && (
@@ -142,8 +147,8 @@ export function RemovalsTab({ notify }) {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <Typography variant="body2" sx={{ mb: 2, maxWidth: 900 }}>{t('removals.intro')}</Typography>
-      {admins !== undefined && admins < 2 && (
+      <Typography variant="body2" sx={{ mb: 2, maxWidth: 900 }}>{t(alone ? 'removals.introSingle' : 'removals.intro')}</Typography>
+      {admins !== undefined && admins < (overview.data?.approvers_required ?? 2) && (
         <Alert severity="warning" sx={{ mb: 2 }}>{t('removals.fewAdmins', { n: admins })}</Alert>
       )}
       <WeeklyCheckCard />

@@ -40,7 +40,7 @@ def _lines(rep: dict) -> list[str]:
             + (f", {u['keys_outstanding']} key(s) outstanding" if u["keys_outstanding"] else "")
             for u in rep["unfinished_removals"]]
     a = rep["admin"]
-    if rep["live_platform_admins"] < 2:
+    if rep["live_platform_admins"] < rep["approvers_required"]:                    # 0079: the setting, not 2
         out.append("  ADMINS   fewer than two live platform admins: no removal can be approved")
     out += [f"  ADMINS   live admin {u} has no grant on record — needs an IS grant" for u in a["admins_without_a_grant"]]
     out += [f"  ADMINS   request {g} for admin rights has waited over 7 days" for g in a["open_over_7_days"]]
@@ -57,7 +57,8 @@ def main() -> None:
     if target is None:
         raise SystemExit("VB_ARCHIVE_DIR and VB_ARCHIVE_KEY_DIR must be set: the check reads the stored files.")
     with SessionLocal() as db:
-        instance.check_startup(db, get_settings().vb_instance_id)            # never under another instance's names
+        s = get_settings()
+        instance.check_startup(db, s.vb_instance_id, s.vb_installation_kind)     # never under another's names
         actor = db.scalar(select(AppUser).where(func.lower(AppUser.email) == a.actor_email.lower(),
                                                 AppUser.is_active, AppUser.is_platform_admin))
         if actor is None:

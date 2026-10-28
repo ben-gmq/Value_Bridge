@@ -575,6 +575,16 @@ anywhere except your own throwaway database without Ben's click."*
 | AR-26 | **[Q-108] A LEGACY grant may carry an earlier date only on a database whose whole name is `vb_[token_]test_db[_gw<n>]`, `vb_[token_]uat_db` or `vb_[token_]demo_db`** (`fn_backdating_allowed`); everywhere else it is dated by the database | slice17 §18 N4's prefix list |
 | AR-27 | **[Q-109] An account's creator never changes, and an account made in the app names a live platform admin as its creator** — enforced by the database, so the creator rule (AR-24) cannot be edited away | — |
 
+**2026-10-24 — approvers required becomes a setting (Ben's own change to Q-67…Q-85 and AR-13 / AR-18 / AR-24).**
+Ben, via Ren: *"Tell Lilly that is not a really good design if you're going hardcore, like the second email of an
+admin." / "Hard code is what I meant."*, then *"Follow her recommendation. Let's go, Ren."* (option a), and on
+2026-10-28 *"yes go ahead"* to A-Q1…A-Q3 (A-Q4…A-Q6 as recommended). Spec: `docs/approvers_setting_spec.md`;
+migration 0079.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| AR-28 | **The number of approvers is a per-installation setting, 2 or 1.** Default 2; never below 2 on an installation holding client data or on a server; 1 only on one declared `LOCAL_SINGLE_OWNER`, set only by the owner command naming an operator, every change logged; the admin page shows a banner while it is 1; every approval made under it is recorded "approved alone"; the 24-hour wait, typed confirmation and the approver's 30-day rule (A-Q1) are unchanged. Under 1 the same live admin may request, approve, and run a removal (A-Q2), and AR-24 / AR-18 give way; the server refuses to start unless the host also declares single-owner (A-Q3); a SHARED installation stays shared (A-Q4); an approval made alone never runs once the setting is back at 2 (A-Q5) | the fixed "second admin" of Q-67…Q-85, AR-13, AR-18, AR-24 |
+
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
 Ben, via Ren, 2026-10-20: *"yes — keep the build as it is."*

@@ -248,7 +248,7 @@ def write_pending(store, keys, *, limit: int = 50, baseline_id: int | None = Non
     skipped. Returns counts by outcome."""
     from config import get_settings
     with SessionLocal() as db:                         # sara H1: never write under another instance's names
-        instance.check_startup(db, get_settings().vb_instance_id)
+        instance.check_startup(db, get_settings().vb_instance_id, get_settings().vb_installation_kind)
     done = {"written": 0, "adopted": 0, "failed": 0}
     for _ in range(limit):
         with SessionLocal() as tx:

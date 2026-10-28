@@ -33,7 +33,7 @@ os.environ["ALLOW_FIRST_RUN_SETUP"] = "true"
 # data (never corrupt it), and every run wipes it anyway. Measured: ~25-35% off the full run.
 os.environ["PGOPTIONS"] = f"{os.environ.get('PGOPTIONS', '')} -c synchronous_commit=off".strip()
 # slice 16 (S9): never a host's archive folders or identity; archive tests stamp and set their own temporary ones
-for _k in ("VB_INSTANCE_ID", "VB_ARCHIVE_DIR", "VB_ARCHIVE_KEY_DIR"):
+for _k in ("VB_INSTANCE_ID", "VB_INSTALLATION_KIND", "VB_ARCHIVE_DIR", "VB_ARCHIVE_KEY_DIR"):
     os.environ[_k] = ""
 os.environ.setdefault("JWT_SECRET_KEY", _env["JWT_SECRET_KEY"])
 os.environ.setdefault("ROW_TOKEN_KEY", _env["ROW_TOKEN_KEY"])
