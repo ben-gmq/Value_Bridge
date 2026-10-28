@@ -265,3 +265,71 @@ def test_the_removal_run_refuses_a_single_owner_database_the_host_does_not_decla
     monkeypatch.setattr(get_settings(), "vb_installation_kind", "LOCAL_SINGLE_OWNER")
     with owner.begin() as c:
         assert purge_run._instance(c) == "test-a"
+
+
+# ---- Ben 2026-10-28 (sara M3): single-owner only where the app is served to this computer ------------------------------
+
+@pytest.mark.parametrize("url, ok", [
+    ("http://localhost:5180", True), ("http://127.0.0.1:5180", True), ("http://[::1]:5180", True),
+    ("http://LOCALHOST:5180", True),
+    ("https://vb.fortience.com", False), ("http://10.0.0.5:5180", False), ("http://localhost.evil.com", False),
+    ("http://localhost@evil.com", False), ("http://0.0.0.0:5180", False), ("localhost:5180", False),
+    ("http://localhost.:5180", False)])                                  # sara L: what a "simplified" check would miss
+def test_single_owner_runs_only_where_the_app_is_served_to_this_computer(owner, monkeypatch, url, ok):
+    """A server with a real address never runs single-owner, even with the database and its .env both declaring it."""
+    from config import get_settings
+    stamp(owner)
+    settings(owner, kind="LOCAL_SINGLE_OWNER")
+    monkeypatch.setattr(get_settings(), "frontend_url", url)
+    with SessionLocal() as db:
+        if ok:
+            assert instance.check_startup(db, "test-a", "LOCAL_SINGLE_OWNER") == "test-a"
+        else:
+            with pytest.raises(instance.NotStamped, match="only on this computer"):
+                instance.check_startup(db, "test-a", "LOCAL_SINGLE_OWNER")
+
+
+def test_a_host_declaring_single_owner_on_a_server_address_is_refused_even_for_a_shared_database(owner, monkeypatch):
+    from config import get_settings
+    stamp(owner)
+    settings(owner, kind="SHARED")
+    monkeypatch.setattr(get_settings(), "frontend_url", "https://vb.fortience.com")
+    with SessionLocal() as db:
+        with pytest.raises(instance.NotStamped, match="only on this computer"):
+            instance.check_startup(db, "test-a", "LOCAL_SINGLE_OWNER")
+        assert instance.check_startup(db, "test-a", None) == "test-a"          # a shared server as before
+
+
+def test_the_owner_command_will_not_declare_single_owner_from_a_server(owner, monkeypatch):
+    from config import get_settings
+    from scripts import instance_settings
+    stamp(owner)
+    monkeypatch.setattr(get_settings(), "frontend_url", "https://vb.fortience.com")
+    for argv in (["--declare-kind", "LOCAL_SINGLE_OWNER"], ["--approvers", "1"]):
+        monkeypatch.setattr("sys.argv", ["instance_settings", *argv, "--operator", "IS test"])
+        with pytest.raises(SystemExit, match="only on this computer"):
+            instance_settings.main()
+    assert run(owner, "SELECT installation_kind FROM vb_instance")[0] is None                # nothing changed
+
+
+def test_an_address_never_set_is_not_this_computer(owner, monkeypatch):
+    """sara M: FRONTEND_URL's built-in default (localhost) is not a host's declaration — unset refuses single-owner."""
+    import config
+    current = config.get_settings()
+    monkeypatch.delenv("FRONTEND_URL", raising=False)
+    unset = config.Settings(_env_file=None, **current.model_dump(exclude={"frontend_url"}))
+    assert "frontend_url" not in unset.model_fields_set and unset.frontend_url.startswith("http://localhost")
+    monkeypatch.setattr(config, "get_settings", lambda: unset)
+    assert "not set" in instance.not_this_computer()
+
+
+def test_the_removal_run_refuses_single_owner_on_a_server_address(owner, monkeypatch):
+    """sara L: the data-destroying script, not only the server, refuses single-owner on a server address."""
+    from config import get_settings
+    stamp(owner)
+    settings(owner, kind="LOCAL_SINGLE_OWNER")
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")
+    monkeypatch.setattr(get_settings(), "vb_installation_kind", "LOCAL_SINGLE_OWNER")
+    monkeypatch.setattr(get_settings(), "frontend_url", "https://vb.fortience.com")
+    with owner.begin() as c, pytest.raises(purge_run.Refused, match="only on this computer"):
+        purge_run._instance(c)

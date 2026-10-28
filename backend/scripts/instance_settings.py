@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.exc import DBAPIError  # noqa: E402
 
 from config import get_settings  # noqa: E402
+from services import instance  # noqa: E402
 
 KINDS = ("SHARED", "LOCAL_SINGLE_OWNER")
 
@@ -64,6 +65,10 @@ def main() -> None:
         return
     if not (a.operator or "").strip():
         raise SystemExit("--operator is required: every change names who made it")
+    if a.declare_kind == "LOCAL_SINGLE_OWNER" or a.approvers == 1:            # Ben 2026-10-28: this computer only
+        why = instance.not_this_computer()
+        if why:
+            raise SystemExit(why)
     print(change(url, a.declare_kind, a.approvers, a.operator.strip()))
     if a.declare_kind == "LOCAL_SINGLE_OWNER":
         print("Set VB_INSTALLATION_KIND=LOCAL_SINGLE_OWNER in this host's .env, or the server will not start.")

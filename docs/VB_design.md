@@ -4726,7 +4726,8 @@ one optional wall per project:
   grant to be at least 30 days old (AR-20) — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
   **"A second admin" is the installation's approvers setting (AR-28, migration 0079):** 2 by default and on every
   installation holding client data or on a server; 1 only on one the owner declared `LOCAL_SINGLE_OWNER` and set to 1
-  (`scripts.instance_settings`, logged), with a banner on the admin page. Under 1 the same live admin may request,
+  (`scripts.instance_settings`, logged), served to this computer alone (`FRONTEND_URL` on localhost — any other address
+  refuses single-owner), with a banner on the admin page. Under 1 the same live admin may request,
   approve and run a removal or approve a grant for an account they created; each such approval is recorded as approved
   alone and never runs once the setting is back at 2. The 24-hour wait, typed confirmation and the 30-day rule hold
   under both.
