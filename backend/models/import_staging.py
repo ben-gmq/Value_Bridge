@@ -116,9 +116,9 @@ class ImportBatch(Base):
 
 ROW_KINDS = ("ISSUE", "DATA_ENTITY", "DATA_FIELD", "BUSINESS_REQUIREMENT", "FUNCTION_REQUIREMENT",
              "WBS_ITEM", "STEP", "STEP_IO", "STEP_ROLE", "FLOW_EDGE", "EXTERNAL_ENTITY",
-             "EXTERNAL_FLOW", "LANE")
+             "EXTERNAL_FLOW", "LANE", "PERFORMER", "TRIGGER", "STEP_TRIGGER")
 FLOW_ROW_KINDS = ("STEP", "STEP_IO", "STEP_ROLE", "FLOW_EDGE", "EXTERNAL_ENTITY", "EXTERNAL_FLOW",
-                  "DATA_ENTITY", "LANE")
+                  "DATA_ENTITY", "LANE", "PERFORMER", "TRIGGER", "STEP_TRIGGER")
 VERDICTS = ("INSERT", "UPDATE", "MATCH", "RETIRE", "KEPT")
 
 
@@ -156,7 +156,8 @@ class ImportRow(Base):
         # Q-21: one staged row per sheet row / pointer; uq_ir_sheet_row is also the FK, purge
         # and ordered-fetch index.
         UniqueConstraint("import_batch_id", "sheet_row_no", name="uq_ir_sheet_row"),
-        UniqueConstraint("import_batch_id", "source_path", name="uq_ir_source_path"),
+        # FI-5 (0080): one row per kind at a pointer — a new DE and the input naming it share one.
+        UniqueConstraint("import_batch_id", "row_kind", "source_path", name="uq_ir_source_path"),
         # Backstops: the service catches duplicates in memory first (S4-4, Q-5).
         Index("uq_ir_local_key", "import_batch_id", "row_kind", "local_key", unique=True,
               postgresql_where=text("local_key IS NOT NULL")),
@@ -178,10 +179,10 @@ class ImportRow(Base):
         CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_ir_payload_object"),
         CheckConstraint("verdict NOT IN ('RETIRE', 'KEPT') OR payload ? 'target'",
                         name="ck_ir_db_staged_target"),
-        CheckConstraint("verdict <> 'RETIRE' OR row_kind IN ('FLOW_EDGE', 'STEP_IO', 'WBS_ITEM')",
+        CheckConstraint("verdict <> 'RETIRE' OR row_kind IN ('FLOW_EDGE', 'STEP_IO', 'WBS_ITEM', 'STEP_TRIGGER')",
                         name="ck_ir_retire_kinds"),
         CheckConstraint("verdict <> 'KEPT' OR row_kind = 'STEP_IO'", name="ck_ir_kept_kind"),
-        CheckConstraint("row_kind <> 'LANE' OR verdict = 'MATCH'", name="ck_ir_lane_match"),
+        CheckConstraint("row_kind NOT IN ('LANE', 'PERFORMER') OR verdict = 'MATCH'", name="ck_ir_match_only"),
         CheckConstraint("target_entity = 'PROCESS_FLOW' OR (local_key IS NULL AND source_ref IS NULL)",
                         name="ck_ir_flow_only_fields"),
         CheckConstraint("sheet_row_no IS NULL OR sheet_row_no BETWEEN 2 AND 1048576", name="ck_ir_sheet_row"),
@@ -190,5 +191,7 @@ class ImportRow(Base):
                         "AND (business_key IS NULL OR btrim(business_key) <> '') "
                         "AND (cross_check_key IS NULL OR btrim(cross_check_key) <> '')",
                         name="ck_ir_keys_not_blank"),
-        CheckConstraint("committed_target_id IS NULL OR row_kind <> 'LANE'", name="ck_ir_target_kind"),
+        # A performer may be one of three tables: its id lives in the payload (0080).
+        CheckConstraint("committed_target_id IS NULL OR row_kind NOT IN ('LANE', 'PERFORMER')",
+                        name="ck_ir_target_kind"),
     )
