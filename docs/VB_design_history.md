@@ -40,6 +40,10 @@ Nothing open.
 
 - **2026-10-28** — Ben's 1e-b rulings FI-1…FI-5 folded into §5 `IMPORT_ROW`, §7.2b rules 4, 8 and 9 and the
   constraint table; the flow file is checked by a strict Pydantic model whose generated schema is the one published.
+- **2026-10-28** — FI-6…FI-9 folded into §7.2b (rules 1–2, commit, audit), §7.11 commit, the API table, criterion
+  144 and A-51: Claude Enterprise is the only AI service (D-36 narrowed); updates confirmed by count.
+- **2026-10-28** — FI-10: the Claude Enterprise data terms checked by Ben, recorded in the 1e-b spec §1a; the design
+  text is unchanged (it never stated the terms as open).
 
 ---
 
@@ -588,9 +592,9 @@ migration 0079.
 |---|---|---|
 | AR-28 | **The number of approvers is a per-installation setting, 2 or 1.** Default 2; never below 2 on an installation holding client data or on a server; 1 only on one declared `LOCAL_SINGLE_OWNER`, set only by the owner command naming an operator, every change logged; the admin page shows a banner while it is 1; every approval made under it is recorded "approved alone"; the 24-hour wait, typed confirmation and the approver's 30-day rule (A-Q1) are unchanged. Under 1 the same live admin may request, approve, and run a removal (A-Q2), and AR-24 / AR-18 give way; the server refuses to start unless the host also declares single-owner (A-Q3) and serves the app to this computer only — FRONTEND_URL on localhost (Ben, 2026-10-28: "YES"); a SHARED installation stays shared (A-Q4); an approval made alone never runs once the setting is back at 2 (A-Q5) | the fixed "second admin" of Q-67…Q-85, AR-13, AR-18, AR-24 |
 
-### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-5)
+### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-10)
 
-Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on the 1e-b model, as recommended). Spec:
+Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on the 1e-b model, as recommended). FI-6…FI-9: Ben, via Ren, the same day, on the round-1 design review — recommendations all accepted. Spec:
 `docs/slice1e_b_flow_import_spec.md`; migration 0080.
 
 | # | Decision | Supersedes / answers |
@@ -600,6 +604,11 @@ Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on t
 | FI-3 | **A step changed since export (stale `row_version`) is an error on that step only; the preview names every one** | §7.2b rule 9, which rejected the whole file |
 | FI-4 | **Replace mode: the file counts as containing its inputs, its outputs and every data entity its own external flows need, so none of those is removed** | §7.2b rule 8 silent on I/O implied by an external flow |
 | FI-5 | **The staging table allows one row per kind at each position in the file: `uq_ir_source_path` becomes `(import_batch_id, row_kind, source_path)`** | design §5 `IMPORT_ROW` "one staged row per pointer" |
+| FI-6 | **The AI conversion uses Claude Enterprise under FTC's own account only — no Copilot. The consultant removes personal data before pasting anything; the pack never asks the AI to do it.** The service, plan and date are recorded in the 1e-b spec's Interface; the vendor's data terms are checked before the pack is given to anyone (open) | D-36 "Claude or Microsoft Copilot"; design-review 1e-b S1 |
+| FI-7 | **Updating existing step names or descriptions from a file needs a typed count confirmation, as adding and retiring do; the old text stays permanently in the audit record** | design-review 1e-b P1 |
+| FI-8 | **A step with no description in the file keeps its current text; only an explicit empty description clears it** | design-review 1e-b D3 |
+| FI-9 | **A file may update only the direct children of the chosen parent** | §7.2b "steps_under(anchor), any level"; design-review 1e-b D7 |
+| FI-10 | **The Claude Enterprise data terms are checked; VB may serve the AI instructions for Claude Enterprise only.** Ben, via Ren, 2026-10-28: *"Ben-san has checked the Claude Enterprise data terms himself (2026-10-28). Record in the spec's ## Interface: service = Claude Enterprise, terms checked by Ben-san on 2026-10-28, source = his own check (no vendor document quoted). That closes the 'terms not checked' item for Claude Enterprise; VB may serve the AI instructions for Claude Enterprise only."* | FI-6 "terms … checked before the pack is given to anyone (open)"; design-review 1e-b S1, N1 |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
@@ -868,7 +877,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice14_issue_spec.md · slice14_issue_schema.md` | Slice 14 — Issue module (approved 2026-10-18, I-1…I-16) | 2026-10-18 |
 | `docs/slice15_phasing_spec.md · slice15_phasing_schema.md` | Slice 15 — waves (phasing) and solution dependencies (approved 2026-10-18, W-1…W-9) | 2026-10-18 |
 | `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-13; approved 2026-10-20) | 2026-10-18, 2026-10-20 |
-| `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-5) | 2026-10-24, 2026-10-28 |
+| `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-10) | 2026-10-24, 2026-10-28 |
 
 ---
 
