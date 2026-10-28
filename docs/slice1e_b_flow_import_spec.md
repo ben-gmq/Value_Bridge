@@ -170,8 +170,9 @@ No new list. A party's kind is `EXTERNAL_ENTITY_KIND`, resolved through `code_ma
 is `TIME|EVENT`, checked by `trigger._check` as on screen. Branching on behaviour, never a code (law 5).
 
 ## 9. API
-As design §9. Export is `GET /projects/{id}/bfc-nodes/{node_id}/process-flow-json` (object_guard VIEW, the anchor's
-DFD component) — ASSUMPTION: the design names the function, not the path; this path follows the BFC routes.
+As design §9. Export is `GET /bfc-nodes/{id}/process-flow-json` (object_guard VIEW, as every BFC object route; the
+anchor's DFD component checked in `flow_import.check_anchor`, since a guard's component gates writes only) — the
+design names the function, not the path. Strings for the export dialog sit with the DFD screen, in `en.processes.json`.
 
 ## 10. Acceptance (1e-b)
 Design criteria **110, 111, 112, 113, 114, 118, 123, 129**, plus:
