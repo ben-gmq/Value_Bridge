@@ -565,9 +565,9 @@ place.
 - **2026-10-23 · test speed, delete-based wipe and saved states (`sara`; HIGH, MEDIUM, five LOWs fixed):** both
   remaining LOWs fixed the same day, awaiting Ben's close — `_restore_library` now calls `_cols`; the test-database
   guard matches a name ending in `_test_db` instead of any name containing "test".
-- **2026-10-28 · approvers setting, migration 0079 (`sara`; H1, M1, M2, M5 fixed):** (M3, decision for Ben) "never
-  below 2 on a server or with client data" rests on the owner's LOCAL declaration and the host's `.env` line —
-  nothing checks the host; a cheap backstop is to refuse LOCAL_SINGLE_OWNER unless FRONTEND_URL is localhost. (M4,
+- **2026-10-28 · approvers setting, migration 0079 (`sara`; H1, M1, M2, M5 fixed):** (M3) FIXED 2026-10-28, Ben: "YES"
+  — single-owner is refused unless FRONTEND_URL's host is localhost / 127.0.0.1 / ::1 (server, writer, weekly check,
+  removal run and the owner command, through `instance.not_this_computer`). (M4,
   before the DELETE_ARCHIVE run is built) a DELETE_ARCHIVE approved alone whose key destruction started, then the
   setting back at 2: keys still destroyable, execution refused, cancel refused — decide "finishing is safe" and test
   the destroy clause. (M6) after the return to 2 a voided lone approval still lists as APPROVED with a runnable time,

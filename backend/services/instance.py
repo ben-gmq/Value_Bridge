@@ -2,6 +2,8 @@
 of truth — a config value describes the host, not the data — so the server refuses to start when VB_INSTANCE_ID is
 missing, the database is not stamped, or the two differ: a prod backup restored into UAT stops at start-up until
 someone deliberately re-stamps it, and never writes under prod's names."""
+from urllib.parse import urlsplit
+
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -55,4 +57,21 @@ def kind_mismatch(db_kind: str | None, configured_kind: str | None) -> str | Non
         return ("This database is declared a local single-owner installation, but VB_INSTALLATION_KIND is "
                 f"{configured_kind!r}: set VB_INSTALLATION_KIND={SINGLE_OWNER} on this host, or have the owner "
                 "declare the database SHARED (scripts.instance_settings)")
+    if SINGLE_OWNER in (db_kind, configured_kind):
+        return not_this_computer()
     return None
+
+
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def not_this_computer() -> str | None:
+    """Ben 2026-10-28 (sara M3, AR-28): one approver only where the app is served to this computer alone — FRONTEND_URL's
+    host must be localhost / 127.0.0.1 / ::1. A server with a real address can never run single-owner, even if its
+    database or its .env were declared so by mistake. None when the address is local."""
+    from config import get_settings
+    host = urlsplit(get_settings().frontend_url or "").hostname
+    if host in LOCAL_HOSTS:
+        return None
+    return (f"Single-owner is allowed only on this computer, but FRONTEND_URL points at {host!r}: a server always "
+            "needs two approvers — have the owner declare the database SHARED (scripts.instance_settings)")

@@ -47,7 +47,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   **0079 deploy (approvers setting, AR-28):** every database reads 2 until the owner acts; a production one is declared
   `scripts.instance_settings --declare-kind SHARED --operator <name>` (one-way). Only a local single-owner install
   declares `LOCAL_SINGLE_OWNER`, sets `--approvers 1`, and puts `VB_INSTALLATION_KIND=LOCAL_SINGLE_OWNER` in `.env`
-  (else the server refuses to start). App code reads the setting only through `services.instance.approvers_required`.
+  (else the server refuses to start), and only where `FRONTEND_URL` is localhost — any other address refuses single-owner.
+  App code reads the setting only through `services.instance.approvers_required`.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·
