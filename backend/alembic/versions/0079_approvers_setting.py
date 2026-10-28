@@ -108,7 +108,8 @@ INSTANCE_SWAPS = [
      "              USING ERRCODE = 'restrict_violation';\n          END IF;\n"
      "          IF TG_OP = 'UPDATE' AND NEW.instance_id = OLD.instance_id THEN                  -- 0079: the setting\n"
      "            IF NEW.prior_instance_ids IS DISTINCT FROM OLD.prior_instance_ids THEN\n"
-     "              RAISE EXCEPTION 'a settings change keeps the instance ids' USING ERRCODE = 'restrict_violation';\n"
+     "              RAISE EXCEPTION 'a re-stamp changes the instance id and appends the old one to prior_instance_ids'\n"
+     "                USING ERRCODE = 'restrict_violation';\n"
      "            END IF;\n"
      "            IF NULLIF(btrim(current_setting('vb.operator', true)), '') IS NULL THEN\n"
      "              RAISE EXCEPTION 'a change of the approval setting names its operator'\n"
@@ -159,7 +160,7 @@ FUNCTIONS = [  # name, signature, header, sha before, sha after, swaps
 NEW_SHAS = {   # the bodies these swaps produce (tests/test_migration_0079.py re-derives them from the database)
     "SHA_PURGE_0079": "4213b1c931470c28816311bfda7505feca6bbd26f3701ff9259f0294b661b214",
     "SHA_GRANT_0079": "576e1ea4162600711152c1ad5a4cd077b808607cb49d20876468e8c739aeffa0",
-    "SHA_INSTANCE_0079": "6513873eeef496b65e1e732741d381a03fb1e38674b753d43e81fd488a68ab0e",
+    "SHA_INSTANCE_0079": "29f66b2a7f8fcdf7d5ad8e1f9630ed0410c67184bf7ae29d48986fa86eaa762f",
     "SHA_ALLOWS_0079": "fd4d7e69e447ddaa171ad50a0ccf56297472a90a7655b9bcf77fb19833bd8029",
     "SHA_INDEPENDENT_0079": "528e2ddd0f99ffc946f574248d0dd6e442736b1a71675121dbe0a3ba8d774309",
 }
@@ -232,6 +233,8 @@ def upgrade() -> None:
     END $$""")
     op.execute("CREATE TRIGGER trg_vb_instance_log_setting AFTER INSERT OR UPDATE ON vb_instance "
                "FOR EACH ROW EXECUTE FUNCTION fn_vb_instance_log_setting()")
+    # the default privileges would give the app INSERT / UPDATE on a new table: it may only read the log (0069's way)
+    op.execute("REVOKE ALL ON vb_instance_setting_log FROM vb_app")
     op.execute("GRANT SELECT ON vb_instance_setting_log TO vb_app")
 
     op.execute(f"""
