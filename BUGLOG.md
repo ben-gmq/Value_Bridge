@@ -606,7 +606,12 @@ place.
   default-status literals ("OPEN" and the FR default) are written twice. (L5) `tag_br_fr` still checks SOLUTION in the
   router, not the service.
 - **2026-10-28 · slice 1e-b design review round 2 (design-auditor):** (N2) a step or party name that, once
-  cleaned, matches two live records is not yet defined — make it a row error naming both (piece a).
+  cleaned, matches two live records is not yet defined — make it a row error naming both (piece a). **Fixed in
+  piece a2** (NAME_AMBIGUOUS on triggers, data entities and parties; awaiting Ben's close).
+- **2026-10-28 · slice 1e-b piece (a2), flow import (`sara`):** (L1) a live step name holding a double space exports
+  as is and re-imports collapsed, so it stages a name UPDATE — the spec's cleaning (rule 13) says yes, §10.1 says no;
+  for Ben. (L3) `flow_import._count` and the insert acknowledgement repeat `bulk`'s — one `bulk.count_rows` /
+  `require_ack` for both. (L4) `flow_import` calls `bulk._statuses`, `_rows_of`, `_RuleFailure` — make them public.
 - **2026-10-28 · slice 1e-b piece (a1), 0079 test fix (`sara`):** (L) `test_migration_0079`'s refused downgrade
   checks only the version row, not that 0079's objects survive the refusal.
 - **2026-10-28 · slice 1e-b piece (a1), Flow file dialog (`sara`):** (L) "has direct steps" on the DFD screen is

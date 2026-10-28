@@ -78,9 +78,11 @@ def tree(db: Session, project_id: int, include_retired: bool = False, bfc_set: s
 
 
 def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | None, name: str,
-                is_process: bool = False, purpose_desc: str | None = None, bfc_set: str = "TO_BE") -> BfcNode:
+                is_process: bool = False, purpose_desc: str | None = None, bfc_set: str = "TO_BE",
+                commit: bool = True) -> BfcNode:
     """A child takes its parent's set; a root names its set (D-47). Only a to-be process gets a BR
-    (S7-2); creating in the as-is chart needs the AS_IS component on (checked here, body-dependent)."""
+    (S7-2); creating in the as-is chart needs the AS_IS component on (checked here, body-dependent).
+    `commit=False` (slice 1e-b): the flow import's form — flush only, the pipeline owns the transaction."""
     parent = _live_node(db, project_id, parent_id) if parent_id is not None else None
     bfc_set = parent.bfc_set_code if parent is not None else check_set(bfc_set)
     if bfc_set == "AS_IS":
@@ -107,11 +109,14 @@ def create_node(db: Session, actor_id: int, project_id: int, parent_id: int | No
     db.flush()
     if node.is_process and node.bfc_set_code == "TO_BE":
         business_requirement.create_br(db, actor_id, node)            # D-2 / S7-2, same transaction
-    db.commit()
+    if commit:
+        db.commit()
     return node
 
 
-def update_node(db: Session, actor_id: int, node: BfcNode, row_version: int, fields: dict) -> BfcNode:
+def update_node(db: Session, actor_id: int, node: BfcNode, row_version: int, fields: dict,
+                commit: bool = True) -> BfcNode:
+    """`commit=False` (slice 1e-b): the flow import's form — flush only."""
     lifecycle.check_live(node, row_version)
     if "node_name" in fields:
         assert_name_free(db, node.project_id, node.parent_bfc_node_id, fields["node_name"],
@@ -124,7 +129,10 @@ def update_node(db: Session, actor_id: int, node: BfcNode, row_version: int, fie
             raise HTTPException(422, "Only a process step describes its data processing")
         node.data_processing_desc = fields["data_processing_desc"]
     node.updated_by = actor_id
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return node
 
 
@@ -316,11 +324,24 @@ def describe_performer(db: Session, node: BfcNode) -> dict | None:
                                   "APPLICATION": "application_name"}[node.performer_kind])}
 
 
+def performer_row(db: Session, project_id: int, kind: str, code: str):
+    """The org unit, org role or application a performer code names in this project, live or retired, or None.
+    sara 7c M3: codes are unique among LIVE rows only — the live one comes first. Shared with the flow import."""
+    model, code_col, _col, _pk = _PERFORMER_TARGET[kind]
+    return db.scalars(select(model).where(model.project_id == project_id,
+                                          func.upper(getattr(model, code_col)) == code.strip().upper())
+                      .order_by(model.is_active.desc())).first()
+
+
+def performer_ref(row, kind: str) -> int:
+    return getattr(row, _PERFORMER_TARGET[kind][3])
+
+
 def set_performer(db: Session, actor_id: int, node: BfcNode, row_version: int, kind: str | None,
-                  code: str | None, label: str | None) -> tuple[BfcNode, list[str]]:
+                  code: str | None, label: str | None, commit: bool = True) -> tuple[BfcNode, list[str]]:
     """One performer per process: a department, a position, an IT system (sent by code, never id)
     or AI (named by its label). None clears it. A to-be application on an as-is process warns
-    (mirrors S6b-4). Audited PERFORMER_SET."""
+    (mirrors S6b-4). Audited PERFORMER_SET. `commit=False` (slice 1e-b): the flow import's form."""
     lifecycle.lock_for_share(db, node)                      # sara 7c L11: serialised with a step retire
     lifecycle.check_live(node, row_version)
     if not node.is_process:
@@ -334,13 +355,9 @@ def set_performer(db: Session, actor_id: int, node: BfcNode, row_version: int, k
         if not (label or "").strip():
             raise HTTPException(422, "Name the AI that performs this step")
     elif kind in _PERFORMER_TARGET:
-        model, code_col, _col, _pk = _PERFORMER_TARGET[kind]
         if not code:
             raise HTTPException(422, "Choose who performs this step")
-        # sara 7c M3: codes are unique among LIVE rows only — prefer the live one.
-        target = db.scalars(select(model).where(model.project_id == node.project_id,
-                                                func.upper(getattr(model, code_col)) == code.strip().upper())
-                            .order_by(model.is_active.desc())).first()
+        target = performer_row(db, node.project_id, kind, code)
         if target is None:
             raise HTTPException(422, f"No {kind.replace('_', ' ').lower()} '{code}' in this project")
         lifecycle.lock_for_share(db, target)                # sara 7c L11: serialised with its retire
@@ -363,5 +380,6 @@ def set_performer(db: Session, actor_id: int, node: BfcNode, row_version: int, k
     db.flush()
     audit.record(db, "PERFORMER_SET", actor_id=actor_id, project_id=node.project_id, target_table="bfc_node",
                  target_id=node.bfc_node_id, detail={"from": before, "to": describe_performer(db, node)})
-    db.commit()
+    if commit:
+        db.commit()
     return node, warnings

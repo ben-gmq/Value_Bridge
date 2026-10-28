@@ -16,7 +16,13 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open.
+- **FI-11 (2026-10-28, slice 1e-b piece a2 build — for Ben):** §7.2b rule 1 says "a step with a `hier_code` and no
+  `br_number` is an error". An as-is export writes every step's `hier_code` and never a BR number (an as-is step
+  has none), so read literally every as-is round trip fails (spec §10.1). **Built as:** on a to-be anchor the rule
+  stands; on an as-is anchor the step is matched by name (SC-6) and a `hier_code` is a cross-check only — it must
+  equal the name-matched step's, and a `hier_code` whose name matches no live step is an error ("re-export, or
+  remove hier_code to add it as new"), so a renamed as-is step never silently becomes a second one. Tested in
+  `test_flow_import.py::test_an_as_is_flow_round_trips_by_name`. Awaiting Ben before the spec text changes.
 
 
 ---

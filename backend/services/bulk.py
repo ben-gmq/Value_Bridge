@@ -1979,15 +1979,20 @@ def validate(db: Session, actor_id: int, project_id: int, target: Target, body: 
 
 def _rows_of(db: Session, batch: ImportBatch) -> list[ImportRow]:
     return list(db.scalars(select(ImportRow).where(ImportRow.import_batch_id == batch.import_batch_id)
-                           .order_by(ImportRow.sheet_row_no)))
+                           .order_by(ImportRow.sheet_row_no, ImportRow.import_row_id)))   # a flow row has no sheet row
+
+
+FLOW = "PROCESS_FLOW"                         # slice 1e-b: its own validate and apply (services/flow_import.py)
 
 
 def batch_out(db: Session, batch: ImportBatch, rows: list[ImportRow] | None = None) -> dict:
     rows = _rows_of(db, batch) if rows is None else rows
     file_info = rows[0].payload.get("file", {}) if rows else {}
     target = BY_CODE.get(batch.target_entity)
+    slug = target.slug if target else "process-flow" if batch.target_entity == FLOW else None
     return {"import_batch_id": batch.import_batch_id, "project_id": batch.project_id,
-            "target": target.slug if target else None, "target_entity": batch.target_entity,
+            "target": slug, "target_entity": batch.target_entity,
+            "import_mode": batch.import_mode, "anchor_bfc_node_id": batch.anchor_bfc_node_id,
             "status": batch.status_code, "file_name": batch.file_name,
             "sheet_name": file_info.get("sheet"),
             "uploaded_by_user_id": batch.uploaded_by_user_id, "uploaded_at": batch.uploaded_at,
@@ -2016,16 +2021,21 @@ def _changes(target: Target, row: ImportRow, current: dict | None) -> list[dict]
 def preview(db: Session, batch: ImportBatch) -> dict:
     """Per row: verdict, errors and warnings by sheet row, and before/after computed NOW
     against the live rows (S4-8); a committed row shows the before-values it stored."""
+    rows = _rows_of(db, batch)
+    if batch.target_entity == FLOW:
+        from services import flow_import
+        return {"batch": batch_out(db, batch, rows), "purged": batch.rows_purged_at is not None,
+                "rows": flow_import.preview_rows(db, batch, rows)}
     target = BY_CODE.get(batch.target_entity)
     if target is None:
         raise HTTPException(404, "Not found")
-    rows = _rows_of(db, batch)
     ids = [r.payload.get("resolved", {}).get("target_id") for r in rows if r.verdict == "UPDATE"]
     current = target.current(db, batch.project_id, [i for i in ids if i is not None])
     out = []
     for r in rows:
         tid = r.payload.get("resolved", {}).get("target_id")
-        out.append({"sheet_row_no": r.sheet_row_no, "verdict": r.verdict, "business_key": r.business_key,
+        out.append({"import_row_id": r.import_row_id, "sheet_row_no": r.sheet_row_no, "verdict": r.verdict,
+                    "business_key": r.business_key,
                     "is_valid": r.is_valid, "errors": r.error_detail, "warnings": r.warning_detail,
                     "changes": _changes(target, r, current.get(tid)),
                     "resolved": r.payload.get("info"),
@@ -2078,9 +2088,9 @@ def _reject(db: Session, batch_id: int, status: dict[str, int], row_errors: dict
                      .execution_options(synchronize_session=False))
     if res.rowcount != 1:
         return False
-    for sheet_row_no, errs in row_errors.items():
+    for import_row_id, errs in row_errors.items():          # by row id: a flow row has no sheet row (D5)
         db.execute(update(ImportRow)
-                   .where(ImportRow.import_batch_id == batch_id, ImportRow.sheet_row_no == sheet_row_no)
+                   .where(ImportRow.import_batch_id == batch_id, ImportRow.import_row_id == import_row_id)
                    .values(error_detail=errs, is_valid=False)
                    .execution_options(synchronize_session=False))
     if row_errors:
@@ -2092,7 +2102,10 @@ def _reject(db: Session, batch_id: int, status: dict[str, int], row_errors: dict
 
 
 def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
-           acknowledged_inserts: int | None, source_ip: str | None = None) -> ImportBatch:
+           acknowledged_inserts: int | None, source_ip: str | None = None,
+           acknowledged_updates: int | None = None) -> ImportBatch:
+    """The one commit: lock, status, version, errors, the component, then the target's own apply, and every
+    failure audited. A flow batch takes `acknowledged_updates` too (FI-7) and its component from its anchor (P3)."""
     status = _statuses(db)
     project_id = None
     try:
@@ -2108,11 +2121,16 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
             raise HTTPException(409, errors.CONFLICT, headers=errors.STALE_HEADERS)
         if batch.error_count > 0:
             raise HTTPException(422, f"Fix {batch.error_count} rows and upload the file again.")
-        target = BY_CODE.get(batch.target_entity)
-        if target is None:
-            raise HTTPException(404, "Not found")
-        components.require_on(db, project_id, target.component)      # D-37 (§5.2, sara L3)
-        result = _commit(db, actor_id, batch, target, status, acknowledged_inserts, source_ip)
+        if batch.target_entity == FLOW:
+            from services import flow_import                       # its anchor's DFD component, checked there (P3)
+            result = flow_import.commit_rows(db, actor_id, batch, status, acknowledged_inserts,
+                                             acknowledged_updates, source_ip)
+        else:
+            target = BY_CODE.get(batch.target_entity)
+            if target is None:
+                raise HTTPException(404, "Not found")
+            components.require_on(db, project_id, target.component)  # D-37 (§5.2, sara L3)
+            result = _commit(db, actor_id, batch, target, status, acknowledged_inserts, source_ip)
         db.commit()                            # the one commit; a failure here is audited too
     except HTTPException as e:                 # refused before anything was applied: unchanged
         db.rollback()
@@ -2178,7 +2196,7 @@ def _commit(db: Session, actor_id: int, batch: ImportBatch, target: Target, stat
                                 "the upload. Upload the file again.", col,
                                 was=pinned.get(col), now=r.pins.get(col)))
         if errs:
-            fresh_errors[r.sheet_row_no] = errs
+            fresh_errors[staged[r.sheet_row_no].import_row_id] = errs
     if fresh_errors:
         raise _RuleFailure(f"{len(fresh_errors)} rows changed since the upload, so nothing was applied "
                            "and the batch was rejected. Export again, re-apply your edits and upload.",
@@ -2196,7 +2214,8 @@ def _commit(db: Session, actor_id: int, batch: ImportBatch, target: Target, stat
         detail = e.detail if isinstance(e, HTTPException) else str(e)
         raise _RuleFailure(f"Row {r.sheet_row_no if r else '?'} could not be applied: {detail}. Nothing "
                            "was applied and the batch was rejected.",
-                           {r.sheet_row_no: [msg("APPLY_FAILED", str(detail), None)]} if r else {})
+                           {staged[r.sheet_row_no].import_row_id: [msg("APPLY_FAILED", str(detail), None)]}
+                           if r else {})
 
     with no_commit(db):
         for r in rows:

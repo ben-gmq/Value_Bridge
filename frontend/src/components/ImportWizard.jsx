@@ -92,11 +92,24 @@ export const IMPORT_TARGETS = {
     reexport: true,
     refresh: (p) => [keys.issues(p)],
   },
+  // Slice 1e-b: a vb-process-flow/2.0 file, opened from a DFD's "Flow file" dialog with its anchor node. Merge only
+  // in piece (a2): replace mode arrives with piece (b), so there is no mode to pick yet.
+  'process-flow': {
+    label: 'data.import.target.flow',
+    help: 'data.import.target.flowHelp',
+    json: true,
+    columns: { name: 'data.import.col.stepName', description: 'data.description', performer: 'data.import.col.performer',
+      br_number: 'data.import.col.brNumber', hier_code: 'data.import.col.hierCode',
+      row_version: 'data.import.col.rowVersion', kind: 'data.import.col.type', external: 'data.import.col.party',
+      ext_number: 'data.import.col.extNumber' },
+    refresh: (p) => [keys.flows(p), keys.tree(p), keys.brs(p), keys.entities(p), keys.triggers(p), ['bfc-node']],
+  },
 };
 
 export const DATA_TARGETS = ['data-entities', 'data-fields', 'data-model'];
 
 const MAX_BYTES = 10 * 1024 * 1024;              // the server's ingress cap (§4 validate, step 2)
+const MAX_JSON_BYTES = 2 * 1024 * 1024;          // a flow file's cap (§7.12a)
 const PAGE = 100;
 const STEPS = ['target', 'file', 'review', 'done'];
 const BOOK_STEPS = ['target', 'file', 'entities', 'fields', 'done'];
@@ -197,7 +210,8 @@ function Preview({ pv, cfg }) {
   return (
     <Box>
       <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
-        {t('data.import.readFrom', { file: b.file_name ?? '', sheet: b.sheet_name ?? t('data.none'), n: b.row_count })}
+        {cfg.json ? t('data.import.flow.readFrom', { file: b.file_name ?? '', n: b.row_count })
+          : t('data.import.readFrom', { file: b.file_name ?? '', sheet: b.sheet_name ?? t('data.none'), n: b.row_count })}
       </Typography>
       <Box sx={{ display: 'grid', gap: 1.5, mb: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
         <Tile label={t('components.import.rows')} value={b.row_count} />
@@ -227,7 +241,7 @@ function Preview({ pv, cfg }) {
               <Table size="small" sx={{ '& td': { verticalAlign: 'top' } }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ width: 64, pl: 2.5 }}>{t('data.import.col.row')}</TableCell>
+                    <TableCell sx={{ width: cfg.json ? 170 : 64, pl: 2.5 }}>{t(cfg.json ? 'data.import.flow.where' : 'data.import.col.row')}</TableCell>
                     <TableCell sx={{ width: 150 }}>{t('data.import.col.verdict')}</TableCell>
                     <TableCell sx={{ width: 170 }}>{t('data.import.col.key')}</TableCell>
                     <TableCell>{t('data.import.col.changes')}</TableCell>
@@ -236,8 +250,12 @@ function Preview({ pv, cfg }) {
                 </TableHead>
                 <TableBody>
                   {shown.map((r) => (
-                    <TableRow key={r.sheet_row_no} sx={(th) => (r.is_valid ? {} : { bgcolor: th.vars.palette.status.escalateBg })}>
-                      <TableCell sx={{ pl: 2.5, fontFamily: MONO, fontSize: 13, color: 'brand.muted' }}>{r.sheet_row_no}</TableCell>
+                    <TableRow key={r.import_row_id ?? r.sheet_row_no} sx={(th) => (r.is_valid ? {} : { bgcolor: th.vars.palette.status.escalateBg })}>
+                      <TableCell sx={{ pl: 2.5, fontFamily: MONO, fontSize: 13, color: 'brand.muted', wordBreak: 'break-all' }}>
+                        {r.sheet_row_no ?? r.source_path}
+                        {r.row_kind && (
+                          <Box sx={{ fontFamily: 'inherit', fontSize: 11.5, mt: 0.5 }}>{tOr(`data.import.kind.${r.row_kind}`, {}, r.row_kind)}</Box>)}
+                      </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
                           <Tag tone={VERDICT_TONE[r.verdict] ?? 'neutral'}>{t(`data.import.verdict.${r.verdict}`)}</Tag>
@@ -249,6 +267,10 @@ function Preview({ pv, cfg }) {
                           ? <Code tone={codeTone(r.business_key)} sx={{ fontSize: 12.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>{r.business_key}</Code>
                           : <Box component="span" sx={{ color: 'text.secondary' }}>{t('data.none')}</Box>}
                         <Resolved res={r.resolved} />
+                        {r.br_number && (
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('data.import.flow.newBr', { number: r.br_number })}</Typography>)}
+                        {r.source_ref && (
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('data.import.flow.sourceRef', { ref: r.source_ref })}</Typography>)}
                       </TableCell>
                       <TableCell><Changes row={r} cfg={cfg} /></TableCell>
                       <TableCell sx={{ pr: 2.5 }}>
@@ -281,7 +303,9 @@ function uploadError(err) {
   return errorText(err, t(s === 422 ? 'data.import.invalidFile' : 'data.import.uploadFailed'));
 }
 
-export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS), initialTarget, onClose, onCommitted }) {
+// `anchor` ({ id, hierCode, name }): the node a flow file is imported under, chosen on screen (R2-P3).
+export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS), initialTarget, anchor, onClose,
+  onCommitted }) {
   const qc = useQueryClient();
   const [target, setTarget] = useState(initialTarget ?? targets[0]);
   const cfg = IMPORT_TARGETS[target];
@@ -291,6 +315,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
   const [file, setFile] = useState(null);          // { name, size, lastModified, buffer } — read once (4a-R16)
   const [batchId, setBatchId] = useState(null);
   const [typed, setTyped] = useState('');
+  const [typedUpdates, setTypedUpdates] = useState('');     // a flow's changed steps (FI-7)
   const [done, setDone] = useState(null);          // the COMMITTED BatchHeader (the last step's)
   const [entitiesDone, setEntitiesDone] = useState(null);   // a book's step 1, once committed
   const [skippedEntities, setSkippedEntities] = useState(false);
@@ -336,8 +361,13 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     say();
     if (!f) return;
     try {
-      if (!/\.xlsx$/i.test(f.name)) { setFile(null); say(t('data.import.notXlsx')); return; }
-      if (f.size > MAX_BYTES) { setFile(null); say(t('data.import.tooBig')); return; }
+      if (cfg.json && !/\.json$/i.test(f.name)) { setFile(null); say(t('data.import.flow.notJson')); return; }
+      if (!cfg.json && !/\.xlsx$/i.test(f.name)) { setFile(null); say(t('data.import.notXlsx')); return; }
+      if (f.size > (cfg.json ? MAX_JSON_BYTES : MAX_BYTES)) {
+        setFile(null);
+        say(t(cfg.json ? 'data.import.flow.tooBig' : 'data.import.tooBig'));
+        return;
+      }
       const buffer = await f.arrayBuffer();
       setFile({ name: f.name, size: f.size, lastModified: f.lastModified, buffer });
     } catch {
@@ -354,11 +384,15 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     setPhase(ph);
     setBatchId(id);
     setTyped('');
+    setTypedUpdates('');
     setStep('review');
   };
 
   const upload = useMutation({
     mutationFn: async () => {
+      if (cfg.json) {
+        return { ph: target, data: await importApi.validateFlow(projectId, anchor.id, 'merge', file.buffer, file.name) };
+      }
       if (!isBook) return { ph: target, data: await importApi.validate(projectId, target, file.buffer, file.name) };
       if (entitiesDone) {                          // a corrected file goes to the fields step alone
         return { ph: 'data-fields', data: await importApi.validate(projectId, 'data-fields', file.buffer, file.name) };
@@ -402,7 +436,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
 
   const commit = useMutation({
     mutationFn: () => importApi.commit(batchId, { row_version: b.row_version,
-      acknowledged_inserts: b.insert_count > 0 ? Number(typed.trim()) : null }),
+      acknowledged_inserts: b.insert_count > 0 ? Number(typed.trim()) : null,
+      acknowledged_updates: cfg.json && b.update_count > 0 ? Number(typedUpdates.trim()) : null }),
     onSuccess: (header) => finish(header),
     onError: async (err) => {
       const s = err?.response?.status;
@@ -427,10 +462,13 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
   });
 
   // Before step 1 commits, a corrected file starts over; after it, it goes to the fields step alone.
-  const reupload = () => { setFile(null); setBatchId(null); setTyped(''); say(); setStep('file'); };
+  const reupload = () => { setFile(null); setBatchId(null); setTyped(''); setTypedUpdates(''); say(); setStep('file'); };
 
   const committable = b && b.status === 'VALIDATED' && b.error_count === 0 && !pv.purged;
-  const countOk = !b?.insert_count || typed.trim() === String(b.insert_count);
+  const insertsOk = !b?.insert_count || typed.trim() === String(b.insert_count);
+  const askUpdates = Boolean(cfg.json && b?.update_count);
+  const updatesOk = !askUpdates || typedUpdates.trim() === String(b.update_count);
+  const countOk = insertsOk && updatesOk;
   const busy = upload.isPending || commit.isPending || fieldsStep.isPending;
   const steps = isBook ? BOOK_STEPS : STEPS;
   const shownStep = isBook && step === 'review' ? (inEntities ? 'entities' : 'fields')
@@ -440,7 +478,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
 
   return (
     <Dialog open onClose={closable ? onClose : undefined} maxWidth="lg" fullWidth>
-      <DialogTitle>{t(isBook ? 'data.import.model.title' : 'data.import.title')}</DialogTitle>
+      <DialogTitle>{t(isBook ? 'data.import.model.title' : cfg.json ? 'data.import.flow.title' : 'data.import.title')}</DialogTitle>
       <DialogContent>
         <Box sx={{ mb: 3, mt: 1 }}>
           <Steps label={t('components.import.progress')} current={steps.indexOf(shownStep)}
@@ -467,7 +505,13 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
 
         {step === 'file' && (
           <Stack spacing={3}>
-            {!entitiesDone && (
+            {cfg.json && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.flow.into', { code: anchor.hierCode, name: anchor.name })}</Typography>
+                <Typography sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'pre-wrap' }}>{t('data.import.flow.mergeHelp')}</Typography>
+              </Box>
+            )}
+            {!entitiesDone && !cfg.json && (
               <Box>
                 <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.getFile')}</Typography>
                 <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
@@ -484,13 +528,14 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
             <Box>
               <Typography variant="h6" sx={{ mb: 0.5 }}>{t(entitiesDone ? 'data.import.model.pickFields' : 'data.import.pickFile')}</Typography>
               <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
-                {t(entitiesDone ? 'data.import.model.pickFieldsHelp' : 'data.import.pickFileHelp')}
+                {t(entitiesDone ? 'data.import.model.pickFieldsHelp' : cfg.json ? 'data.import.flow.pickHelp' : 'data.import.pickFileHelp')}
               </Typography>
               <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                 <Button component="label" variant="outlined" startIcon={<UploadFileRounded />} disabled={busy}>
                   {t(file ? 'data.import.pickOther' : 'data.import.pick')}
                   <input id="import-file" type="file" hidden onChange={pick}
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                    accept={cfg.json ? '.json,application/json'
+                      : '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'} />
                 </Button>
                 <FileInfo file={file} />
               </Stack>
@@ -516,7 +561,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
             {committable && b.insert_count + b.update_count === 0 && (
               <Alert severity="info" sx={ERR_SX}>{t('data.import.nothingToChange')}</Alert>)}
             {pv && <Preview key={b.import_batch_id} pv={pv} cfg={phaseCfg} />}
-            {committable && (inEntities || b.insert_count > 0) && (
+            {committable && (inEntities || b.insert_count > 0 || askUpdates) && (
               <Card sx={{ mt: 2 }} bodySx={{ gap: 1.25 }}>
                 <SectionLabel>{t('components.import.allOrNone')}</SectionLabel>
                 {inEntities && (
@@ -526,8 +571,18 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                     <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.confirmBody', { n: b.insert_count })}</Typography>
                     <TextField id="import-confirm-count" label={t('data.import.confirmLabel')} value={typed}
                       onChange={(e) => setTyped(e.target.value)} sx={{ width: 220 }}
-                      error={typed.trim() !== '' && !countOk}
-                      helperText={typed.trim() !== '' && !countOk ? t('data.import.confirmMismatch') : ' '}
+                      error={typed.trim() !== '' && !insertsOk}
+                      helperText={typed.trim() !== '' && !insertsOk ? t('data.import.confirmMismatch') : ' '}
+                      slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
+                  </Box>
+                )}
+                {askUpdates && (
+                  <Box>
+                    <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.flow.confirmUpdates', { n: b.update_count })}</Typography>
+                    <TextField id="import-confirm-updates" label={t('data.import.flow.confirmUpdatesLabel')} value={typedUpdates}
+                      onChange={(e) => setTypedUpdates(e.target.value)} sx={{ width: 220 }}
+                      error={typedUpdates.trim() !== '' && !updatesOk}
+                      helperText={typedUpdates.trim() !== '' && !updatesOk ? t('data.import.confirmMismatch') : ' '}
                       slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
                   </Box>
                 )}
@@ -545,7 +600,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                   updates: entitiesDone.update_count, matches: entitiesDone.match_count })}
               </Alert>)}
             <Alert severity="success">
-              {t(isBook ? 'data.import.model.fieldsSummary' : 'data.import.committed',
+              {t(isBook ? 'data.import.model.fieldsSummary' : cfg.json ? 'data.import.flow.committed' : 'data.import.committed',
                 { inserts: done.insert_count, updates: done.update_count, matches: done.match_count })}
             </Alert>
             {cfg.reexport && done.insert_count > 0 && (

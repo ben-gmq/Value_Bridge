@@ -15,7 +15,7 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser, ImportBatch
 from routers.guards import GuardedRouter, object_guard, project_ctx
-from services import bulk, xlsx
+from services import bulk, flow_import, xlsx
 
 router = GuardedRouter(tags=["bulk"])
 _read = project_ctx("VIEW")
@@ -27,6 +27,7 @@ class CommitIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     row_version: int
     acknowledged_inserts: int | None = Field(default=None, ge=0)
+    acknowledged_updates: int | None = Field(default=None, ge=0)          # a flow file's changed steps (FI-7)
 
 
 def _xlsx(content: bytes, name: str) -> Response:
@@ -39,6 +40,14 @@ async def _upload(request: Request) -> bytes:
     media = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if media != xlsx.XLSX_MEDIA_TYPE:
         raise HTTPException(415, "Send the .xlsx file itself as the request body.")
+    return await request.body()
+
+
+async def _json_upload(request: Request) -> bytes:
+    """The raw .json body of a flow file, already size-capped at ingress (2 MB)."""
+    media = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media != "application/json":
+        raise HTTPException(415, "Send the .json file itself as the request body.")
     return await request.body()
 
 
@@ -65,6 +74,18 @@ def check(project_id: int, target: str, body: bytes = Depends(_upload), db: Sess
     return bulk.check_file(db, project_id, bulk.target_for(target), body)
 
 
+@router.post("/projects/{project_id}/bulk/process-flow/validate", status_code=201, **_edit.route)
+def validate_flow(project_id: int, anchor_bfc_node_id: int, mode: str = "merge", body: bytes = Depends(_json_upload),
+                  file_name: str | None = Header(default=None, alias="X-VB-File-Name"),
+                  user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
+    """A vb-process-flow/2.0 file (slice 1e-b, design §7.2b), the raw JSON body (≤ 2 MB at ingress, §7.12a). The
+    anchor and mode are chosen on screen (R2-P3); its DFD component is checked from the anchor (P3). Declared before
+    the sheet route, so `process-flow` never reaches it."""
+    batch = flow_import.validate(db, user.app_user_id, project_id, anchor_bfc_node_id, mode, body,
+                                 bulk.clean_file_name(file_name))
+    return bulk.preview(db, batch)
+
+
 @router.post("/projects/{project_id}/bulk/{target}/validate", status_code=201, **_edit.route)
 def validate(project_id: int, target: str, body: bytes = Depends(_upload),
              file_name: str | None = Header(default=None, alias="X-VB-File-Name"),
@@ -88,5 +109,5 @@ def preview(batch_id: int, batch: ImportBatch = Depends(_batch.dep), db: Session
 def commit(batch_id: int, body: CommitIn, request: Request, user: AppUser = Depends(current_user),
            batch: ImportBatch = Depends(_batch.dep), db: Session = Depends(get_db)):
     done = bulk.commit(db, user.app_user_id, batch.import_batch_id, body.row_version,
-                       body.acknowledged_inserts, _ip(request))
+                       body.acknowledged_inserts, _ip(request), body.acknowledged_updates)
     return bulk.batch_out(db, done)

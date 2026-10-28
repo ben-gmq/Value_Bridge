@@ -187,6 +187,7 @@
   "processes.flowFile.export": "Export this flow",
   "processes.flowFile.pack": "AI prompt pack",
   "processes.flowFile.schema": "Schema and example",
+  "processes.flowFile.import": "Import a flow file",
   "processes.flowFile.exported": "Flow file saved.",
   "processes.flowFile.packSaved": "Prompt pack saved.",
   "processes.flowFile.schemaSaved": "Schema and example saved.",

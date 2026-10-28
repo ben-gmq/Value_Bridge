@@ -314,9 +314,13 @@ export const importApi = {
     { headers: { 'Content-Type': XLSX_TYPE, 'X-VB-File-Name': encodeURIComponent(fileName) } })),
   batch: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}`)),
   preview: (batchId) => d(http.get(`${V}/bulk/batches/${batchId}/preview`)),
-  // acknowledged_inserts is the count the user typed; the server re-validates and compares (R2-P2).
-  commit: (batchId, { row_version, acknowledged_inserts }) =>
-    d(http.post(`${V}/bulk/batches/${batchId}/commit`, { row_version, acknowledged_inserts })),
+  // A flow file (slice 1e-b): the raw .json, the anchor and mode chosen on screen (R2-P3). 201 → the preview.
+  validateFlow: (projectId, anchorId, mode, buffer, fileName) => d(http.post(`${P(projectId)}/bulk/process-flow/validate`,
+    buffer, { params: { anchor_bfc_node_id: anchorId, mode },
+      headers: { 'Content-Type': 'application/json', 'X-VB-File-Name': encodeURIComponent(fileName) } })),
+  // acknowledged_inserts / _updates are the counts the user typed; the server re-validates and compares (R2-P2, FI-7).
+  commit: (batchId, { row_version, acknowledged_inserts, acknowledged_updates = null }) =>
+    d(http.post(`${V}/bulk/batches/${batchId}/commit`, { row_version, acknowledged_inserts, acknowledged_updates })),
 };
 
 // Slice 6b-1 (docs/slice6b1_spec.md). Allocations are written through the solution's routes and

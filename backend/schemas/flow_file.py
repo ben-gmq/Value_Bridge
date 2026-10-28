@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from schemas.process_flow import TriggerKind
 
 FORMAT = "vb-process-flow/2.0"
+MAX_LIST = 100                     # triggers, inputs, outputs or external flows of one step
+MAX_PARTIES = 200
 
 Key = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,40}$")]
 Name = Annotated[str, StringConstraints(min_length=1, max_length=200)]
@@ -60,13 +62,14 @@ class Step(_Strict):
     hier_code: Annotated[str, StringConstraints(max_length=40)] | None = None
     row_version: Annotated[int, Field(ge=1)] | None = None
     name: Name
-    description: str | None = Field(None, description="Left out: kept as it is. \"\" or null: cleared (FI-8).")
+    description: Annotated[str, StringConstraints(max_length=4000)] | None = Field(None, description="Left out: kept as it is. \"\" or null: cleared (FI-8).")
     performer: Annotated[CodedPerformer | AiPerformer, Field(discriminator="kind")] | None = Field(
         None, description="Left out, or an unknown code: kept as it is. null: cleared (FI-2).")
-    triggers: list[Trigger] | None = Field(None, description="Left out: kept as they are. [] means none (FI-1).")
-    inputs: list[DeRef] | None = None
-    outputs: list[DeRef] | None = None
-    external_flows: list[ExternalFlow] | None = None
+    triggers: Annotated[list[Trigger], Field(max_length=MAX_LIST)] | None = Field(
+        None, description="Left out: kept as they are. [] means none (FI-1).")
+    inputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = None
+    outputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = None
+    external_flows: Annotated[list[ExternalFlow], Field(max_length=MAX_LIST)] | None = None
     source_ref: Ref | None = None
 
 
@@ -76,8 +79,9 @@ class FlowFile(_Strict):
     format: Literal["vb-process-flow/2.0"]
     parent: Parent
     mode: Literal["merge", "replace"] = "merge"
-    external_entities: list[ExternalEntity] = []
-    steps: Annotated[list[Step], Field(min_length=1)]
+    external_entities: Annotated[list[ExternalEntity], Field(max_length=MAX_PARTIES)] = []
+    # A node holds at most 99 children (bfc.MAX_SIBLINGS), so a file never needs more steps (§7.12a limits).
+    steps: Annotated[list[Step], Field(min_length=1, max_length=99)]
 
 
 def json_schema() -> dict:

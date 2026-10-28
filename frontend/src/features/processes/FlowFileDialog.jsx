@@ -2,15 +2,21 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Typography } from '@mui/material';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
+import UploadFileRounded from '@mui/icons-material/UploadFileRounded';
 import { errorText } from '../../api/client';
 import { flowFileApi } from '../../api/scope';
+import { ImportWizard } from '../../components/ImportWizard';
 import { t } from '../../i18n/t';
 
-// The flow as a file (slice 1e-b, D-25): export this parent node's steps as vb-process-flow/2.0, and download the
-// format and the AI prompt pack. The AI rules come first, before any download (VB-013, FI-6, FI-10): Claude
-// Enterprise under FTC's account only, personal data removed by the consultant. Importing a file is piece (a2).
-export function FlowFileButton({ nodeId, hasSteps }) {
+// The flow as a file (slice 1e-b, D-25): export this parent node's steps as vb-process-flow/2.0, download the
+// format and the AI prompt pack, and import a file back under this node (piece a2: merge mode, through the one
+// ImportWizard). The AI rules come first, before any download or upload (VB-013, FI-6, FI-10): Claude Enterprise
+// under FTC's account only, personal data removed by the consultant. Import shows only to an editor (useCanEdit —
+// presentation only, the guards still refuse).
+export function FlowFileButton({ projectId, scope, hasSteps, canEdit }) {
+  const nodeId = scope.bfc_node_id;
   const [open, setOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState(null);          // an error, shown in the dialog
   const [done, setDone] = useState(null);              // a success, as a toast (playbook §7)
   const run = useMutation({
@@ -43,6 +49,10 @@ export function FlowFileButton({ nodeId, hasSteps }) {
             <Button variant="contained" startIcon={<DownloadRounded />} disabled={!hasSteps || run.isPending}
               onClick={() => go(() => flowFileApi.export(nodeId), 'processes.flowFile.exported')}>
               {t('processes.flowFile.export')}</Button>
+            {canEdit && (
+              <Button variant="outlined" startIcon={<UploadFileRounded />} disabled={run.isPending}
+                onClick={() => { setNotice(null); setOpen(false); setImporting(true); }}>
+                {t('processes.flowFile.import')}</Button>)}
             <Button variant="outlined" startIcon={<DownloadRounded />} disabled={run.isPending}
               onClick={() => go(flowFileApi.promptPack, 'processes.flowFile.packSaved')}>
               {t('processes.flowFile.pack')}</Button>
@@ -55,6 +65,10 @@ export function FlowFileButton({ nodeId, hasSteps }) {
           <Button onClick={close}>{t('processes.flowFile.close')}</Button>
         </DialogActions>
       </Dialog>
+      {importing && (
+        <ImportWizard projectId={projectId} targets={['process-flow']} initialTarget="process-flow"
+          anchor={{ id: nodeId, hierCode: scope.hier_code, name: scope.node_name }}
+          onClose={() => setImporting(false)} />)}
       <Snackbar open={Boolean(done)} autoHideDuration={4000} onClose={() => setDone(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {done ? <Alert severity="success" variant="filled" onClose={() => setDone(null)}>{done}</Alert> : undefined}

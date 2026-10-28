@@ -47,7 +47,8 @@ def list_triggers(db: Session, project_id: int, include_retired: bool = False) -
 
 
 def create_trigger(db: Session, actor_id: int, project_id: int, name: str, kind: str,
-                   schedule_note: str | None, description: str | None) -> ProcessTrigger:
+                   schedule_note: str | None, description: str | None, commit: bool = True) -> ProcessTrigger:
+    """`commit=False` (slice 1e-b): the flow import's form — flush only, the pipeline owns the transaction."""
     require_any_dfd(db, project_id)
     name = (name or "").strip()
     if not name:
@@ -57,7 +58,10 @@ def create_trigger(db: Session, actor_id: int, project_id: int, name: str, kind:
     row = ProcessTrigger(project_id=project_id, trigger_name=name, trigger_kind=kind,
                          schedule_note=_clean(schedule_note), description=_clean(description), created_by=actor_id)
     db.add(row)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return row
 
 
@@ -103,8 +107,10 @@ def list_links(db: Session, node: BfcNode) -> list[BfcNodeTrigger]:
                            .order_by(BfcNodeTrigger.bfc_node_trigger_id)))
 
 
-def link(db: Session, actor_id: int, node: BfcNode, process_trigger_id: int, note: str | None) -> BfcNodeTrigger:
-    """Re-linking restores the same row (full grain UK, S1-7). Serialised with a step retire (SR-5)."""
+def link(db: Session, actor_id: int, node: BfcNode, process_trigger_id: int, note: str | None,
+         commit: bool = True) -> BfcNodeTrigger:
+    """Re-linking restores the same row (full grain UK, S1-7). Serialised with a step retire (SR-5).
+    `commit=False` (slice 1e-b): the flow import's form — flush only."""
     lifecycle.lock_for_share(db, node)
     if not (node.is_active and node.is_process):
         raise HTTPException(422, "A trigger starts a process step only")
@@ -126,8 +132,9 @@ def link(db: Session, actor_id: int, node: BfcNode, process_trigger_id: int, not
     audit.record(db, "STEP_TRIGGER_LINKED", actor_id=actor_id, project_id=node.project_id,
                  target_table="bfc_node_trigger", target_id=row.bfc_node_trigger_id,
                  detail={"bfc_node_id": node.bfc_node_id, "process_trigger_id": process_trigger_id})
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
     return row
 
 
