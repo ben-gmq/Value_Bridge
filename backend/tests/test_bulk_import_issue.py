@@ -201,3 +201,22 @@ def test_with_issue_off_template_export_and_validate_are_409(client, ed, world):
     assert client.get(URL.format(p=ed["p"], what="export"), headers=ed["h"]).status_code == 409
     assert client.get(f"{API}/projects/{ed['p']}/bulk/templates/issues", headers=ed["h"]).status_code == 409
     staged(client, ed, body, expect=409)
+
+
+# ---- §10.14: text that looks like a formula ------------------------------------------------------------------------
+
+def test_text_starting_with_a_formula_sign_exports_as_text_and_round_trips(client, ed):
+    """§10.14 (4a-R9): = + - @ open in Excel as text, never a formula; the file reads back unchanged."""
+    scope(client, ed)
+    anan = stakeholder(client, ed, "Anan")
+    texts = {"=SUM(A1:A9)": "+66 2 555 0100", "-negative": "@channel see HYPERLINK"}
+    made = [issue(client, ed, anan, title, description=desc) for title, desc in texts.items()]
+    body = export(client, ed)
+    ws = next(s for s in openpyxl.load_workbook(io.BytesIO(body)).worksheets if s.cell(1, 1).value == TAG)
+    col = {ws.cell(1, i).value: i for i in range(2, ws.max_column + 1)}
+    rows = {ws.cell(r, col["issue_number"]).value: r for r in range(3, ws.max_row + 1)}
+    for i in made:
+        for c in ("title", "description"):
+            cell = ws.cell(rows[i["issue_number"]], col[c])
+            assert cell.data_type == "s" and cell.quotePrefix and cell.value == i[c], (c, cell.value)
+    assert {r["verdict"] for r in by_row(client, ed, staged(client, ed, body))} == {"MATCH"}

@@ -23,7 +23,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import AuditEvent, BaselineArchive, Project, ProjectPurge, ProjectPurgeKey
+from models import AuditEvent, BaselineArchive, CodeMaster, ImportBatch, Project, ProjectPurge, ProjectPurgeKey
 from services import admin_grant, audit, purge
 
 EVENT = "WEEKLY_CHECK_RAN"
@@ -178,12 +178,34 @@ def _unfinished_removals(db: Session) -> list[dict]:
     return rows
 
 
+IMPORT_WINDOW = timedelta(days=7)
+
+
+def import_lines(db: Session) -> list[dict]:
+    """Slice 1e P8 / N7: per import target, the batches rejected and the commits that failed in the last 7 days.
+    Information only: it never changes the check's exit code."""
+    start = func.now() - IMPORT_WINDOW
+    rejected = dict(db.execute(
+        select(ImportBatch.target_entity, func.count())
+        .join(CodeMaster, CodeMaster.code_id == ImportBatch.status_code_id)
+        .where(CodeMaster.category == "IMPORT_STATUS", CodeMaster.code == "REJECTED", ImportBatch.updated_at >= start)
+        .group_by(ImportBatch.target_entity)).all())
+    failed = dict(db.execute(
+        select(ImportBatch.target_entity, func.count()).select_from(AuditEvent)
+        .join(ImportBatch, ImportBatch.import_batch_id == AuditEvent.target_id)
+        .where(AuditEvent.event_type == "IMPORT_COMMIT_FAILED", AuditEvent.target_table == "import_batch",
+               AuditEvent.occurred_at >= start)
+        .group_by(ImportBatch.target_entity)).all())
+    return [{"target": t, "rejected": rejected.get(t, 0), "failed_commits": failed.get(t, 0)}
+            for t in sorted(set(rejected) | set(failed))]
+
+
 def report(db: Session, since) -> dict:
     ov = purge.overview(db)
     return {"due_for_archiving": ov["due_for_archiving"], "reopened_since_last_run": _reopened_since(db, since),
             "owed_files": ov["archive_backlog"], "unfinished_removals": _unfinished_removals(db),
             "live_platform_admins": ov["live_platform_admins"], "approvers_required": ov["approvers_required"],
-            "admin": admin_grant.weekly_admin_lines(db)}
+            "admin": admin_grant.weekly_admin_lines(db), "imports": import_lines(db)}
 
 
 def run(db: Session, store, keys, actor_id: int, operator: str) -> dict:

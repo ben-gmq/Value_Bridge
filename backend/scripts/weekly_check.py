@@ -39,6 +39,8 @@ def _lines(rep: dict) -> list[str]:
     out += [f"  REMOVAL  {u['purge_kind']} {u['project_code']} (request {u['project_purge_id']}): {u['state']}"
             + (f", {u['keys_outstanding']} key(s) outstanding" if u["keys_outstanding"] else "")
             for u in rep["unfinished_removals"]]
+    out += [f"  IMPORTS  {i['target']}: {i['rejected']} rejected, {i['failed_commits']} failed commit(s) in the last "
+            "7 days (information only)" for i in rep["imports"]]                      # slice 1e P8, N7
     a = rep["admin"]
     if rep["live_platform_admins"] < rep["approvers_required"]:                    # 0079: the setting, not 2
         out.append("  ADMINS   fewer than two live platform admins: no removal can be approved")
