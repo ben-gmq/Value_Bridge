@@ -10,6 +10,7 @@ import { frApi, solutionApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
+import { ListImportActions } from '../../components/ImportWizard';
 import { Card, Code, PurpleTile, Segmented, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
@@ -80,6 +81,7 @@ export default function FrsPage() {
   const { getLabel: statusLabel } = useCodes(projectId, 'FR_FULFILMENT_STATUS');
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
+  const [fileError, setFileError] = useState('');
   const [warnings, setWarnings] = useState([]);
   const rows = q.data ?? [];
   const activeCount = rows.filter((r) => r.is_active).length;
@@ -127,9 +129,13 @@ export default function FrsPage() {
   ];
 
   return (
-    <Page title={t('frs.title')} subtitle={t('frs.subtitle')} error={q.error && errorText(q.error)}
-      actions={canEdit && (
-        <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('frs.add')}</Button>)}>
+    <Page title={t('frs.title')} subtitle={t('frs.subtitle')} error={fileError || (q.error && errorText(q.error))}
+      actions={(<>
+        <ListImportActions projectId={projectId} target="function-requirements" canEdit={canEdit}
+          onNotice={setNotice} onError={setFileError} />
+        {canEdit && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('frs.add')}</Button>)}
+      </>)}>
       <FrWarnings warnings={warnings} onClose={() => setWarnings([])} />
       {!q.error && q.data && (
         <TileRow>

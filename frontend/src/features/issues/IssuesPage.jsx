@@ -11,6 +11,7 @@ import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { useComponents } from '../../app/useComponents';
+import { ListImportActions } from '../../components/ImportWizard';
 import { Card, Code, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
@@ -100,6 +101,7 @@ export default function IssuesPage() {
   const { getLabel: statusLabel } = useCodes(projectId, 'ISSUE_STATUS');
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
+  const [fileError, setFileError] = useState('');
   const people = stk.data ?? [];
   const name = Object.fromEntries(people.map((s) => [s.stakeholder_id, s.stakeholder_name]));
   const rows = q.data ?? [];
@@ -129,9 +131,14 @@ export default function IssuesPage() {
   ];
 
   return (
-    <Page title={t('issues.title')} subtitle={t('issues.subtitle')} error={(q.error || stk.error) && errorText(q.error || stk.error)}
-      actions={canEdit && (
-        <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('issues.raise')}</Button>)}>
+    <Page title={t('issues.title')} subtitle={t('issues.subtitle')}
+      error={fileError || ((q.error || stk.error) && errorText(q.error || stk.error))}
+      actions={(<>
+        {isOn('ISSUE') && <ListImportActions projectId={projectId} target="issues" canEdit={canEdit}
+          onNotice={setNotice} onError={setFileError} />}
+        {canEdit && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setAdding(true)}>{t('issues.raise')}</Button>)}
+      </>)}>
       <Segmented label={t('issues.title')} value={tab} onChange={setTab} sx={{ mb: 2 }}
         options={[{ value: 'register', label: t('issues.tab.register') }, { value: 'dashboard', label: t('issues.tab.dashboard') }]} />
       {tab === 'dashboard' && <IssueDashboard projectId={projectId} onFilter={openFiltered} />}

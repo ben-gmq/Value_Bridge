@@ -58,7 +58,35 @@ export const IMPORT_TARGETS = {
     columns: FIELD_COLUMNS,
     refresh: (p) => [keys.entities(p), keys.everyEntity()],
   },
+  // Slice 1e-a: opened from the FR and Issue lists only (docs/slice1e_imports_spec.md §7.2, §7.3).
+  'function-requirements': {
+    label: 'data.import.target.frs',
+    help: 'data.import.target.frsHelp',
+    columns: { fr_number: 'data.import.col.frNumber', fr_name: 'data.name', fr_type_code: 'data.import.col.type',
+      complexity_code: 'data.import.col.complexity', solution_number: 'data.import.col.solution',
+      br_numbers: 'data.import.col.brNumbers', br_links_at_export: 'data.import.col.brsAtExport',
+      links_added: 'data.import.col.linksAdded', description: 'data.description',
+      acceptance_note: 'data.import.col.acceptance', status_code: 'data.import.col.status',
+      effort_days: 'data.import.col.effortDays', row_token: 'data.import.col.rowToken' },
+    reexport: true,                              // P1: an insert makes the open file stale
+    refresh: (p) => [keys.frs(p)],
+  },
+  issues: {
+    label: 'data.import.target.issues',
+    help: 'data.import.target.issuesHelp',
+    columns: { issue_number: 'data.import.col.issueNumber', title: 'data.import.col.title',
+      description: 'data.description', issue_type_code: 'data.import.col.type',
+      severity_code: 'data.import.col.severity', status_code: 'data.import.col.status',
+      raised_by: 'data.import.col.raisedBy', raised_by_org_unit: 'data.import.col.raiserUnit',
+      raised_date: 'data.import.col.raisedDate', target_date: 'data.import.col.targetDate',
+      br_numbers: 'data.import.col.brNumbers', br_links_at_export: 'data.import.col.brsAtExport',
+      links_added: 'data.import.col.linksAdded', row_token: 'data.import.col.rowToken' },
+    reexport: true,
+    refresh: (p) => [keys.issues(p)],
+  },
 };
+
+export const DATA_TARGETS = ['data-entities', 'data-fields', 'data-model'];
 
 const MAX_BYTES = 10 * 1024 * 1024;              // the server's ingress cap (§4 validate, step 2)
 const PAGE = 100;
@@ -512,6 +540,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
               {t(isBook ? 'data.import.model.fieldsSummary' : 'data.import.committed',
                 { inserts: done.insert_count, updates: done.update_count, matches: done.match_count })}
             </Alert>
+            {cfg.reexport && done.insert_count > 0 && (
+              <Alert severity="info">{t('data.import.reexport')}</Alert>)}
           </Stack>
         )}
       </DialogContent>
@@ -562,5 +592,27 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
           </DialogActions>
         </Dialog>)}
     </Dialog>
+  );
+}
+
+
+/** The Export and Import buttons of a one-target list page (slice 1e-a: the FR and Issue lists). Export is open to
+ * every viewer; Import only to an editor (useCanEdit — presentation only, the guards still refuse). */
+export function ListImportActions({ projectId, target, canEdit, onNotice, onError }) {
+  const [open, setOpen] = useState(false);
+  const exp = useMutation({
+    mutationFn: () => importApi.export(projectId, target),
+    onSuccess: (name) => onNotice(t('data.import.exported', { name })),
+    onError: (err) => onError(errorText(err, t('data.import.downloadFailed'))),
+  });
+  return (
+    <>
+      <Button startIcon={<DownloadRounded />} disabled={exp.isPending}
+        onClick={() => { onError(''); exp.mutate(); }}>{t('data.import.exportList')}</Button>
+      {canEdit && (
+        <Button variant="outlined" startIcon={<UploadFileRounded />} onClick={() => setOpen(true)}>
+          {t('data.import.importList')}</Button>)}
+      {open && <ImportWizard projectId={projectId} targets={[target]} initialTarget={target} onClose={() => setOpen(false)} />}
+    </>
   );
 }
