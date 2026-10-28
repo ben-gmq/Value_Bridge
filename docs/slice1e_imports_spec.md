@@ -192,7 +192,7 @@ first half, Q-9) and "a row pointing at a summary node is an error" (§7.1). Plu
 14. Exported text starting with `=`, `+`, `-` or `@` opens in Excel as text.
 15. The weekly check prints rejected and failed import batches of the last 7 days per target (P8).
 
-## 11. Decisions for Ben (the build follows the recommendation and flags it until he answers)
+## 11. Decisions for Ben — all nine accepted as recommended (Ben, 2026-10-28: "Yes")
 - **Q-1** BR sheet: statement and status only; requirement lines stay on screen. *Recommended: yes.*
 - **Q-2** FR interface detail: exported read-only (source and target app), not imported in 1e-a. *Recommended: defer.*
 - **Q-3** BR links on FR and issue rows are add-only; removal on screen. *Recommended: yes.*
