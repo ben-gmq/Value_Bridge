@@ -70,7 +70,11 @@ def not_this_computer() -> str | None:
     host must be localhost / 127.0.0.1 / ::1. A server with a real address can never run single-owner, even if its
     database or its .env were declared so by mistake. None when the address is local."""
     from config import get_settings
-    host = urlsplit(get_settings().frontend_url or "").hostname
+    s = get_settings()
+    if "frontend_url" not in s.model_fields_set:        # sara M: the built-in default is not a host's declaration
+        return ("Single-owner needs FRONTEND_URL set in this host's .env to a localhost address; it is not set — a "
+                "server always needs two approvers")
+    host = urlsplit(s.frontend_url or "").hostname
     if host in LOCAL_HOSTS:
         return None
     return (f"Single-owner is allowed only on this computer, but FRONTEND_URL points at {host!r}: a server always "
