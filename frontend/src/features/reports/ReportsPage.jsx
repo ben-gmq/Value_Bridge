@@ -2,11 +2,12 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Segmented } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
+import { Coverage } from './Coverage';
 import { Traceability } from './Traceability';
 
 // Slice 1f (spec §4): one Reports page, a Segmented choice of the reports (?tab=). Every report is read-only and
 // worked out on each read; the screen never adds anything up itself.
-const TABS = ['traceability'];
+const TABS = ['traceability', 'coverage'];
 
 export default function ReportsPage() {
   const { projectId } = useParams();
@@ -18,6 +19,7 @@ export default function ReportsPage() {
         onChange={(v) => setParams(v === TABS[0] ? {} : { tab: v }, { replace: true })}
         options={TABS.map((v) => ({ value: v, label: t(`reports.tab.${v}`) }))} />
       {tab === 'traceability' && <Traceability projectId={projectId} />}
+      {tab === 'coverage' && <Coverage projectId={projectId} />}
     </Page>
   );
 }

@@ -51,3 +51,16 @@ class TraceabilityOut(BaseModel):
     groups: list[TraceGroup] | None
     untraced: list[_FrTag] | None
     answered_without_software: list[AnsweredWithoutSoftware] | None
+
+
+class CoverageLine(BaseModel):
+    """One gap kind (spec §3.2). A row's keys depend on the kind: the ids and numbers of the BR, FR, solution, flow
+    or data entity it names."""
+    code: str
+    severity: str                         # warning | information
+    rows: list[dict[str, str | int | None]] | None
+
+
+class CoverageOut(BaseModel):
+    generated_at: str
+    lines: list[CoverageLine]

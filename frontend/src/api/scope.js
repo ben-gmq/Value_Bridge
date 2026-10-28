@@ -168,6 +168,7 @@ export const issueApi = {                                             // slice 1
 
 export const reportApi = {                                            // slice 1f (spec §2): read-only reports
   traceability: (projectId) => d(http.get(`${P(projectId)}/traceability`)),
+  coverage: (projectId) => d(http.get(`${P(projectId)}/coverage`)),
 };
 
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
