@@ -42,9 +42,17 @@ def check_startup(db: Session, configured: str | None, configured_kind: str | No
     if stamped != configured:
         raise NotStamped(f"VB_INSTANCE_ID is {configured!r} but this database is stamped {stamped!r}: "
                          "re-stamp it deliberately (scripts.stamp_instance) or fix the setting")
-    # A-Q3 (Ben 2026-10-24): a single-owner database needs the host to say so too — a copy restored elsewhere stops
-    if row.installation_kind == SINGLE_OWNER and configured_kind != SINGLE_OWNER:
-        raise NotStamped("This database is declared a local single-owner installation, but VB_INSTALLATION_KIND is "
-                         f"{configured_kind!r}: set VB_INSTALLATION_KIND={SINGLE_OWNER} on this host, or have the "
-                         "owner declare the database SHARED (scripts.instance_settings)")
+    why = kind_mismatch(row.installation_kind, configured_kind)
+    if why:
+        raise NotStamped(why)
     return stamped
+
+
+def kind_mismatch(db_kind: str | None, configured_kind: str | None) -> str | None:
+    """A-Q3 (Ben 2026-10-24), the one rule for the server, the archive writer, the weekly check and the removal run: a
+    single-owner database needs the host to say so too — a copy restored elsewhere stops. None when they agree."""
+    if db_kind == SINGLE_OWNER and configured_kind != SINGLE_OWNER:
+        return ("This database is declared a local single-owner installation, but VB_INSTALLATION_KIND is "
+                f"{configured_kind!r}: set VB_INSTALLATION_KIND={SINGLE_OWNER} on this host, or have the owner "
+                "declare the database SHARED (scripts.instance_settings)")
+    return None

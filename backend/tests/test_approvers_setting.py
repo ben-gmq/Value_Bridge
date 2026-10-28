@@ -12,7 +12,7 @@ from database import SessionLocal
 from models import AppUser
 from services import admin_grant, instance, purge_run
 from tests.admin_team import seed_bootstrap
-from tests.test_project_purge_record import INSERT, backdate, owner, refused, request, run, two  # noqa: F401
+from tests.test_project_purge_record import INSERT, backdate, owner, promote, refused, request, run, two  # noqa: F401
 
 APPROVE = "UPDATE project_purge SET approved_at = now(), approved_by_user_id = :u WHERE project_purge_id = :pp"
 
@@ -198,3 +198,70 @@ def test_the_admin_overview_carries_the_setting_for_the_banner(client, world, ow
     assert client.get("/api/v1/admin/archive-overview", headers=h).json()["approvers_required"] == 2
     single_owner(owner)
     assert client.get("/api/v1/admin/archive-overview", headers=h).json()["approvers_required"] == 1
+
+
+# ---- sara round 1 (2026-10-28): H1, M2, M5 ---------------------------------------------------------------------------
+
+def test_under_two_on_a_local_installation_the_requester_still_cannot_approve(two, owner):
+    """M5: a stamped LOCAL row at 2 behaves exactly as before — not only the no-row path the older suites run on."""
+    stamp(owner)
+    settings(owner, kind="LOCAL_SINGLE_OWNER")
+    promote(owner, two["a2"])
+    pp = request(app_engine, two)
+    assert "four eyes" in refused(app_engine, APPROVE, u=two["a1"], pp=pp)
+
+
+def test_the_app_cannot_insert_a_flagged_request_the_guard_forces_it_false(two, owner):
+    """M5: vb_app holds INSERT on the table; a request born flagged is born unflagged."""
+    single_owner(owner)
+    seed_bootstrap(owner, two["a1"])
+    pp = run(app_engine, INSERT.replace("archive_purge_id)", "archive_purge_id, approved_single_owner)")
+             .replace(":a)", ":a, true)"), k="DELETE", p=two["p"], c=two["c"], r=two["a1"], a=None)[0]
+    assert run(owner, "SELECT approved_single_owner FROM project_purge WHERE project_purge_id = :pp", pp=pp)[0] is False
+
+
+def test_a_decided_grant_s_flag_never_changes(client, world, owner):
+    """M5: on the grant table the flag is fixed once decided — even for the owner."""
+    a1 = run(owner, "SELECT app_user_id FROM app_user WHERE email = 'admin@example.test'")[0]
+    seed_bootstrap(owner, a1)
+    single_owner(owner)
+    with SessionLocal() as db:
+        actor = db.get(AppUser, a1)
+        g = admin_grant.request(db, actor, world["users"]["editor"], "Second admin")
+        g = admin_grant.approve(db, actor, g.platform_admin_grant_id, g.row_version)
+        gid = g.platform_admin_grant_id
+    assert "never changes" in refused(owner, "UPDATE platform_admin_grant SET approved_single_owner = false "
+                                             "WHERE platform_admin_grant_id = :g", g=gid)
+
+
+def test_admins_made_alone_never_approve_for_each_other_once_back_at_two(client, world, owner):
+    """H1: one person's admins B and C count as independent of nobody, so back at 2 they cannot pair."""
+    a1 = run(owner, "SELECT app_user_id FROM app_user WHERE email = 'admin@example.test'")[0]
+    seed_bootstrap(owner, a1)
+    single_owner(owner)
+    b, c, d = world["users"]["editor"], world["users"]["owner"], world["users"]["outsider"]
+    with SessionLocal() as db:
+        actor = db.get(AppUser, a1)
+        for uid in (b, c):
+            g = admin_grant.request(db, actor, uid, "Made alone")
+            admin_grant.approve(db, actor, g.platform_admin_grant_id, g.row_version)
+    settings(owner, n=2)
+    assert run(owner, "SELECT public.fn_admin_grant_independent(:b, :c)", b=b, c=c)[0] is False
+    with SessionLocal() as db:
+        g = admin_grant.request(db, db.get(AppUser, b), d, "A third, back at two")
+        with pytest.raises(Exception, match="independent"):
+            admin_grant.approve(db, db.get(AppUser, c), g.platform_admin_grant_id, g.row_version)
+
+
+def test_the_removal_run_refuses_a_single_owner_database_the_host_does_not_declare(owner, monkeypatch):
+    """M2: the data-destroying script applies A-Q3 too, through the same rule as the server."""
+    from config import get_settings
+    stamp(owner)
+    settings(owner, kind="LOCAL_SINGLE_OWNER")
+    monkeypatch.setattr(get_settings(), "vb_instance_id", "test-a")
+    monkeypatch.setattr(get_settings(), "vb_installation_kind", None)
+    with owner.begin() as c, pytest.raises(purge_run.Refused, match="VB_INSTALLATION_KIND"):
+        purge_run._instance(c)
+    monkeypatch.setattr(get_settings(), "vb_installation_kind", "LOCAL_SINGLE_OWNER")
+    with owner.begin() as c:
+        assert purge_run._instance(c) == "test-a"

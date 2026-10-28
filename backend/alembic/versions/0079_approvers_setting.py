@@ -144,6 +144,16 @@ AGED = """COALESCE((SELECT g.approved_at <= statement_timestamp() - interval '30
                         ORDER BY g.approved_at DESC, g.platform_admin_grant_id DESC
                         LIMIT 1), false)"""
 INDEPENDENT_SWAPS = [("AND " + AGED, "AND public.fn_admin_rights_aged(p_approver)")]
+# sara H1: admins one person made alone never count as independent of anyone — so back at 2 (or declared SHARED) they
+# cannot approve each other's grants or removals; their latest grant has to be a two-admin one first.
+GRANT_INDEPENDENT_SWAPS = [
+    ("g.target_user_id, g.requested_by_user_id, g.approved_by_user_id\n          FROM public.platform_admin_grant g",
+     "g.target_user_id, g.requested_by_user_id, g.approved_by_user_id,\n"
+     "               g.approved_single_owner\n          FROM public.platform_admin_grant g"),
+    ("OR (target_user_id = p_requester AND maker_id = p_approver))",
+     "OR (target_user_id = p_requester AND maker_id = p_approver))\n"
+     "         AND NOT EXISTS (SELECT 1 FROM latest WHERE approved_single_owner)          -- 0079, sara H1"),
+]
 
 FUNCTIONS = [  # name, signature, header, sha before, sha after, swaps
     ("fn_project_purge_guard", "()", "RETURNS trigger " + PURGE_HDR,
@@ -156,6 +166,9 @@ FUNCTIONS = [  # name, signature, header, sha before, sha after, swaps
      "2cf08a6be18fd8e7dcec8d34e3a960d1a7a65dc6c55bfa67837fac31f1a2a848", "SHA_ALLOWS_0079", ALLOWS_SWAPS),
     ("fn_admin_purge_independent", "(p_approver bigint, p_requester bigint)", "RETURNS boolean " + SQL_HDR,
      "3c24b4d5b0fb1dc0f3d74d08e0e06061ee71d33893c0721394a2638512fbd43c", "SHA_INDEPENDENT_0079", INDEPENDENT_SWAPS),
+    ("fn_admin_grant_independent", "(p_approver bigint, p_requester bigint)", "RETURNS boolean " + SQL_HDR,
+     "acc8a37b6f6937558c08badb4680ce52b21f55ef99d8b63335a33260a5ed0e23", "SHA_GRANT_INDEPENDENT_0079",
+     GRANT_INDEPENDENT_SWAPS),
 ]
 NEW_SHAS = {   # the bodies these swaps produce (tests/test_migration_0079.py re-derives them from the database)
     "SHA_PURGE_0079": "4213b1c931470c28816311bfda7505feca6bbd26f3701ff9259f0294b661b214",
@@ -163,6 +176,7 @@ NEW_SHAS = {   # the bodies these swaps produce (tests/test_migration_0079.py re
     "SHA_INSTANCE_0079": "29f66b2a7f8fcdf7d5ad8e1f9630ed0410c67184bf7ae29d48986fa86eaa762f",
     "SHA_ALLOWS_0079": "fd4d7e69e447ddaa171ad50a0ccf56297472a90a7655b9bcf77fb19833bd8029",
     "SHA_INDEPENDENT_0079": "528e2ddd0f99ffc946f574248d0dd6e442736b1a71675121dbe0a3ba8d774309",
+    "SHA_GRANT_INDEPENDENT_0079": "e335e735b610c6019f3df1d5295641de73d66803e2b72cc340f637731eb65c96",
 }
 
 

@@ -75,6 +75,7 @@ BODY = "SELECT prosrc FROM pg_proc WHERE proname = 'fn_project_purge_guard'"
 
 def test_the_purge_guard_is_0072s_body_with_one_block_swapped_and_reads_no_audit(owner):
     m = _m0077()
+    command.downgrade(_cfg(), "0078")                    # 0079 swaps this body again (approvers setting): judge 0077's
     at_head = q(owner, BODY)[0][0]
     assert m._sha(at_head) == m.SHA_0077
     assert "audit_event" not in at_head and "fn_admin_purge_independent" in at_head
@@ -84,7 +85,7 @@ def test_the_purge_guard_is_0072s_body_with_one_block_swapped_and_reads_no_audit
     assert m._swap(old, m.OLD_DECLARE, m.NEW_DECLARE, m.OLD_BLOCK, m.NEW_BLOCK) == at_head
     assert q(owner, "SELECT proconfig FROM pg_proc WHERE proname = 'fn_project_purge_guard'")[0][0] == \
         ["search_path=pg_catalog, public"]
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), "0078")
     assert q(owner, BODY)[0][0] == at_head
 
 

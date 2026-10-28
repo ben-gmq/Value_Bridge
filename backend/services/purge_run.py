@@ -20,6 +20,7 @@ from typing import Callable
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from services import instance
 from services.archive_store import REF, key_name
 
 # Tables that hold rows of a project which survive its removal (schema §8).
@@ -270,12 +271,16 @@ def _instance(c: Connection) -> str:
     a restored copy still stamped as production can never destroy production's keys."""
     from config import get_settings
     configured = get_settings().vb_instance_id
-    stamped = c.scalar(text("SELECT instance_id FROM vb_instance"))
+    row = c.execute(text("SELECT instance_id, installation_kind FROM vb_instance")).first()
+    stamped = row[0] if row else None
     if not configured or stamped is None:
         raise Refused("VB_INSTANCE_ID is not set or the database is not stamped (scripts.stamp_instance).")
     if stamped != configured:
         raise Refused(f"VB_INSTANCE_ID is {configured!r} but this database is stamped {stamped!r}: "
                       "re-stamp it deliberately first.")
+    why = instance.kind_mismatch(row[1], get_settings().vb_installation_kind)       # sara M2: A-Q3 here too
+    if why:
+        raise Refused(why)
     return stamped
 
 
