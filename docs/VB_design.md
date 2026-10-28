@@ -4724,6 +4724,12 @@ one optional wall per project:
   admin is one such grant by Fortience IS (AR-25), dated by the database except on a named test or demo database
   (AR-26). Removing admin rights is one admin's action (AR-17). A purge approval additionally needs the approver's
   grant to be at least 30 days old (AR-20) — the first admin's creation counts as their grant (AR-15). The FTC default rate card stays a fixed default in code (SC-10).
+  **"A second admin" is the installation's approvers setting (AR-28, migration 0079):** 2 by default and on every
+  installation holding client data or on a server; 1 only on one the owner declared `LOCAL_SINGLE_OWNER` and set to 1
+  (`scripts.instance_settings`, logged), with a banner on the admin page. Under 1 the same live admin may request,
+  approve and run a removal or approve a grant for an account they created; each such approval is recorded as approved
+  alone and never runs once the setting is back at 2. The 24-hour wait, typed confirmation and the 30-day rule hold
+  under both.
 - **User:** `app_user.user_kind = 'USER'`. Reads and edits; administers a project or program only through
   an `ADMIN` membership.
 - **Viewer:** `app_user.user_kind = 'VIEWER'`. Reads only; no edit controls, and every write is refused by
@@ -7697,7 +7703,8 @@ target is confirmed.
 - **First admins**: first-run setup is switched off in every Azure environment
   (`ALLOW_FIRST_RUN_SETUP=false`); the first two platform admins are created with
   `python -m seeds.create_admin` as the owner, run as a one-off Container Apps Job by the Fortience IS department and
-  recorded with who ran it (sara H1, AR-16, AR-22). Every later admin comes through a request another admin approves.
+  recorded with who ran it (sara H1, AR-16, AR-22). Every later admin comes through a request another admin approves;
+  a production installation is SHARED and so always needs two approvers (AR-28).
 - **Who holds production server access**: the **Fortience IS department** — the owner role, the operator jobs (migrations,
   purge, LEGACY grants) and the database admin. Platform admins hold none of it (AR-22), so no single platform admin can
   both approve inside the app and act on the database.

@@ -38,12 +38,16 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   Removals tab warns once its last run is over 8 days old (U5).
   **Slice 17 deploy:** read 0076's NOTICEs (every admin recorded or skipped — a skipped one needs an IS grant); IS
   confirms `SELECT fn_backdating_allowed()` is false on production. Admins are then made only by a request a second
-  admin approves; `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)
+  admin approves (on a declared single-owner local install the setting may be 1 — see 0079 below); `seeds.create_admin` runs on the owner URL with `--operator` (`--actor-email` once an admin exists)
   for the first two only; any other admin is an IS grant, `seeds.owner_grant` (AR-16, AR-25). IS also confirms the app
   login has no TEMP on the database and no CREATE on `public`, and that the owner login is named exactly `vb_owner`
   (the guards name it; another name fails closed). Tests make admins only
   through `tests/admin_team.py` (`promote`, `legacy`) — the flag cannot be set by SQL (two exceptions:
   `test_app_user_admin_guard.unrecorded_admin` stages an admin 0076's backfill skipped; `conftest.restore_state` copies back admin rows a proper build made).
+  **0079 deploy (approvers setting, AR-28):** every database reads 2 until the owner acts; a production one is declared
+  `scripts.instance_settings --declare-kind SHARED --operator <name>` (one-way). Only a local single-owner install
+  declares `LOCAL_SINGLE_OWNER`, sets `--approvers 1`, and puts `VB_INSTALLATION_KIND=LOCAL_SINGLE_OWNER` in `.env`
+  (else the server refuses to start). App code reads the setting only through `services.instance.approvers_required`.
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·
