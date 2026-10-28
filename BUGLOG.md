@@ -581,3 +581,10 @@ place.
   `purge_run` reads `fn_approvers_required()` directly (it holds a Connection) — note it. (L9, re-check) back at 2 an
   admin made alone pairs with nobody until re-granted by a request or an IS grant — intended, but silent: list "live
   admins made alone" in the weekly check and show "approved alone" on decided grants.
+- **2026-10-28 · slice 1e-a imports, BR / FR / Issue (`sara`; M1, M2 fixed, Ren for Ben 2026-10-28):** (M3) the
+  import validators repeat the service rules (status changes, closed issue, SOLUTION / EFFORT) instead of calling one
+  check the screen also uses — two copies can drift. (L1) the RESOLVED_CHANGED message shows ids, not numbers. (L2) a
+  stakeholder renamed after export can re-point an issue's raiser to a different person of the old name. (L3) commit
+  runs per-row queries and locks every stakeholder; `create_fr`'s `link_fr` still runs the drift query. (L4) the
+  default-status literals ("OPEN" and the FR default) are written twice. (L5) `tag_br_fr` still checks SOLUTION in the
+  router, not the service.
