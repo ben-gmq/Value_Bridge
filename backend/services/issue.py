@@ -172,7 +172,7 @@ def list_issues(db: Session, project_id: int, include_retired: bool = False, *, 
     return list(db.scalars(q.order_by(Issue.issue_number)).unique())
 
 
-def raise_issue(db: Session, actor_id: int, project_id: int, fields: dict) -> Issue:
+def raise_issue(db: Session, actor_id: int, project_id: int, fields: dict, commit: bool = True) -> Issue:
     """recorded_by is the JWT user, never the body (§9.2); the raiser is a stakeholder (D-4, D8). The raised date is
     the day raised, today in ICT unless given (I-6, R12)."""
     title = _text(fields.get("title"), "title", required=True)
@@ -188,12 +188,16 @@ def raise_issue(db: Session, actor_id: int, project_id: int, fields: dict) -> Is
                   target_date=fields.get("target_date"), created_by=actor_id)
     _set_status(issue, _open_status(db, project_id))
     db.add(issue)
+    db.flush()
+    if not commit:                                            # slice 1e: an import writes more in this transaction
+        return issue
     db.commit()
     db.refresh(issue)
     return issue
 
 
-def update_issue(db: Session, actor_id: int, issue: Issue, row_version: int, fields: dict) -> Issue:
+def update_issue(db: Session, actor_id: int, issue: Issue, row_version: int, fields: dict,
+                 commit: bool = True) -> Issue:
     """R2 / N1: a status change here stays among the open statuses, and none at all while the issue is closed."""
     lifecycle.check_live(issue, row_version)
     if "status_code" in fields:
@@ -224,6 +228,9 @@ def update_issue(db: Session, actor_id: int, issue: Issue, row_version: int, fie
     if "raised_by_stakeholder_id" in fields:                     # R9: duplicates can be merged, then retired
         issue.raised_by_stakeholder_id = _raiser(db, issue.project_id, fields["raised_by_stakeholder_id"])
     issue.updated_by = actor_id
+    db.flush()
+    if not commit:                                            # slice 1e
+        return issue
     db.commit()
     db.refresh(issue)
     return issue
@@ -278,7 +285,7 @@ def links_of(db: Session, issue: Issue, include_retired: bool = False) -> list[I
     return sorted(db.scalars(q), key=lambda r: r.br_row.br_number)
 
 
-def link_br(db: Session, actor_id: int, issue: Issue, br_id: int) -> IssueBr:
+def link_br(db: Session, actor_id: int, issue: Issue, br_id: int, commit: bool = True) -> IssueBr:
     """A BR of another project — live, retired or missing — is the same 422 (criterion 4). Lock order (R11, SR-5):
     the step, then the BR, then the issue, all FOR SHARE, so a step retire and a link are serialised."""
     br = db.scalars(select(BusinessRequirement).where(BusinessRequirement.br_id == br_id,
@@ -300,6 +307,9 @@ def link_br(db: Session, actor_id: int, issue: Issue, br_id: int) -> IssueBr:
         raise HTTPException(409, f"{issue.issue_number} is already linked to {br.br_number}")
     else:                                                     # re-link restores the same row (S1-7)
         lifecycle.relink(db, actor_id, row)
+    db.flush()
+    if not commit:                                            # slice 1e
+        return row
     db.commit()
     db.refresh(row)
     return row

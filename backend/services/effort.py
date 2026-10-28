@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from models import BrFunctionRequirement, CodeMaster, EffortRate, FunctionRequirement, Solution
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
-from services import audit, errors, lifecycle
+from services import audit, components, errors, lifecycle
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -183,8 +183,9 @@ def maintain_card(db: Session, actor_id: int, project_id: int, rationale: str | 
 
 
 # ---- rating an FR -------------------------------------------------------------------------------
-def rate_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: int, complexity_code: str | None
-            ) -> FunctionRequirement:
+def rate_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: int, complexity_code: str | None,
+            commit: bool = True) -> FunctionRequirement:
+    components.require_on(db, fr.project_id, "EFFORT")          # S1: the screen and the import share the check
     lifecycle.lock(db, fr)                                      # lock, then check (DR6c-D2)
     lifecycle.check_live(fr, row_version)
     if not fr.fr_type_code_row.is_active:
@@ -210,6 +211,9 @@ def rate_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: in
                  detail={"label": lifecycle.label(fr), **before,
                          "effort_rate_id": rate.effort_rate_id if rate else None,
                          "rate_row_version": rate.row_version if rate else None})
+    db.flush()
+    if not commit:                                              # slice 1e: an import writes more in this transaction
+        return fr
     db.commit()
     db.refresh(fr)
     return fr

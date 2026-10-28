@@ -1,6 +1,7 @@
 """Slice 1e-a: the BUSINESS_REQUIREMENT import target (spec docs/slice1e_imports_spec.md §7.0, §7.1; design §7.11,
 R2-D1, criteria 106, 117). Grade 2: a wrong row reaches a client deliverable but is an audited, correctable update.
 Every check is proven on a real export of a real chart, edited the way a consultant would edit it."""
+import dataclasses
 import io
 
 import openpyxl
@@ -146,3 +147,44 @@ def test_a_row_without_its_token_must_be_exported_first(client, ed):
     row = rows_of(client, ed, staged(client, ed, edit(export(client, ed),
                                                       lambda ws, col, r: put(ws, r[n1], col["row_token"], None))))[n1]
     assert codes_of(row) == ["EXPORT_FIRST"]
+
+
+# ---- shared 1e rules (spec §7.0, §7.4): re-upload warning, row cap, signed links-at-export -------------------------
+
+def test_re_uploading_a_committed_file_warns_with_its_date_and_committer(client, ed):
+    """Spec §10.7 first half (P1): warn, not block (Q-6)."""
+    s = scope(client, ed)
+    n1 = s["br1"]["br_number"]
+    body = edit(export(client, ed), lambda ws, col, rows: put(ws, rows[n1], col["br_statement"], "Once"))
+    first = staged(client, ed, body)
+    assert not (first["batch"] if "batch" in first else first)["file_warnings"]
+    assert commit(client, ed, first).status_code == 200
+    again = staged(client, ed, body)
+    warns = (again["batch"] if "batch" in again else again)["file_warnings"]
+    assert [w["code"] for w in warns] == ["FILE_COMMITTED_BEFORE"]
+    assert warns[0]["params"]["date"] and warns[0]["params"]["by"]
+
+
+def test_a_file_over_the_row_cap_is_refused_at_file_level(client, ed, monkeypatch):
+    """Spec §10.13 (P7): proven at a cap of 2 rather than with a 2,001-row file — the check is the same comparison."""
+    from services import bulk
+    scope(client, ed)
+    monkeypatch.setitem(bulk.TARGETS, "business-requirements",
+                        dataclasses.replace(bulk.BUSINESS_REQUIREMENT, max_rows=1))
+    r = client.post(URL.format(p=ed["p"], what="validate"), content=export(client, ed),
+                    headers={**ed["h"], "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml"
+                             ".sheet", "X-VB-File-Name": "brs.xlsx"})
+    assert r.status_code == 422 and "At most 1 rows" in r.json()["detail"]
+
+
+def test_the_links_at_export_cell_verifies_only_for_its_own_row_and_list():
+    """§7.4, N2: the MAC covers the token's claims and the list — another row, version or list does not verify."""
+    from services.bulk import Claims, links_cell, read_links_cell
+    cell = links_cell(7, "function_requirement", 11, 3, ["BR-0005", "BR-0003", "BR-0005"])
+    assert cell.startswith("BR-0003, BR-0005 | ")
+    assert read_links_cell(cell, Claims(7, "function_requirement", 11, 3)) == ["BR-0003", "BR-0005"]
+    assert read_links_cell(cell, Claims(7, "function_requirement", 12, 3)) is None
+    assert read_links_cell(cell, Claims(7, "function_requirement", 11, 4)) is None
+    assert read_links_cell(cell.replace("BR-0003, ", ""), Claims(7, "function_requirement", 11, 3)) is None
+    empty = links_cell(7, "issue", 2, 1, [])
+    assert read_links_cell(empty, Claims(7, "issue", 2, 1)) == []

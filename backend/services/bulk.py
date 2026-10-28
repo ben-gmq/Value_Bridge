@@ -40,7 +40,8 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.types import Text
 
 from config import get_settings
-from models import BfcNode, BusinessRequirement, DataEntity, DataField, ImportBatch, ImportRow
+from models import (AppUser, AuditEvent, BfcNode, BusinessRequirement, DataEntity, DataField, ImportBatch,
+                    ImportRow)
 from services import audit, code_master, components, errors, xlsx
 from services import business_requirement as br_service
 from services import data_entity as de_service
@@ -167,6 +168,8 @@ class Target:
     validate: Callable[[Ctx, list[Staged]], None]
     apply: Callable[[Ctx, list[Staged]], None]
     component: str | None = None                # D-37: checked at validate and commit (§5.2)
+    max_rows: int | None = None                 # a lower cap than xlsx.MAX_ROWS (slice 1e, P7)
+    reupload_warning: bool = False              # warn when this file was committed before (slice 1e, P1)
 
     @property
     def codes(self) -> tuple[str, ...]:
@@ -916,6 +919,96 @@ def changed(current, value) -> bool:
     return not _same(current, value)
 
 
+ROW_CAP_1E = 2_000                                          # P7: one file, one transaction, bounded
+
+
+def _links_mac(claims: str, numbers: list[str]) -> str:
+    key = get_settings().row_token_key.encode()
+    digest = hmac.new(key, b"vb-links|" + claims.encode() + b"|" + ",".join(numbers).encode(),
+                      hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def links_cell(project_id: int, table: str, row_id: int, row_version: int, numbers) -> str:
+    """The signed links-at-export cell (§7.4, N2): the BR numbers linked when the row was exported, and a MAC over
+    the row token's claims plus that list — so a cell copied to another row, or edited, does not verify."""
+    nums = sorted(set(numbers))
+    claims = f"{TOKEN_VERSION}.{project_id}.{table}.{row_id}.{row_version}"
+    return f"{', '.join(nums)} | {_links_mac(claims, nums)}"
+
+
+def read_links_cell(cell: str | None, tok: Claims) -> list[str] | None:
+    """The BR numbers a genuine links-at-export cell carries for this token's row, or None."""
+    if cell is None:
+        return None
+    listed, sep, mac = cell.rpartition("|")
+    if not sep:
+        return None
+    nums = sorted({n.strip().upper() for n in listed.split(",") if n.strip()})
+    claims = f"{TOKEN_VERSION}.{tok.project_id}.{tok.table}.{tok.row_id}.{tok.row_version}"
+    return nums if hmac.compare_digest(_links_mac(claims, nums), mac.strip()) else None
+
+
+def br_list(value: str | None) -> list[str]:
+    """A br_numbers cell: comma, semicolon or line separated, upper-cased; duplicates dropped, first order kept."""
+    out: list[str] = []
+    for part in re.split(r"[,;\n]", value or ""):
+        n = part.strip().upper()
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def live_brs(db: Session, project_id: int, numbers, lock: bool = False) -> dict[str, BusinessRequirement]:
+    """This project's live BRs by number; FOR SHARE at commit, so a retire waits."""
+    if not numbers:
+        return {}
+    q = select(BusinessRequirement).where(BusinessRequirement.project_id == project_id, BusinessRequirement.is_active,
+                                          BusinessRequirement.br_number.in_(sorted(set(numbers))))
+    if lock:
+        q = q.with_for_update(read=True, of=BusinessRequirement)
+    return {br.br_number: br for br in db.scalars(q.order_by(BusinessRequirement.br_number))}
+
+
+def check_links(r: Staged, live_numbers: set[str], at_export: list[str] | None, cell: list[str],
+                found: dict[str, BusinessRequirement]) -> list[str]:
+    """§7.0 "BRs to add" (P5, D1, N6) for an existing row: returns the additions; errors and warnings go on the row.
+    `live_numbers` are the BRs linked now; `at_export` the signed cell's list."""
+    key = r.business_key
+    if at_export is None:
+        r.errors.append(msg("LINKS_TOKEN_INVALID", "The links-at-export cell is not one VB issued, or it was edited. "
+                            "Re-export.", "br_links_at_export", key=key))
+        return []
+    removed = [n for n in cell if n in at_export and n not in live_numbers]
+    for n in removed:                                       # N6: only when the file still lists it
+        r.errors.append(msg("ROW_STALE", f"{n} was unlinked on screen since your export. Re-export.", "br_numbers",
+                            key=key, br=n))
+    omitted = [n for n in at_export if n not in cell and n in live_numbers]
+    if omitted:
+        r.warnings.append(msg("LINKS_ADD_ONLY", f"Links are only added by file: {', '.join(omitted)} stays linked. "
+                              "Remove a link on screen.", "br_numbers", brs=", ".join(omitted)))
+    adds = [n for n in cell if n not in at_export and n not in live_numbers]
+    for n in adds:
+        if n not in found:
+            r.errors.append(msg("NOT_FOUND", f"{n} is not a live BR of this project.", "br_numbers", key=n))
+    return [n for n in adds if n in found] if not removed else []
+
+
+def reupload_warning(db: Session, project_id: int, target: "Target", sha: str) -> dict | None:
+    """P1: the same file committed before to this project and target — named by date and committer."""
+    hit = db.execute(select(AuditEvent.occurred_at, AppUser.display_name)
+                     .outerjoin(AppUser, AppUser.app_user_id == AuditEvent.app_user_id)
+                     .where(AuditEvent.event_type == "IMPORT_COMMITTED", AuditEvent.project_id == project_id,
+                            AuditEvent.detail["file_sha256"].astext == sha,
+                            AuditEvent.detail["entity"].astext == target.code)
+                     .order_by(AuditEvent.occurred_at.desc()).limit(1)).first()
+    if hit is None:
+        return None
+    when, who = hit
+    return msg("FILE_COMMITTED_BEFORE", f"This exact file was committed on {when:%Y-%m-%d} by {who or 'someone'}. "
+               "Re-export before editing again.", None, date=f"{when:%Y-%m-%d}", by=who)
+
+
 # ---- BUSINESS_REQUIREMENT (slice 1e-a, spec §7.1) -----------------------------------------------
 
 BR_COLUMNS = (
@@ -1054,7 +1147,7 @@ def _br_apply(ctx: Ctx, rows: list[Staged]) -> None:
 
 BUSINESS_REQUIREMENT = Target("BUSINESS_REQUIREMENT", "business-requirements", "Business requirements",
                               "business_requirement", BR_COLUMNS, BR_COMPARE, _br_export_rows, _br_current,
-                              _br_validate, _br_apply)
+                              _br_validate, _br_apply, max_rows=ROW_CAP_1E, reupload_warning=True)
 
 # A workbook of several targets' sheets, one batch per sheet (S4-12): template and export only.
 BOOKS: dict[str, tuple[Target, ...]] = {"data-model": (DATA_ENTITY, DATA_FIELD)}
@@ -1208,6 +1301,9 @@ def _read(body: bytes, target: Target) -> xlsx.SheetRead:
         sheet = xlsx.read_rows(body, target.code, target.codes)
     if not sheet.rows:
         raise HTTPException(422, "The sheet has no data rows.")
+    if target.max_rows is not None and len(sheet.rows) > target.max_rows:
+        raise HTTPException(422, f"At most {target.max_rows:,} rows per file ({len(sheet.rows):,} given). "
+                                 "Split the file.")
     return sheet
 
 
@@ -1236,6 +1332,8 @@ def validate(db: Session, actor_id: int, project_id: int, target: Target, body: 
 
     status = _statuses(db)
     warnings = _file_warnings(sheet)
+    if target.reupload_warning and (seen := reupload_warning(db, project_id, target, sha)) is not None:
+        warnings.append(seen)
     batch = ImportBatch(project_id=project_id, target_entity=target.code, file_name=file_name,
                         uploaded_by_user_id=actor_id, status_code_id=status["VALIDATING"],
                         file_warning_detail=warnings)
