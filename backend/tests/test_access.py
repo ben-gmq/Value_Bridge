@@ -374,7 +374,8 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
                  "/api/v1/issues/{id}/brs",                                        # the linked BR's statement
                  "/api/v1/projects/{project_id}/phases", "/api/v1/phases/{id}",    # slice 15: the wave's name
                  "/api/v1/projects/{project_id}/phase-plan", "/api/v1/solutions/{id}/phase-split",
-                 "/api/v1/solutions/{id}/dependencies"):                           # the prerequisite's name
+                 "/api/v1/solutions/{id}/dependencies",                            # the prerequisite's name
+                 "/api/v1/projects/{project_id}/traceability"):                    # slice 1f: the FR name
         assert must in seen_by_admin, must                                              # positive control
     assert called > 200
     # slice 8 (sara L6): the parameterised baseline reads, as admin (positive) and as each non-member
