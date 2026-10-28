@@ -46,7 +46,8 @@ and grant guards replaced by the SHA-freeze pattern (expect the 0077 / 0076 bodi
 Downgrade refuses if any approval was made alone or the setting is or ever was 1.
 
 ## Open for Ben (the build takes the recommendation and flags it)
-- **A-Q1** Under 1, does the approver still need admin rights at least 30 days old? *Default: kept (unchanged rule).*
+- **A-Q1** Under 1, does a removal's approver still need admin rights at least 30 days old? *Default: kept (unchanged
+  rule; AR-20 is a purge (project removal) rule — a grant approval never had it).*
 - **A-Q2** Under 1, may the same admin also run the removal (today the requester may not run it)? *Recommended: yes,
   only under 1 — otherwise a sole admin can never finish a removal.*
 - **A-Q3** Server refuses to start when the database says single-owner but `.env` lacks

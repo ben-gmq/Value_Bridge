@@ -611,3 +611,7 @@ place.
   checks only the version row, not that 0079's objects survive the refusal.
 - **2026-10-28 · slice 1e-b piece (a1), Flow file dialog (`sara`):** (L) "has direct steps" on the DFD screen is
   read from the `hier_code` format; a parent id in the DFD graph payload would make it exact.
+- **2026-10-28 · approvers setting, test-checker trial (Ren):** (L) acceptance 4's "the audit carries approved
+  alone" for a removal (`services/purge.py` `PURGE_APPROVED`) is built but no test asserts it — the grant's is. Same
+  trial: the setting-log test's tie-prone sort was fixed in the commit; "under 1 the 30-day rule does not reach
+  grants" is not a gap — AR-20 is a purge (project removal) rule only (spec A-Q1 wording made exact).

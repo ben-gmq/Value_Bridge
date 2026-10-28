@@ -95,7 +95,7 @@ def test_only_the_owner_naming_an_operator_changes_it_and_every_change_is_one_lo
     settings(owner, kind="LOCAL_SINGLE_OWNER", operator="Ben (owner)")
     settings(owner, n=1, operator="Ben (owner)")
     log = [tuple(r) for r in run_all(owner, "SELECT kind_from, kind_to, approvers_from, approvers_to, operator_name, "
-                                            "db_session_user FROM vb_instance_setting_log ORDER BY 1 NULLS FIRST")]
+                                            "db_session_user FROM vb_instance_setting_log ORDER BY vb_instance_setting_log_id")]
     assert log[-2:] == [(None, "LOCAL_SINGLE_OWNER", 2, 2, "Ben (owner)", "vb_owner"),
                         ("LOCAL_SINGLE_OWNER", "LOCAL_SINGLE_OWNER", 2, 1, "Ben (owner)", "vb_owner")]
     assert "append-only" in refused(owner, "UPDATE vb_instance_setting_log SET operator_name = 'x'")
@@ -109,7 +109,8 @@ def run_all(eng, sql, **kw):
 
 
 def test_under_two_the_requester_still_cannot_approve_even_on_a_local_installation(two, owner):
-    """Acceptance 3: LOCAL_SINGLE_OWNER alone changes nothing — the setting must also be 1."""
+    """Under 2 (beside acceptance 3, which the slice 16 and 17 suites prove unchanged): declaring LOCAL_SINGLE_OWNER
+    alone changes nothing — the setting must also be 1."""
     stamp(owner)
     settings(owner, kind="LOCAL_SINGLE_OWNER")
     seed_bootstrap(owner, two["a1"])
@@ -118,8 +119,9 @@ def test_under_two_the_requester_still_cannot_approve_even_on_a_local_installati
 
 
 def test_under_one_a_sole_admin_requests_and_approves_a_removal_flagged_and_the_30_days_still_apply(two, owner):
-    """Acceptance 4, A-Q1: one live admin asks and approves; the approval is flagged; rights under 30 days old are
-    refused as before."""
+    """Acceptance 4 (its run: the next test), A-Q1: one live admin asks and approves; the approval is flagged; rights
+    under 30 days old are refused as before — a purge (project removal) rule only (AR-20); a grant
+    approval never had it."""
     single_owner(owner)
     seed_bootstrap(owner, two["a1"])                                                     # approved just now
     pp = request(app_engine, two)
@@ -164,7 +166,7 @@ def test_an_approval_made_alone_runs_under_one_and_never_once_the_setting_is_bac
 
 
 def test_under_one_a_sole_admin_grants_admin_rights_to_an_account_they_created_flagged(client, world, owner):
-    """Acceptance 5: AR-24 and the independence check give way under 1; a target never approves their own grant."""
+    """Acceptance 5: AR-24 and the independence check give way under 1; the grant and its audit are flagged."""
     a1 = run(owner, "SELECT app_user_id FROM app_user WHERE email = 'admin@example.test'")[0]
     seed_bootstrap(owner, a1)
     target = world["users"]["editor"]                                                    # created by a1 (world)
