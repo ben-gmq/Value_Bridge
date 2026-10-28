@@ -236,3 +236,27 @@ def test_the_operator_report_prints_every_section(frozen, db, owner):
     _held_archive(owner, frozen)
     text_out = "\n".join(_lines(run(db, frozen)))
     assert text_out.startswith("Weekly archive check — 0 due") and "HELD     GONE" in text_out
+
+
+def test_the_report_lists_rejected_and_failed_imports_without_failing_the_run(frozen, db, owner, monkeypatch, capsys):
+    """Slice 1e P8 / N7: per target, the last 7 days' rejected batches and failed commits; information only."""
+    from scripts import weekly_check as script
+    with owner.begin() as c:
+        p = frozen["p"]
+        rejected = c.execute(text("SELECT code_id FROM code_master WHERE category = 'IMPORT_STATUS' AND code = 'REJECTED' "
+                                  "AND project_id IS NULL")).scalar_one()
+        ids = [c.execute(text("INSERT INTO import_batch (project_id, target_entity, file_name, uploaded_by_user_id, "
+                              "status_code_id) VALUES (:p, :t, 'x.xlsx', :u, :s) RETURNING import_batch_id"),
+                         {"p": p, "t": t, "u": frozen["admin"], "s": rejected}).scalar_one()
+               for t in ("ISSUE", "ISSUE", "FUNCTION_REQUIREMENT")]
+        c.execute(text("INSERT INTO audit_event (event_type, app_user_id, project_id, target_table, target_id, detail) "
+                       "VALUES ('IMPORT_COMMIT_FAILED', :u, :p, 'import_batch', :b, '{}')"),
+                  {"u": frozen["admin"], "p": p, "b": ids[0]})
+    rep = run(db, frozen)
+    assert rep["imports"] == [{"target": "FUNCTION_REQUIREMENT", "rejected": 1, "failed_commits": 0},
+                              {"target": "ISSUE", "rejected": 2, "failed_commits": 1}]
+    monkeypatch.setattr("sys.argv", ["weekly_check", "--actor-email", "admin@example.test", "--operator", "IS"])
+    with pytest.raises(SystemExit) as out:
+        script.main()
+    assert out.value.code == 0                                                        # N7: never the exit code
+    assert "IMPORTS  ISSUE: 2 rejected, 1 failed commit(s)" in capsys.readouterr().out

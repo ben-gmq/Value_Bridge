@@ -19,6 +19,7 @@ import { useBackGuard } from '../../app/backGuard';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useComponents } from '../../app/useComponents';
+import { ListImportActions } from '../../components/ImportWizard';
 import { Page } from '../../components/Page';
 import { Card, Code, InfoTip, LevelBadge, Segmented, Tag } from '../../components/kit';
 import { MONO } from '../../theme/theme';
@@ -362,6 +363,10 @@ export default function ProcessesPage() {
           <Segmented label={t('processes.chart.label')} value={bfcSet} onChange={chooseSet}
             options={['TO_BE', 'AS_IS'].map((v) => ({ value: v, label: t(`processes.chart.${v}`) }))} />
         )}
+        {/* Slice 1e-a (§7.1): D-53 gives BRs no list page, so their Excel round trip sits on the chart */}
+        <ListImportActions projectId={projectId} target="business-requirements" canEdit={canEdit}
+          exportLabel="data.import.exportBrs" importLabel="data.import.importBrs"
+          onNotice={setNotice} onError={setError} />
         {canEdit && <Button variant="contained" startIcon={<AddRounded />}
           onClick={() => { setError(''); setAdding({ parent: null }); }}>{t('processes.addTop')}</Button>}
       </>}>

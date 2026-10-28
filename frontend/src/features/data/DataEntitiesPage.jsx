@@ -13,7 +13,7 @@ import { dataApi, importApi } from '../../api/scope';
 import { errorText } from '../../api/client';
 import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
-import { ImportWizard } from '../../components/ImportWizard';
+import { DATA_TARGETS, ImportWizard } from '../../components/ImportWizard';
 import { Card, Code, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
@@ -170,7 +170,7 @@ export default function DataEntitiesPage() {
       {adding && <AddEntityDialog projectId={projectId} onClose={() => setAdding(false)}
         onDone={(de) => { qc.invalidateQueries({ queryKey: keys.entities(projectId) });
           setNotice(t('data.created', { number: de.de_number })); }} />}
-      {importing && <ImportWizard projectId={projectId} initialTarget={importing} onClose={() => setImporting(null)} />}
+      {importing && <ImportWizard projectId={projectId} targets={DATA_TARGETS} initialTarget={importing} onClose={() => setImporting(null)} />}
       <Snackbar open={Boolean(notice)} autoHideDuration={3000} onClose={() => setNotice('')} message={notice} />
     </Page>
   );

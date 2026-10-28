@@ -15,7 +15,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
-from services import audit, effort, interface, lifecycle, numbering
+from services import audit, components, effort, interface, lifecycle, numbering
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -171,7 +171,9 @@ def create_fr(db: Session, actor_id: int, project_id: int, name: str, fr_type_co
     must be a live solution of that BR (422)."""
     name = _name(name)
     ftype = _type(db, project_id, fr_type_code)
-    br = scoped_br(db, project_id, br_id) if br_id is not None else None
+    br = scoped_br(db, project_id, br_id) if br_id is not None else None    # 404 before 409 COMPONENT_OFF
+    if solution_id is not None:
+        components.require_on(db, project_id, "SOLUTION")      # S1: the screen and the import share the check
     sol = None
     specified = next((c for c in resolve(db, project_id, "FR_FULFILMENT_STATUS") if c.code == "SPECIFIED"), None)
     if specified is None:                                  # L6: detail in the log only
@@ -208,8 +210,10 @@ _UNSET = object()
 
 def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: int, fields: dict,
               fr_type_code: str | None, status_code: str | None,
-              solution_id=_UNSET) -> tuple[FunctionRequirement, list[str]]:
+              solution_id=_UNSET, commit: bool = True) -> tuple[FunctionRequirement, list[str]]:
     """`solution_id` is _UNSET when not sent, None to unlink, an id to (re)link."""
+    if solution_id is not _UNSET and solution_id is not None:
+        components.require_on(db, fr.project_id, "SOLUTION")  # S1: the screen and the import share the check
     lifecycle.lock(db, fr)                  # FOR UPDATE: a type change serialises with an interface PUT (sara 6b-2 L1)
     lifecycle.check_live(fr, row_version)
     before = {"previous_solution_number": fr.solution_row.solution_number if fr.solution_row else None,
@@ -250,6 +254,8 @@ def update_fr(db: Session, actor_id: int, fr: FunctionRequirement, row_version: 
     warnings = _warnings(db, fr, sol)
     if moved_days:                                         # DR6c-P2: a type change that moved the days says so
         warnings.append("effort_changed")
+    if not commit:                                         # slice 1e: an import writes more in this transaction
+        return fr, warnings
     db.commit()
     db.refresh(fr)
     fr.effort_change = {"previous_days": moved_days[0], "new_days": moved_days[1]} if moved_days else None
@@ -373,9 +379,10 @@ def drift_warnings(db: Session, fr_ids, include_no_br: bool = False) -> list[dic
 
 
 def link_fr(db: Session, actor_id: int, br: BusinessRequirement, fr_id: int, coverage_note: str | None,
-            commit: bool = True) -> tuple[BrFunctionRequirement, list[dict]]:
+            commit: bool = True, drift: bool = True) -> tuple[BrFunctionRequirement, list[dict]]:
     """Link an FR to a BR (slice10b §1.2). Lock order (SR-5 extended): step → BR → FR, all FOR SHARE, then the
-    liveness checks, then the pair's row FOR UPDATE through the full grain. A dead row is relinked (S1-7)."""
+    liveness checks, then the pair's row FOR UPDATE through the full grain. A dead row is relinked (S1-7).
+    `drift=False` (slice 1e, P7): an import skips the per-link drift query; its preview carries the warnings."""
     fr = db.scalars(select(FunctionRequirement).where(FunctionRequirement.fr_id == fr_id,
                                                       FunctionRequirement.project_id == br.project_id)).one_or_none()
     if fr is None:                                         # DR1-S1: another project's FR is the same 404
@@ -399,7 +406,7 @@ def link_fr(db: Session, actor_id: int, br: BusinessRequirement, fr_id: int, cov
         lifecycle.relink(db, actor_id, row, detail={"previous_coverage_note": row.coverage_note})
         row.coverage_note = coverage_note
     db.flush()
-    warnings = drift_warnings(db, [fr.fr_id])              # Q-6: allowed, and the response says so
+    warnings = drift_warnings(db, [fr.fr_id]) if drift else []    # Q-6: allowed, and the response says so
     if commit:
         db.commit()
         db.refresh(row)

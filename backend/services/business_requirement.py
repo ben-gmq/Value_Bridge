@@ -45,7 +45,8 @@ def list_brs(db: Session, project_id: int, include_retired: bool = False) -> lis
 
 
 def update_br(db: Session, actor_id: int, br: BusinessRequirement, row_version: int,
-              fields: dict, status_code: str | None) -> BusinessRequirement:
+              fields: dict, status_code: str | None, commit: bool = True) -> BusinessRequirement:
+    """`commit=False` (slice 1e): the import's form — flush only, the pipeline owns the transaction."""
     lifecycle.check_live(br, row_version)
     for k in EDITABLE:
         if k in fields:
@@ -56,6 +57,9 @@ def update_br(db: Session, actor_id: int, br: BusinessRequirement, row_version: 
         br.status_code_id = validate_required_code(db, br.project_id, "BR_STATUS", status_code,
                                                    "status_code").code_id
     br.updated_by = actor_id
+    if not commit:
+        db.flush()
+        return br
     db.commit()
     db.refresh(br)                 # reload the code relationship with the new id
     return br

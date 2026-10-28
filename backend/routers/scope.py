@@ -482,10 +482,7 @@ def list_frs(project_id: int, include_retired: bool = False, unlinked: bool = Fa
 @router.post("/projects/{project_id}/function-requirements", response_model=FrOut, status_code=201,
              **_edit_fr.route)
 def create_fr(project_id: int, body: FrIn, user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
-    if body.br_id is not None:
-        fr_service.scoped_br(db, project_id, body.br_id)                 # 404 before 409 COMPONENT_OFF
-    if body.solution_id is not None:
-        components.require_on(db, project_id, "SOLUTION")
+    # the SOLUTION check (after the BR's 404) lives in the service, shared with the import (slice 1e, S1)
     fr, warnings = fr_service.create_fr(db, _uid(user), project_id, body.fr_name, body.fr_type_code,
                                         body.solution_id, body.model_dump(include={"description", "acceptance_note"}),
                                         br_id=body.br_id)
@@ -503,8 +500,6 @@ def update_fr(id: int, body: FrPatch, fr: FunctionRequirement = Depends(_fr_w.de
     sent = body.model_dump(exclude_unset=True)
     fields = {k: sent[k] for k in fr_service.EDITABLE if k in sent}
     extra = {"solution_id": sent["solution_id"]} if "solution_id" in sent else {}
-    if extra.get("solution_id") is not None:
-        components.require_on(db, fr.project_id, "SOLUTION")
     fr, warnings = fr_service.update_fr(db, _uid(user), fr, body.row_version, fields,
                                         sent.get("fr_type_code"), sent.get("fulfilment_status_code"), **extra)
     return _fr_out(fr, warnings).model_copy(update={"effort_change": getattr(fr, "effort_change", None)})

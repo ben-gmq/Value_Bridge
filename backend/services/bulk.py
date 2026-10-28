@@ -40,8 +40,13 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.types import Text
 
 from config import get_settings
-from models import DataEntity, DataField, ImportBatch, ImportRow
-from services import audit, code_master, components, errors, xlsx
+from models import (AppUser, AuditEvent, BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, CodeMaster,
+                    DataEntity, DataField, FrInterface, FunctionRequirement, ImportBatch, ImportRow, Issue, IssueBr,
+                    OrgUnit, Solution, Stakeholder)
+from services import audit, code_master, components, effort, errors, interface, xlsx
+from services import business_requirement as br_service
+from services import function_requirement as fr_service
+from services import issue as issue_service
 from services import data_entity as de_service
 
 OPERATIONAL_SQLSTATES = frozenset({"40001", "40P01", "55P03", "57014"})    # 4a-R7
@@ -142,6 +147,7 @@ class Staged:
                                                 # different resolution at commit is an error
     info: dict | None = None                    # display only: resolved parents, the relationship
     plan: dict = field(default_factory=dict)    # the target's working notes from validate to apply
+    token_key: str | None = None                # the key column a token message points at (slice 1e)
 
 
 @dataclass
@@ -166,6 +172,8 @@ class Target:
     validate: Callable[[Ctx, list[Staged]], None]
     apply: Callable[[Ctx, list[Staged]], None]
     component: str | None = None                # D-37: checked at validate and commit (§5.2)
+    max_rows: int | None = None                 # a lower cap than xlsx.MAX_ROWS (slice 1e, P7)
+    reupload_warning: bool = False              # warn when this file was committed before (slice 1e, P1)
 
     @property
     def codes(self) -> tuple[str, ...]:
@@ -173,7 +181,7 @@ class Target:
 
     @property
     def token_column(self) -> str | None:
-        return next((c.code for c in self.columns if c.protected), None)
+        return "row_token" if "row_token" in self.codes else None     # an FR / issue sheet locks a second column
 
 
 def _same(current, value) -> bool:
@@ -904,10 +912,861 @@ def _df_apply(ctx: Ctx, rows: list[Staged]) -> None:
 DATA_FIELD = Target("DATA_FIELD", "data-fields", "Data fields", DataField.__tablename__,
                     DF_COLUMNS, DF_COMPARE, _df_export_rows, _df_current, _df_validate, _df_apply)
 
+# ---- shared by the slice 1e targets (spec §7.0) ----------------------------------------------
+
+def picker_codes(db: Session, project_id: int, category: str) -> set[str]:
+    """The codes a new or changed value may take: the project's picker list, hidden codes left out (D4, R5)."""
+    return {r.code for r in code_master.resolve(db, project_id, category, for_picker=True)}
+
+
+def changed(current, value) -> bool:
+    return not _same(current, value)
+
+
+ROW_CAP_1E = 2_000                                          # P7: one file, one transaction, bounded
+
+
+def _links_mac(claims: str, numbers: list[str]) -> str:
+    key = get_settings().row_token_key.encode()
+    digest = hmac.new(key, b"vb-links|" + claims.encode() + b"|" + ",".join(numbers).encode(),
+                      hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def links_cell(project_id: int, table: str, row_id: int, row_version: int, numbers) -> str:
+    """The signed links-at-export cell (§7.4, N2): the BR numbers linked when the row was exported, and a MAC over
+    the row token's claims plus that list — so a cell copied to another row, or edited, does not verify."""
+    nums = sorted(set(numbers))
+    claims = f"{TOKEN_VERSION}.{project_id}.{table}.{row_id}.{row_version}"
+    return f"{', '.join(nums)} | {_links_mac(claims, nums)}"
+
+
+def read_links_cell(cell: str | None, tok: Claims) -> list[str] | None:
+    """The BR numbers a genuine links-at-export cell carries for this token's row, or None."""
+    if cell is None:
+        return None
+    listed, sep, mac = cell.rpartition("|")
+    if not sep:
+        return None
+    nums = sorted({n.strip().upper() for n in listed.split(",") if n.strip()})
+    claims = f"{TOKEN_VERSION}.{tok.project_id}.{tok.table}.{tok.row_id}.{tok.row_version}"
+    return nums if hmac.compare_digest(_links_mac(claims, nums), mac.strip()) else None
+
+
+def br_list(value: str | None) -> list[str]:
+    """A br_numbers cell: comma, semicolon or line separated, upper-cased; duplicates dropped, first order kept."""
+    out: list[str] = []
+    for part in re.split(r"[,;\n]", value or ""):
+        n = part.strip().upper()
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def live_brs(db: Session, project_id: int, numbers, lock: bool = False) -> dict[str, BusinessRequirement]:
+    """This project's live BRs by number; FOR SHARE at commit, so a retire waits."""
+    if not numbers:
+        return {}
+    q = select(BusinessRequirement).where(BusinessRequirement.project_id == project_id, BusinessRequirement.is_active,
+                                          BusinessRequirement.br_number.in_(sorted(set(numbers))))
+    if lock:
+        q = q.with_for_update(read=True, of=BusinessRequirement)
+    return {br.br_number: br for br in db.scalars(q.order_by(BusinessRequirement.br_number))}
+
+
+def check_links(r: Staged, live_numbers: set[str], at_export: list[str] | None, cell: list[str],
+                found: dict[str, BusinessRequirement]) -> list[str]:
+    """§7.0 "BRs to add" (P5, D1, N6) for an existing row: returns the additions; errors and warnings go on the row.
+    `live_numbers` are the BRs linked now; `at_export` the signed cell's list."""
+    key = r.business_key
+    if at_export is None:
+        r.errors.append(msg("LINKS_TOKEN_INVALID", "The links-at-export cell is not one VB issued, or it was edited. "
+                            "Re-export.", "br_links_at_export", key=key))
+        return []
+    removed = [n for n in cell if n in at_export and n not in live_numbers]
+    for n in removed:                                       # N6: only when the file still lists it
+        r.errors.append(msg("ROW_STALE", f"{n} was unlinked on screen since your export. Re-export.", "br_numbers",
+                            key=key, br=n))
+    omitted = [n for n in at_export if n not in cell and n in live_numbers]
+    if omitted:
+        r.warnings.append(msg("LINKS_ADD_ONLY", f"Links are only added by file: {', '.join(omitted)} stays linked. "
+                              "Remove a link on screen.", "br_numbers", brs=", ".join(omitted)))
+    adds = [n for n in cell if n not in at_export and n not in live_numbers]
+    for n in adds:
+        if n not in found:
+            r.errors.append(msg("NOT_FOUND", f"{n} is not a live BR of this project.", "br_numbers", key=n))
+    return [n for n in adds if n in found] if not removed else []
+
+
+def reupload_warning(db: Session, project_id: int, target: "Target", sha: str) -> dict | None:
+    """P1: the same file committed before to this project and target — named by date and committer."""
+    hit = db.execute(select(AuditEvent.occurred_at, AppUser.display_name)
+                     .outerjoin(AppUser, AppUser.app_user_id == AuditEvent.app_user_id)
+                     .where(AuditEvent.event_type == "IMPORT_COMMITTED", AuditEvent.project_id == project_id,
+                            AuditEvent.detail["file_sha256"].astext == sha,
+                            AuditEvent.detail["entity"].astext == target.code)
+                     .order_by(AuditEvent.occurred_at.desc()).limit(1)).first()
+    if hit is None:
+        return None
+    when, who = hit
+    return msg("FILE_COMMITTED_BEFORE", f"This exact file was committed on {when:%Y-%m-%d} by {who or 'someone'}. "
+               "Re-export before editing again.", None, date=f"{when:%Y-%m-%d}", by=who)
+
+
+# ---- BUSINESS_REQUIREMENT (slice 1e-a, spec §7.1) -----------------------------------------------
+
+BR_COLUMNS = (
+    Column("br_number", "BR number", max_len=20, width=12),
+    Column("hier_code", "Chart code (check only)", max_len=40, width=12),
+    Column("step_name", "Process step (read only)", max_len=200, width=32),
+    Column("br_statement", "Statement", max_len=8000, width=60),
+    Column("status_code", "Status", max_len=40, category="BR_STATUS", width=16),
+    Column("row_token", "Row token (do not edit)", max_len=200, protected=True, width=14),
+)
+BR_COMPARE = ("br_statement", "status_code")
+
+
+def _brs_with_steps(db: Session, project_id: int, numbers: list[str] | None = None, lock: bool = False):
+    """(BR, its step) for this project's live BRs — every one, or those numbered; locked for a commit."""
+    q = (select(BusinessRequirement, BfcNode)
+         .join(BfcNode, (BfcNode.bfc_node_id == BusinessRequirement.bfc_node_id)
+               & (BfcNode.project_id == BusinessRequirement.project_id))
+         .where(BusinessRequirement.project_id == project_id, BusinessRequirement.is_active)
+         .order_by(BusinessRequirement.br_number))
+    if numbers is not None:
+        q = q.where(BusinessRequirement.br_number.in_(numbers))
+    if lock:
+        q = q.with_for_update(of=BusinessRequirement)
+    return db.execute(q.execution_options(populate_existing=True)).all()
+
+
+def _br_values(br) -> dict:
+    return {"br_statement": br.br_statement, "status_code": br.status_code}
+
+
+def _br_export_rows(db: Session, project_id: int) -> list[dict]:
+    return [{"br_number": br.br_number, "hier_code": node.hier_code, "step_name": node.node_name, **_br_values(br),
+             "row_token": row_token(project_id, BusinessRequirement.__tablename__, br.br_id, br.row_version)}
+            for br, node in _brs_with_steps(db, project_id)]
+
+
+def _br_current(db: Session, project_id: int, ids: list[int]) -> dict[int, dict]:
+    if not ids:
+        return {}
+    rows = db.scalars(select(BusinessRequirement).where(BusinessRequirement.project_id == project_id,
+                                                       BusinessRequirement.br_id.in_(ids)))
+    return {br.br_id: _br_values(br) for br in rows}
+
+
+def _br_validate(ctx: Ctx, rows: list[Staged]) -> None:
+    first: dict[str, int] = {}
+    for r in rows:
+        number = r.cells["br_number"]
+        if number is None:
+            if not any(e["column"] == "br_number" for e in r.errors):
+                r.errors.append(msg("BR_NUMBER_REQUIRED", "BRs are created with their step — use the flow import "
+                                    "to add steps.", "br_number"))
+            continue
+        number = r.cells["br_number"] = number.strip().upper()
+        if number in first:
+            r.errors.append(msg("DUPLICATE_KEY", f"{number} also appears on row {first[number]}.", "br_number",
+                                key=number, first_row=first[number]))
+            continue
+        first[number] = r.sheet_row_no
+        r.business_key = number
+    found = {br.br_number: (br, node) for br, node in
+             _brs_with_steps(ctx.db, ctx.project_id, sorted(first), lock=ctx.for_commit)} if first else {}
+    statuses = picker_codes(ctx.db, ctx.project_id, "BR_STATUS")
+    for r in rows:
+        number = r.business_key
+        if number is None or r.errors:
+            continue
+        hit = found.get(number)
+        if hit is None:
+            r.errors.append(msg("NOT_FOUND", f"{number} is not a live BR of this project.", "br_number", key=number))
+            continue
+        br, node = hit
+        tok = r.token
+        if tok is None:
+            if r.cells["row_token"] is None:
+                r.errors.append(msg("EXPORT_FIRST", f"{number}: export first to update. A BR row needs the row "
+                                    "token from an export.", "br_number", key=number))
+            continue
+        if tok.row_id != br.br_id:
+            r.errors.append(msg("TOKEN_ROW_MISMATCH", f"This row's token belongs to another BR, not {number}: the "
+                                "rows were sorted or shifted. Re-export.", "br_number", key=number))
+            continue
+        current = _br_values(br)
+        if br.row_version != tok.row_version:
+            stale = [k for k in BR_COMPARE if changed(current[k], r.cells[k])]
+            if stale == ["status_code"] and current["status_code"] in br_service.SYSTEM_SET_STATUSES:     # D6
+                r.errors.append(msg("FROZEN_SINCE_EXPORT", f"{number}: a baseline was frozen since your export. "
+                                    "Re-export.", "status_code", key=number))
+            elif stale:
+                for k in stale:
+                    r.errors.append(msg("ROW_STALE", f"{number} changed since export. Current value: "
+                                        f"{_q(current[k])}", k, key=number, current=current[k]))
+            else:
+                r.errors.append(msg("ROW_STALE", f"{number} changed since export. Re-export.", None, key=number))
+            continue
+        if r.cells["hier_code"] is not None and r.cells["hier_code"] != node.hier_code:
+            r.errors.append(msg("MOVED_SINCE_EXPORT", f"{number} moved since export: now {node.hier_code}, file "
+                                f"says {r.cells['hier_code']}. Re-export.", "hier_code", key=number,
+                                current=node.hier_code))                              # R2-D1, criterion 117
+            continue
+        if r.cells["step_name"] is not None and changed(node.node_name, r.cells["step_name"]):
+            r.warnings.append(msg("STEP_NAME_IGNORED", "Step names change on the chart; this one was ignored.",
+                                  "step_name"))
+        r.target_id, r.target_row_version = br.br_id, br.row_version
+        diff = [k for k in BR_COMPARE if changed(current[k], r.cells[k])]
+        if "br_statement" in diff and r.cells["br_statement"] is None:
+            r.errors.append(msg("REQUIRED", "A BR's statement cannot be cleared.", "br_statement"))
+        if "status_code" in diff:
+            new = r.cells["status_code"]
+            if new is None:
+                r.errors.append(msg("REQUIRED", "A BR needs a status.", "status_code"))
+            elif new in br_service.SYSTEM_SET_STATUSES:
+                r.errors.append(msg("SYSTEM_SET", f"{new} is set by the baseline freeze, not by hand.",
+                                    "status_code", value=new))
+            elif new not in statuses:
+                r.errors.append(msg("CODE_UNKNOWN", f"{_q(new)} is not a status this project offers.",
+                                    "status_code", value=new))
+        r.verdict = "UPDATE" if diff else "MATCH"
+
+
+def _br_apply(ctx: Ctx, rows: list[Staged]) -> None:
+    for r in rows:
+        if r.verdict != "UPDATE":
+            continue
+        ctx.current_row = r
+        br = ctx.db.get(BusinessRequirement, r.target_id)                # locked by the re-validation
+        current = _br_values(br)
+        r.before = {**current, "row_version": br.row_version}
+        fields = {"br_statement": r.cells["br_statement"]} if changed(current["br_statement"],
+                                                                       r.cells["br_statement"]) else {}
+        status = r.cells["status_code"] if changed(current["status_code"], r.cells["status_code"]) else None
+        br_service.update_br(ctx.db, ctx.actor_id, br, r.target_row_version, fields, status, commit=False)
+    ctx.current_row = None
+
+
+BUSINESS_REQUIREMENT = Target("BUSINESS_REQUIREMENT", "business-requirements", "Business requirements",
+                              "business_requirement", BR_COLUMNS, BR_COMPARE, _br_export_rows, _br_current,
+                              _br_validate, _br_apply, max_rows=ROW_CAP_1E, reupload_warning=True)
+
+
+# ---- FUNCTION_REQUIREMENT (slice 1e-a, spec §7.2, round-2 N1/N3/N5/N6) ---------------------------------------------
+
+FR_COLUMNS = (
+    Column("fr_number", "FR number (blank = new)", max_len=20, width=12),
+    Column("fr_name", "Name", max_len=200, width=36),
+    Column("fr_type_code", "Type", max_len=40, category="FR_TYPE", width=16),
+    Column("complexity_code", "Complexity", max_len=40, category="FR_COMPLEXITY", width=14),
+    Column("solution_number", "Solution number", max_len=20, width=14),
+    Column("br_numbers", "BRs (add only)", max_len=4000, width=24),
+    Column("br_links_at_export", "BRs at export (do not edit)", max_len=4000, protected=True, width=14),
+    Column("description", "Description", max_len=4000, width=48),
+    Column("acceptance_note", "Acceptance note", max_len=4000, width=36),
+    Column("status_code", "Status", max_len=40, category="FR_FULFILMENT_STATUS", width=16),
+    Column("effort_days", "Effort days (read only)", max_len=40, width=12),
+    Column("interface_source_app", "Interface source (read only)", max_len=40, width=14),
+    Column("interface_target_app", "Interface target (read only)", max_len=40, width=14),
+    Column("row_token", "Row token (do not edit)", max_len=200, protected=True, width=14),
+)
+FR_VALUES = ("fr_name", "fr_type_code", "complexity_code", "solution_number", "description", "acceptance_note",
+             "status_code")
+FR_COMPARE = (*FR_VALUES, "links_added")                  # the preview's "links added: BR-0007" (P5)
+FR_DEFAULT_STATUS = "SPECIFIED"                           # what create_fr sets
+
+
+def _fr_values(fr: FunctionRequirement) -> dict:
+    return {"fr_name": fr.fr_name, "fr_type_code": fr.fr_type_code, "complexity_code": fr.complexity_code,
+            "solution_number": fr.solution_row.solution_number if fr.solution_row else None,
+            "description": fr.description, "acceptance_note": fr.acceptance_note,
+            "status_code": fr.fulfilment_status_code, "links_added": None}
+
+
+def _fr_links(db: Session, fr_ids: list[int]) -> dict[int, list[str]]:
+    """Each FR's live BR links, by BR number."""
+    out: dict[int, list[str]] = {i: [] for i in fr_ids}
+    if fr_ids:
+        for fr_id, number in db.execute(
+                select(BrFunctionRequirement.fr_id, BusinessRequirement.br_number)
+                .join(BusinessRequirement, BusinessRequirement.br_id == BrFunctionRequirement.br_id)
+                .where(BrFunctionRequirement.fr_id.in_(fr_ids), BrFunctionRequirement.is_active,
+                       BusinessRequirement.is_active).order_by(BusinessRequirement.br_number)):
+            out[fr_id].append(number)
+    return out
+
+
+def _frs(db: Session, project_id: int, numbers: list[str] | None = None, lock: bool = False):
+    q = (select(FunctionRequirement).where(FunctionRequirement.project_id == project_id, FunctionRequirement.is_active)
+         .order_by(FunctionRequirement.fr_number))
+    if numbers is not None:
+        q = q.where(FunctionRequirement.fr_number.in_(numbers))
+    if lock:
+        q = q.with_for_update(of=FunctionRequirement)
+    return list(db.scalars(q.execution_options(populate_existing=True)))
+
+
+def _fr_export_rows(db: Session, project_id: int) -> list[dict]:
+    frs = _frs(db, project_id)
+    links = _fr_links(db, [f.fr_id for f in frs])
+    ifaces = {fi.fr_id: fi for fi in db.scalars(select(FrInterface).where(FrInterface.project_id == project_id,
+                                                                         FrInterface.is_active))}
+    table = FunctionRequirement.__tablename__
+    out = []
+    for fr in frs:
+        fi = ifaces.get(fr.fr_id)
+        v = {k: x for k, x in _fr_values(fr).items() if k != "links_added"}
+        out.append({"fr_number": fr.fr_number, **v, "br_numbers": ", ".join(links[fr.fr_id]),
+                    "br_links_at_export": links_cell(project_id, table, fr.fr_id, fr.row_version, links[fr.fr_id]),
+                    "effort_days": str(fr.effort_days) if fr.effort_days is not None else None,
+                    "interface_source_app": fi.source_row.application_code if fi else None,     # Q-2: read only
+                    "interface_target_app": fi.target_row.application_code if fi else None,
+                    "row_token": row_token(project_id, table, fr.fr_id, fr.row_version)})
+    return out
+
+
+def _fr_current(db: Session, project_id: int, ids: list[int]) -> dict[int, dict]:
+    if not ids:
+        return {}
+    rows = db.scalars(select(FunctionRequirement).where(FunctionRequirement.project_id == project_id,
+                                                       FunctionRequirement.fr_id.in_(ids)))
+    return {fr.fr_id: _fr_values(fr) for fr in rows}
+
+
+def _codes_by(db: Session, project_id: int, category: str) -> dict[str, CodeMaster]:
+    return {c.code: c for c in code_master.resolve(db, project_id, category)}
+
+
+def _token_checks(r: Staged, row, row_id: int, number: str, what: str) -> bool:
+    """The DATA_ENTITY token rules for a numbered row: True when the row may go on."""
+    tok = r.token
+    if tok is None:
+        if r.cells["row_token"] is None:
+            r.errors.append(msg("EXPORT_FIRST", f"{number}: export first to update. {what} row needs the row token "
+                                "from an export.", r.token_key, key=number))
+        return False
+    if tok.row_id != row_id:
+        r.errors.append(msg("TOKEN_ROW_MISMATCH", f"This row's token belongs to another record, not {number}: the "
+                            "rows were sorted or shifted. Re-export.", r.token_key, key=number))
+        return False
+    if row.row_version != tok.row_version:
+        r.errors.append(msg("ROW_STALE", f"{number} changed since export. Re-export.", None, key=number))
+        return False
+    return True
+
+
+def _numbered(rows: list[Staged], key: str, noun: str) -> list[str]:
+    """Upper-case the key, mark UPDATE / INSERT, refuse a key twice; the keys found, in order."""
+    first: dict[str, int] = {}
+    for r in rows:
+        r.token_key = key
+        number = r.cells[key]
+        if number is not None:
+            number = r.cells[key] = number.strip().upper()
+        r.verdict = "UPDATE" if number else "INSERT"
+        if not number:
+            if r.token is not None:
+                r.errors.append(msg("TOKEN_ROW_MISMATCH", f"This row has a row token but no {noun} number: the rows "
+                                    "were shifted. Re-export.", key))
+            continue
+        if number in first:
+            r.errors.append(msg("DUPLICATE_KEY", f"{number} also appears on row {first[number]}.", key,
+                                key=number, first_row=first[number]))
+            continue
+        first[number] = r.sheet_row_no
+        r.business_key = number
+    return sorted(first)
+
+
+def _fr_validate(ctx: Ctx, rows: list[Staged]) -> None:
+    db, pid = ctx.db, ctx.project_id
+    numbers = _numbered(rows, "fr_number", "FR")
+    for r in rows:
+        if r.cells["fr_name"] is None:
+            r.errors.append(msg("REQUIRED", "An FR needs a name.", "fr_name"))
+    found = {fr.fr_number: fr for fr in _frs(db, pid, numbers, lock=ctx.for_commit)} if numbers else {}
+    links_now = _fr_links(db, [fr.fr_id for fr in found.values()])
+    on = components.enabled(db, pid)
+    types, cxs = _codes_by(db, pid, "FR_TYPE"), _codes_by(db, pid, "FR_COMPLEXITY")
+    pick = {c: picker_codes(db, pid, c) for c in ("FR_TYPE", "FR_COMPLEXITY", "FR_FULFILMENT_STATUS")}
+    brs = live_brs(db, pid, {n for r in rows for n in br_list(r.cells["br_numbers"])}, lock=ctx.for_commit)
+    sol_numbers = sorted({r.cells["solution_number"].strip().upper() for r in rows if r.cells["solution_number"]})
+    sols = {s.solution_number: s for s in db.scalars(select(Solution).where(
+        Solution.project_id == pid, Solution.is_active, Solution.solution_number.in_(sol_numbers)))} \
+        if sol_numbers else {}
+
+    def code_ok(r: Staged, col: str, category: str, value: str) -> None:
+        if value not in pick[category]:
+            r.errors.append(msg("CODE_UNKNOWN", f"{_q(value)} is not a value this project offers here.", col,
+                                value=value))
+
+    for r in rows:
+        c = r.cells
+        if any(e["column"] in ("row_token", "fr_number") for e in r.errors):
+            continue
+        fr = None
+        if r.verdict == "UPDATE":
+            fr = found.get(r.business_key)
+            if fr is None:
+                r.errors.append(msg("NOT_FOUND", f"{r.business_key} is not a live FR of this project.", "fr_number",
+                                    key=r.business_key))
+                continue
+            if not _token_checks(r, fr, fr.fr_id, r.business_key, "An FR"):
+                continue
+            r.target_id, r.target_row_version = fr.fr_id, fr.row_version
+
+        cur = _fr_values(fr) if fr else dict.fromkeys(FR_COMPARE)
+        v = {k: c[k] for k in FR_VALUES}
+        if v["solution_number"] is not None:
+            v["solution_number"] = v["solution_number"].strip().upper()
+        if fr is not None:                               # Q-5, N3, N5: a blank is "unchanged", never "cleared"
+            for k in ("solution_number", "complexity_code"):
+                if v[k] is None:
+                    v[k] = cur[k]
+        elif v["status_code"] is None:
+            v["status_code"] = FR_DEFAULT_STATUS
+        diff = {k for k in FR_VALUES if changed(cur[k], v[k])}
+
+        # codes: only a new or changed value is checked against the picker list (§7.0, D4, R5)
+        if "fr_type_code" in diff or fr is None:
+            if v["fr_type_code"] is None:
+                r.errors.append(msg("REQUIRED", "An FR needs a type.", "fr_type_code"))          # N1
+            else:
+                code_ok(r, "fr_type_code", "FR_TYPE", v["fr_type_code"])
+        if "status_code" in diff:
+            if v["status_code"] is None:
+                r.errors.append(msg("REQUIRED", "An FR needs a status.", "status_code"))
+            else:
+                code_ok(r, "status_code", "FR_FULFILMENT_STATUS", v["status_code"])          # Q-7: honoured
+        rating = "complexity_code" in diff and v["complexity_code"] is not None
+        if rating:
+            code_ok(r, "complexity_code", "FR_COMPLEXITY", v["complexity_code"])
+            if "EFFORT" not in on:
+                r.errors.append(msg("COMPONENT_OFF", "Rating complexity needs the Effort component, which is off "
+                                    "in this project.", "complexity_code", component="EFFORT"))      # S1
+
+        # links: "BRs to add" (§7.0, P5, D1, N6)
+        cell = br_list(c["br_numbers"])
+        if fr is None:
+            for n in cell:
+                if n not in brs:
+                    r.errors.append(msg("NOT_FOUND", f"{n} is not a live BR of this project.", "br_numbers", key=n))
+            adds = [n for n in cell if n in brs]
+            final_ids = [brs[n].br_id for n in adds]
+        else:
+            live_now = set(links_now[fr.fr_id])
+            adds = check_links(r, live_now, read_links_cell(c["br_links_at_export"], r.token), cell, brs)
+            final_ids = _br_ids_of(db, fr.fr_id) + [brs[n].br_id for n in adds]
+            if adds:
+                diff.add("links_added")
+        v["links_added"] = ", ".join(adds) or None
+        if adds:
+            r.pins["br_numbers"] = ",".join(str(brs[n].br_id) for n in adds)
+        if not final_ids:
+            r.warnings.append(msg("NO_BR", "No BR: this FR will not trace.", "br_numbers"))   # D-28; none for SOL
+
+        # solution: a live SOL- of this project (never created, D-34), answering one of the final BRs (Q-3)
+        if v["solution_number"] is not None and ("solution_number" in diff):
+            sol = sols.get(v["solution_number"])
+            if sol is None:
+                r.errors.append(msg("NOT_FOUND", f"{v['solution_number']} is not a live solution of this project.",
+                                    "solution_number", key=v["solution_number"]))
+            elif "SOLUTION" not in on:
+                r.errors.append(msg("COMPONENT_OFF", "Tagging a solution needs the Solution component, which is "
+                                    "off in this project.", "solution_number", component="SOLUTION"))   # S1
+            else:
+                r.pins["solution_number"] = sol.solution_id
+                if final_ids and not db.scalar(select(func.count()).select_from(BrSolution).where(
+                        BrSolution.solution_id == sol.solution_id, BrSolution.is_active,
+                        BrSolution.br_id.in_(final_ids))):
+                    r.errors.append(msg("SOLUTION_ANSWERS_NO_BR", f"{sol.solution_number} answers none of this "
+                                        "row's BRs. Add it to one of them first.", "solution_number",
+                                        key=sol.solution_number))
+
+        # type and complexity: the rate cells update_fr and rate_fr will need (P3c, N1, criterion 124)
+        final_type = fr.fr_type_code_row if fr is not None and "fr_type_code" not in diff else \
+            types.get(v["fr_type_code"])
+        if fr is not None and "fr_type_code" in diff and final_type is not None:
+            if (fr.fr_type_behaviour == "INTERFACE" and final_type.behaviour_code != "INTERFACE"   # behaviour
+                    and interface.live_detail_exists(db, fr.fr_id)):
+                r.errors.append(msg("INTERFACE_DETAIL", f"{fr.fr_number} has interface detail. Remove it on screen "
+                                    "first, or keep an interface type.", "fr_type_code"))
+            if fr.complexity_code_id is not None and \
+                    effort.rate_for(db, pid, final_type.code_id, fr.complexity_code_id, lock=False) is None:
+                r.errors.append(msg("NO_RATE_CELL", f"No rate card entry for {final_type.label} × "
+                                    f"{fr.complexity_code_row.label}.", "fr_type_code"))
+        if rating and final_type is not None and v["complexity_code"] in cxs:
+            if not final_type.is_active:
+                r.errors.append(msg("TYPE_RETIRED", "This FR's type is retired: change the type first.",
+                                    "complexity_code"))                                          # N1
+            elif effort.rate_for(db, pid, final_type.code_id, cxs[v["complexity_code"]].code_id, lock=False) is None:
+                r.errors.append(msg("NO_RATE_CELL", f"No rate card entry for {final_type.label} × "
+                                    f"{cxs[v['complexity_code']].label}.", "complexity_code"))
+        stored_days = str(fr.effort_days) if fr is not None and fr.effort_days is not None else None
+        if "EFFORT" in on and c["effort_days"] is not None and changed(stored_days, c["effort_days"]):
+            r.warnings.append(msg("EFFORT_DERIVED", "Effort days are derived from the rate card; your value was "
+                                  "ignored.", "effort_days"))
+
+        r.values = v
+        if fr is not None:
+            r.verdict = "UPDATE" if diff else "MATCH"
+
+    # P1: a new row whose name and type match a live FR's — a warning, not a block (Q-6)
+    new = [r for r in rows if r.verdict == "INSERT" and r.cells["fr_name"] is not None]
+    if new:
+        live = db.execute(select(func.lower(func.btrim(FunctionRequirement.fr_name)), CodeMaster.code,
+                                 FunctionRequirement.fr_number)
+                          .join(CodeMaster, CodeMaster.code_id == FunctionRequirement.fr_type_code_id)
+                          .where(FunctionRequirement.project_id == pid, FunctionRequirement.is_active)).all()
+        by_key = {(n, t): num for n, t, num in live}
+        for r in new:
+            hit = by_key.get((r.cells["fr_name"].strip().lower(), r.cells["fr_type_code"]))
+            if hit:
+                r.warnings.append(msg("POSSIBLE_DUPLICATE", f"{hit} already has this name and type.", "fr_name",
+                                      key=hit))
+
+
+def _br_ids_of(db: Session, fr_id: int) -> list[int]:
+    return list(db.scalars(select(BrFunctionRequirement.br_id)
+                           .join(BusinessRequirement, BusinessRequirement.br_id == BrFunctionRequirement.br_id)
+                           .where(BrFunctionRequirement.fr_id == fr_id, BrFunctionRequirement.is_active,
+                                  BusinessRequirement.is_active)))
+
+
+def _fr_apply(ctx: Ctx, rows: list[Staged]) -> None:
+    """P3a/b: create (with the first link) → the other links → update_fr (solution, status, type, text) → rate_fr.
+    Each call takes the FR's current row_version (P3d)."""
+    db, pid = ctx.db, ctx.project_id
+    for r in rows:
+        if r.verdict not in ("INSERT", "UPDATE"):
+            continue
+        ctx.current_row = r
+        v = r.values
+        add_ids = [int(i) for i in r.pins["br_numbers"].split(",")] if r.pins.get("br_numbers") else []
+        if r.verdict == "INSERT":
+            fields = {"description": v["description"], "acceptance_note": v["acceptance_note"]}
+            fr, _ = fr_service.create_fr(db, ctx.actor_id, pid, v["fr_name"], v["fr_type_code"], None, fields,
+                                         br_id=add_ids[0] if add_ids else None, commit=False)
+            r.target_id, add_ids = fr.fr_id, add_ids[1:]
+            cur = {**dict.fromkeys(FR_VALUES), "fr_type_code": v["fr_type_code"], "status_code": FR_DEFAULT_STATUS,
+                   "fr_name": v["fr_name"], "description": v["description"], "acceptance_note": v["acceptance_note"]}
+        else:
+            fr = db.get(FunctionRequirement, r.target_id)                   # locked by the re-validation
+            cur = _fr_values(fr)
+            r.before = {**cur, "row_version": fr.row_version}
+        added = [fr_service.link_fr(db, ctx.actor_id, db.get(BusinessRequirement, br_id), fr.fr_id, None,
+                                    commit=False, drift=False)[0].br_function_requirement_id for br_id in add_ids]
+        if added and r.before is not None:
+            r.before["links_added_ids"] = added                             # P6: kept for a manual reversal
+        texts = {k: v[k] for k in fr_service.EDITABLE if changed(cur[k], v[k])}
+        extra = {"solution_id": r.pins["solution_number"]} if "solution_number" in r.pins else {}
+        new_type = v["fr_type_code"] if changed(cur["fr_type_code"], v["fr_type_code"]) else None
+        status = v["status_code"] if changed(cur["status_code"], v["status_code"]) else None
+        if texts or extra or new_type or status:
+            fr, _ = fr_service.update_fr(db, ctx.actor_id, fr, fr.row_version, texts, new_type, status,
+                                         commit=False, **extra)
+        if v["complexity_code"] is not None and changed(cur["complexity_code"], v["complexity_code"]):
+            effort.rate_fr(db, ctx.actor_id, fr, fr.row_version, v["complexity_code"], commit=False)
+    ctx.current_row = None
+
+
+FUNCTION_REQUIREMENT = Target("FUNCTION_REQUIREMENT", "function-requirements", "Function requirements",
+                              FunctionRequirement.__tablename__, FR_COLUMNS, FR_COMPARE, _fr_export_rows,
+                              _fr_current, _fr_validate, _fr_apply, component="FUNCTION_REQUIREMENT",
+                              max_rows=ROW_CAP_1E, reupload_warning=True)
+
+
+# ---- ISSUE (slice 1e-a, spec §7.3, round-2 N1/N4/N8) --------------------------------------------------------------
+
+def as_iso_date(value):
+    """A date cell, or YYYY-MM-DD typed as text (D10) → ISO text; anything else is refused."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.time() != time(0):
+            raise ValueError("A date as YYYY-MM-DD.")
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
+        try:
+            return date.fromisoformat(value.strip()).isoformat()
+        except ValueError:
+            pass
+    raise ValueError("A date as YYYY-MM-DD.")
+
+
+ISSUE_COLUMNS = (
+    Column("issue_number", "Issue number (blank = new)", max_len=20, width=12),
+    Column("title", "Title", max_len=200, width=36),
+    Column("description", "Description", max_len=20000, width=48),
+    Column("issue_type_code", "Type", max_len=40, category="ISSUE_TYPE", width=14),
+    Column("severity_code", "Severity", max_len=40, category="ISSUE_SEVERITY", width=12),
+    Column("status_code", "Status (open statuses only)", max_len=40, category="ISSUE_STATUS", width=16),
+    Column("raised_by", "Raised by (stakeholder name)", max_len=200, width=24),
+    Column("raised_by_org_unit", "Raiser's org unit code (blank = none)", max_len=30, width=16),
+    Column("raised_date", "Raised date (YYYY-MM-DD)", parse=as_iso_date, width=14),
+    Column("target_date", "Target date (YYYY-MM-DD)", parse=as_iso_date, width=14),
+    Column("br_numbers", "BRs (add only)", max_len=4000, width=24),
+    Column("br_links_at_export", "BRs at export (do not edit)", max_len=4000, protected=True, width=14),
+    Column("row_token", "Row token (do not edit)", max_len=200, protected=True, width=14),
+)
+ISSUE_VALUES = ("title", "description", "issue_type_code", "severity_code", "status_code", "raised_by",
+                "raised_by_org_unit", "raised_date", "target_date")
+ISSUE_COMPARE = (*ISSUE_VALUES, "links_added")
+ISSUE_DEFAULT_STATUS = "OPEN"                             # what raise_issue sets (pinned, I-1)
+OPEN_ISSUE = issue_service.OPEN                           # branch on behaviour, never a code (law 5)
+
+
+def _stakeholders(db: Session, project_id: int, ids=None, lock: bool = False) -> dict[int, tuple]:
+    """Stakeholder id → (name, org unit code or None, is_active); every one of the project's when `ids` is None."""
+    q = (select(Stakeholder.stakeholder_id, Stakeholder.stakeholder_name, OrgUnit.org_unit_code, Stakeholder.is_active)
+         .outerjoin(OrgUnit, OrgUnit.org_unit_id == Stakeholder.org_unit_id)
+         .where(Stakeholder.project_id == project_id))
+    if ids is not None:
+        q = q.where(Stakeholder.stakeholder_id.in_(sorted(set(ids)) or [-1]))
+    if lock:
+        q = q.with_for_update(read=True, of=Stakeholder)
+    return {sid: (name, unit, live) for sid, name, unit, live in db.execute(q)}
+
+
+def _fold(value: str | None) -> str | None:
+    """How a raiser cell is compared: trimmed, case-folded — the unique index's own rule (I-16)."""
+    return value.strip().lower() if value and value.strip() else None
+
+
+def _issue_values(issue: Issue, stk: dict[int, tuple]) -> dict:
+    name, unit, _ = stk.get(issue.raised_by_stakeholder_id, (None, None, None))
+    return {"title": issue.title, "description": issue.description, "issue_type_code": issue.issue_type_code,
+            "severity_code": issue.severity_code, "status_code": issue.status_code, "raised_by": name,
+            "raised_by_org_unit": unit,
+            "raised_date": issue.raised_date.isoformat() if issue.raised_date else None,
+            "target_date": issue.target_date.isoformat() if issue.target_date else None, "links_added": None}
+
+
+def _issue_links(db: Session, issue_ids: list[int]) -> dict[int, list[str]]:
+    """Each issue's live BR links, by BR number."""
+    out: dict[int, list[str]] = {i: [] for i in issue_ids}
+    if issue_ids:
+        for issue_id, number in db.execute(
+                select(IssueBr.issue_id, BusinessRequirement.br_number)
+                .join(BusinessRequirement, BusinessRequirement.br_id == IssueBr.br_id)
+                .where(IssueBr.issue_id.in_(issue_ids), IssueBr.is_active, BusinessRequirement.is_active)
+                .order_by(BusinessRequirement.br_number)):
+            out[issue_id].append(number)
+    return out
+
+
+def _issues(db: Session, project_id: int, numbers: list[str] | None = None, lock: bool = False) -> list[Issue]:
+    q = select(Issue).where(Issue.project_id == project_id, Issue.is_active).order_by(Issue.issue_number)
+    if numbers is not None:
+        q = q.where(Issue.issue_number.in_(numbers))
+    if lock:
+        q = q.with_for_update(of=Issue)
+    return list(db.scalars(q.execution_options(populate_existing=True)).unique())
+
+
+def _issue_export_rows(db: Session, project_id: int) -> list[dict]:
+    issues = _issues(db, project_id)
+    links = _issue_links(db, [i.issue_id for i in issues])
+    stk = _stakeholders(db, project_id, [i.raised_by_stakeholder_id for i in issues])
+    table = Issue.__tablename__
+    out = []
+    for i in issues:
+        v = {k: x for k, x in _issue_values(i, stk).items() if k != "links_added"}
+        out.append({"issue_number": i.issue_number, **v, "br_numbers": ", ".join(links[i.issue_id]),
+                    "br_links_at_export": links_cell(project_id, table, i.issue_id, i.row_version, links[i.issue_id]),
+                    "row_token": row_token(project_id, table, i.issue_id, i.row_version)})
+    return out
+
+
+def _issue_current(db: Session, project_id: int, ids: list[int]) -> dict[int, dict]:
+    if not ids:
+        return {}
+    issues = list(db.scalars(select(Issue).where(Issue.project_id == project_id, Issue.issue_id.in_(ids))).unique())
+    stk = _stakeholders(db, project_id, [i.raised_by_stakeholder_id for i in issues])
+    return {i.issue_id: _issue_values(i, stk) for i in issues}
+
+
+def _issue_validate(ctx: Ctx, rows: list[Staged]) -> None:
+    db, pid = ctx.db, ctx.project_id
+    numbers = _numbered(rows, "issue_number", "issue")
+    for r in rows:
+        if r.cells["title"] is None:
+            r.errors.append(msg("REQUIRED", "An issue needs a title.", "title"))
+        if r.cells["raised_date"] is None and not any(e["column"] == "raised_date" for e in r.errors):
+            r.errors.append(msg("REQUIRED", "An issue needs a raised date (YYYY-MM-DD).", "raised_date"))  # D10
+    found = {i.issue_number: i for i in _issues(db, pid, numbers, lock=ctx.for_commit)} if numbers else {}
+    links_now = _issue_links(db, [i.issue_id for i in found.values()])
+    statuses = _codes_by(db, pid, "ISSUE_STATUS")
+    pick = {c: picker_codes(db, pid, c) for c in ("ISSUE_TYPE", "ISSUE_SEVERITY", "ISSUE_STATUS")}
+    brs = live_brs(db, pid, {n for r in rows for n in br_list(r.cells["br_numbers"])}, lock=ctx.for_commit)
+    stk = _stakeholders(db, pid, lock=ctx.for_commit)
+    live_by: dict[tuple, list[int]] = {}                   # (name, unit) folded → live stakeholder ids
+    for sid, (name, unit, is_live) in stk.items():
+        if is_live:
+            live_by.setdefault((_fold(name), _fold(unit)), []).append(sid)
+
+    def named(ids) -> str:
+        return ", ".join(f"{stk[s][0]} ({stk[s][1] or 'no unit'})" for s in sorted(ids))
+
+    def code_ok(r: Staged, col: str, category: str, value: str) -> None:
+        if value not in pick[category]:
+            r.errors.append(msg("CODE_UNKNOWN", f"{_q(value)} is not a value this project offers here.", col,
+                                value=value))
+
+    for r in rows:
+        c = r.cells
+        if any(e["column"] in ("row_token", "issue_number") for e in r.errors):
+            continue
+        issue = None
+        if r.verdict == "UPDATE":
+            issue = found.get(r.business_key)
+            if issue is None:
+                r.errors.append(msg("NOT_FOUND", f"{r.business_key} is not a live issue of this project.",
+                                    "issue_number", key=r.business_key))
+                continue
+            if not _token_checks(r, issue, issue.issue_id, r.business_key, "An issue"):
+                continue
+            r.target_id, r.target_row_version = issue.issue_id, issue.row_version
+
+        cur = _issue_values(issue, stk) if issue else dict.fromkeys(ISSUE_COMPARE)
+        v = {k: c[k] for k in ISSUE_VALUES}
+        if issue is None and v["status_code"] is None:
+            v["status_code"] = ISSUE_DEFAULT_STATUS
+
+        # raiser (D3, N8): an unchanged raiser keeps its id; otherwise name + unit match exactly one live stakeholder
+        key = (_fold(v["raised_by"]), _fold(v["raised_by_org_unit"]))
+        if issue is not None and key == (_fold(cur["raised_by"]), _fold(cur["raised_by_org_unit"])):
+            v["raised_by"], v["raised_by_org_unit"] = cur["raised_by"], cur["raised_by_org_unit"]
+        elif key[0] is None:
+            r.errors.append(msg("REQUIRED", "An issue needs a raiser: a stakeholder's name.", "raised_by"))
+        else:
+            hits = live_by.get(key, [])
+            if len(hits) == 1:
+                r.pins["raised_by"] = hits[0]
+                v["raised_by"], v["raised_by_org_unit"] = stk[hits[0]][0], stk[hits[0]][1]
+            elif hits:
+                r.errors.append(msg("RAISER_AMBIGUOUS", f"{v['raised_by']} matches {len(hits)} stakeholders: "
+                                    f"{named(hits)}. Choose the raiser on the issue screen.", "raised_by"))
+            else:
+                near = [s for (n, _), ids in live_by.items() if n == key[0] for s in ids]
+                hint = f" Stakeholders with this name: {named(near)}." if near else ""
+                r.errors.append(msg("RAISER_NOT_FOUND", f"No live stakeholder {v['raised_by']} in "
+                                    f"{v['raised_by_org_unit'] or 'no org unit'}.{hint} Add the person on the "
+                                    "Stakeholders screen first; an import never creates one.", "raised_by"))
+        diff = {k for k in ISSUE_VALUES if changed(cur[k], v[k])}
+
+        # codes: only a new or changed value is checked against the picker list (§7.0, N1)
+        for col, cat, noun in (("issue_type_code", "ISSUE_TYPE", "a type"),
+                               ("severity_code", "ISSUE_SEVERITY", "a severity")):
+            if col in diff or issue is None:
+                if v[col] is None:
+                    r.errors.append(msg("REQUIRED", f"An issue needs {noun}.", col))
+                else:
+                    code_ok(r, col, cat, v[col])
+        if "status_code" in diff:                          # R2 / N1: open statuses only; closing is on screen
+            row = statuses.get(v["status_code"])
+            if issue is not None and issue.status_behaviour != OPEN_ISSUE:
+                r.errors.append(msg("ISSUE_CLOSED", f"{issue.issue_number} is closed: reopen it on the issue "
+                                    "screen before changing its status.", "status_code"))
+            elif v["status_code"] is None:
+                r.errors.append(msg("REQUIRED", "An issue needs a status.", "status_code"))
+            elif v["status_code"] not in pick["ISSUE_STATUS"] or row is None:
+                code_ok(r, "status_code", "ISSUE_STATUS", v["status_code"])
+            elif row.behaviour_code != OPEN_ISSUE:
+                r.errors.append(msg("STATUS_CLOSES", f"{v['status_code']} closes the issue: resolve it on the issue "
+                                    "screen, where a resolution is required.", "status_code"))
+        if v["raised_date"] and v["target_date"] and v["target_date"] < v["raised_date"]:
+            r.errors.append(msg("DATE_ORDER", "The target date cannot be before the raised date.", "target_date"))
+
+        # links: "BRs to add" (§7.0, P5, D1, N6)
+        cell = br_list(c["br_numbers"])
+        if issue is None:
+            for n in cell:
+                if n not in brs:
+                    r.errors.append(msg("NOT_FOUND", f"{n} is not a live BR of this project.", "br_numbers", key=n))
+            adds = [n for n in cell if n in brs]
+        else:
+            adds = check_links(r, set(links_now[issue.issue_id]),
+                               read_links_cell(c["br_links_at_export"], r.token), cell, brs)
+            if adds:
+                diff.add("links_added")
+        v["links_added"] = ", ".join(adds) or None
+        if adds:
+            r.pins["br_numbers"] = ",".join(str(brs[n].br_id) for n in adds)
+
+        r.values = v
+        if issue is not None:
+            r.verdict = "UPDATE" if diff else "MATCH"
+
+    # P1: a new row whose title and raised date match a live issue's — a warning, not a block (Q-6)
+    new = [r for r in rows if r.verdict == "INSERT" and r.cells["title"] is not None and r.cells["raised_date"]]
+    if new:
+        by_key = {(t, d.isoformat()): n for t, d, n in db.execute(
+            select(func.lower(func.btrim(Issue.title)), Issue.raised_date, Issue.issue_number)
+            .where(Issue.project_id == pid, Issue.is_active))}
+        for r in new:
+            hit = by_key.get((r.cells["title"].strip().lower(), r.cells["raised_date"]))
+            if hit:
+                r.warnings.append(msg("POSSIBLE_DUPLICATE", f"{hit} already has this title and raised date.", "title",
+                                      key=hit))
+
+
+def _issue_fields(v: dict, keys) -> dict:
+    out = {k: v[k] for k in keys}
+    for k in ("raised_date", "target_date"):
+        if k in out:
+            out[k] = date.fromisoformat(out[k]) if out[k] else None
+    return out
+
+
+def _issue_apply(ctx: Ctx, rows: list[Staged]) -> None:
+    """raise_issue (then update_issue for a non-OPEN open status, N4) or update_issue with the changed fields only →
+    link_br for each addition, the ids kept for a manual reversal (P6)."""
+    db, pid = ctx.db, ctx.project_id
+    for r in rows:
+        if r.verdict not in ("INSERT", "UPDATE"):
+            continue
+        ctx.current_row = r
+        v = r.values
+        add_ids = [int(i) for i in r.pins["br_numbers"].split(",")] if r.pins.get("br_numbers") else []
+        raiser = {"raised_by_stakeholder_id": r.pins["raised_by"]} if "raised_by" in r.pins else {}
+        if r.verdict == "INSERT":
+            fields = _issue_fields(v, ("title", "description", "issue_type_code", "severity_code", "raised_date",
+                                       "target_date"))
+            issue = issue_service.raise_issue(db, ctx.actor_id, pid, {**fields, **raiser}, commit=False)
+            r.target_id = issue.issue_id
+            if v["status_code"] != ISSUE_DEFAULT_STATUS:
+                issue_service.update_issue(db, ctx.actor_id, issue, issue.row_version,
+                                           {"status_code": v["status_code"]}, commit=False)
+        else:
+            issue = db.get(Issue, r.target_id)                              # locked by the re-validation
+            stk = _stakeholders(db, pid, [issue.raised_by_stakeholder_id])
+            cur = _issue_values(issue, stk)
+            r.before = {**cur, "raised_by_stakeholder_id": issue.raised_by_stakeholder_id,
+                        "row_version": issue.row_version}
+            keys = [k for k in ISSUE_VALUES if k not in ("raised_by", "raised_by_org_unit") and changed(cur[k], v[k])]
+            fields = {**_issue_fields(v, keys), **raiser}
+            if fields:
+                issue_service.update_issue(db, ctx.actor_id, issue, issue.row_version, fields, commit=False)
+        added = [issue_service.link_br(db, ctx.actor_id, issue, br_id, commit=False).issue_br_id for br_id in add_ids]
+        if added and r.before is not None:
+            r.before["links_added_ids"] = added                             # P6
+    ctx.current_row = None
+
+
+ISSUE = Target("ISSUE", "issues", "Issues", Issue.__tablename__, ISSUE_COLUMNS, ISSUE_COMPARE, _issue_export_rows,
+               _issue_current, _issue_validate, _issue_apply, component="ISSUE", max_rows=ROW_CAP_1E,
+               reupload_warning=True)
+
 # A workbook of several targets' sheets, one batch per sheet (S4-12): template and export only.
 BOOKS: dict[str, tuple[Target, ...]] = {"data-model": (DATA_ENTITY, DATA_FIELD)}
 
-TARGETS: dict[str, Target] = {t.slug: t for t in (DATA_ENTITY, DATA_FIELD)}
+TARGETS: dict[str, Target] = {t.slug: t for t in (DATA_ENTITY, DATA_FIELD, BUSINESS_REQUIREMENT,
+                                                  FUNCTION_REQUIREMENT, ISSUE)}
 BY_CODE: dict[str, Target] = {t.code: t for t in TARGETS.values()}
 
 
@@ -935,11 +1794,15 @@ def out_columns(db: Session, project_id: int, target: Target) -> tuple[xlsx.OutC
 
 def template_book(db: Session, project_id: int, targets: tuple[Target, ...]) -> bytes:
     """One workbook, one tagged sheet per target and at most one hidden lookup sheet (S4-12)."""
+    for t in targets:
+        components.require_on(db, project_id, t.component)            # slice 1e, S1
     return xlsx.write_book([xlsx.OutSheet(t.sheet_title, t.code, out_columns(db, project_id, t))
                             for t in targets])
 
 
 def export_book(db: Session, project_id: int, targets: tuple[Target, ...]) -> bytes:
+    for t in targets:
+        components.require_on(db, project_id, t.component)            # slice 1e, S1
     return xlsx.write_book([xlsx.OutSheet(t.sheet_title, t.code, out_columns(db, project_id, t),
                                           [[r.get(c) for c in t.codes] for r in t.export_rows(db, project_id)])
                             for t in targets])
@@ -1056,6 +1919,9 @@ def _read(body: bytes, target: Target) -> xlsx.SheetRead:
         sheet = xlsx.read_rows(body, target.code, target.codes)
     if not sheet.rows:
         raise HTTPException(422, "The sheet has no data rows.")
+    if target.max_rows is not None and len(sheet.rows) > target.max_rows:
+        raise HTTPException(422, f"At most {target.max_rows:,} rows per file ({len(sheet.rows):,} given). "
+                                 "Split the file.")
     return sheet
 
 
@@ -1084,6 +1950,8 @@ def validate(db: Session, actor_id: int, project_id: int, target: Target, body: 
 
     status = _statuses(db)
     warnings = _file_warnings(sheet)
+    if target.reupload_warning and (seen := reupload_warning(db, project_id, target, sha)) is not None:
+        warnings.append(seen)
     batch = ImportBatch(project_id=project_id, target_entity=target.code, file_name=file_name,
                         uploaded_by_user_id=actor_id, status_code_id=status["VALIDATING"],
                         file_warning_detail=warnings)
