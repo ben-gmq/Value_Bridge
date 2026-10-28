@@ -58,7 +58,10 @@ is the most a browser-printed PDF can prove (A3).
   printed and is sent to the stamp, which records it in the audit detail (P3). Only when both succeed does the print
   dialog open; a failure shows the error toast and no dialog.
 - **Ctrl+P without the button** (P2): in `@media print` the report body is shown only while a stamp fetched for this
-  print is held; otherwise the page prints one line, "Use Print / PDF to print this report."
+  print is held; otherwise the page prints one line, "Use Print / PDF to print this report." The stamp is dropped on
+  the browser's `afterprint` event and whenever the report data or filters change (round 2 N1).
+- The `generated_at` sent to the stamp must be an ISO time with its zone, no later than now and no earlier than 30
+  minutes ago, else 422 (N2).
 - `filters` is checked at the boundary: control characters (NUL included) → 422, over 200 characters → 422 (S2).
 - A project with an open removal request may still be printed and the row is written (reads are not refused on
   such a project; A9).
@@ -96,6 +99,7 @@ off is `null`.
 | `fr_solution_outside_its_brs` | reused from `function_requirement` | **warning** | FR + SOLUTION |
 | `solution_reach_without_link` | (FR, BR) where the FR's tag answers the BR and the FR is not linked to it — a hint | information | FR + SOLUTION |
 | `flow_uncovered` | live BR system flows no interface FR covers (`br_flows.coverage`) | warning with FR on, else information | APPLICATION |
+| `fr_rejected_tag` | live FRs tagged to a REJECTED solution (round 2 N3; `fr_solution_outside_its_brs` is the freeze's line and stays as it is) | warning | FR + SOLUTION |
 | `tech_solution_without_fr` | live TECHNOLOGY-category solutions answering a live BR with no live FR (D5; §7.9 `tech_solution_no_fr`) | warning | FR + SOLUTION |
 | `de_unreferenced` | live data entities no live BR references — the scope-gap list | information (A4) | — |
 
@@ -139,7 +143,8 @@ missing; the effort column is blank with EFFORT off (A1). The time is written as
 hidden code row, no protection: this is a report, not an import template. Not audited (D-42 covers PDFs; A8).
 
 ### 3.6 Print to PDF (function 143; D-42, OR-8)
-- **Printable reports in 1f:** `traceability`, `coverage`, `solution_matrix`, `application_gap`, `interfaces` —
+- **Printable reports in 1f:** `traceability`, `coverage`, `solution_matrix`, `interfaces` (`application_gap` joins
+  when it is built, round 2 N4) —
   the registry `reports.PRINTABLE`; any other `report` → 422. The other D-42 reports (BFC, BR register, DFD, ERD,
   registers, effort, baseline diff, issue log, WBS) get the same button later; function 143 stays *partly built*.
 - **Stamp:** `{report, project_code, project_name, is_live: true, generated_at, generated_by}` (`generated_at` = the
@@ -207,7 +212,11 @@ projects (no performance test); Excel opening in Excel itself (read back with op
 | S3 | LOW | Leak sweep proves nothing for new routes | Fixed: positive controls (§5) |
 
 Questions Q3a (effort in vendor Excel: kept, as `interface_list` lists effort), Q4 (A8), Q5 (A9), Q6 (D7), Q7
-(denominator = live non-REJECTED solutions), Q8 (columns) are settled by the defaults above; Q1/Q2 are D1.
+(denominator = live non-REJECTED solutions) are **defaults put to Ben, not settled** — Q6 under D7 means a program
+that ever held a project never changes client. Q8 (columns) is settled by layout; Q1/Q2 are D1.
+
+**Round 2 (final, 2026-10-28):** every round-1 fix closes its finding; four new points fixed — N1 stamp released on
+`afterprint`, N2 `generated_at` bounded, N3 `fr_rejected_tag` line, N4 `application_gap` not printable until built.
 
 ## 8. Egress and confidentiality
 No outside service is called: PDF by the browser's own print, `.xlsx` by download, no fonts or scripts from a CDN.
