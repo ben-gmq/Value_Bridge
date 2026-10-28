@@ -143,7 +143,7 @@ export function RemovalsTab({ notify }) {
   return (
     <Box sx={{ mt: 2 }}>
       <Typography variant="body2" sx={{ mb: 2, maxWidth: 900 }}>{t('removals.intro')}</Typography>
-      {admins !== undefined && admins < 2 && (
+      {admins !== undefined && admins < (overview.data?.approvers_required ?? 2) && (
         <Alert severity="warning" sx={{ mb: 2 }}>{t('removals.fewAdmins', { n: admins })}</Alert>
       )}
       <WeeklyCheckCard />

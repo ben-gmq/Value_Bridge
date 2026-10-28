@@ -15,7 +15,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from models import AppUser, BaselineArchive, Client, Project, ProjectPurge
-from services import access, audit
+from services import access, audit, instance
 from services.baseline import local_today
 
 KINDS = ProjectPurge.KINDS
@@ -115,7 +115,8 @@ def approve(db: Session, actor: AppUser, purge_id: int, confirm_text: str | None
         p.approved_by_user_id, p.approved_at = actor.app_user_id, func.now()     # the guard sets the time
         p.updated_by, p.row_version = actor.app_user_id, p.row_version + 1
     _guarded(db, step)
-    _event(db, "PURGE_APPROVED", actor, p)
+    db.refresh(p, ["approved_single_owner"])                                # 0079: set by the guard, read back
+    _event(db, "PURGE_APPROVED", actor, p, approved_alone=p.approved_single_owner)
     db.commit()
     db.refresh(p)
     return p
@@ -168,6 +169,7 @@ def _rows(db: Session, rows: list[ProjectPurge]) -> list[dict]:
              "requested_at": p.requested_at, "requested_by": names.get(p.requested_by_user_id),
              "requested_by_user_id": p.requested_by_user_id,
              "approved_at": p.approved_at, "approved_by": names.get(p.approved_by_user_id),
+             "approved_alone": p.approved_single_owner,                                      # 0079
              "runnable_from": p.approved_at and p.approved_at.replace(microsecond=0) + _DAY,
              "waiting": bool(p.approved_at and p.executed_at is None and p.cancelled_at is None
                              and p.approved_at + _DAY > now),
@@ -195,7 +197,8 @@ def overview(db: Session) -> dict:
                       .where(BaselineArchive.written_at.is_(None)).group_by(BaselineArchive.project_id)).all()
     codes = dict(db.execute(select(Project.project_id, Project.project_code)
                             .where(Project.project_id.in_([o[0] for o in owed] or [-1]))).all())
-    return {"live_platform_admins": admins, "due_for_archiving": due,
+    return {"live_platform_admins": admins, "approvers_required": instance.approvers_required(db),   # 0079
+            "due_for_archiving": due,
             "archive_backlog": [{"project_id": pid, "project_code": codes.get(pid), "owed_files": n,
                                  "last_error": err} for pid, n, err in owed]}
 

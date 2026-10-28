@@ -2,7 +2,7 @@
 of truth — a config value describes the host, not the data — so the server refuses to start when VB_INSTANCE_ID is
 missing, the database is not stamped, or the two differ: a prod backup restored into UAT stops at start-up until
 someone deliberately re-stamps it, and never writes under prod's names."""
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from models import VbInstance
@@ -25,11 +25,26 @@ def ids(db: Session) -> list[str]:
     return [row.instance_id, *row.prior_instance_ids]
 
 
-def check_startup(db: Session, configured: str | None) -> str:
+SINGLE_OWNER = "LOCAL_SINGLE_OWNER"
+
+
+def approvers_required(db: Session) -> int:
+    """How many admins a removal or an admin grant needs (0079, docs/approvers_setting_spec.md): the database's
+    fn_approvers_required() — 1 only on a declared single-owner installation set to 1, otherwise 2. Never re-coded."""
+    return int(db.scalar(text("SELECT public.fn_approvers_required()")))
+
+
+def check_startup(db: Session, configured: str | None, configured_kind: str | None = None) -> str:
     if not configured:
         raise NotStamped("VB_INSTANCE_ID is not set")
-    stamped = current(db).instance_id
+    row = current(db)
+    stamped = row.instance_id
     if stamped != configured:
         raise NotStamped(f"VB_INSTANCE_ID is {configured!r} but this database is stamped {stamped!r}: "
                          "re-stamp it deliberately (scripts.stamp_instance) or fix the setting")
+    # A-Q3 (Ben 2026-10-24): a single-owner database needs the host to say so too — a copy restored elsewhere stops
+    if row.installation_kind == SINGLE_OWNER and configured_kind != SINGLE_OWNER:
+        raise NotStamped("This database is declared a local single-owner installation, but VB_INSTALLATION_KIND is "
+                         f"{configured_kind!r}: set VB_INSTALLATION_KIND={SINGLE_OWNER} on this host, or have the "
+                         "owner declare the database SHARED (scripts.instance_settings)")
     return stamped

@@ -21,7 +21,7 @@ settings = get_settings()          # refuses to start without the required env (
 async def lifespan(_app):
     """Slice 16 (schema §3.4): refuse to serve a database whose archive identity is not this host's."""
     with SessionLocal() as db:
-        instance.check_startup(db, settings.vb_instance_id)
+        instance.check_startup(db, settings.vb_instance_id, settings.vb_installation_kind)
     yield
 
 

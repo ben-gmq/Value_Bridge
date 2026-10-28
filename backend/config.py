@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # slice 16 (schema §3.4): must equal the vb_instance row stamped in the database; the server refuses to start
     # otherwise (services/instance.check_startup). Archive files and keys live outside the repo, never in it.
     vb_instance_id: str | None = None
+    vb_installation_kind: str | None = None            # 0079: LOCAL_SINGLE_OWNER only where the database says so
     vb_archive_dir: str | None = None       # write-once archive files (services/archive_store.LocalStore)
     vb_archive_key_dir: str | None = None   # one key file per project and version (LocalKeys); never committed
 

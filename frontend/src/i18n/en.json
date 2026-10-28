@@ -75,6 +75,7 @@
   "section.data.what": "Logical data entities and fields; the ERD follows in slice 2.",
   "admin.title": "Administration",
   "admin.subtitle": "Platform administrators only. Creating a project grants nobody access — give access from the project's Access screen.",
+  "admin.singleOwner": "Single-owner setting is on: one platform admin may ask for and approve a removal or new admin rights alone. Every such approval is recorded as approved alone. The 24-hour wait and the typed confirmation still apply.",
   "admin.tabs": "Administration sections",
   "admin.users": "Users",
   "admin.clients": "Clients",

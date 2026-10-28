@@ -74,6 +74,7 @@ def _live_admin(c: Connection, uid: int | None) -> bool:
 def _check_request(c: Connection, purge_id: int, executor_id: int):
     """Criterion 6 and S7, read again inside the transaction; the 0072 guard checks the same at execution."""
     pp = _one(c, "SELECT project_purge_id, purge_kind, project_id, reason, requested_by_user_id, approved_by_user_id, "
+                 "approved_single_owner, "
                  "approved_at, cancelled_at, executed_at, (approved_at <= now() - interval '24 hours' OR repurge_of_purge_id IS NOT NULL) AS aged "
                  "FROM project_purge WHERE project_purge_id = :i FOR UPDATE", i=purge_id)
     if pp is None or pp.cancelled_at is not None or pp.executed_at is not None:
@@ -84,15 +85,19 @@ def _check_request(c: Connection, purge_id: int, executor_id: int):
         raise Refused("The request has no second platform admin's approval.")
     if not pp.aged:
         raise Refused("The approval is less than 24 hours old.")
-    if pp.approved_by_user_id == pp.requested_by_user_id:
+    quorum = c.scalar(text("SELECT public.fn_approvers_required()"))     # 0079: 1 only on a single-owner install
+    if pp.approved_single_owner and quorum == 2:                            # A-Q5
+        raise Refused("This request was approved alone under the single-owner setting, which is now off: a second "
+                      "platform admin must approve it again.")
+    if pp.approved_by_user_id == pp.requested_by_user_id and not pp.approved_single_owner:
         raise Refused("The requester approved their own request.")
     if not (_live_admin(c, pp.requested_by_user_id) and _live_admin(c, pp.approved_by_user_id)):
         raise Refused("The requester or the approver is no longer a live platform admin.")
-    if c.scalar(text("SELECT count(*) FROM app_user WHERE is_active AND is_platform_admin")) < 2:
+    if c.scalar(text("SELECT count(*) FROM app_user WHERE is_active AND is_platform_admin")) < quorum:
         raise Refused("Fewer than two live platform admins.")
     if not _live_admin(c, executor_id):
         raise Refused("The person running the removal is not a live platform admin.")
-    if executor_id == pp.requested_by_user_id:
+    if executor_id == pp.requested_by_user_id and quorum == 2:             # A-Q2: a sole admin may run it under 1
         raise Refused("The requester cannot also run the removal.")
     return pp
 

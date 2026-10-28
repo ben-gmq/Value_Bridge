@@ -356,12 +356,20 @@ function CompanyCodeLists() {
 const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
   ['admin.codeLists', CompanyCodeLists], ['removals.tab', RemovalsTab]];
 
+// 0079 (Ben 2026-10-24): while this installation lets one admin approve alone, every admin page says so.
+function SingleOwnerBanner() {
+  const overview = useQuery({ queryKey: keys.archiveOverview(), queryFn: api.archiveOverview });
+  if (overview.data?.approvers_required !== 1) return null;
+  return <Alert severity="warning" sx={{ mb: 2 }}>{t('admin.singleOwner')}</Alert>;
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState(0);
   const [notice, setNotice] = useState('');
   const Body = TABS[tab][1];
   return (
     <Page title={t('admin.title')} subtitle={t('admin.subtitle')}>
+      <SingleOwnerBanner />
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label={t('admin.tabs')}>
           {TABS.map(([key]) => <Tab key={key} label={t(key)} />)}
