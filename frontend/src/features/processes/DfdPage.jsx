@@ -627,7 +627,9 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
         options={[{ value: 'diagram', label: t('processes.viewDiagram') }, { value: 'table', label: t('processes.viewTable') }]} />
       <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{chartLabel}</Button>
       <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
-      {g && <FlowFileButton nodeId={nodeId} hasSteps={g.processes.length > 0} />}
+      {g && <FlowFileButton nodeId={nodeId} hasSteps={g.processes.some((p) =>      // direct steps only (FI-9): the
+        p.hier_code.startsWith(`${g.scope.hier_code}.`)                           // DFD also rolls up deeper ones
+        && p.hier_code.split('.').length === g.scope.hier_code.split('.').length + 1)} />}
       {canEdit && (
         <Button color="warning" disabled={!g || reset.isPending}
           onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}

@@ -183,7 +183,7 @@
   "processes.flowFile.aiRulePersonal": "Remove personal data yourself before you paste anything: names, e-mail addresses, phone numbers. The AI is not asked to do it.",
   "processes.flowFile.aiRuleConfidential": "Everything in Value Bridge is confidential, much of it under client NDAs. Paste only the flow you are converting.",
   "processes.flowFile.intro": "Export saves the process steps under this node — performers, triggers, inputs, outputs and outside parties — as a vb-process-flow/2.0 file. The prompt pack tells Claude Enterprise how to turn a slide or a Visio diagram into the same format; the schema and its example define it.",
-  "processes.flowFile.noSteps": "There are no process steps under this node to export.",
+  "processes.flowFile.noSteps": "Only the process steps directly under a node are exported, and this node has none. Open the flow of the node just above the steps.",
   "processes.flowFile.export": "Export this flow",
   "processes.flowFile.pack": "AI prompt pack",
   "processes.flowFile.schema": "Schema and example",
