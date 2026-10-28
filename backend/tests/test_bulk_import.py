@@ -874,3 +874,22 @@ def test_the_existing_entity_routes_still_commit(client, ed, db):
     r = client.patch(f"{API}/data-entities/{de['data_entity_id']}", headers=ed["h"],
                      json={"row_version": de["row_version"], "description": "x"})
     assert r.status_code == 200 and live(db, ed["p"])["DE-0001"].description == "x"
+
+
+def _schema_cap(model, name):
+    f = model.model_fields.get(name)
+    return next((m.max_length for m in (f.metadata if f else ()) if getattr(m, "max_length", None)), None)
+
+
+@pytest.mark.parametrize("target, patch", [
+    ("data-entities", "schemas.scope:DataEntityPatch"), ("data-fields", "schemas.scope:DataFieldPatch"),
+    ("business-requirements", "schemas.scope:BrPatch"),
+    ("function-requirements", "schemas.function_requirement:FrPatch"), ("issues", "schemas.issue:IssuePatch")])
+def test_no_import_column_is_capped_below_what_the_screen_accepts(target, patch):
+    """sara M1 (slice 1e): a column capped lower than its screen fails TOO_LONG on an unchanged re-import."""
+    import importlib
+    mod, cls = patch.split(":")
+    model = getattr(importlib.import_module(mod), cls)
+    low = [(c.code, c.max_len, _schema_cap(model, c.code)) for c in bulk.TARGETS[target].columns
+           if c.max_len and _schema_cap(model, c.code) and c.max_len < _schema_cap(model, c.code)]
+    assert not low

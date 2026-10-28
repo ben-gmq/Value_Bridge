@@ -1019,7 +1019,7 @@ BR_COLUMNS = (
     Column("br_number", "BR number", max_len=20, width=12),
     Column("hier_code", "Chart code (check only)", max_len=40, width=12),
     Column("step_name", "Process step (read only)", max_len=200, width=32),
-    Column("br_statement", "Statement", max_len=4000, width=60),
+    Column("br_statement", "Statement", max_len=8000, width=60),
     Column("status_code", "Status", max_len=40, category="BR_STATUS", width=16),
     Column("row_token", "Row token (do not edit)", max_len=200, protected=True, width=14),
 )
@@ -1501,7 +1501,7 @@ def as_iso_date(value):
 ISSUE_COLUMNS = (
     Column("issue_number", "Issue number (blank = new)", max_len=20, width=12),
     Column("title", "Title", max_len=200, width=36),
-    Column("description", "Description", max_len=4000, width=48),
+    Column("description", "Description", max_len=20000, width=48),
     Column("issue_type_code", "Type", max_len=40, category="ISSUE_TYPE", width=14),
     Column("severity_code", "Severity", max_len=40, category="ISSUE_SEVERITY", width=12),
     Column("status_code", "Status (open statuses only)", max_len=40, category="ISSUE_STATUS", width=16),
