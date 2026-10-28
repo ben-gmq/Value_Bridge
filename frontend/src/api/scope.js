@@ -344,6 +344,9 @@ export const ifaceApi = {
   put: (frId, body) => d(http.put(`${V}/function-requirements/${frId}/interface`, body)),
   remove: (frId, rowVersion) => del(`${V}/function-requirements/${frId}/interface`, rowVersion),
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/interfaces`, { params })),
+  // Slice 1f §3.5: the same filters as the screen, as .xlsx.
+  export: (projectId, params = {}) =>
+    download(`${P(projectId)}/interfaces/export?${new URLSearchParams(params)}`, 'vb-interfaces.xlsx'),
 };
 
 // Slice 6c (docs/slice6c_spec.md). Effort days are derived from the card, never sent (VB law 6).

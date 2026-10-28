@@ -3,15 +3,19 @@ owns access: every route is project_ctx(VIEW).
 
 A part that needs a component the project has switched off is None, never an empty list — an empty list would read
 "no gaps" (spec A1)."""
+import io
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
+import openpyxl
+from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import (Application, ApplicationSolution, BfcNode, BrDataEntity, BrFunctionRequirement, BrSolution,
-                    BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Solution)
+                    BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Project, Solution)
 from models.shared import FR_BEHAVIOURS
-from services import br_flows, components, function_requirement as fr_service
+from services import br_flows, components, function_requirement as fr_service, interface as iface_service, xlsx
 from services.code_master import resolve
 
 BEHAVIOUR_ORDER = ("FORM", "BATCH", "INTERFACE", "REPORT", "OTHER")
@@ -260,3 +264,61 @@ def solution_matrix(db: Session, project_id: int) -> dict:
     return {"generated_at": _now(), "categories": cats, "rows": rows, "unlinked": row(unlinked)["cells"],
             "totals": totals, "live_count": len(live), "rejected_count": len(sc.sols) - len(live),
             "technology_share": share}
+
+
+# ---- §3.5 the interface list as an Excel file (function 61) -------------------------------------------------------
+ICT = ZoneInfo("Asia/Bangkok")
+IFACE_HEADERS = ("Interface", "Name", "Type", "Source → target", "Pattern", "Method", "Frequency", "Data entities carried",
+                 "Solution", "BRs", "Status", "Effort (days)", "Complete")
+IFACE_WIDTHS = (12, 40, 16, 22, 14, 12, 14, 44, 12, 22, 16, 12, 34)
+MISSING_TEXT = {"endpoints": "endpoints", "method": "method", "data_entities": "data entities"}
+
+
+def _app_label(db: Session, project_id: int, app_id: int | None) -> str:
+    a = db.scalar(select(Application).where(Application.application_id == app_id,
+                                            Application.project_id == project_id)) if app_id is not None else None
+    return "any" if app_id is None else (a.application_code if a else f"#{app_id}")
+
+
+def interface_workbook(db: Session, project_id: int, by: str, source: int | None = None, target: int | None = None,
+                       status: str | None = None) -> bytes:
+    """The rows of `interface_list` under the screen's filters, one sheet: the print stamp, the filters (and how many
+    undescribed interfaces a pair filter left out, D6), a header row, one row per interface. Every value goes through
+    xlsx.write_cell. A report, not an import template: no code row, no protection."""
+    data = iface_service.interface_list(db, project_id, source, target, status)
+    effort_on = "EFFORT" in components.enabled(db, project_id)
+    project = db.get(Project, project_id)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Interfaces"
+    w = xlsx.write_cell
+    w(ws, 1, 1, f"{project.project_code} {project.project_name}", bold=True)
+    w(ws, 2, 1, "LIVE — not a baseline")
+    w(ws, 3, 1, f"Generated {datetime.now(ICT).strftime('%Y-%m-%d %H:%M')} ICT by {by}")    # text with its zone (D8)
+    filtered = source is not None or target is not None or status is not None
+    w(ws, 4, 1, "Filters: " + (f"source {_app_label(db, project_id, source)}, target {_app_label(db, project_id, target)}"
+                               f", status {status or 'any'}" if filtered else "none"))
+    row = 5
+    if filtered and data["unfilterable_incomplete"]:
+        w(ws, row, 1, f"{data['unfilterable_incomplete']} interfaces not yet described are not in this filtered list")
+        row += 1
+    row += 1
+    for i, (h, width) in enumerate(zip(IFACE_HEADERS, IFACE_WIDTHS), start=1):
+        w(ws, row, i, h, bold=True)
+        ws.column_dimensions[get_column_letter(i)].width = width
+    ws.freeze_panes = ws.cell(row=row + 1, column=1)
+    for r in data["rows"]:
+        row += 1
+        route = f"{r['source_application_code']} → {r['target_application_code']}" if r["is_described"] else None
+        carried = ", ".join(f"{c['de_number']} {c['de_name']}" + (f" ({c['note']})" if c["note"] else "")
+                            for c in r["carried"])
+        complete = "Complete" if r["is_complete"] else "Missing: " + ", ".join(MISSING_TEXT[m] for m in r["missing"])
+        effort = float(r["effort_days"]) if effort_on and r["effort_days"] is not None else None
+        for i, v in enumerate((r["interface_number"], r["interface_name"], r["fr_type_label"], route, r["pattern_label"],
+                               r["method_label"], r["frequency_label"], carried or None, r["solution_number"],
+                               ", ".join(r["br_numbers"]) or None, r["fulfilment_status_label"], effort, complete),
+                              start=1):
+            w(ws, row, i, v)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()

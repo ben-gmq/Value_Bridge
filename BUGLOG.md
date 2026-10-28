@@ -611,3 +611,7 @@ place.
   checks only the version row, not that 0079's objects survive the refusal.
 - **2026-10-28 · slice 1e-b piece (a1), Flow file dialog (`sara`):** (L) "has direct steps" on the DFD screen is
   read from the `hier_code` format; a parent id in the DFD graph payload would make it exact.
+- **2026-10-28 · slice 1f piece 4, interface list to Excel (`sara`, PASS):** (L1) the filters line prints the raw
+  status code from the address and accepts an unknown one; resolve it to its label and 422 an unknown code, once in
+  `interface_list` so the screen route gets it too. (L2) `reports.ICT` should move to one shared stamp helper when the
+  §3.6 PDF stamp lands, so the two never drift.

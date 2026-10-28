@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Button, Link, Tooltip, Typography } from '@mui/material';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Alert, Box, Button, Link, Snackbar, Tooltip, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { errorText } from '../../api/client';
 import { appApi, ifaceApi } from '../../api/scope';
@@ -33,6 +33,9 @@ export default function InterfacesPage() {
   const hidden = q.data?.unfilterable_incomplete ?? 0;
   const incomplete = rows.filter((r) => !r.is_complete).length;
   const missingText = (m) => m.map((x) => t(`interfaces.missing.${x}`)).join(', ');
+  // Slice 1f §3.5: the same filters, as .xlsx. Success is a toast, a failure an alert (playbook §7).
+  const [done, setDone] = useState(null);
+  const xlsx = useMutation({ mutationFn: () => ifaceApi.export(projectId, params), onSuccess: () => setDone(t('interfaces.exported')) });
 
   const columns = [
     { field: 'interface_number', headerName: t('interfaces.number'), width: 110,
@@ -77,6 +80,7 @@ export default function InterfacesPage() {
         <Alert severity="warning" sx={{ mb: 2 }} action={(
           <Button size="small" onClick={() => { setSource(''); setTarget(''); }}>{t('interfaces.showUnfilterable')}</Button>)}>
           {t('interfaces.unfilterable', { n: hidden })}</Alert>)}
+      {xlsx.error && <Alert severity="error" sx={{ mb: 2 }}>{errorText(xlsx.error, t('interfaces.exportFailed'))}</Alert>}
       <Card>
         <Toolbar>
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('interfaces.count', { n: rows.length })}</Typography>
@@ -87,6 +91,8 @@ export default function InterfacesPage() {
             emptyLabel={t('interfaces.filterAny')} onChange={setTarget} options={apps} /></Box>
           <Box sx={{ width: 180, maxWidth: '100%' }}><SimpleSelect id="if-status" label={t('interfaces.filterStatus')} value={status} allowEmpty
             emptyLabel={t('interfaces.filterAny')} onChange={setStatus} options={statuses.map((c) => ({ value: c.code, label: c.label }))} /></Box>
+          <Button variant="outlined" size="small" disabled={xlsx.isPending} onClick={() => xlsx.mutate()}>
+            {t('interfaces.export')}</Button>
         </Toolbar>
         {!q.error && (
           <DataGrid autoHeight rows={rows} getRowId={(r) => r.fr_id} columns={columns} loading={q.isLoading}
@@ -94,6 +100,10 @@ export default function InterfacesPage() {
             localeText={{ noRowsLabel: t('interfaces.empty') }}
             sx={GRID_SX} />)}
       </Card>
+      <Snackbar open={Boolean(done)} autoHideDuration={4000} onClose={() => setDone(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        {done ? <Alert severity="success" variant="filled" onClose={() => setDone(null)}>{done}</Alert> : undefined}
+      </Snackbar>
     </Page>
   );
 }
