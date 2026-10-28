@@ -166,7 +166,8 @@ def test_allocation_note_is_edited_in_place_and_relink_restores_the_row(client, 
     assert again["application_solution_id"] == row["application_solution_id"]
     notes = [e.detail for e in db.scalars(select(AuditEvent).where(AuditEvent.target_table == "application_solution",
                                                                      AuditEvent.event_type.in_(["RECORD_UPDATED",
-                                                                                                "RECORD_RESTORED"])))]
+                                                                                                "RECORD_RESTORED"]))
+                                                         .order_by(AuditEvent.audit_event_id))]
     assert {"previous_allocation_note": "first"}.items() <= notes[0].items()
     assert notes[1]["previous_allocation_note"] == "second"
 
