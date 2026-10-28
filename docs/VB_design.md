@@ -244,7 +244,7 @@ list, so the marks change when the rule changes.
 | `save_diagram_layout` (DFD) | `DIAGRAM_LAYOUT` | C/U | As §4.2: positions of processes, stores, externals and triggers, last write wins per object (D-30). Diagram types are ERD and DFD; a `PROCESS_FLOW` position is refused (S7-5) |
 | `download_flow_schema` | — | R | **D-25.** The JSON Schema for `vb-process-flow/2.0`, a worked example, and the **AI conversion prompt pack**: instructions an AI follows to turn a PowerPoint, BPMN or Visio flow into a valid file. **The pack names the approved services — Claude or Microsoft Copilot, under FTC's own accounts only — and opens with the personal-data removal step** (D-36) |
 | `export_process_flow_json` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER` | R | The processes under one parent node as `vb-process-flow/2.0`: per step its `br_number` (to-be only — its identity, R2-D1), current `hier_code` (a cross-check), `row_version` (R2-D5), name, description, **performer**, **inputs** and **outputs**, **triggers** and **external flows**. **No edges and no lanes** (D-38, D-46). An edited file re-imports as an update and a stale step is caught |
-| `validate_process_flow_json` | `IMPORT_BATCH`, `IMPORT_ROW` | C | **The anchor node and the mode come from the route, chosen in the UI** (R2-P3); the chart is the anchor's. Parse under the JSON caps (§7.12a) and check the format version; a `1.0` file is refused ("re-export from VB"). **Resolve each to-be step by `br_number`** (UPDATE), cross-checking `hier_code` ("moved since export", R2-D1) and `row_version`. A step with neither — and every as-is step, which has no BR number — is **matched by normalised name to an active process child of the anchor** (UPDATE with a warning, R2-P1, Q1, SC-6); otherwise it is an INSERT. Resolve data entities by `DE-` number or exact name, performers by code, triggers by name, external parties to `EXT-` rows. In replace mode, stage a **RETIRE** row per omitted step I/O and trigger link, and a **KEPT** row with a warning for I/O a BR CRUD or external flow depends on (R2-P4). **Warn and still import (D-55):** a process with no input/trigger or no output, an unconnected process, an unknown data entity name (created as a new entity, listed in the preview), an unknown trigger (added to the catalogue), an unknown performer (left blank), missing descriptions. **Errors block only what would damage data:** an unreadable file, a wrong format version, a file for a different anchor or mode than chosen, a stale `row_version`, and a step whose identity is wrong (unknown or out-of-scope BR number, moved `hier_code`, `hier_code` without `br_number`, two steps on one process, duplicate names — SC-6). **Nothing written to a business table** |
+| `validate_process_flow_json` | `IMPORT_BATCH`, `IMPORT_ROW` | C | **The anchor node and the mode come from the route, chosen in the UI** (R2-P3); the chart is the anchor's. Parse under the JSON caps (§7.12a) and check the format version; a `1.0` file is refused ("re-export from VB"). **Resolve each to-be step by `br_number`** (UPDATE), cross-checking `hier_code` ("moved since export", R2-D1) and `row_version`. A step with neither — and every as-is step, which has no BR number — is **matched by normalised name to an active process child of the anchor** (UPDATE with a warning, R2-P1, Q1, SC-6); otherwise it is an INSERT. Resolve data entities by `DE-` number or exact name, performers by code, triggers by name, external parties to `EXT-` rows. In replace mode, stage a **RETIRE** row per omitted step I/O and trigger link, and a **KEPT** row with a warning for I/O a BR CRUD or external flow depends on (R2-P4). **Warn and still import (D-55):** a process with no input/trigger or no output, an unconnected process, an unknown data entity name (created as a new entity, listed in the preview), an unknown trigger (added to the catalogue), an unknown performer (current one kept), missing descriptions. **Errors block only what would damage data:** an unreadable file, a wrong format version, a file for a different anchor or mode than chosen (nothing staged), and a step that is stale (`row_version`, an error on that step only, FI-3) or whose identity is wrong (unknown or out-of-scope BR number, moved `hier_code`, `hier_code` without `br_number`, two steps on one process, duplicate names — SC-6). **Nothing written to a business table** |
 | `commit_process_flow_json` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BFC_NODE_DATA_ENTITY`, `BFC_NODE_EXTERNAL_FLOW`, `BFC_NODE_TRIGGER`, `PROCESS_TRIGGER`, `DATA_ENTITY`, `EXTERNAL_ENTITY` | C/U | One transaction, all-or-nothing, the same six properties as §7.11. Component: the anchor chart's DFD. **Refused unless `acknowledged_inserts` equals the insert count whenever there are inserts, and `acknowledged_retires` equals the retire count whenever there are retirements** (R2-P1, R2-P2). New steps are process nodes; a new to-be step gets its BR (D-2). The file's performer **replaces** the step's performer. `merge` never retires. **`replace` retires only step I/O and trigger links (Q5)** — never steps, BRs, performers, roles, external flows, or I/O a BR CRUD or external flow depends on. The gaps imported stay visible as the DFD's warnings panel; an incomplete DFD can be imported, not frozen (D-55) |
 | `(manual)` AI conversion | — | — | The consultant removes personal data from the source slide or BPMN export, then gives it and the prompt pack to **Claude or Microsoft Copilot under FTC's own account — no other service, no personal account** (D-36, R2-S6), and uploads the JSON it returns. **VB itself never sends client content to an AI service** (A-51) |
 
@@ -2520,13 +2520,13 @@ at validate and again at commit, S4-9). UK `(import_batch_id, project_id)` (targ
 **IMPORT_ROW** — one row per staged sheet row **or staged JSON object**. PK `import_row_id`; FK
 `(import_batch_id, target_entity) → IMPORT_BATCH(import_batch_id, target_entity)`: `target_entity` is
 copied from the batch by the service, so a row kind can never mismatch its batch (S4-2). One staged row
-per sheet row or pointer (UK `(import_batch_id, sheet_row_no)`, UK `(import_batch_id, source_path)`).
+per sheet row, or per pointer and kind (UK `(import_batch_id, sheet_row_no)`, UK `(import_batch_id, row_kind, source_path)`, FI-5).
 A process-flow file is flattened into one row per object, so the preview and the verdicts work per object:
 - `row_kind varchar(30) NOT NULL`, under a CHECK over the union and `ck_ir_kind_fits_target`. For a sheet
   it equals `target_entity`. For a flow file it is `STEP`, `STEP_IO`, `STEP_ROLE`, `EXTERNAL_ENTITY`,
   `EXTERNAL_FLOW` or `DATA_ENTITY`. `FLOW_EDGE` and `LANE` stay in the lists so that rows staged under the
-  old flow format still satisfy the CHECKs. When the `vb-process-flow/2.0` import is built, the kinds gain
-  `PERFORMER` (MATCH only), `TRIGGER` and `STEP_TRIGGER` (S7-1, slice7 §9.9).
+  old flow format still satisfy the CHECKs. The `vb-process-flow/2.0` import adds `PERFORMER` (MATCH only),
+  `TRIGGER` and `STEP_TRIGGER` (S7-1, slice7 §9.9; migration 0080).
 - **Locator** (S4-1): RETIRE and KEPT rows are staged from the database and have no file locator; flow rows
   carry `source_path varchar(200)`, the JSON Pointer (`/steps/3/inputs/0`, must start with `/`); sheet rows
   carry `sheet_row_no` (2…1048576).
@@ -3622,7 +3622,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `UNIQUE (project_id, ms_unique_id)` (full); `UNIQUE (wbs_item_id, project_id)`; FK `(parent_wbs_item_id, project_id)`; `CHECK ((outline_level = 1) = (parent_wbs_item_id IS NULL))`; `CHECK (parent_wbs_item_id <> wbs_item_id)`; date-order CHECKs; `CHECK (actual_finish IS NULL OR actual_start IS NOT NULL)`; `CHECK (percent_complete BETWEEN 0 AND 100)`; composite FKs `(phase_id, project_id)`, `(solution_id, project_id)` | `wbs_item` *(when built)* | **D-33, Q13, R2-D15** — one row per MS Project Unique ID per project, restored rather than duplicated on re-import; links cannot cross projects. `row_version` guards the two links only (documented deviation). No unique on `wbs_code` (renumbered by MS Project on outline moves) |
 | `ck_dl_type CHECK (diagram_type IN ('ERD','PROCESS_FLOW','DFD'))` — **new `PROCESS_FLOW` rows are refused by the service** (S7-5); `ck_dl_one_object CHECK (num_nonnulls(bfc_node_id, data_entity_id, external_entity_id, bfc_node_flow_id, process_trigger_id) = 1)`; `ck_dl_erd_entity`; `ck_dl_event_flow_only CHECK (diagram_type = 'PROCESS_FLOW' OR bfc_node_flow_id IS NULL)`; `ck_dl_scope CHECK (diagram_type = 'ERD' OR scope_bfc_node_id IS NOT NULL)`; `ck_dl_collapse_erd`; `uq_dl_object UNIQUE NULLS NOT DISTINCT (project_id, diagram_type, scope_bfc_node_id, bfc_node_id, data_entity_id, external_entity_id, bfc_node_flow_id, process_trigger_id)` (a constraint, named in `ON CONFLICT`); composite `(id, project_id)` FKs | `diagram_layout` | D-30 — one position per object per diagram per scope; typed, project-safe pointers, triggers included (D-49). Old `PROCESS_FLOW` positions stay as history. **Exempt from soft delete and `row_version`** (documented deviation, A-52) |
 | `ck_ib_target_entity CHECK (target_entity IN ('ISSUE','DATA_ENTITY','DATA_FIELD','BUSINESS_REQUIREMENT','FUNCTION_REQUIREMENT','PROCESS_FLOW','WBS_ITEM'))`; `ck_ib_flow_format CHECK ((target_entity = 'PROCESS_FLOW') = (source_format LIKE 'vb-process-flow/%'))`; `ck_ib_import_mode`; `ck_ib_mode_targets CHECK ((target_entity IN ('PROCESS_FLOW','WBS_ITEM')) = (import_mode IS NOT NULL))`; `ck_ib_flow_anchor CHECK ((target_entity = 'PROCESS_FLOW') = (anchor_bfc_node_id IS NOT NULL))`; `ck_ib_retire_needs_replace CHECK (retire_count = 0 OR import_mode IS NOT DISTINCT FROM 'REPLACE')`; count bounds; `uq_import_batch_target (import_batch_id, target_entity)` | `import_batch` | D-25 / D-33 — a flow import states its format, mode and anchor; a WBS import states its mode; **merge never retires** |
-| `fk_ir_batch (import_batch_id, target_entity) → import_batch`; `ck_ir_kind_fits_target`; `ck_ir_locator` (none for RETIRE / KEPT, a JSON pointer for flow rows, a sheet row otherwise, S4-1); `ck_ir_valid_matches_errors`; `ck_ir_verdict CHECK (verdict IN ('INSERT','UPDATE','MATCH','RETIRE','KEPT'))`; `ck_ir_db_staged_target`; `ck_ir_retire_kinds`; `ck_ir_kept_kind CHECK (verdict <> 'KEPT' OR row_kind = 'STEP_IO')`; partial `uq_ir_local_key (import_batch_id, row_kind, local_key)` and `uq_ir_business_key (import_batch_id, row_kind, business_key)` | `import_row` | D-25, S4-2 — every staged object is locatable and fits its batch; validity cannot disagree with its errors; a duplicate file-local key or a business key named twice in one file is caught at staging (R2-D1, backstop to S4-4); `KEPT` marks step I/O a replace-mode flow import would have retired but a dependent protects (§7.2b). The flow-file row kinds of `vb-process-flow/2.0` are added by the import's own migration (§7.2b) |
+| `fk_ir_batch (import_batch_id, target_entity) → import_batch`; `ck_ir_kind_fits_target`; `ck_ir_locator` (none for RETIRE / KEPT, a JSON pointer for flow rows, a sheet row otherwise, S4-1); `ck_ir_valid_matches_errors`; `ck_ir_verdict CHECK (verdict IN ('INSERT','UPDATE','MATCH','RETIRE','KEPT'))`; `ck_ir_db_staged_target`; `ck_ir_retire_kinds`; `ck_ir_kept_kind CHECK (verdict <> 'KEPT' OR row_kind = 'STEP_IO')`; partial `uq_ir_local_key (import_batch_id, row_kind, local_key)` and `uq_ir_business_key (import_batch_id, row_kind, business_key)` | `import_row` | D-25, S4-2 — every staged object is locatable and fits its batch; validity cannot disagree with its errors; a duplicate file-local key or a business key named twice in one file is caught at staging (R2-D1, backstop to S4-4); `KEPT` marks step I/O a replace-mode flow import would have retired but a dependent protects (§7.2b). The flow-file row kinds of `vb-process-flow/2.0`, `ck_ir_match_only` and the per-kind `uq_ir_source_path` are added by the import's own migration, 0080 (§7.2b, FI-5) |
 | `SELECT … FOR UPDATE` on the batch row as the first statement of `commit`, status re-checked inside the lock, plus `row_version` sent on commit | `import_batch` | **a committed batch cannot be re-committed (P2)** — a CHECK is stateless and cannot express a state transition |
 | `row_version` + `WHERE row_version = :v` on every UPDATE (ORM `version_id_col`) | all editable business tables | **D-6 — two consultants on one record never overwrite each other silently** (stale → 409) |
 | `uq_baseline_version UNIQUE (project_id, major_no, minor_no)`; `version_label GENERATED ('v' ‖ major_no ‖ '.' ‖ minor_no)` + `uq_baseline_label`; `ck_baseline_major`, `ck_baseline_minor` | `baseline` | P9 — version identity is two integers; the label is rendered from them and can never disagree |
@@ -4200,8 +4200,9 @@ Rules the schema and the prompt pack both state — **keys are local to the file
    an unknown name is **created**, with a warning, and listed in the preview (D-55).
 4. **The performer** is `{kind, code}` for an org unit, org role or application (matched by its live code), or
    `{kind: "AI", label}`. **The file's performer replaces the step's performer** (D-46); nothing else about who
-   does the work is touched — RACI is never read or written by an import. An unknown code leaves the performer
-   blank, with a warning (D-55). Org units, roles and applications are never created from a file.
+   does the work is touched — RACI is never read or written by an import. A missing performer, or an unknown
+   code, keeps the step's current performer, with a warning (D-55, FI-2); only `"performer": null` clears it.
+   Org units, roles and applications are never created from a file.
 5. **Triggers** are matched by live name in the project's catalogue; an unknown trigger is created in the
    catalogue (name + kind), with a warning.
 6. **External flows** link the step to a party (by `ext_number`, or a new party by name) with a direction and an
@@ -4210,17 +4211,20 @@ Rules the schema and the prompt pack both state — **keys are local to the file
    checked against them, and a mismatch rejects the file. A file cannot aim itself at a different branch, or turn
    itself into a replace.
 8. `mode: "merge"` (default) never retires anything. **`mode: "replace"` retires only step I/O and trigger links
-   of the file's steps that the file omits** (Q5). **An I/O row that a BR CRUD or an external flow depends on is
+   of the file's steps that the file omits** (Q5). A step that leaves out its `triggers`, `inputs` or `outputs`
+   list keeps them; only an explicit `[]` removes them (FI-1). A step's I/O in the file is its `inputs`, its
+   `outputs` and every data entity its own external flows need, so none of those is retired (FI-4). **An I/O row that a BR CRUD or an external flow depends on is
    kept**, with a warning naming the dependent. Steps, BRs, performers, roles and external flows are never retired
    by an import. Every RETIRE row is listed in the preview, and the retire count must be acknowledged.
 9. **An imperfect file still imports, with warnings** (D-55): a process with no input or trigger, or no output;
-   a process connected to nothing; an unknown data-entity name (created); an unknown performer (left blank);
-   missing descriptions. The gaps stay visible on the diagram's warnings panel and, where the chart's DFD rule
+   a process connected to nothing; an unknown data-entity name (created); an unknown performer (current one
+   kept); missing descriptions. The gaps stay visible on the diagram's warnings panel and, where the chart's DFD rule
    requires the element, still block a freeze while unresolved (D-70). **A file is rejected, with nothing staged, only for** an unreadable file, a wrong format
-   version, a different anchor or mode than chosen (R2-P3) or a stale `row_version` (R2-D5); and a step is an
-   error when its identity is wrong — an unknown or out-of-scope BR number, a moved `hier_code`, a `hier_code`
-   without a `br_number`, two steps resolving to one process, or two steps with one name — because importing it
-   would write to the wrong process (SC-6).
+   version, or a different anchor or mode than chosen (R2-P3). **A step is an error** — the rest of the file still
+   stages, and the preview names every such step — when it changed since export (a stale `row_version`, named with
+   the node's current values, R2-D5, FI-3) or when its identity is wrong — an unknown or out-of-scope BR number, a
+   moved `hier_code`, a `hier_code` without a `br_number`, two steps resolving to one process, or two steps with one
+   name — because importing it would write to the wrong process (SC-6). A batch holding any error cannot commit.
 10. `source_ref` is kept on the staged row so the preview can say *which shape on which slide* a problem came
     from — that is what makes an AI conversion checkable by a human.
 
@@ -4231,7 +4235,8 @@ validate_process_flow_json(project_id, anchor_bfc_node_id, mode, file):   # R2-P
     mode in ('merge', 'replace'), else 422
     enforce_json_limits(file)                      # §7.12a — bytes, depth, steps; body cap at ingress (R2-S8)
     doc = json.loads(file, parse_constant=reject)  # no NaN / Infinity
-    jsonschema.validate(doc, VB_PROCESS_FLOW_2_0)  # structural errors → 422, nothing staged; 1.0 → 422 "re-export"
+    FlowFile20.model_validate(doc)                 # strict Pydantic model; the published schema is generated from it
+                                                   # structural errors → 422, nothing staged; 1.0 → 422 "re-export"
     doc.parent.hier_code == anchor.hier_code, else 422 "This file is for …; you chose …"
     doc.mode (default merge) == mode, else 422 "Nothing was staged"
 
@@ -4245,7 +4250,7 @@ validate_process_flow_json(project_id, anchor_bfc_node_id, mode, file):   # R2-P
                 stale row_version, two file steps on one node, repeated name (Q1)
         INSERT IMPORT_ROW(row_kind='STEP', verdict, payload, source_ref, is_valid, error_detail, warning_detail)
     for performer, triggers, inputs/outputs, external flows: resolve per rules 3–6
-        warnings (D-55): new data entity / trigger / party to be created, unknown performer left blank,
+        warnings (D-55): new data entity / trigger / party to be created, unknown performer (current kept),
                          step with no input-or-trigger, step with no output, unconnected step, no description
     if mode == 'replace':                                          # rule 8 — Q5
         for io in live BFC_NODE_DATA_ENTITY on the file's resolved steps, not in the file:
@@ -4280,7 +4285,9 @@ commit_process_flow_json(batch_id, confirm):
 **Staging rows.** The flow import stages `STEP`, `STEP_IO`, `EXTERNAL_ENTITY`, `EXTERNAL_FLOW` and
 `DATA_ENTITY` rows as today, and its own migration adds the kinds `PERFORMER` (MATCH only), `TRIGGER` and
 `STEP_TRIGGER` to `ck_ir_row_kind` / `ck_ir_kind_fits_target`, `STEP_TRIGGER` to `ck_ir_retire_kinds`, and
-`PERFORMER` to the MATCH-only rule. `FLOW_EDGE`, `STEP_ROLE` and `LANE` stay in the lists so rows staged before
+`PERFORMER` to the MATCH-only rule (`ck_ir_match_only`) and the untyped-target rule (`ck_ir_target_kind`); and it
+makes the pointer unique per kind, `uq_ir_source_path (import_batch_id, row_kind, source_path)`, because a new data
+entity and the input that names it share one pointer (FI-5). Migration 0080; detail in `docs/slice1e_b_flow_import_spec.md`. `FLOW_EDGE`, `STEP_ROLE` and `LANE` stay in the lists so rows staged before
 remain valid until the 90-day purge (S7 Q-32).
 
 **Why the pipeline is reused rather than a second importer:** the six properties of §7.11 — separate validate and
