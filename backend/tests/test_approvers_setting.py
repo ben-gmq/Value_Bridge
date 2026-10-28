@@ -123,7 +123,7 @@ def test_under_one_a_sole_admin_requests_and_approves_a_removal_flagged_and_the_
     single_owner(owner)
     seed_bootstrap(owner, two["a1"])                                                     # approved just now
     pp = request(app_engine, two)
-    assert "30" in refused(app_engine, APPROVE, u=two["a1"], pp=pp)                       # A-Q1 kept
+    assert "single-owner setting the approver" in refused(app_engine, APPROVE, u=two["a1"], pp=pp)   # A-Q1 kept
     age_grant(owner, two["a1"])
     run(app_engine, APPROVE, u=two["a1"], pp=pp)
     assert run(owner, "SELECT approved_by_user_id = requested_by_user_id, approved_single_owner FROM project_purge "

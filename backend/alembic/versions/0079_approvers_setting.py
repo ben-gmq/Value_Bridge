@@ -49,9 +49,12 @@ PURGE_SWAPS = [
     (">= 2 THEN\n              RAISE EXCEPTION 'an open request is approved once",
      ">= quorum THEN\n              RAISE EXCEPTION 'an open request is approved once"),
     ("            IF NOT public.fn_admin_purge_independent(NEW.approved_by_user_id, OLD.requested_by_user_id) THEN",
-     "            IF (quorum = 2 AND NOT public.fn_admin_purge_independent(NEW.approved_by_user_id, "
-     "OLD.requested_by_user_id))\n"
-     "               OR (quorum = 1 AND NOT public.fn_admin_rights_aged(NEW.approved_by_user_id)) THEN"),
+     "            IF quorum = 1 AND NOT public.fn_admin_rights_aged(NEW.approved_by_user_id) THEN   -- A-Q1\n"
+     "              RAISE EXCEPTION 'under the single-owner setting the approver''s admin rights must still be at '\n"
+     "                'least 30 days old (AR-20, AR-28)' USING ERRCODE = 'restrict_violation';\n"
+     "            END IF;\n"
+     "            IF quorum = 2 AND NOT public.fn_admin_purge_independent(NEW.approved_by_user_id, "
+     "OLD.requested_by_user_id) THEN"),
     ("            NEW.approved_at := statement_timestamp();\n"
      "          ELSIF (NEW.approved_at IS DISTINCT FROM OLD.approved_at OR NEW.approved_by_user_id IS DISTINCT FROM "
      "OLD.approved_by_user_id) THEN",
@@ -171,7 +174,7 @@ FUNCTIONS = [  # name, signature, header, sha before, sha after, swaps
      GRANT_INDEPENDENT_SWAPS),
 ]
 NEW_SHAS = {   # the bodies these swaps produce (tests/test_migration_0079.py re-derives them from the database)
-    "SHA_PURGE_0079": "4213b1c931470c28816311bfda7505feca6bbd26f3701ff9259f0294b661b214",
+    "SHA_PURGE_0079": "c88bd8a1624de47800db51edd6cf59b8d71640cd7b195dab1addfdad8288152d",
     "SHA_GRANT_0079": "576e1ea4162600711152c1ad5a4cd077b808607cb49d20876468e8c739aeffa0",
     "SHA_INSTANCE_0079": "29f66b2a7f8fcdf7d5ad8e1f9630ed0410c67184bf7ae29d48986fa86eaa762f",
     "SHA_ALLOWS_0079": "fd4d7e69e447ddaa171ad50a0ccf56297472a90a7655b9bcf77fb19833bd8029",

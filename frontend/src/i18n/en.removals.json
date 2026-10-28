@@ -1,6 +1,7 @@
 {
   "removals.tab": "Removals",
   "removals.intro": "Taking a project out of Value Bridge needs two platform admins: one asks, a different one approves, and the operator runs it at least 24 hours later. While a request is open the project cannot be changed.",
+  "removals.introSingle": "Single-owner setting: one platform admin may ask for and approve a removal alone; the operator runs it at least 24 hours after the approval, and the approver's admin rights must be at least 30 days old. While a request is open the project cannot be changed.",
   "removals.fewAdmins": "Only {n} live platform admin. Every removal needs two: add a second platform admin before any project can be archived or deleted.",
   "removals.approvedAlone": "Approved alone under the single-owner setting",
   "removals.due.title": "Due for archiving",
