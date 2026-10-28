@@ -607,3 +607,5 @@ place.
   router, not the service.
 - **2026-10-28 · slice 1e-b design review round 2 (design-auditor):** (N2) a step or party name that, once
   cleaned, matches two live records is not yet defined — make it a row error naming both (piece a).
+- **2026-10-28 · slice 1e-b piece (a1), 0079 test fix (`sara`):** (L) `test_migration_0079`'s refused downgrade
+  checks only the version row, not that 0079's objects survive the refusal.
