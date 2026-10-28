@@ -3,11 +3,12 @@ import { Segmented } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { Coverage } from './Coverage';
+import { SolutionMatrix } from './SolutionMatrix';
 import { Traceability } from './Traceability';
 
 // Slice 1f (spec §4): one Reports page, a Segmented choice of the reports (?tab=). Every report is read-only and
 // worked out on each read; the screen never adds anything up itself.
-const TABS = ['traceability', 'coverage'];
+const TABS = ['traceability', 'coverage', 'solution_matrix'];
 
 export default function ReportsPage() {
   const { projectId } = useParams();
@@ -20,6 +21,7 @@ export default function ReportsPage() {
         options={TABS.map((v) => ({ value: v, label: t(`reports.tab.${v}`) }))} />
       {tab === 'traceability' && <Traceability projectId={projectId} />}
       {tab === 'coverage' && <Coverage projectId={projectId} />}
+      {tab === 'solution_matrix' && <SolutionMatrix projectId={projectId} />}
     </Page>
   );
 }

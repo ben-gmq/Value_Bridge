@@ -103,6 +103,7 @@ export const keys = {
   phaseSplit: (solId) => ['phase-split', String(solId)],
   traceability: (p) => ['reports', String(p), 'traceability'],                       // slice 1f
   coverage: (p) => ['reports', String(p), 'coverage'],
+  solutionMatrix: (p) => ['reports', String(p), 'solution-matrix'],
   solutionDeps: (solId) => ['solution-deps', String(solId)],
   allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],

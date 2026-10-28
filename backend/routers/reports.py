@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.guards import GuardedRouter, project_ctx
-from schemas.reports import CoverageOut, TraceabilityOut
+from schemas.reports import CoverageOut, SolutionMatrixOut, TraceabilityOut
 from services import reports
 
 router = GuardedRouter(tags=["reports"])
@@ -20,3 +20,8 @@ def traceability(project_id: int, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/coverage", response_model=CoverageOut, **_read.route)
 def coverage(project_id: int, db: Session = Depends(get_db)):
     return reports.coverage(db, project_id)
+
+
+@router.get("/projects/{project_id}/solution-matrix", response_model=SolutionMatrixOut, **_read.route)
+def solution_matrix(project_id: int, db: Session = Depends(get_db)):
+    return reports.solution_matrix(db, project_id)

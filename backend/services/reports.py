@@ -12,6 +12,7 @@ from models import (Application, ApplicationSolution, BfcNode, BrDataEntity, BrF
                     BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Solution)
 from models.shared import FR_BEHAVIOURS
 from services import br_flows, components, function_requirement as fr_service
+from services.code_master import resolve
 
 BEHAVIOUR_ORDER = ("FORM", "BATCH", "INTERFACE", "REPORT", "OTHER")
 assert set(BEHAVIOUR_ORDER) == set(FR_BEHAVIOURS)          # a new behaviour gets its place here (sara 1f L1)
@@ -215,3 +216,47 @@ def coverage(db: Session, project_id: int) -> dict:
                        [{"data_entity_id": d.data_entity_id, "de_number": d.de_number, "de_name": d.de_name}
                         for d in sorted(des.values(), key=lambda d: d.de_number) if d.data_entity_id not in referenced]))
     return {"generated_at": _now(), "lines": lines}
+
+
+# ---- 3.3 solution matrix ---------------------------------------------------------------------------------------
+def solution_matrix(db: Session, project_id: int) -> dict:
+    """§7.9 solution_matrix, criterion 10b: one cell per (to-be L1 area × solution category) holding the distinct live
+    non-REJECTED solutions that answer a live BR under that area and the count of those BRs. Every category is a
+    column, in SOLUTION_CATEGORY order, even when empty. Solutions on no live BR get their own row; REJECTED ones are
+    only counted (A6). Needs SOLUTION."""
+    sc = _Scope(db, project_id)
+    if "SOLUTION" not in sc.on:
+        return {"generated_at": _now(), "categories": None, "rows": None, "unlinked": None, "totals": None,
+                "live_count": None, "rejected_count": None, "technology_share": None}
+    cats = [{"code": c.code, "label": c.label} for c in resolve(db, project_id, "SOLUTION_CATEGORY")]
+    areas = {n.hier_code: n for n in sc.steps.values() if n.level_no == 1 and not n.is_process}
+    live = {sid: s for sid, s in sc.sols.items() if s.status_code != "REJECTED"}
+    cells: dict[str, dict[str, tuple[set, set]]] = {}
+    linked: set[int] = set()
+    for br_id, sid in sc.br_sol:
+        if sid not in live:
+            continue
+        linked.add(sid)
+        area = sc.steps[sc.brs[br_id].bfc_node_id].hier_code.split(".", 1)[0]
+        sols, brs = cells.setdefault(area, {}).setdefault(live[sid].category_code, (set(), set()))
+        sols.add(sid)
+        brs.add(br_id)
+
+    def row(by_cat: dict) -> dict:
+        empty = (set(), set())
+        return {"cells": {c["code"]: {"solutions": len(by_cat.get(c["code"], empty)[0]),
+                                      "brs": len(by_cat.get(c["code"], empty)[1])} for c in cats},
+                "total": {"solutions": len(set().union(*(v[0] for v in by_cat.values()))),
+                          "brs": len(set().union(*(v[1] for v in by_cat.values())))}}
+
+    rows = [{"bfc_node_id": a.bfc_node_id, "hier_code": code, "area_name": a.node_name, **row(cells.get(code, {}))}
+            for code, a in sorted(areas.items(), key=lambda kv: _hier_key(kv[0]))]
+    unlinked: dict[str, tuple[set, set]] = {}
+    for sid, s in live.items():
+        if sid not in linked:
+            unlinked.setdefault(s.category_code, (set(), set()))[0].add(sid)
+    totals = {c["code"]: sum(1 for s in live.values() if s.category_code == c["code"]) for c in cats}
+    share = round(totals.get(fr_service.TECHNOLOGY, 0) * 100 / len(live), 1) if live else None
+    return {"generated_at": _now(), "categories": cats, "rows": rows, "unlinked": row(unlinked)["cells"],
+            "totals": totals, "live_count": len(live), "rejected_count": len(sc.sols) - len(live),
+            "technology_share": share}

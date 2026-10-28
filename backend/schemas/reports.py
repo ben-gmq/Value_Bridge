@@ -64,3 +64,32 @@ class CoverageLine(BaseModel):
 class CoverageOut(BaseModel):
     generated_at: str
     lines: list[CoverageLine]
+
+
+class CategoryRef(BaseModel):
+    code: str
+    label: str
+
+
+class MatrixCell(BaseModel):
+    solutions: int
+    brs: int
+
+
+class MatrixRow(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+    cells: dict[str, MatrixCell]          # keyed by category code, every category present
+    total: MatrixCell                      # a solution counted once per row
+
+
+class SolutionMatrixOut(BaseModel):
+    generated_at: str
+    categories: list[CategoryRef] | None
+    rows: list[MatrixRow] | None
+    unlinked: dict[str, MatrixCell] | None
+    totals: dict[str, int] | None
+    live_count: int | None                # live non-REJECTED solutions: the share's denominator (Q7)
+    rejected_count: int | None
+    technology_share: float | None        # None also when there is no live solution
