@@ -286,6 +286,22 @@ async function download(url, fallback) {
   }
 }
 
+// The process flow as a vb-process-flow/2.0 file (slice 1e-b, D-25): one anchor's export, and the published format —
+// the AI prompt pack (Claude Enterprise only, FI-10) and the schema with its worked example — saved as files.
+export const flowFileApi = {
+  export: (nodeId) => download(`${V}/bfc-nodes/${nodeId}/process-flow-json`, 'vb-flow.json'),
+  promptPack: async () => {
+    const s = await d(http.get(`${V}/process-flow-json/schema`));
+    saveBlob(new Blob([s.prompt_pack], { type: 'text/markdown' }), 'vb-process-flow-2.0-prompt-pack.md');
+  },
+  schema: async () => {
+    const s = await d(http.get(`${V}/process-flow-json/schema`));
+    const body = JSON.stringify({ approved_ai_service: s.approved_ai_service, ai_rules: s.ai_rules,
+      schema: s.schema, example: s.example }, null, 2);
+    saveBlob(new Blob([body], { type: 'application/json' }), 'vb-process-flow-2.0-schema.json');
+  },
+};
+
 export const importApi = {
   template: (projectId, target) => download(`${P(projectId)}/bulk/templates/${target}`, `vb-${target}-template.xlsx`),
   export: (projectId, target) => download(`${P(projectId)}/bulk/${target}/export`, `vb-${target}-export.xlsx`),

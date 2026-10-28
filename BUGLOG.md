@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-013 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-014 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -47,6 +47,23 @@ place.
   run log line.
 - **Severity:** MEDIUM, not reachable today (local only, no real data). **Gate:** before the first non-local deploy,
   beside VB-011.
+
+### VB-013 | The flow import's AI safety rules must reach the consultant even where the prompt pack is withheld | OPEN — FIXED, awaiting Ben's close
+- **FIXED 2026-10-28, slice 1e-b piece (a1):** the DFD screen's "Flow file" dialog opens with the three rules
+  (Claude Enterprise under FTC's account only, no other AI; remove personal data first; everything confidential)
+  before any download; `GET /process-flow-json/schema` serves the pack (`backend/assets/flow_prompt_pack.md`), whose
+  first section states the same rules to the consultant. The import (piece a2) opens in the same dialog, under the
+  same rules. Tests: `tests/test_flow_export.py::test_the_schema_route_serves_the_schema_the_example_and_the_claude_enterprise_pack`.
+- **type:** ENHANCEMENT (design) · **found:** 2026-10-28, design review of slice 1e-b, round 2 (design-auditor N1,
+  MEDIUM) · **depends-on:** —
+- **What:** the 1e-b spec withheld the AI prompt pack until the vendor's data terms were recorded, and the pack is
+  what carries the rules "Claude Enterprise under FTC's account only" and "remove personal data first". Withholding
+  it would also have withheld those rules, leaving a consultant to try an AI with no guidance.
+- **Fix (piece a):** the import dialog and the schema download state "no client content into any AI except Claude
+  Enterprise under FTC's account; remove personal data first"; the pack asset is committed only together with the
+  spec §1a terms row. FI-10 (Ben, 2026-10-28) recorded the Claude Enterprise terms, so the pack ships in piece (a)
+  naming that one service; the warning stays for any other.
+- **Severity:** MEDIUM, not reachable today (local only, no real data; nothing of 1e-b is built). Closes with piece (a).
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
@@ -588,3 +605,9 @@ place.
   runs per-row queries and locks every stakeholder; `create_fr`'s `link_fr` still runs the drift query. (L4) the
   default-status literals ("OPEN" and the FR default) are written twice. (L5) `tag_br_fr` still checks SOLUTION in the
   router, not the service.
+- **2026-10-28 · slice 1e-b design review round 2 (design-auditor):** (N2) a step or party name that, once
+  cleaned, matches two live records is not yet defined — make it a row error naming both (piece a).
+- **2026-10-28 · slice 1e-b piece (a1), 0079 test fix (`sara`):** (L) `test_migration_0079`'s refused downgrade
+  checks only the version row, not that 0079's objects survive the refusal.
+- **2026-10-28 · slice 1e-b piece (a1), Flow file dialog (`sara`):** (L) "has direct steps" on the DFD screen is
+  read from the `hier_code` format; a parent id in the DFD graph payload would make it exact.

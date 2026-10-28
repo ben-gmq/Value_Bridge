@@ -38,6 +38,8 @@ def test_the_downgrade_refuses_once_the_setting_was_one(owner):
     setting(owner, installation_kind="LOCAL_SINGLE_OWNER")
     setting(owner, approvers_required=1)
     setting(owner, approvers_required=2)                                  # back at 2: the log still says it was 1
+    head = q(owner, "SELECT version_num FROM alembic_version")[0][0]
     with pytest.raises(Exception, match="0079 downgrade refused"):
         command.downgrade(_cfg(), "0078")
-    assert q(owner, "SELECT version_num FROM alembic_version")[0][0] == "0079"
+    # The refusal rolls the whole downgrade back: the chain stays where it was (head, not 0079, once 0080 sits on it).
+    assert q(owner, "SELECT version_num FROM alembic_version")[0][0] == head >= "0079"

@@ -217,13 +217,13 @@ def enabled(db: Session, project_id: int, lock: bool = False) -> frozenset[str]:
     return frozenset(db.scalars(q))
 
 
-def require_on(db: Session, project_id: int, codes: str | tuple[str, ...] | None) -> None:
+def require_on(db: Session, project_id: int, codes: str | tuple[str, ...] | None, lock: bool = True) -> None:
     """409 COMPONENT_OFF unless every named component is on. Holds FOR SHARE on the rows until the
-    request commits, so a write and a switch-off serialise (§5.1)."""
+    request commits, so a write and a switch-off serialise (§5.1); a read passes lock=False."""
     if not codes:
         return
     wanted = (codes,) if isinstance(codes, str) else tuple(codes)
-    on = enabled(db, project_id, lock=True)
+    on = enabled(db, project_id, lock=lock)
     missing = [c for c in wanted if c not in on]
     if missing:
         labels = _codes(db)

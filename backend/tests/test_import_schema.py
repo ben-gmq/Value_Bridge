@@ -181,6 +181,44 @@ def test_one_staged_row_per_sheet_row_or_pointer(db, w):
     w.row(flow, "PROCESS_FLOW", "STEP", source_path="/steps/1")   # NULL sheet_row_no never collides
 
 
+# ---- 0080: the 1e-b flow kinds (FI-5) -----------------------------------------------------
+
+def test_a_pointer_holds_one_row_per_kind(db, w):
+    """A new data entity and the input that names it share one pointer (FI-5)."""
+    b = w.batch("PROCESS_FLOW")
+    w.row(b, "PROCESS_FLOW", "STEP_IO", source_path="/steps/0/inputs/0")
+    w.row(b, "PROCESS_FLOW", "DATA_ENTITY", source_path="/steps/0/inputs/0")
+    _violates(db, "uq_ir_source_path",
+              lambda: w.row(b, "PROCESS_FLOW", "DATA_ENTITY", source_path="/steps/0/inputs/0"))
+
+
+def test_the_new_flow_kinds_stage_only_in_a_flow_batch(db, w):
+    b = w.batch("PROCESS_FLOW")
+    w.row(b, "PROCESS_FLOW", "PERFORMER", verdict="MATCH", source_path="/steps/0/performer")
+    w.row(b, "PROCESS_FLOW", "TRIGGER", source_path="/triggers/0")
+    w.row(b, "PROCESS_FLOW", "STEP_TRIGGER", source_path="/steps/0/triggers/0")
+    for kind in ("PERFORMER", "TRIGGER", "STEP_TRIGGER"):
+        _violates(db, "ck_ir_kind_fits_target", lambda: w.row(w.batch(), kind=kind, sheet_row_no=2))
+
+
+def test_a_performer_row_is_only_ever_a_match_with_no_target_id(db, w):
+    b = w.batch("PROCESS_FLOW")
+    _violates(db, "ck_ir_match_only",
+              lambda: w.row(b, "PROCESS_FLOW", "PERFORMER", source_path="/steps/0/performer"))
+    _violates(db, "ck_ir_match_only", lambda: w.row(b, "PROCESS_FLOW", "LANE", source_path="/lanes/0"))
+    _violates(db, "ck_ir_target_kind",
+              lambda: w.row(b, "PROCESS_FLOW", "PERFORMER", verdict="MATCH", source_path="/steps/1/performer",
+                            committed_target_id=1))
+    w.row(b, "PROCESS_FLOW", "TRIGGER", source_path="/triggers/0", committed_target_id=1)
+
+
+def test_replace_may_retire_a_trigger_link_but_not_a_trigger(db, w):
+    b = w.batch("PROCESS_FLOW", import_mode="REPLACE")
+    w.row(b, "PROCESS_FLOW", "STEP_TRIGGER", verdict="RETIRE", payload=TARGET)
+    _violates(db, "ck_ir_retire_kinds",
+              lambda: w.row(b, "PROCESS_FLOW", "TRIGGER", verdict="RETIRE", payload=TARGET))
+
+
 # ---- import_batch CHECKs ------------------------------------------------------------------
 
 def test_merge_never_retires(db, w):

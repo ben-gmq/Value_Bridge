@@ -22,6 +22,7 @@ import { Card, Code, ListRow, SectionLabel, Segmented, Status, Tag } from '../..
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { DrawNotice, useDfdDraw } from './DfdDraw';
+import { FlowFileButton } from './FlowFileDialog';
 
 // The DFD of one parent node — the one process diagram (D-38, D-46, D-47, D-49; slice7_schema §9.8).
 // Lanes are performers; a process sits in its lane at the column of its derived rank (order comes
@@ -626,6 +627,9 @@ export function DfdView({ projectId, nodeId, frame, chartLabel = t('processes.ba
         options={[{ value: 'diagram', label: t('processes.viewDiagram') }, { value: 'table', label: t('processes.viewTable') }]} />
       <Button variant="outlined" component={RouterLink} to={links.node(projectId, nodeId, g?.scope.bfc_set_code)}>{chartLabel}</Button>
       <CopyMermaidButton area="processes" disabled={!g} fetchText={() => dfdApi.mermaid(nodeId, showOrder)} />
+      {g && <FlowFileButton nodeId={nodeId} hasSteps={g.processes.some((p) =>      // direct steps only (FI-9): the
+        p.hier_code.startsWith(`${g.scope.hier_code}.`)                           // DFD also rolls up deeper ones
+        && p.hier_code.split('.').length === g.scope.hier_code.split('.').length + 1)} />}
       {canEdit && (
         <Button color="warning" disabled={!g || reset.isPending}
           onClick={() => setConfirmReset(true)}>{t('processes.resetLayout')}</Button>)}

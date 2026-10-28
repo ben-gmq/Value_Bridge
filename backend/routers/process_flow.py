@@ -7,22 +7,24 @@ a 404. A write names the component it needs: the chart's DFD component for trigg
 from typing import Annotated
 
 from fastapi import Depends
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import Field
 from sqlalchemy.orm import Session
 
 from auth.dependencies import current_user
 from database import get_db
 from models import AppUser, BfcNode, BfcNodeTrigger, ProcessTrigger
-from routers.guards import GuardedRouter, object_guard, project_ctx
+from routers.guards import GuardedRouter, authenticated, object_guard, project_ctx
 from schemas.process_flow import (DfdGraphOut, LayoutItem, PerformerIn, ProcessCompletenessOut, SetCopyIn,
                                   SetCopyOut, StepTriggerIn, StepTriggerOut, TriggerIn, TriggerOut, TriggerPatch,
                                   VolumeIn, VolumeOut)
 from schemas.scope import BfcNodeOut
-from services import bfc, bfc_set, components, diagram_layout, lifecycle, process_flow, process_volume, render
+from services import (bfc, bfc_set, components, diagram_layout, flow_import, lifecycle, process_flow, process_volume,
+                      render)
 from services import trigger as trigger_service
 
 router = GuardedRouter(tags=["dfd"])
+_auth = authenticated()
 _read = project_ctx("VIEW")
 _edit = project_ctx("EDIT")
 _edit_asis = project_ctx("EDIT", "AS_IS")              # copying a chart needs the as-is chart on
@@ -153,6 +155,20 @@ def unlink_step_trigger(id: int, link_id: int, row_version: int, node: BfcNode =
                         user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     trigger_service.unlink(db, _uid(user), lifecycle.child_of(db, BfcNodeTrigger, link_id, "bfc_node_id",
                                                               node.bfc_node_id), row_version)
+
+
+# ---- the flow as a file (D-25, slice 1e-b) --------------------------------------------------------------
+@router.get("/process-flow-json/schema", **_auth.route)
+def flow_file_schema():
+    """The vb-process-flow/2.0 JSON Schema, the worked example and the AI prompt pack (Claude Enterprise only)."""
+    return flow_import.schema()
+
+
+@router.get("/bfc-nodes/{id}/process-flow-json", **_node_r.route)
+def export_flow_file(id: int, node: BfcNode = Depends(_node_r.dep), db: Session = Depends(get_db)):
+    """The anchor's direct process steps as a vb-process-flow/2.0 file; its DFD component must be on (spec §7)."""
+    name = flow_import.download_name(node)
+    return JSONResponse(flow_import.export(db, node), headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 # ---- the two charts (D-47) -------------------------------------------------------------------------
