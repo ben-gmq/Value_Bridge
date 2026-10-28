@@ -58,7 +58,15 @@ export const IMPORT_TARGETS = {
     columns: FIELD_COLUMNS,
     refresh: (p) => [keys.entities(p), keys.everyEntity()],
   },
-  // Slice 1e-a: opened from the FR and Issue lists only (docs/slice1e_imports_spec.md §7.2, §7.3).
+  // Slice 1e-a: opened from the business-function chart, the FR and the Issue lists only (§7.1–§7.3).
+  'business-requirements': {
+    label: 'data.import.target.brs',
+    help: 'data.import.target.brsHelp',
+    columns: { br_number: 'data.import.col.brNumber', hier_code: 'data.import.col.hierCode',
+      step_name: 'data.import.col.stepName', br_statement: 'data.import.col.statement',
+      status_code: 'data.import.col.status', row_token: 'data.import.col.rowToken' },
+    refresh: (p) => [keys.brs(p)],
+  },
   'function-requirements': {
     label: 'data.import.target.frs',
     help: 'data.import.target.frsHelp',
@@ -598,7 +606,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
 
 /** The Export and Import buttons of a one-target list page (slice 1e-a: the FR and Issue lists). Export is open to
  * every viewer; Import only to an editor (useCanEdit — presentation only, the guards still refuse). */
-export function ListImportActions({ projectId, target, canEdit, onNotice, onError }) {
+export function ListImportActions({ projectId, target, canEdit, onNotice, onError,
+  exportLabel = 'data.import.exportList', importLabel = 'data.import.importList' }) {
   const [open, setOpen] = useState(false);
   const exp = useMutation({
     mutationFn: () => importApi.export(projectId, target),
@@ -608,10 +617,10 @@ export function ListImportActions({ projectId, target, canEdit, onNotice, onErro
   return (
     <>
       <Button startIcon={<DownloadRounded />} disabled={exp.isPending}
-        onClick={() => { onError(''); exp.mutate(); }}>{t('data.import.exportList')}</Button>
+        onClick={() => { onError(''); exp.mutate(); }}>{t(exportLabel)}</Button>
       {canEdit && (
         <Button variant="outlined" startIcon={<UploadFileRounded />} onClick={() => setOpen(true)}>
-          {t('data.import.importList')}</Button>)}
+          {t(importLabel)}</Button>)}
       {open && <ImportWizard projectId={projectId} targets={[target]} initialTarget={target} onClose={() => setOpen(false)} />}
     </>
   );
