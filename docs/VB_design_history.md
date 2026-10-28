@@ -592,6 +592,15 @@ migration 0079.
 |---|---|---|
 | AR-28 | **The number of approvers is a per-installation setting, 2 or 1.** Default 2; never below 2 on an installation holding client data or on a server; 1 only on one declared `LOCAL_SINGLE_OWNER`, set only by the owner command naming an operator, every change logged; the admin page shows a banner while it is 1; every approval made under it is recorded "approved alone"; the 24-hour wait, typed confirmation and the approver's 30-day rule (A-Q1) are unchanged. Under 1 the same live admin may request, approve, and run a removal (A-Q2), and AR-24 / AR-18 give way; the server refuses to start unless the host also declares single-owner (A-Q3) and serves the app to this computer only — FRONTEND_URL on localhost (Ben, 2026-10-28: "YES"); a SHARED installation stays shared (A-Q4); an approval made alone never runs once the setting is back at 2 (A-Q5) | the fixed "second admin" of Q-67…Q-85, AR-13, AR-18, AR-24 |
 
+### Ben's ruling, 2026-10-28 — the System gap report's step rule (slice 1f, RP-1)
+
+Ben, via Ren, 2026-10-28, on design review round 1 finding D1 (HIGH) of `docs/slice1f_spec.md`: option (a), *check per
+system*, "accept the ~2 extra hours".
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| RP-1 | **`application_gap` checks per system, inside each matched area.** An as-is step's support by an application is `unallocated` when that same application has no to-be allocation in the matched to-be area; a to-be step's allocation to an application is `unsupported` when that application supports no as-is step in the matched as-is area. One allocation in an area no longer hides the area's other supported steps | §7.9 `application_gap` "per matched area" (an area with any allocation read as having no backlog) |
+
 ### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-10)
 
 Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on the 1e-b model, as recommended). FI-6…FI-9: Ben, via Ren, the same day, on the round-1 design review — recommendations all accepted. Spec:

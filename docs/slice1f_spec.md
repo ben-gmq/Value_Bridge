@@ -2,8 +2,8 @@
 
 **Status:** DRAFT for Ren / Ben. Plan approved by Ren for Ben 2026-10-28 (pieces 1–6; piece 7, ERD to PNG/SVG, held
 for Ben's choice of method). Working assumptions are tagged **A1…A9**. Design review round 1 (design-auditor,
-2026-10-28): 13 findings, dispositions in §7; **§3.4's step rule (D1) is open for Ben and the System gap report
-waits for his answer.**
+2026-10-28): 13 findings, dispositions in §7; **§3.4's step rule (D1) is Ben's ruling RP-1 (per system); the System gap report is
+built last.**
 **Source of truth:** `docs/VB_design.md` §4.3 (`br_coverage_report`), §4.4 (`interface_list`, `solution_matrix`,
 `application_gap_report`, `fr_traceability_matrix`), §4.7 (`create_program` · `update_program`), §7.9 (the report
 pseudo-code: `traceability`, `solution_matrix`, `application_gap`), §11 routes ("Phase 1 — slice 1f"), §12 criteria
@@ -114,18 +114,17 @@ off is `null`.
 - **Headline:** TECHNOLOGY as a share of live non-REJECTED solutions. No flag until control rules exist (A5).
 - Needs SOLUTION.
 
-### 3.4 System gap (function 67; §7.9 `application_gap`; criterion 10d; S6b-5, SC-5) — **waits for Ben (D1)**
-**Open (round 1 D1, HIGH):** at area level one allocation anywhere in a matched area hides every supported as-is step
-in it, so the migration backlog reads "none". Which reading Ben chooses decides the grain below; nothing in §3.4 is
-built until he does. The text below is the draft that the review found wanting.
+### 3.4 System gap (function 67; §7.9 `application_gap`; criterion 10d; S6b-5, SC-5, RP-1) — built last
+**Ben's ruling RP-1 (2026-10-28, round 1 D1):** the check is **per system**, inside each matched area, so one to-be
+allocation in an area no longer hides the area's other supported as-is steps.
 - As-is support = live `APPLICATION_BFC_NODE` on a live as-is process, application lifecycle AS_IS or BOTH. To-be
   allocation = live to-be process ⋈ live BR ⋈ live `BR_SOLUTION` ⋈ live `APPLICATION_SOLUTION` ⋈ live application.
 - Areas paired as `process_volume.summary` does: same level, chart code and normalised name; everything else is
   listed under `unmatched` with the same reasons (ONLY_AS_IS, ONLY_TO_BE, CODE_SAME_NAME_DIFFERS, NAME_ELSEWHERE).
   The pairing is lifted into one shared function both reports call (playbook §10) — no second copy.
-- **`unallocated`:** as-is steps with support, in a matched area whose to-be side has no allocation — one row per
-  (step × supporting application). **`unsupported`:** to-be steps with an allocation, in a matched area whose
-  as-is side has no support. **`retiring`:** applications supporting an as-is step that are allocated to no live
+- **`unallocated`:** one row per (as-is step × supporting application) in a matched area where **that application**
+  has no to-be allocation on any to-be step of the matched area. **`unsupported`:** one row per (to-be step ×
+  allocated application) in a matched area where **that application** supports no as-is step of the matched area. **`retiring`:** applications supporting an as-is step that are allocated to no live
   solution anywhere (A7). **`as_is_support_by_to_be`:** support links naming a TO_BE application — information,
   never counted as support.
 - Needs APPLICATION, AS_IS and SOLUTION (to-be allocation joins `BR_SOLUTION` and `APPLICATION_SOLUTION`, D2); with
@@ -172,7 +171,7 @@ Excel* and *Print / PDF*. No mockup exists for these reports; they compose the k
 Wrong figures reach a client deck or the vendor scope list; noticed when someone checks a row; corrected by fixing
 the data. **Proposed depth:** each report's rules tested directly on built fixtures — traceability grouping, 10a
 (three rows), the untraced group, the flagged tag, criterion 10; each coverage line, one positive and one negative;
-10b; 10d plus one unmatched area and the TO_BE-support line; interface export reads back with an `=` cell kept as
+10b; 10d plus one unmatched area, the TO_BE-support line, and RP-1 (two systems on one area, only one allocated: the other is still listed); interface export reads back with an `=` cell kept as
 text; the print stamp writes one audit row, refuses an unknown report and is 404 for a non-member of a restricted
 project; program edit: 409 stale, 409 client change with projects, audit before/after, non-admin refused by the
 existing guard test. The new report routes and `print-stamp?report=traceability` join the positive-control list of
@@ -195,7 +194,7 @@ projects (no performance test); Excel opening in Excel itself (read back with op
 ## 7. Design review round 1 (design-auditor, 2026-10-28) — dispositions
 | Id | Sev | Finding | Disposition |
 |---|---|---|---|
-| D1 | HIGH | Area-level gap rule hides supported steps | **Open — Ben.** §3.4 not built until decided |
+| D1 | HIGH | Area-level gap rule hides supported steps | **Ben, RP-1 (2026-10-28): per system.** §3.4 rewritten |
 | P1 | MED | GET stamp refired by query machinery | Fixed: one-shot call, retry off (§2). Kept a GET: a POST at VIEW would need an exception in the viewer-write rule |
 | P2 | MED | Ctrl+P prints without stamp/audit | Fixed: body prints only under a held stamp (§2) |
 | P3 | MED | Stamp time ≠ data time | Fixed: refetch, report `generated_at` printed and audited (§2) |
