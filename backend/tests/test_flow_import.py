@@ -122,6 +122,11 @@ def test_an_as_is_flow_round_trips_by_name(client, ed):
     assert codes(at(pv, "STEP", "/steps/0"), "warnings") == ["MATCHED_BY_NAME"]
     doc["steps"][0]["name"] = "Answer the call"                               # an as-is step is matched by name
     assert codes(at(stage(client, ed, area_, doc), "STEP", "/steps/0")) == ["AS_IS_NOT_FOUND"]
+    doc["steps"][0].update(name="Take the call", hier_code="09.09.09")        # FI-11: a cross-check, compared
+    assert codes(at(stage(client, ed, area_, doc), "STEP", "/steps/0")) == ["MOVED"]
+    doc["steps"][0].update(name="Answer the call", hier_code=None, row_version=None)   # no hier_code: a new step
+    pv = stage(client, ed, area_, doc)
+    assert pv["batch"]["error_count"] == 0 and at(pv, "STEP", "/steps/0")["verdict"] == "INSERT"
 
 
 # ---- new steps, their BR, links, catalogue rows (rules 2, 3, 7, 13, 17) ------------------------------------------

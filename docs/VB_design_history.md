@@ -16,13 +16,6 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **FI-11 (2026-10-28, slice 1e-b piece a2 build — for Ben):** §7.2b rule 1 says "a step with a `hier_code` and no
-  `br_number` is an error". An as-is export writes every step's `hier_code` and never a BR number (an as-is step
-  has none), so read literally every as-is round trip fails (spec §10.1). **Built as:** on a to-be anchor the rule
-  stands; on an as-is anchor the step is matched by name (SC-6) and a `hier_code` is a cross-check only — it must
-  equal the name-matched step's, and a `hier_code` whose name matches no live step is an error ("re-export, or
-  remove hier_code to add it as new"), so a renamed as-is step never silently becomes a second one. Tested in
-  `test_flow_import.py::test_an_as_is_flow_round_trips_by_name`. Awaiting Ben before the spec text changes.
 - **2026-10-29 · ERD as SVG (function 41, after EX-1).** Ben chose `html-to-image` to save the ERD as shown. Its PNG
   is built; its SVG is held, because the library's SVG wraps the page's HTML in a `foreignObject`, which §14.5 forbids
   in an exported SVG. Open: (a) PNG only; (b) an SVG drawn from the diagram's own shapes and text, ~1.5 days; (c)
@@ -57,6 +50,8 @@ Nothing here is in the spec yet.
   text is unchanged (it never stated the terms as open).
 - **2026-10-29** — EX-1 folded into §4 `export_erd` and §14 (ERD export): the ERD is saved in the browser as a PNG,
   exactly as shown; SVG is open (§1).
+- **2026-10-29** — FI-11 folded into §5 (BR import identity), §7.2b rules 1 and 9 and the API table: on an as-is
+  anchor a step's `hier_code` cross-checks its name match.
 
 ---
 
@@ -622,7 +617,7 @@ Ben, via Ren, 2026-10-29: option (a), *add `html-to-image` and save the ERD exac
 |---|---|---|
 | EX-1 | **The ERD is saved as a PNG in the browser, exactly as shown** (current zoom and positions; zoom controls and minimap left out), through `html-to-image` pinned at 1.11.11 and one saver for every canvas (`canvas/saveImage.js`). Not audited (only PDFs are, D-42). Nothing is rendered on the server. SVG is not offered: the library's SVG wraps the page's HTML in a `foreignObject`, which §14.5 forbids — open in §1 | Function 41 "PNG/SVG" left open by the 1f spec; options (b) hand-drawn SVG and (c) server-side Mermaid render not taken |
 
-### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-10)
+### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-11)
 
 Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on the 1e-b model, as recommended). FI-6…FI-9: Ben, via Ren, the same day, on the round-1 design review — recommendations all accepted. Spec:
 `docs/slice1e_b_flow_import_spec.md`; migration 0080.
@@ -639,6 +634,7 @@ Ben, via Ren, 2026-10-28: *"yes to all"* (the five questions `apple` raised on t
 | FI-8 | **A step with no description in the file keeps its current text; only an explicit empty description clears it** | design-review 1e-b D3 |
 | FI-9 | **A file may update only the direct children of the chosen parent** | §7.2b "steps_under(anchor), any level"; design-review 1e-b D7 |
 | FI-10 | **The Claude Enterprise data terms are checked; VB may serve the AI instructions for Claude Enterprise only.** Ben, via Ren, 2026-10-28: *"Ben-san has checked the Claude Enterprise data terms himself (2026-10-28). Record in the spec's ## Interface: service = Claude Enterprise, terms checked by Ben-san on 2026-10-28, source = his own check (no vendor document quoted). That closes the 'terms not checked' item for Claude Enterprise; VB may serve the AI instructions for Claude Enterprise only."* | FI-6 "terms … checked before the pack is given to anyone (open)"; design-review 1e-b S1, N1 |
+| FI-11 | **On an as-is anchor a step's `hier_code` cross-checks its name match; it is not an error.** It must equal the name-matched step's code ("moved since export"), and a `hier_code` whose name matches no live step is an error ("re-export, or remove hier_code to add it as a new step"), so an as-is flow re-imports and a renamed step never silently becomes a second one. Raised in the piece a2 build, 2026-10-28. Ben, via Ren, 2026-10-29: *"yes, I agree with you."* | §7.2b rule 1 "a step with a `hier_code` and no `br_number` is an error", which failed every as-is round trip |
 
 ### Ben's ruling, 2026-10-20 — where a restored wave goes (slice 15, Q-94)
 
@@ -907,7 +903,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice14_issue_spec.md · slice14_issue_schema.md` | Slice 14 — Issue module (approved 2026-10-18, I-1…I-16) | 2026-10-18 |
 | `docs/slice15_phasing_spec.md · slice15_phasing_schema.md` | Slice 15 — waves (phasing) and solution dependencies (approved 2026-10-18, W-1…W-9) | 2026-10-18 |
 | `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-13; approved 2026-10-20) | 2026-10-18, 2026-10-20 |
-| `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-10) | 2026-10-24, 2026-10-28 |
+| `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-11) | 2026-10-24, 2026-10-28 |
 
 ---
 

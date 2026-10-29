@@ -199,9 +199,13 @@ Design criteria **110, 111, 112, 113, 114, 118, 123, 129**, plus:
     not in the file and warns `POSSIBLE_DUPLICATE` on the new one.
 17. (P3) With `AS_IS` switched off, an as-is anchor's batch is refused at validate and at commit with 409
     COMPONENT_OFF.
+18. (FI-11) An as-is export re-imports unchanged with no errors (steps matched by name); the same file with a step
+    renamed is a step error (`AS_IS_NOT_FOUND`), with a wrong `hier_code` is `MOVED`, and with the `hier_code`
+    removed stages the renamed step as a new one.
 
-## 11. Decisions — FI-1…FI-10 accepted (Ben, 2026-10-28); recorded in history §3. FI-10 closes the Claude
-Enterprise vendor terms (§1a). Nothing open.
+## 11. Decisions — FI-1…FI-10 accepted (Ben, 2026-10-28), FI-11 (2026-10-29); recorded in history §3. FI-10 closes
+the Claude Enterprise vendor terms (§1a). FI-11: on an as-is anchor `hier_code` cross-checks the name match (design
+§7.2b rule 1). Nothing open.
 
 ## 12. Build order and pieces
 0. **Migration 0080** on `main`, its own commit (Sara before commit).
