@@ -28,16 +28,19 @@ export function Loading() {
 // ---- Print to PDF (spec §3.6, function 143; D-42) ----------------------------------------------------------------
 // One stylesheet for every printable screen: no buttons or filter controls, light colours on paper, table heads on
 // every page, no row split across pages. The left rail and the header hide themselves (AppShell, displayPrint).
-const PRINT_CSS = {
+// Paper is the card colour: with backgrounds printed (sara M1) the page tint would otherwise print as a grey wash.
+const PRINT_CSS = (th) => ({
   '@media print': {
     '*': { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' },          // sara M1: tiles keep their fill
-    'button, .MuiButtonBase-root, .vb-print-hide': { display: 'none !important' },
+    'html, body, #root, #root > div': { backgroundColor: `${th.vars.palette.background.paper} !important` },
+    // a Segmented (the tab and level switchers) is a pill around buttons: hidden whole, never an empty ring
+    'button, .MuiButtonBase-root, .MuiToggleButtonGroup-root, .vb-print-hide': { display: 'none !important' },
     '.MuiTypography-noWrap': { whiteSpace: 'normal', overflow: 'visible', textOverflow: 'clip' },   // sara M2
     thead: { display: 'table-header-group' },
     'tr:not(.vb-print-frame), .vb-print-row': { breakInside: 'avoid' },
   },
   '@page': { margin: '14mm 12mm' },
-};
+});
 
 // Press → refetch the report → fetch the stamp (one REPORT_PRINTED row) → hold it → the browser's print dialog.
 // The stamp is held only for the data and filters it was fetched for, and dropped after printing (round 2 N1), so

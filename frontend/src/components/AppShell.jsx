@@ -306,7 +306,7 @@ export function AppShell({ children }) {
   const ctx = useMemo(() => ({ crumb, setCrumb }), [crumb]);
   return (
     <CrumbContext.Provider value={ctx}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default', '@media print': { bgcolor: 'background.paper' } }}>
         {narrow ? (
           <Drawer open={open} onClose={() => setOpen(false)} slotProps={{ paper: { sx: { border: 0 } } }}>
             <Rail onNavigate={() => setOpen(false)} />
