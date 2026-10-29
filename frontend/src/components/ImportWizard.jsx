@@ -92,8 +92,8 @@ export const IMPORT_TARGETS = {
     reexport: true,
     refresh: (p) => [keys.issues(p)],
   },
-  // Slice 1e-b: a vb-process-flow/2.0 file, opened from a DFD's "Flow file" dialog with its anchor node. Merge only
-  // in piece (a2): replace mode arrives with piece (b), so there is no mode to pick yet.
+  // Slice 1e-b: a vb-process-flow/2.0 file, opened from a DFD's "Flow file" dialog with its anchor node. The mode —
+  // merge or replace — is picked here, never by the file (R2-P3); replace lists every removal and asks for its count.
   'process-flow': {
     label: 'data.import.target.flow',
     help: 'data.import.target.flowHelp',
@@ -113,7 +113,8 @@ const MAX_JSON_BYTES = 2 * 1024 * 1024;          // a flow file's cap (§7.12a)
 const PAGE = 100;
 const STEPS = ['target', 'file', 'review', 'done'];
 const BOOK_STEPS = ['target', 'file', 'entities', 'fields', 'done'];
-const VERDICT_TONE = { INSERT: 'purple', UPDATE: 'navy', MATCH: 'neutral' };     // mockup 08: New purple, Update navy
+// mockup 08: New purple, Update navy; a flow's removal is a regret-able change, a kept link a caution
+const VERDICT_TONE = { INSERT: 'purple', UPDATE: 'navy', MATCH: 'neutral', RETIRE: 'escalate', KEPT: 'caution' };
 const ERR_SX = { mb: 2, whiteSpace: 'pre-wrap' };
 
 function fmtSize(n) {
@@ -154,6 +155,13 @@ function Value({ v }) {
 }
 
 function Changes({ row, cfg }) {
+  if (row.target_label) {                        // a replace-mode RETIRE or KEPT row: the link it acts on
+    return (
+      <Typography sx={{ fontSize: 13 }}>
+        {t(row.verdict === 'RETIRE' ? 'data.import.flow.willRemove' : 'data.import.flow.kept', { what: row.target_label })}
+      </Typography>
+    );
+  }
   if (!row.changes?.length) {
     return row.verdict === 'MATCH'
       ? <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('data.import.noChange')}</Typography> : null;
@@ -217,6 +225,9 @@ function Preview({ pv, cfg }) {
         <Tile label={t('components.import.rows')} value={b.row_count} />
         <Tile label={t('components.import.new')} value={b.insert_count} note={t('data.import.count.insert')} />
         <Tile label={t('components.import.update')} value={b.update_count} note={t('data.import.count.update')} />
+        {b.import_mode === 'REPLACE' && (
+          <Tile label={t('data.import.flow.retireTile')} value={b.retire_count} tone={b.retire_count ? 'escalate' : undefined}
+            note={t('data.import.count.retire')} />)}
         <Tile label={t('components.import.unchanged')} value={b.match_count} note={t('data.import.count.match')} />
         <Tile label={t('components.import.errors')} value={b.error_count} tone={b.error_count ? 'escalate' : undefined}
           note={t('data.import.count.errors')} />
@@ -252,7 +263,7 @@ function Preview({ pv, cfg }) {
                   {shown.map((r) => (
                     <TableRow key={r.import_row_id ?? r.sheet_row_no} sx={(th) => (r.is_valid ? {} : { bgcolor: th.vars.palette.status.escalateBg })}>
                       <TableCell sx={{ pl: 2.5, fontFamily: MONO, fontSize: 13, color: 'brand.muted', wordBreak: 'break-all' }}>
-                        {r.sheet_row_no ?? r.source_path}
+                        {r.sheet_row_no ?? r.source_path ?? t('data.import.flow.notInFile')}
                         {r.row_kind && (
                           <Box sx={{ fontFamily: 'inherit', fontSize: 11.5, mt: 0.5 }}>{tOr(`data.import.kind.${r.row_kind}`, {}, r.row_kind)}</Box>)}
                       </TableCell>
@@ -269,6 +280,8 @@ function Preview({ pv, cfg }) {
                         <Resolved res={r.resolved} />
                         {r.br_number && (
                           <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('data.import.flow.newBr', { number: r.br_number })}</Typography>)}
+                        {r.ext_number && (
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('data.import.flow.newBr', { number: r.ext_number })}</Typography>)}
                         {r.source_ref && (
                           <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{t('data.import.flow.sourceRef', { ref: r.source_ref })}</Typography>)}
                       </TableCell>
@@ -316,6 +329,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
   const [batchId, setBatchId] = useState(null);
   const [typed, setTyped] = useState('');
   const [typedUpdates, setTypedUpdates] = useState('');     // a flow's changed steps (FI-7)
+  const [mode, setMode] = useState('merge');                // a flow file's mode, picked here (R2-P3)
+  const [typedRetires, setTypedRetires] = useState('');     // a replace-mode flow's removals (§7.2b)
   const [done, setDone] = useState(null);          // the COMMITTED BatchHeader (the last step's)
   const [entitiesDone, setEntitiesDone] = useState(null);   // a book's step 1, once committed
   const [skippedEntities, setSkippedEntities] = useState(false);
@@ -385,13 +400,14 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
     setBatchId(id);
     setTyped('');
     setTypedUpdates('');
+    setTypedRetires('');
     setStep('review');
   };
 
   const upload = useMutation({
     mutationFn: async () => {
       if (cfg.json) {
-        return { ph: target, data: await importApi.validateFlow(projectId, anchor.id, 'merge', file.buffer, file.name) };
+        return { ph: target, data: await importApi.validateFlow(projectId, anchor.id, mode, file.buffer, file.name) };
       }
       if (!isBook) return { ph: target, data: await importApi.validate(projectId, target, file.buffer, file.name) };
       if (entitiesDone) {                          // a corrected file goes to the fields step alone
@@ -437,7 +453,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
   const commit = useMutation({
     mutationFn: () => importApi.commit(batchId, { row_version: b.row_version,
       acknowledged_inserts: b.insert_count > 0 ? Number(typed.trim()) : null,
-      acknowledged_updates: cfg.json && b.update_count > 0 ? Number(typedUpdates.trim()) : null }),
+      acknowledged_updates: cfg.json && b.update_count > 0 ? Number(typedUpdates.trim()) : null,
+      acknowledged_retires: cfg.json && b.retire_count > 0 ? Number(typedRetires.trim()) : null }),
     onSuccess: (header) => finish(header),
     onError: async (err) => {
       const s = err?.response?.status;
@@ -462,13 +479,17 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
   });
 
   // Before step 1 commits, a corrected file starts over; after it, it goes to the fields step alone.
-  const reupload = () => { setFile(null); setBatchId(null); setTyped(''); setTypedUpdates(''); say(); setStep('file'); };
+  const reupload = () => {
+    setFile(null); setBatchId(null); setTyped(''); setTypedUpdates(''); setTypedRetires(''); say(); setStep('file');
+  };
 
   const committable = b && b.status === 'VALIDATED' && b.error_count === 0 && !pv.purged;
   const insertsOk = !b?.insert_count || typed.trim() === String(b.insert_count);
   const askUpdates = Boolean(cfg.json && b?.update_count);
   const updatesOk = !askUpdates || typedUpdates.trim() === String(b.update_count);
-  const countOk = insertsOk && updatesOk;
+  const askRetires = Boolean(cfg.json && b?.retire_count);
+  const retiresOk = !askRetires || typedRetires.trim() === String(b.retire_count);
+  const countOk = insertsOk && updatesOk && retiresOk;
   const busy = upload.isPending || commit.isPending || fieldsStep.isPending;
   const steps = isBook ? BOOK_STEPS : STEPS;
   const shownStep = isBook && step === 'review' ? (inEntities ? 'entities' : 'fields')
@@ -507,8 +528,15 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
           <Stack spacing={3}>
             {cfg.json && (
               <Box>
-                <Typography variant="h6" sx={{ mb: 0.5 }}>{t('data.import.flow.into', { code: anchor.hierCode, name: anchor.name })}</Typography>
-                <Typography sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'pre-wrap' }}>{t('data.import.flow.mergeHelp')}</Typography>
+                <Typography variant="h6" sx={{ mb: 1 }}>{t('data.import.flow.into', { code: anchor.hierCode, name: anchor.name })}</Typography>
+                <Segmented label={t('data.import.flow.mode')} value={mode} onChange={setMode} sx={{ mb: 1.25 }}
+                  options={[{ value: 'merge', label: t('data.import.flow.modeMerge') },
+                    { value: 'replace', label: t('data.import.flow.modeReplace') }]} />
+                <Typography sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'pre-wrap' }}>
+                  {t(mode === 'replace' ? 'data.import.flow.replaceHelp' : 'data.import.flow.mergeHelp')}
+                </Typography>
+                {mode === 'replace' && (
+                  <Alert severity="warning" sx={{ mt: 1.25, whiteSpace: 'pre-wrap' }}>{t('data.import.flow.replaceWarn')}</Alert>)}
               </Box>
             )}
             {!entitiesDone && !cfg.json && (
@@ -558,10 +586,10 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                 {t((fieldsOwed ? 'data.import.model.fixFields' : 'data.import.fixErrors')
                   + (b.error_count === 1 ? 'One' : ''), { n: b.error_count })}
               </Alert>)}
-            {committable && b.insert_count + b.update_count === 0 && (
+            {committable && b.insert_count + b.update_count + (b.retire_count ?? 0) === 0 && (
               <Alert severity="info" sx={ERR_SX}>{t('data.import.nothingToChange')}</Alert>)}
             {pv && <Preview key={b.import_batch_id} pv={pv} cfg={phaseCfg} />}
-            {committable && (inEntities || b.insert_count > 0 || askUpdates) && (
+            {committable && (inEntities || b.insert_count > 0 || askUpdates || askRetires) && (
               <Card sx={{ mt: 2 }} bodySx={{ gap: 1.25 }}>
                 <SectionLabel>{t('components.import.allOrNone')}</SectionLabel>
                 {inEntities && (
@@ -586,6 +614,16 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                       slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
                   </Box>
                 )}
+                {askRetires && (
+                  <Box>
+                    <Typography sx={{ fontSize: 13.5, mb: 1 }}>{t('data.import.flow.confirmRetires', { n: b.retire_count })}</Typography>
+                    <TextField id="import-confirm-retires" label={t('data.import.flow.confirmRetiresLabel')} value={typedRetires}
+                      onChange={(e) => setTypedRetires(e.target.value)} sx={{ width: 220 }}
+                      error={typedRetires.trim() !== '' && !retiresOk}
+                      helperText={typedRetires.trim() !== '' && !retiresOk ? t('data.import.confirmMismatch') : ' '}
+                      slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
+                  </Box>
+                )}
               </Card>
             )}
           </>
@@ -601,7 +639,8 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
               </Alert>)}
             <Alert severity="success">
               {t(isBook ? 'data.import.model.fieldsSummary' : cfg.json ? 'data.import.flow.committed' : 'data.import.committed',
-                { inserts: done.insert_count, updates: done.update_count, matches: done.match_count })}
+                { inserts: done.insert_count, updates: done.update_count, matches: done.match_count,
+                  retires: done.retire_count ?? 0 })}
             </Alert>
             {cfg.reexport && done.insert_count > 0 && (
               <Alert severity="info">{t('data.import.reexport')}</Alert>)}
