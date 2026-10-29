@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-014 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-015 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -64,6 +64,15 @@ place.
   spec §1a terms row. FI-10 (Ben, 2026-10-28) recorded the Claude Enterprise terms, so the pack ships in piece (a)
   naming that one service; the warning stays for any other.
 - **Severity:** MEDIUM, not reachable today (local only, no real data; nothing of 1e-b is built). Closes with piece (a).
+
+### VB-014 | The Coverage report runs two database queries for every requirement with flows | OPEN
+- **type:** BUG (performance) · **found:** 2026-10-28, slice 1f piece 2 (`sara` M1, MEDIUM) · **depends-on:** —
+- **What:** `services/reports.coverage` asks `services/br_flows` for each BR's flows one BR at a time: two queries per
+  BR that has flows. Piece 2 removed a third query per BR; the remaining two stay. A project with a few hundred BRs
+  makes the Coverage tab, and its print, slow.
+- **Fix:** one project-wide `br_flows` read (all flows of the project's live BRs in one query, grouped in Python),
+  used by coverage and anything else that walks every BR. About an hour, with the coverage tests as the check.
+- **Severity:** MEDIUM, not reachable today (local only, no real data, no large project yet).
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
