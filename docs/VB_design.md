@@ -258,7 +258,7 @@ list, so the marks change when the rule changes.
 | `manage_data_fields` | `DATA_FIELD` | U | If `is_foreign_key`, `fk_target_entity_id` is mandatory and must be a DE in the **same project** — cross-project FK is rejected |
 | `validate_entity_model` | `DATA_ENTITY`, `DATA_FIELD`, `PROJECT` | R | Report DEs with no PK field, FK fields pointing at a DE with no PK, and **DEs with no fields at all**; under data model depth `FULL` also DEs with keys but no other attributes (D-39; never under `KEYS_ONLY`) → validation warning list. Warnings, never blocks — a partial logical model is the expected state during an assessment. A freeze with entities that have no fields warns and proceeds (S4-12) |
 | `generate_erd` | `DATA_ENTITY`, `DATA_FIELD`, `DIAGRAM_LAYOUT` | R | **D-29.** Entities as boxes (PK, FK and attribute rows), one relationship per FK field → parent entity. Cardinality: parent side `1` if the FK is mandatory, `0..1` if optional or unknown; child side `many`, or `1` only when the FK field set equals the child's PK field set (`DATA_FIELD` models no alternate keys). Saved positions from `DIAGRAM_LAYOUT`. Filter by **subject area** = the entities a BFC L1/L2 branch reads or writes. The "attributes missing" hint follows the project's depth (D-39) |
-| `export_erd` | — | R | The ERD as Mermaid `erDiagram` text, and as PNG/SVG from the canvas |
+| `export_erd` | — | R | The ERD as Mermaid `erDiagram` text, and as a PNG of the canvas as shown (EX-1) |
 | `save_diagram_layout` | `DIAGRAM_LAYOUT` | C/U | **D-30.** Upsert (diagram × scope × object) → x, y, for the listed objects only. Last write wins, per object — two consultants dragging different entities never conflict, and a lost position is not a data-integrity event. A separate audited reset clears one diagram's positions (S2-6) |
 
 ### 4.3 Business Requirement (scope area 2)
@@ -311,7 +311,7 @@ history §1.
 | `create_application` | `APPLICATION` | C | Component APPLICATION (needs no other component, S7-4). The project's application/technology catalogue. `lifecycle_code` ∈ AS_IS / TO_BE / BOTH. Codes upper-case, A–Z 0–9 `.` `_` `-`, unique and editable until a baseline freezes them; a code freed by a rename may be taken by another application; live names unique (S6b-2, S6b-6, S6b-7) |
 | `link_application_solution` | `APPLICATION_SOLUTION` | C/D | Components APPLICATION and SOLUTION. **To-be allocation** — what delivers this solution. Rejected if the application's lifecycle is `AS_IS` |
 | `solution_matrix` | `SOLUTION`, `BR_SOLUTION`, `BUSINESS_REQUIREMENT` | R | Solutions by category × BFC L1 area → *is this transformation actually balanced, or is it five technology answers and no org change?* |
-| `application_gap_report` | `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION`, `BFC_NODE` | R | Per area, as-is support with no to-be allocation → the migration backlog. **The two charts are matched by area** — L1 / L2 chart code and normalised name agreeing, as the volume summary; unmatched areas are listed apart (SC-5). **The reason both links exist.** A `TO_BE` application linked as today's support does not count as today's support; it is listed on the informational line `as_is_support_by_to_be` (S6b-5) |
+| `application_gap_report` | `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION`, `BFC_NODE` | R | Per system within each area, as-is support with no to-be allocation of that system → the migration backlog (RP-1). **The two charts are matched by area** — L1 / L2 chart code and normalised name agreeing, as the volume summary; unmatched areas are listed apart (SC-5). **The reason both links exist.** A `TO_BE` application linked as today's support does not count as today's support; it is listed on the informational line `as_is_support_by_to_be` (S6b-5) |
 | `fr_traceability_matrix` | `BFC_NODE`, `BUSINESS_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT`, `FUNCTION_REQUIREMENT`, `SOLUTION`, `APPLICATION` | R | Process step → BR → FR (through the direct link), grouped by FR type → the vendor-facing scope list. The Solution column is the FR's tag (blank allowed, flagged when it answers none of the FR's BRs); Application is the tag's live `APPLICATION_SOLUTION`. Untraced FRs listed in their own group at the end |
 
 ### 4.5 Issue Management (scope area 5)
@@ -5028,16 +5028,19 @@ application_gap(project_id):                   # D-8 — the migration backlog
     as_is  = APPLICATION_BFC_NODE (as-is processes) ⋈ APPLICATION where lifecycle in (AS_IS, BOTH)
     to_be  = BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION
                           ⋈ APPLICATION_SOLUTION ⋈ APPLICATION
-    return {
-      "unallocated": process steps in as_is with no row in to_be,     # nothing replaces it
-      "unsupported": process steps in to_be with no row in as_is,     # net-new capability
+    return {                                       # per system, inside each matched area (RP-1)
+      "unallocated": (as-is step × application) in as_is where that application has no to_be row
+                     in the matched to-be area,                         # nothing replaces it
+      "unsupported": (to-be step × application) in to_be where that application has no as_is row
+                     in the matched as-is area,                         # net-new capability
       "retiring":    AS_IS applications with no to-be allocation anywhere,
       "as_is_support_by_to_be": as-is support links naming a TO_BE application — informational,
                      never counted as today's support (S6b-5)
     }
     # The two charts have their own node ids and no provenance (D-47), so as-is and to-be are matched by
     # AREA — an L1 / L2 area whose chart code and normalised name agree, as volume_summary (Q-28, SC-5).
-    # "unallocated" / "unsupported" are per matched area; unmatched areas are listed apart with their reason.
+    # "unallocated" / "unsupported" are checked per application within a matched area (RP-1); unmatched areas
+    # are listed apart with their reason.
     # A process-to-process link is a later, separate design.
 
 issue_dashboard(project_id):
@@ -6097,8 +6100,8 @@ refuses new ones (S7-5).
 - **Subject areas.** A filter by BFC L1/L2 branch shows only the entities that branch reads
   or writes. FKs leaving the area are drawn as short stubs labelled with the target, so a
   200-entity model stays readable one area at a time.
-- **Export.** PNG and SVG for decks, Mermaid `erDiagram` text for documents (§7.12b), and PDF
-  (D-42).
+- **Export.** A PNG for decks, saved in the browser exactly as shown (EX-1), Mermaid `erDiagram` text for
+  documents (§7.12b), and PDF (D-42).
 
 **What the DFD looks like** (the process diagram, as-is and to-be, D-38, D-47). It is **generated** (D-31):
 every element comes from the process records (`generate_dfd`, §7.2a), and a connection drawn on it writes one of

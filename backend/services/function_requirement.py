@@ -23,7 +23,8 @@ log = logging.getLogger("vb")
 # DR6a, law 6: the only plain columns a request may set. Type, status and solution are handled
 # on their own; never project_id, the number, complexity, effort or the audit set.
 EDITABLE = ("fr_name", "description", "acceptance_note")
-TECH_CATEGORIES = ("TECHNOLOGY", "DATA")          # §7.5: an FR elsewhere is a finding, not a block
+TECHNOLOGY = "TECHNOLOGY"                       # the solution matrix's headline share (slice 1f §3.3)
+TECH_CATEGORIES = (TECHNOLOGY, "DATA")          # §7.5: an FR elsewhere is a finding, not a block
 
 
 def _name(value: str | None) -> str:

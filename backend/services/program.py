@@ -5,12 +5,12 @@ import hashlib
 import json
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models import AppUser, Client, Program, ProgramMember, Project
 from services import access, audit
-from services.lifecycle import soft_delete
+from services.lifecycle import check_version, soft_delete
 
 
 def get_program(db: Session, program_id: int) -> Program:
@@ -42,6 +42,55 @@ def create_program(db: Session, actor: AppUser, client_id: int, program_code: st
     db.flush()
     audit.record(db, "PROGRAM_CREATED", actor_id=actor.app_user_id, target_table="program",
                  target_id=p.program_id)
+    db.commit()
+    return p
+
+
+PROGRAM_EDITABLE = ("program_code", "program_name", "client_id", "description")
+
+
+def update_program(db: Session, actor: AppUser, program_id: int, row_version: int, changes: dict) -> Program:
+    """Slice 1f §3.7 (function 134): a platform admin edits the program header. The row is locked before the checks,
+    so a project moved in meanwhile is seen. A client change is refused while any project, live or retired, is in the
+    program — a retired one's composite FK still binds the client (round 1 D7). Audited field by field; an edit that
+    changes nothing writes nothing."""
+    p = db.scalar(select(Program).where(Program.program_id == program_id).with_for_update())
+    if p is None:
+        raise HTTPException(404, "Not found")
+    if not p.is_active:
+        raise HTTPException(409, "This program is retired")
+    check_version(p, row_version)
+    changes = {f: v for f, v in changes.items() if f in PROGRAM_EDITABLE}
+    for f in ("program_code", "program_name", "client_id"):
+        if f in changes and (changes[f] is None or (isinstance(changes[f], str) and not changes[f].strip())):
+            raise HTTPException(422, f"{f.replace('_', ' ').capitalize()} is required")
+    if "program_code" in changes:
+        changes["program_code"] = changes["program_code"].strip().upper()          # as at create
+    if "program_name" in changes:
+        changes["program_name"] = changes["program_name"].strip()
+    diff = {f: [getattr(p, f), v] for f, v in changes.items() if getattr(p, f) != v}
+    if not diff:
+        return p
+    client_id = changes.get("client_id", p.client_id)
+    if "client_id" in diff:
+        client = db.get(Client, client_id)
+        if client is None or not client.is_active:
+            raise HTTPException(422, "Choose an active client")
+        held = db.scalars(select(Project.project_code).where(Project.program_id == p.program_id)
+                          .order_by(Project.project_code)).all()
+        if held:
+            raise HTTPException(409, f"The program holds projects ({', '.join(held)}), so its client cannot change")
+    code, name = changes.get("program_code", p.program_code), changes.get("program_name", p.program_name)
+    others = select(Program.program_id).where(Program.client_id == client_id, Program.program_id != p.program_id)
+    if db.scalar(others.where(Program.program_code == code)) is not None:
+        raise HTTPException(409, f"Program code {code} is already used for this client")
+    if db.scalar(others.where(Program.is_active, func.lower(Program.program_name) == name.lower())) is not None:
+        raise HTTPException(409, f"A live program named {name} already exists for this client")
+    for f, (_, v) in diff.items():
+        setattr(p, f, v)
+    p.updated_by = actor.app_user_id
+    audit.record(db, "PROGRAM_UPDATED", actor_id=actor.app_user_id, target_table="program", target_id=p.program_id,
+                 detail=diff)
     db.commit()
     return p
 

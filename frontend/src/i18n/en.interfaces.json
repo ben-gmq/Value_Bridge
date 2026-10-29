@@ -2,6 +2,9 @@
   "interfaces.title": "Interfaces",
   "interfaces.subtitle": "Generated from interface-type function requirements — one row per interface, never typed",
   "interfaces.count": "{n} interface(s)",
+  "interfaces.export": "Download Excel",
+  "interfaces.exported": "Interface list downloaded",
+  "interfaces.exportFailed": "The Excel file could not be made",
   "interfaces.number": "Interface",
   "interfaces.name": "Name",
   "interfaces.type": "Type",
@@ -50,5 +53,7 @@
   "interfaces.card.removeEntity": "Remove {de}",
   "interfaces.tiles.shown": "Interfaces",
   "interfaces.tiles.incomplete": "Incomplete",
-  "interfaces.tiles.incompleteNote": "Missing a source and target, a method or the data carried"
+  "interfaces.tiles.incompleteNote": "Missing a source and target, a method or the data carried",
+  "interfaces.completeHead": "Complete",
+  "interfaces.printFilters": "source {source}, target {target}, status {status}"
 }

@@ -8,6 +8,7 @@ import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOu
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined';
 import ViewTimelineOutlined from '@mui/icons-material/ViewTimelineOutlined';
+import AssessmentOutlined from '@mui/icons-material/AssessmentOutlined';
 import DnsOutlined from '@mui/icons-material/DnsOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
@@ -58,6 +59,7 @@ export const NAV = [
     ['nav.baselines', 'baselines', LayersOutlined],
     ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
     ['nav.waves', 'waves', ViewTimelineOutlined, ['PHASING']],           // slice 15 (W-1: "Wave" on screen)
+    ['nav.reports', 'reports', AssessmentOutlined],                       // slice 1f
   ] },
   { group: 'nav.group.admin', items: [
     ['nav.settings', 'settings', SettingsOutlined],
@@ -256,7 +258,7 @@ function Header({ onMenu, narrow }) {
   if (crumb) crumbs.push({ label: crumb });
   return (
     <Box component="header" sx={(th) => ({ minHeight: 56, flexShrink: 0, px: { xs: 2, md: 3 }, display: 'flex', alignItems: 'center',
-      gap: 2, borderBottom: `1px solid ${th.vars.palette.divider}` })}>
+      gap: 2, borderBottom: `1px solid ${th.vars.palette.divider}`, displayPrint: 'none' })}>
       {narrow && <IconButton onClick={onMenu} aria-label={t('shell.menu')} edge="start"><MenuRounded /></IconButton>}
       <Box component="ol" aria-label={t('shell.breadcrumb')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, m: 0, p: 0,
         listStyle: 'none', minWidth: 0, flexWrap: 'wrap' }}>
@@ -304,13 +306,13 @@ export function AppShell({ children }) {
   const ctx = useMemo(() => ({ crumb, setCrumb }), [crumb]);
   return (
     <CrumbContext.Provider value={ctx}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default', '@media print': { bgcolor: 'background.paper' } }}>
         {narrow ? (
           <Drawer open={open} onClose={() => setOpen(false)} slotProps={{ paper: { sx: { border: 0 } } }}>
             <Rail onNavigate={() => setOpen(false)} />
           </Drawer>
         ) : (
-          <Box sx={{ position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', flexShrink: 0 }}><Rail /></Box>
+          <Box sx={{ position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', flexShrink: 0, displayPrint: 'none' }}><Rail /></Box>
         )}
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <Header narrow={narrow} onMenu={() => setOpen(true)} />

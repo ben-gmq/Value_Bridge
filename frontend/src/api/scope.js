@@ -166,6 +166,15 @@ export const issueApi = {                                             // slice 1
   dashboard: (projectId) => d(http.get(`${P(projectId)}/issue-dashboard`)),
 };
 
+export const reportApi = {                                            // slice 1f (spec §2): read-only reports
+  traceability: (projectId) => d(http.get(`${P(projectId)}/traceability`)),
+  coverage: (projectId) => d(http.get(`${P(projectId)}/coverage`)),
+  solutionMatrix: (projectId) => d(http.get(`${P(projectId)}/solution-matrix`)),
+  applicationGap: (projectId, level) => d(http.get(`${P(projectId)}/application-gap`, { params: { level } })),
+  // §3.6: writes one REPORT_PRINTED row. A plain one-shot call on the Print / PDF press — never a query (round 1 P1).
+  printStamp: (projectId, params) => d(http.get(`${P(projectId)}/print-stamp`, { params })),
+};
+
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
   list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/phases`, { params: { include_retired: includeRetired } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/phases`, body)),
@@ -342,6 +351,9 @@ export const ifaceApi = {
   put: (frId, body) => d(http.put(`${V}/function-requirements/${frId}/interface`, body)),
   remove: (frId, rowVersion) => del(`${V}/function-requirements/${frId}/interface`, rowVersion),
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/interfaces`, { params })),
+  // Slice 1f §3.5: the same filters as the screen, as .xlsx.
+  export: (projectId, params = {}) =>
+    download(`${P(projectId)}/interfaces/export?${new URLSearchParams(params)}`, 'vb-interfaces.xlsx'),
 };
 
 // Slice 6c (docs/slice6c_spec.md). Effort days are derived from the card, never sent (VB law 6).

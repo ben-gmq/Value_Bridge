@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from models import BfcNode, Project
-from services import audit, lifecycle
+from services import area_match, audit, lifecycle
 from services.code_master import resolve, validate_required_code
 
 PERIODS = ("DAY", "WEEK", "MONTH", "QUARTER", "YEAR")                      # ck_bfc_volume_period
@@ -158,8 +158,7 @@ def set_basis(db: Session, actor_id: int, project: Project, row_version: int, wo
 
 # ---- as-is beside to-be (volume_summary, Q-9, Q-28; slice13_schema §3.8) -----------------------------------
 
-SETS = ("AS_IS", "TO_BE")
-_norm = lambda s: (s or "").strip().lower()      # noqa: E731 — the live-name rule, lower(btrim(...)) (S1-6)
+SETS = area_match.SETS
 
 
 def _totals(processes: list[BfcNode], days: int, hpd: Decimal) -> dict:
@@ -195,26 +194,14 @@ def summary(db: Session, project: Project) -> dict:
                 for a in ns if a.level_no == level and not a.is_process}
     out_levels = []
     for level in (1, 2):
-        asis, tobe = areas[("AS_IS", level)], areas[("TO_BE", level)]
-        matched, unmatched = [], []
-        names = {s: {_norm(a.node_name): code for code, (a, _) in areas[(s, level)].items()} for s in SETS}
-        for code in sorted(asis.keys() | tobe.keys()):
-            a, b = asis.get(code), tobe.get(code)
-            if a and b and _norm(a[0].node_name) == _norm(b[0].node_name):
-                matched.append({"hier_code": code, "as_is_name": a[0].node_name, "to_be_name": b[0].node_name,
-                                "as_is": a[1], "to_be": b[1],
-                                "saved_hours": a[1]["annual_hours"] - b[1]["annual_hours"],
-                                "saved_fte": a[1]["fte"] - b[1]["fte"]})
-                continue
-            for chart, side, other in (("AS_IS", a, "TO_BE"), ("TO_BE", b, "AS_IS")):
-                if side is None:
-                    continue
-                elsewhere = names[other].get(_norm(side[0].node_name))
-                # a reorder that swapped two areas reads "probably reordered", not "renamed"
-                reason = ("NAME_ELSEWHERE" if elsewhere and elsewhere != code else
-                          "CODE_SAME_NAME_DIFFERS" if (a and b) else f"ONLY_{chart}")
-                unmatched.append({"chart": chart, "hier_code": code, "name": side[0].node_name, "reason": reason,
-                                  "other_code": elsewhere if reason == "NAME_ELSEWHERE" else None, "totals": side[1]})
+        side = {s: areas[(s, level)] for s in SETS}
+        pairs, loose = area_match.pair_areas({s: {code: a for code, (a, _) in side[s].items()} for s in SETS})
+        matched = [{"hier_code": code, "as_is_name": a.node_name, "to_be_name": b.node_name,
+                    "as_is": side["AS_IS"][code][1], "to_be": side["TO_BE"][code][1],
+                    "saved_hours": side["AS_IS"][code][1]["annual_hours"] - side["TO_BE"][code][1]["annual_hours"],
+                    "saved_fte": side["AS_IS"][code][1]["fte"] - side["TO_BE"][code][1]["fte"]}
+                   for code, a, b in pairs]
+        unmatched = [{**u, "totals": side[u["chart"]][u["hier_code"]][1]} for u in loose]
         out_levels.append({"level": level, "matched": matched, "unmatched": unmatched})
     return {"working_days_per_year": days, "hours_per_working_day": hpd, "levels": out_levels,
             "has_as_is": bool(by_set["AS_IS"])}

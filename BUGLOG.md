@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-014 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-015 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -64,6 +64,15 @@ place.
   spec §1a terms row. FI-10 (Ben, 2026-10-28) recorded the Claude Enterprise terms, so the pack ships in piece (a)
   naming that one service; the warning stays for any other.
 - **Severity:** MEDIUM, not reachable today (local only, no real data; nothing of 1e-b is built). Closes with piece (a).
+
+### VB-014 | The Coverage report runs two database queries for every requirement with flows | OPEN
+- **type:** BUG (performance) · **found:** 2026-10-28, slice 1f piece 2 (`sara` M1, MEDIUM) · **depends-on:** —
+- **What:** `services/reports.coverage` asks `services/br_flows` for each BR's flows one BR at a time: two queries per
+  BR that has flows. Piece 2 removed a third query per BR; the remaining two stay. A project with a few hundred BRs
+  makes the Coverage tab, and its print, slow.
+- **Fix:** one project-wide `br_flows` read (all flows of the project's live BRs in one query, grouped in Python),
+  used by coverage and anything else that walks every BR. About an hour, with the coverage tests as the check.
+- **Severity:** MEDIUM, not reachable today (local only, no real data, no large project yet).
 
 ### VB-006 | App shell overflows horizontally on a phone; top nav clips below ~930px | OPEN — FIXED, awaiting Ben's close
 
@@ -620,3 +629,22 @@ place.
   alone" for a removal (`services/purge.py` `PURGE_APPROVED`) is built but no test asserts it — the grant's is. Same
   trial: the setting-log test's tie-prone sort was fixed in the commit; "under 1 the 30-day rule does not reach
   grants" is not a gap — AR-20 is a purge (project removal) rule only (spec A-Q1 wording made exact).
+- **2026-10-28 · slice 1f piece 4, interface list to Excel (`sara`, PASS):** (L1) the filters line prints the raw
+  status code from the address and accepts an unknown one; resolve it to its label and 422 an unknown code, once in
+  `interface_list` so the screen route gets it too. (L2) `reports.ICT` should move to one shared stamp helper when the
+  §3.6 PDF stamp lands, so the two never drift. — **L2 FIXED 2026-10-29 (piece 143):** `reports.stamp_time`.
+- **2026-10-29 · slice 1f piece 143, print to PDF (`sara`, PASS; M1–M3, L2–L4 fixed):** (L1) the interface filter
+  wording is built twice — Excel in `reports.interface_workbook` (raw status code, "any"), print in
+  `InterfacesPage.jsx` (label, "Any"); build it once in the backend (joins piece-4 L1). (L5) pressing Print / PDF and
+  then changing a filter before the stamp returns writes a REPORT_PRINTED row for a print that shows only the notice;
+  accepted under spec A3 (the row proves the stamp was fetched, not that a PDF was saved).
+- **2026-10-29 · slice 1f piece 134, program edit (`sara`, PASS; L1, L3, L4 fixed):** (L2) the Edit dialog locks the
+  client picker from the live project list only, so a program holding only retired projects offers a client change
+  the server then refuses with a 409 naming them; add an all-projects count to `ProgramOut`. Also: Edit still shows on
+  a retired program (server 409). (Forward, for Ben) a client change keeps the program's members; harmless while
+  every member is staff, a cross-client leak once CLIENT_VIEWER lands — decide when that kind is designed.
+- **2026-10-29 · slice 1f piece 67, system gap (`sara`, PASS; L1 wording fixed):** (L2) `area_match.pair_areas` maps a
+  name to one code per chart, last wins: two level-2 areas sharing a name under different L1s can give NAME_ELSEWHERE
+  the wrong `other_code` (reason text only; carried over from `process_volume`); keep name → codes and say
+  NAME_ELSEWHERE only when exactly one holds it. (L3) `reports.SUPPORTING` (S6b-5) should live beside
+  `application.is_as_is`, so one file owns what a lifecycle means.

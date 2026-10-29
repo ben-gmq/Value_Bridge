@@ -32,6 +32,7 @@ export const links = {
   issue: (p, id) => `/p/${p}/issues/${id}`,
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
+  reports: (p, tab) => (tab ? `/p/${p}/reports?tab=${tab}` : `/p/${p}/reports`),   // slice 1f
   rateCard: (p) => `/p/${p}/settings/rate-card`,
   codeLists: (p) => `/p/${p}/settings/code-lists`,                  // wave 1g
   effort: (p) => `/p/${p}/br-fr/effort`,
@@ -49,6 +50,7 @@ export const keys = {
   project: (p) => ['project', String(p)],
   projectAccess: (p) => ['access', String(p)],
   memberCandidates: (p) => ['memberCandidates', String(p)],
+  program: (g) => ['program', String(g)],
   programMembers: (g) => ['programMembers', String(g)],
   programMemberCandidates: (g) => ['programMemberCandidates', String(g)],
   codeLists: (p) => ['codeLists', String(p ?? 'company')],
@@ -100,6 +102,10 @@ export const keys = {
   phases: (p) => ['phases', String(p)],                                             // slice 15: the waves
   phasePlan: (p) => ['phases', String(p), 'plan'],                                  // under phases(p)
   phaseSplit: (solId) => ['phase-split', String(solId)],
+  traceability: (p) => ['reports', String(p), 'traceability'],                       // slice 1f
+  coverage: (p) => ['reports', String(p), 'coverage'],
+  solutionMatrix: (p) => ['reports', String(p), 'solution-matrix'],
+  applicationGap: (p, level) => ['reports', String(p), 'application-gap', String(level)],
   solutionDeps: (solId) => ['solution-deps', String(solId)],
   allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],
