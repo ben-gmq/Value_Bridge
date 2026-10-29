@@ -634,3 +634,8 @@ place.
   the server then refuses with a 409 naming them; add an all-projects count to `ProgramOut`. Also: Edit still shows on
   a retired program (server 409). (Forward, for Ben) a client change keeps the program's members; harmless while
   every member is staff, a cross-client leak once CLIENT_VIEWER lands — decide when that kind is designed.
+- **2026-10-29 · slice 1f piece 67, system gap (`sara`, PASS; L1 wording fixed):** (L2) `area_match.pair_areas` maps a
+  name to one code per chart, last wins: two level-2 areas sharing a name under different L1s can give NAME_ELSEWHERE
+  the wrong `other_code` (reason text only; carried over from `process_volume`); keep name → codes and say
+  NAME_ELSEWHERE only when exactly one holds it. (L3) `reports.SUPPORTING` (S6b-5) should live beside
+  `application.is_as_is`, so one file owns what a lifecycle means.

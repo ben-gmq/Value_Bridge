@@ -124,8 +124,8 @@ allocation in an area no longer hides the area's other supported as-is steps.
   The pairing is lifted into one shared function both reports call (playbook §10) — no second copy.
 - **`unallocated`:** one row per (as-is step × supporting application) in a matched area where **that application**
   has no to-be allocation on any to-be step of the matched area. **`unsupported`:** one row per (to-be step ×
-  allocated application) in a matched area where **that application** supports no as-is step of the matched area. **`retiring`:** applications supporting an as-is step that are allocated to no live
-  solution anywhere (A7). **`as_is_support_by_to_be`:** support links naming a TO_BE application — information,
+  allocated application) in a matched area where **that application** supports no as-is step of the matched area. **`retiring`:** applications supporting an as-is step that are allocated to no
+  solution answering a live requirement anywhere (A7, A10). **`as_is_support_by_to_be`:** support links naming a TO_BE application — information,
   never counted as support.
 - Needs APPLICATION, AS_IS and SOLUTION (to-be allocation joins `BR_SOLUTION` and `APPLICATION_SOLUTION`, D2); with
   any off the report is `null`.
@@ -142,8 +142,8 @@ missing; the effort column is blank with EFFORT off (A1). The time is written as
 hidden code row, no protection: this is a report, not an import template. Not audited (D-42 covers PDFs; A8).
 
 ### 3.6 Print to PDF (function 143; D-42, OR-8)
-- **Printable reports in 1f:** `traceability`, `coverage`, `solution_matrix`, `interfaces` (`application_gap` joins
-  when it is built, round 2 N4) —
+- **Printable reports in 1f:** `traceability`, `coverage`, `solution_matrix`, `interfaces`, `application_gap`
+  (round 2 N4) —
   the registry `reports.PRINTABLE`; any other `report` → 422. The other D-42 reports (BFC, BR register, DFD, ERD,
   registers, effort, baseline diff, issue log, WBS) get the same button later; function 143 stays *partly built*.
 - **Stamp:** `{report, project_code, project_name, is_live: true, generated_at, generated_by}` (`generated_at` = the

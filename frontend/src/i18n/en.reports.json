@@ -77,7 +77,7 @@
   "reports.gap.unsupported": "Allocated in the to-be area, not there today",
   "reports.gap.unsupportedNote": "Each system allocated to a to-be step that supports no as-is step of the same area — new capability.",
   "reports.gap.retiring": "Retiring systems",
-  "reports.gap.retiringNote": "Systems supporting an as-is step that no live solution allocates anywhere.",
+  "reports.gap.retiringNote": "Systems supporting an as-is step that no solution answering a live requirement allocates, anywhere.",
   "reports.gap.byToBe": "To-be systems linked as today's support",
   "reports.gap.byToBeNote": "Information only: a to-be system is never counted as today's support.",
   "reports.gap.unmatched": "Areas not compared",
