@@ -14,10 +14,12 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import (AppUser, Application, ApplicationSolution, BfcNode, BrDataEntity, BrFunctionRequirement,
-                    BrSolution, BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Project, Solution)
+from models import (AppUser, Application, ApplicationBfcNode, ApplicationSolution, BfcNode, BrDataEntity,
+                    BrFunctionRequirement, BrSolution, BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement,
+                    Project, Solution)
 from models.shared import FR_BEHAVIOURS
-from services import audit, br_flows, components, function_requirement as fr_service, interface as iface_service, xlsx
+from services import (area_match, audit, br_flows, components, function_requirement as fr_service,
+                      interface as iface_service, xlsx)
 from services.code_master import resolve
 
 BEHAVIOUR_ORDER = ("FORM", "BATCH", "INTERFACE", "REPORT", "OTHER")
@@ -66,11 +68,13 @@ class _Scope:
         self.apps = apps = {a.application_id: a for a in db.scalars(select(Application).where(
             Application.project_id == project_id, Application.is_active))}
         self.apps_of_sol: dict[int, list[dict]] = {}
+        self.app_ids_of_sol: dict[int, set[int]] = {}
         for app_id, sol_id in db.execute(select(ApplicationSolution.application_id, ApplicationSolution.solution_id)
                                          .where(ApplicationSolution.project_id == project_id,
                                                 ApplicationSolution.is_active)):
             if app_id in apps:
                 a = apps[app_id]
+                self.app_ids_of_sol.setdefault(sol_id, set()).add(app_id)
                 self.apps_of_sol.setdefault(sol_id, []).append(
                     {"application_code": a.application_code, "application_name": a.application_name})
         for v in self.apps_of_sol.values():
@@ -278,6 +282,82 @@ def solution_matrix(db: Session, project_id: int) -> dict:
             "technology_share": share}
 
 
+# ---- §3.4 the system gap (function 67; D-8, RP-1) -----------------------------------------------------------------
+GAP_NEEDS = ("APPLICATION", "AS_IS", "SOLUTION")         # to-be allocation joins BR_SOLUTION and APPLICATION_SOLUTION (D2)
+SUPPORTING = ("AS_IS", "BOTH")                            # lifecycles that count as today's support (S6b-5)
+
+
+def _step_out(n: BfcNode) -> dict:
+    return {"bfc_node_id": n.bfc_node_id, "hier_code": n.hier_code, "node_name": n.node_name}
+
+
+def _app_out(a: Application) -> dict:
+    return {"application_id": a.application_id, "application_code": a.application_code,
+            "application_name": a.application_name}
+
+
+def application_gap(db: Session, project_id: int, level: int = 1) -> dict:
+    """The migration backlog, per system inside each matched area (RP-1). As-is support = a live support link on a live
+    as-is process to a live AS_IS / BOTH application; to-be allocation = a live to-be process ⋈ live BR ⋈ a live,
+    non-REJECTED answer (as coverage counts answers, S5-2) ⋈ a live allocation of a live application. Areas are paired
+    by area_match, the volume summary's rule. The input counts come back so an empty project never reads "no gap"
+    (D3); with APPLICATION, AS_IS or SOLUTION off every part is None (A1)."""
+    if level not in (1, 2):
+        raise HTTPException(422, "Level must be 1 or 2")
+    sc = _Scope(db, project_id)
+    if any(c not in sc.on for c in GAP_NEEDS):
+        return {"generated_at": _now(), "level": level, "counts": None, "unallocated": None, "unsupported": None,
+                "retiring": None, "as_is_support_by_to_be": None, "unmatched": None}
+    as_is = {n.bfc_node_id: n for n in db.scalars(select(BfcNode).where(
+        BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.bfc_set_code == "AS_IS"))}
+    support: dict[int, set[int]] = {}                    # as-is step → applications supporting it today
+    by_to_be: list[tuple[BfcNode, Application]] = []
+    links = 0
+    for step_id, app_id in db.execute(select(ApplicationBfcNode.bfc_node_id, ApplicationBfcNode.application_id).where(
+            ApplicationBfcNode.project_id == project_id, ApplicationBfcNode.is_active)):
+        step, app = as_is.get(step_id), sc.apps.get(app_id)
+        if step is None or not step.is_process or app is None:
+            continue
+        if app.lifecycle_code in SUPPORTING:
+            support.setdefault(step_id, set()).add(app_id)
+            links += 1
+        else:
+            by_to_be.append((step, app))                 # information, never today's support (S6b-5)
+    alloc: dict[int, set[int]] = {}                      # to-be step → applications allocated to it
+    for br_id, sol_id in sc.answers():
+        apps = sc.app_ids_of_sol.get(sol_id)
+        if apps:
+            alloc.setdefault(sc.brs[br_id].bfc_node_id, set()).update(apps)
+    areas = {"AS_IS": {c: n for c, n in ((n.hier_code, n) for n in as_is.values())
+                       if n.level_no == level and not n.is_process},
+             "TO_BE": {n.hier_code: n for n in sc.steps.values() if n.level_no == level and not n.is_process}}
+    pairs, unmatched = area_match.pair_areas(areas)
+    under = lambda nodes, code: [n for n in nodes if n.is_process and n.hier_code.startswith(code + ".")]  # noqa: E731
+    unallocated, unsupported = [], []
+    for code, a_area, b_area in pairs:
+        old_steps, new_steps = under(as_is.values(), code), under(sc.steps.values(), code)
+        old_apps = set().union(*(support.get(s.bfc_node_id, set()) for s in old_steps))
+        new_apps = set().union(*(alloc.get(s.bfc_node_id, set()) for s in new_steps))
+        area = {"area_code": code, "area_name": b_area.node_name}
+        for s in sorted(old_steps, key=lambda n: _hier_key(n.hier_code)):
+            for app_id in sorted(support.get(s.bfc_node_id, set()) - new_apps, key=lambda i: sc.apps[i].application_code):
+                unallocated.append({**area, "step": _step_out(s), "application": _app_out(sc.apps[app_id])})
+        for s in sorted(new_steps, key=lambda n: _hier_key(n.hier_code)):
+            for app_id in sorted(alloc.get(s.bfc_node_id, set()) - old_apps, key=lambda i: sc.apps[i].application_code):
+                unsupported.append({**area, "step": _step_out(s), "application": _app_out(sc.apps[app_id])})
+    allocated = set().union(*(sc.app_ids_of_sol.get(s, set()) for _, s in sc.answers()))
+    retiring = sorted((sc.apps[i] for i in set().union(*support.values()) - allocated),
+                      key=lambda a: a.application_code)                                         # A7
+    return {"generated_at": _now(), "level": level,
+            "counts": {"as_is_processes": sum(1 for n in as_is.values() if n.is_process), "support_links": links,
+                       "to_be_allocations": sum(len(v) for v in alloc.values())},
+            "unallocated": unallocated, "unsupported": unsupported, "retiring": [_app_out(a) for a in retiring],
+            "as_is_support_by_to_be": [{"step": _step_out(s), "application": _app_out(a)}
+                                       for s, a in sorted(by_to_be, key=lambda p: (_hier_key(p[0].hier_code),
+                                                                                   p[1].application_code))],
+            "unmatched": unmatched}
+
+
 # ---- §3.5 the interface list as an Excel file (function 61) -------------------------------------------------------
 IFACE_HEADERS = ("Interface", "Name", "Type", "Source → target", "Pattern", "Method", "Frequency", "Data entities carried",
                  "Solution", "BRs", "Status", "Effort (days)", "Complete")
@@ -336,7 +416,7 @@ def interface_workbook(db: Session, project_id: int, by: str, source: int | None
 
 
 # ---- §3.6 print to PDF (function 143): the stamp, and the one audit row a print writes -------------------------------
-PRINTABLE = ("traceability", "coverage", "solution_matrix", "interfaces")   # + application_gap once built (N4)
+PRINTABLE = ("traceability", "coverage", "solution_matrix", "interfaces", "application_gap")
 STAMP_WINDOW_MINUTES = 30
 FILTERS_CAP = 200
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")

@@ -7,7 +7,7 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser, Project
 from routers.guards import GuardedRouter, project_ctx
-from schemas.reports import CoverageOut, PrintStampOut, SolutionMatrixOut, TraceabilityOut
+from schemas.reports import ApplicationGapOut, CoverageOut, PrintStampOut, SolutionMatrixOut, TraceabilityOut
 from services import reports, xlsx
 
 router = GuardedRouter(tags=["reports"])
@@ -27,6 +27,11 @@ def coverage(project_id: int, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/solution-matrix", response_model=SolutionMatrixOut, **_read.route)
 def solution_matrix(project_id: int, db: Session = Depends(get_db)):
     return reports.solution_matrix(db, project_id)
+
+
+@router.get("/projects/{project_id}/application-gap", response_model=ApplicationGapOut, **_read.route)
+def application_gap(project_id: int, level: int = 1, db: Session = Depends(get_db)):
+    return reports.application_gap(db, project_id, level)
 
 
 @router.get("/projects/{project_id}/interfaces/export", **_read.route)

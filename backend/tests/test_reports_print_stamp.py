@@ -45,7 +45,7 @@ def test_one_press_writes_one_row_and_returns_the_stamp(client, ed, db):
 
 def test_every_refusal_writes_nothing(client, ed, db):
     now = datetime.now(UTC)
-    for q in ({"report": "bfc"}, {"report": "application_gap"},                          # N4: not built yet
+    for q in ({"report": "bfc"}, {"report": "erd"},                                      # not in PRINTABLE
               {"filters": "a\x00b"}, {"filters": "tab\there"}, {"filters": "x" * 201},  # S2
               {"generated_at": "yesterday"},
               {"generated_at": now.replace(tzinfo=None).isoformat()},               # N2: no zone

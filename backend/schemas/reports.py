@@ -95,6 +95,56 @@ class SolutionMatrixOut(BaseModel):
     technology_share: float | None        # None also when there is no live solution
 
 
+class GapStep(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    node_name: str
+
+
+class GapApplication(BaseModel):
+    application_id: int
+    application_code: str
+    application_name: str
+
+
+class GapRow(BaseModel):
+    area_code: str
+    area_name: str
+    step: GapStep
+    application: GapApplication
+
+
+class GapByToBe(BaseModel):
+    step: GapStep
+    application: GapApplication
+
+
+class GapUnmatched(BaseModel):
+    chart: str
+    hier_code: str
+    name: str
+    reason: str                          # ONLY_AS_IS / ONLY_TO_BE / CODE_SAME_NAME_DIFFERS / NAME_ELSEWHERE
+    other_code: str | None
+
+
+class GapCounts(BaseModel):
+    as_is_processes: int
+    support_links: int
+    to_be_allocations: int
+
+
+class ApplicationGapOut(BaseModel):
+    """§3.4: per system inside each matched area (RP-1). Every part is None with APPLICATION, AS_IS or SOLUTION off."""
+    generated_at: str
+    level: int
+    counts: GapCounts | None             # the inputs, so an empty project never reads "no gap" (D3)
+    unallocated: list[GapRow] | None
+    unsupported: list[GapRow] | None
+    retiring: list[GapApplication] | None
+    as_is_support_by_to_be: list[GapByToBe] | None
+    unmatched: list[GapUnmatched] | None
+
+
 class PrintStampOut(BaseModel):
     """§3.6: what every printed page carries (D-42). generated_at is the report response's own time (P3)."""
     report: str
