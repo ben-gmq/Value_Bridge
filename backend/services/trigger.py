@@ -138,5 +138,8 @@ def link(db: Session, actor_id: int, node: BfcNode, process_trigger_id: int, not
     return row
 
 
-def unlink(db: Session, actor_id: int, row: BfcNodeTrigger, row_version: int) -> None:
-    lifecycle.unlink(db, actor_id, row, row_version)
+def unlink(db: Session, actor_id: int, row: BfcNodeTrigger, row_version: int, commit: bool = True) -> None:
+    """`commit=False` (slice 1e-b piece b): the flow import's replace mode — flush only."""
+    lifecycle.unlink(db, actor_id, row, row_version, commit=commit)
+    if not commit:
+        db.flush()

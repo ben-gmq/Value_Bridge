@@ -1998,7 +1998,7 @@ def batch_out(db: Session, batch: ImportBatch, rows: list[ImportRow] | None = No
             "uploaded_by_user_id": batch.uploaded_by_user_id, "uploaded_at": batch.uploaded_at,
             "row_count": batch.row_count, "error_count": batch.error_count,
             "warning_count": batch.warning_count, "insert_count": batch.insert_count,
-            "update_count": batch.update_count,
+            "update_count": batch.update_count, "retire_count": batch.retire_count,
             "match_count": sum(1 for r in rows if r.verdict == "MATCH" and r.is_valid),
             "file_warnings": batch.file_warning_detail, "committed_at": batch.committed_at,
             "committed_by_user_id": batch.committed_by_user_id,
@@ -2103,9 +2103,10 @@ def _reject(db: Session, batch_id: int, status: dict[str, int], row_errors: dict
 
 def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
            acknowledged_inserts: int | None, source_ip: str | None = None,
-           acknowledged_updates: int | None = None) -> ImportBatch:
+           acknowledged_updates: int | None = None, acknowledged_retires: int | None = None) -> ImportBatch:
     """The one commit: lock, status, version, errors, the component, then the target's own apply, and every
-    failure audited. A flow batch takes `acknowledged_updates` too (FI-7) and its component from its anchor (P3)."""
+    failure audited. A flow batch takes `acknowledged_updates` (FI-7) and `acknowledged_retires` (replace mode,
+    §7.2b) too, and its component from its anchor (P3)."""
     status = _statuses(db)
     project_id = None
     try:
@@ -2124,7 +2125,7 @@ def commit(db: Session, actor_id: int, batch_id: int, row_version: int,
         if batch.target_entity == FLOW:
             from services import flow_import                       # its anchor's DFD component, checked there (P3)
             result = flow_import.commit_rows(db, actor_id, batch, status, acknowledged_inserts,
-                                             acknowledged_updates, source_ip)
+                                             acknowledged_updates, source_ip, acknowledged_retires)
         else:
             target = BY_CODE.get(batch.target_entity)
             if target is None:

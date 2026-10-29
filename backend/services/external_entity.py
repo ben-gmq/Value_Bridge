@@ -8,7 +8,8 @@ from services.code_master import validate_required_code
 from services import lifecycle
 
 
-def _kind(db: Session, project_id: int, code: str | None) -> int | None:
+def kind_code_id(db: Session, project_id: int, code: str | None) -> int | None:
+    """Shared with the flow import, which checks a new party's kind at validate."""
     return validate_required_code(db, project_id, "EXTERNAL_ENTITY_KIND", code, "kind_code").code_id \
         if code else None      # kind is optional (a missing kind is a report warning, §5.3); a wrong one is 400
 
@@ -20,12 +21,16 @@ def list_parties(db: Session, project_id: int, include_retired: bool = False) ->
 
 
 def create_party(db: Session, actor_id: int, project_id: int, name: str, kind_code: str | None,
-                 description: str | None) -> ExternalEntity:
+                 description: str | None, commit: bool = True) -> ExternalEntity:
+    """`commit=False` (slice 1e-b piece b): the flow import's form — flush only, the pipeline owns the transaction."""
     ext = ExternalEntity(project_id=project_id, ext_number=numbering.next_number(db, project_id, "EXT"),
-                         ext_name=name, kind_code_id=_kind(db, project_id, kind_code),
+                         ext_name=name, kind_code_id=kind_code_id(db, project_id, kind_code),
                          description=description, created_by=actor_id)
     db.add(ext)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return ext
 
 
@@ -36,7 +41,7 @@ def update_party(db: Session, actor_id: int, ext: ExternalEntity, row_version: i
     if "description" in fields:
         ext.description = fields["description"]
     if "kind_code" in fields:
-        ext.kind_code_id = _kind(db, ext.project_id, fields["kind_code"])
+        ext.kind_code_id = kind_code_id(db, ext.project_id, fields["kind_code"])
     ext.updated_by = actor_id
     db.commit()
     db.refresh(ext)                 # reload the code relationship with the new id

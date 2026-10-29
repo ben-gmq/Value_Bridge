@@ -28,6 +28,7 @@ class CommitIn(BaseModel):
     row_version: int
     acknowledged_inserts: int | None = Field(default=None, ge=0)
     acknowledged_updates: int | None = Field(default=None, ge=0)          # a flow file's changed steps (FI-7)
+    acknowledged_retires: int | None = Field(default=None, ge=0)          # a replace-mode flow file's removals
 
 
 def _xlsx(content: bytes, name: str) -> Response:
@@ -109,5 +110,6 @@ def preview(batch_id: int, batch: ImportBatch = Depends(_batch.dep), db: Session
 def commit(batch_id: int, body: CommitIn, request: Request, user: AppUser = Depends(current_user),
            batch: ImportBatch = Depends(_batch.dep), db: Session = Depends(get_db)):
     done = bulk.commit(db, user.app_user_id, batch.import_batch_id, body.row_version,
-                       body.acknowledged_inserts, _ip(request), body.acknowledged_updates)
+                       body.acknowledged_inserts, _ip(request), body.acknowledged_updates,
+                       body.acknowledged_retires)
     return bulk.batch_out(db, done)

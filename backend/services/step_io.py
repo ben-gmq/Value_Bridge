@@ -65,9 +65,10 @@ def link(db: Session, actor_id: int, node: BfcNode, data_entity_id: int, directi
     return row
 
 
-def unlink(db: Session, actor_id: int, row: BfcNodeDataEntity, row_version: int) -> None:
-    """Refused while a BR CRUD or an external flow still depends on the row (D-24, R2-D13)."""
-    lifecycle.check_version(row, row_version)
+def dependents(db: Session, row: BfcNodeDataEntity) -> list[str]:
+    """What still needs this step I/O row — each live BR CRUD and external flow, named (D-24, R2-D13). Shared by
+    unlink and the flow import's replace mode, which keeps such a row instead of retiring it (§7.2b rule 8)."""
+    from models import BusinessRequirement, ExternalEntity
     crud = db.scalars(select(BrDataEntity).where(
         BrDataEntity.bfc_node_id == row.bfc_node_id, BrDataEntity.data_entity_id == row.data_entity_id,
         BrDataEntity.direction == row.direction, BrDataEntity.is_active)).all()
@@ -75,12 +76,18 @@ def unlink(db: Session, actor_id: int, row: BfcNodeDataEntity, row_version: int)
         BfcNodeExternalFlow.bfc_node_id == row.bfc_node_id,
         BfcNodeExternalFlow.data_entity_id == row.data_entity_id,
         BfcNodeExternalFlow.direction == row.direction, BfcNodeExternalFlow.is_active)).all()
-    if crud or ext:
-        from models import BusinessRequirement, ExternalEntity
-        names = [f"{db.get(BusinessRequirement, c.br_id).br_number} {c.crud_code}" for c in crud]
-        names += [f"{db.get(ExternalEntity, x.external_entity_id).ext_number} {x.direction}" for x in ext]
+    names = [f"{db.get(BusinessRequirement, c.br_id).br_number} {c.crud_code}" for c in crud]
+    names += [f"{db.get(ExternalEntity, x.external_entity_id).ext_number} {x.direction}" for x in ext]
+    return names
+
+
+def unlink(db: Session, actor_id: int, row: BfcNodeDataEntity, row_version: int, commit: bool = True) -> None:
+    """Refused while a BR CRUD or an external flow still depends on the row (D-24, R2-D13). `commit=False` (slice
+    1e-b piece b): the flow import's replace mode — the check runs again inside its transaction."""
+    lifecycle.check_version(row, row_version)
+    if names := dependents(db, row):
         raise HTTPException(409, f"Still needed by {', '.join(names)}")
-    lifecycle.unlink(db, actor_id, row, row_version)
+    lifecycle.unlink(db, actor_id, row, row_version, commit=commit)
 
 
 def hand_off(db: Session, actor_id: int, a: BfcNode, to_bfc_node_id: int, data_entity_id: int) -> dict:

@@ -263,7 +263,9 @@ def restore_node_row(db: Session, actor_id: int, node: BfcNode, detail: dict | N
 
 def link_external_flow(db: Session, actor_id: int, node: BfcNode, external_entity_id: int,
                        direction: str, data_entity_id: int | None, flow_label: str | None,
-                       note: str | None) -> BfcNodeExternalFlow:
+                       note: str | None, commit: bool = True, keep_text: bool = False) -> BfcNodeExternalFlow:
+    """`commit=False` (slice 1e-b piece b): the flow import's form — flush only. `keep_text`: a restored flow keeps
+    its old label and note (spec §4 rule 10); a new one has none."""
     if direction not in step_io.DIRECTIONS:
         raise HTTPException(422, "direction must be I (from the party) or O (to the party)")
     lifecycle.lock_for_share(db, node)                        # SR-5: serialised with a step retire
@@ -289,7 +291,11 @@ def link_external_flow(db: Session, actor_id: int, node: BfcNode, external_entit
         raise HTTPException(409, f"That flow with {ext.ext_number} already exists")
     else:                                                     # re-link restores (S1-7)
         lifecycle.relink(db, actor_id, row)
-    row.flow_label, row.note = flow_label, note
+    if not keep_text:
+        row.flow_label, row.note = flow_label, note
+    if not commit:
+        db.flush()
+        return row
     db.commit()
     db.refresh(row)
     return row

@@ -1,7 +1,8 @@
 """Process flow as a file — `vb-process-flow/2.0` (design §7.2b, D-25; slice 1e-b spec). Piece (a1): the published
 format (schema, worked example and the AI conversion prompt pack) and the export of one anchor's flow. Piece (a2):
 the re-import in merge mode — validate and commit on the one bulk pipeline (VB law 8), staged one `import_row` per
-file object (spec §3). Outside parties and flows are matched only; new ones, and replace mode, are piece (b).
+file object (spec §3). Piece (b): new outside parties and flows, and replace mode — the step I/O and trigger links a
+file's own steps leave out of a list they state are retired, or kept when a BR CRUD or an external flow needs them.
 
 The file carries what the DFD is drawn from — steps, performers, inputs, outputs, triggers and external flows — and
 no edges and no lanes (D-38). Export writes every list, empty as `[]`, so an export re-imported changes nothing
@@ -22,7 +23,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from models import (BfcNode, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeTrigger, BusinessRequirement, CodeMaster,
                     DataEntity, ExternalEntity, ImportBatch, ImportRow, ProcessTrigger)
 from schemas.flow_file import FORMAT, FlowFile, json_schema
-from services import audit, bfc, bulk, components, data_entity, lifecycle, step_io, trigger, xlsx
+from services import audit, bfc, bulk, components, data_entity, external_entity, lifecycle, step_io, trigger, xlsx
 from services.bulk import msg
 
 PACK_PATH = Path(__file__).resolve().parent.parent / "assets" / "flow_prompt_pack.md"
@@ -202,10 +203,21 @@ class Row:
     pins: dict = field(default_factory=dict)   # what it resolved to; a different resolution at commit is an error
     plan: dict = field(default_factory=dict)   # what the apply needs and the preview shows
     target_id: int | None = None
+    target: dict | None = None           # a RETIRE or KEPT row: what it acts on, {table, id, label} (S4-2)
 
     @property
     def pair(self) -> tuple[str, str]:
-        return self.kind, self.path      # D5: a re-checked row meets its staged row by (row_kind, source_path)
+        """D5: a re-checked row meets its staged row by (row_kind, source_path); a RETIRE or KEPT row, which has no
+        path, by what it acts on."""
+        return (self.kind, self.path) if self.path is not None else (self.kind, _target_key(self.target))
+
+
+def _target_key(target: dict) -> str:
+    return f"{target['table']}:{target['id']}"
+
+
+def _stored_pair(r: ImportRow) -> tuple[str, str]:
+    return (r.row_kind, r.source_path) if r.source_path is not None else (r.row_kind, _target_key(r.payload["target"]))
 
 
 # ---- reading the file (file-level: 422, nothing staged) ------------------------------------------------------------
@@ -278,11 +290,11 @@ def _performer_key(p: dict | None):
 
 
 class _Resolver:
-    """Rules 1–8 and 10–17 of spec §4 for merge mode. Run at validate, and at commit under the batch's locks; both
-    runs must agree row for row (rule 14, D5)."""
+    """Rules 1–17 of spec §4. Run at validate, and at commit under the batch's locks; both runs must agree row for
+    row (rule 14, D5), RETIRE and KEPT rows included (§7.2b: the RETIRE set re-computed inside the lock)."""
 
-    def __init__(self, db: Session, anchor: BfcNode, doc: dict, lock: bool):
-        self.db, self.anchor, self.doc, self.lock = db, anchor, doc, lock
+    def __init__(self, db: Session, anchor: BfcNode, doc: dict, lock: bool, mode: str = "merge"):
+        self.db, self.anchor, self.doc, self.lock, self.mode = db, anchor, doc, lock, mode
         self.pid = anchor.project_id
         self.to_be = anchor.bfc_set_code == "TO_BE"
         self.rows: list[Row] = []
@@ -306,6 +318,8 @@ class _Resolver:
         self._steps(steps)
         self._parties()
         self._links(steps)
+        if self.mode == "replace":
+            self._replace(steps)
         taken = {n.bfc_node_id for n in self.step_nodes.values() if n is not None}
         self.unmatched = [p for p in self.processes.values() if p.bfc_node_id not in taken]
         self._near_duplicates()
@@ -461,9 +475,12 @@ class _Resolver:
         for p in live:
             by_name.setdefault(_norm(p.ext_name), []).append(p)
         self.party_keys: dict[str, ExternalEntity | None] = {}
+        self.party_rows: dict[str, Row] = {}
+        new_names: dict[str, str] = {}
         for k, e in enumerate(self.doc.get("external_entities", [])):
             r = Row("EXTERNAL_ENTITY", f"/external_entities/{k}", local_key=e["key"], obj=e)
             self.rows.append(r)
+            self.party_rows[e["key"]] = r
             name, number = clean(e["name"]) or "", clean(e.get("ext_number"))
             party = None
             if number:
@@ -481,9 +498,7 @@ class _Resolver:
                 elif found:
                     party = found[0]
                 else:
-                    r.verdict = "INSERT"
-                    r.errors.append(msg("PARTY_LATER", f"A new external party is added in a later release — add "
-                                        f"'{name}' on the data-flow screen first, then import again.", "name"))
+                    self._new_party(r, e, name, new_names)
             if party is not None:
                 r.target_id = party.external_entity_id
                 r.pins = {"party": party.external_entity_id}
@@ -492,6 +507,29 @@ class _Resolver:
                     r.warnings.append(msg("KIND_KEPT", f"{party.ext_number} keeps its kind {kind or '(none)'}; an "
                                           "import never changes a party.", "kind", kind=kind))
             self.party_keys[e["key"]] = party
+
+    def _new_party(self, r: Row, e: dict, name: str, new_names: dict[str, str]) -> None:
+        """Rule 8: a party named by no `ext_number` and no live name is created at commit, its EXT number minted
+        then (§9.8). Its kind must be a live EXTERNAL_ENTITY_KIND code of this project; one new name given twice in
+        the file is one party, so the second entry is an error."""
+        r.verdict = "INSERT"
+        if not name:
+            r.errors.append(msg("NAME_REQUIRED", "Name the external party.", "name"))
+            return
+        if _norm(name) in new_names:
+            r.errors.append(msg("NAME_REPEATED", f"Party {new_names[_norm(name)]} in this file has the same name.",
+                                "name"))
+            return
+        new_names[_norm(name)] = e["key"]
+        kind = clean(e.get("kind"))
+        try:
+            external_entity.kind_code_id(self.db, self.pid, kind)
+        except HTTPException:
+            r.errors.append(msg("KIND_UNKNOWN", f"'{kind}' is not an external party kind in this project.", "kind",
+                                kind=kind))
+            return
+        r.plan = {"name": name, "kind": kind}
+        r.warnings.append(msg("NEW_PARTY", f"'{name}' is not an external party yet; it will be created.", "name"))
 
     # -- triggers, inputs and outputs, external flows (rules 2, 7, 10, 13) --
     def _links(self, steps: list[dict]) -> None:
@@ -534,9 +572,10 @@ class _Resolver:
             for direction, field_name in (("I", "inputs"), ("O", "outputs")):
                 for j, ref in enumerate(s.get(field_name) or []):
                     self._io(i, key, node, direction, ref, f"/steps/{i}/{field_name}/{j}", io_seen)
+            flow_seen: dict[tuple, Row] = {}
             for k, f in enumerate(s.get("external_flows") or []):
                 path = f"/steps/{i}/external_flows/{k}"
-                self._flow(i, key, node, f, path, io_seen)
+                self._flow(i, key, node, f, path, io_seen, flow_seen)
 
     def _trigger(self, tk: str, tname: str, kind: str, path: str, trigs: dict) -> Row:
         tr = self.trigger_rows.get(tk)
@@ -626,19 +665,34 @@ class _Resolver:
         self._link_verdict(r, link)
         return r
 
-    def _flow(self, i: int, key: str, node: BfcNode | None, f: dict, path: str, io_seen: dict) -> None:
-        """Piece (a): a live external flow is MATCH and its I/O implied (FI-4); a new or retired one is an error."""
+    def _flow(self, i: int, key: str, node: BfcNode | None, f: dict, path: str, io_seen: dict,
+              seen: dict) -> None:
+        """Rules 8 and 10 (FI-4): a flow implies its step I/O; a live flow is MATCH, a retired one is restored (it
+        keeps its old label and note), and a new one — to a new or known party, from a new or known step — is
+        created at commit by bfc.link_external_flow. One row per resolved (party, direction, entity) of a step."""
         ref = clean(f.get("data_entity"))
-        r = Row("EXTERNAL_FLOW", path, business_key=f"{key}/{f['external']}/{f['direction']}/{ref or '-'}"[:KEY_CAP])
-        self.rows.append(r)
+        bkey = f"{key}/{f['external']}/{f['direction']}/{ref or '-'}"[:KEY_CAP]
         der = self._io(i, key, node, f["direction"], f["data_entity"], path, io_seen) if ref else None
-        de_id = self.de_rows[der.plan["de"]].target_id if der is not None else None
+        de_row = self.de_rows[der.plan["de"]] if der is not None else None
         if f["external"] not in self.party_keys:
-            r.verdict = "INSERT"
+            r = Row("EXTERNAL_FLOW", path, verdict="INSERT", business_key=bkey)
+            self.rows.append(r)
             r.errors.append(msg("FLOW_PARTY_UNKNOWN", f"No entry in external_entities has the key "
                                 f"\"{f['external']}\".", "external"))
             return
         party = self.party_keys[f["external"]]
+        de_id = de_row.target_id if de_row is not None else None
+        grain = (party.external_entity_id if party is not None else f["external"], f["direction"],
+                 (de_id if de_id is not None else de_row.plan["ref"]) if de_row is not None else None)
+        if grain in seen:
+            seen[grain].warnings.append(msg("REPEATED", "This flow is listed twice for this step; it is one flow.",
+                                            None))
+            return
+        r = Row("EXTERNAL_FLOW", path, business_key=bkey,
+                plan={"step": i, "party": f["external"], "direction": f["direction"],
+                      "de": der.plan["de"] if der is not None else None})
+        seen[grain] = r
+        self.rows.append(r)
         flow = None
         if node is not None and party is not None and (ref is None or de_id is not None):
             de_match = (BfcNodeExternalFlow.data_entity_id == de_id) if de_id is not None \
@@ -647,13 +701,65 @@ class _Resolver:
                 BfcNodeExternalFlow.bfc_node_id == node.bfc_node_id,
                 BfcNodeExternalFlow.external_entity_id == party.external_entity_id,
                 BfcNodeExternalFlow.direction == f["direction"], de_match)).one_or_none()
-        if flow is not None and flow.is_active:
-            r.target_id = flow.bfc_node_external_flow_id
-            r.pins = {"flow": r.target_id}
-            return
-        r.verdict = "INSERT"
-        r.errors.append(msg("FLOW_LATER", "A new external flow is added in a later release — add it on the data-flow "
-                            "screen first, then import again.", "external"))
+        self._link_verdict(r, flow)
+
+    # -- replace mode (rule 9, FI-1, FI-4; design §7.2b rule 8) --
+    def _replace(self, steps: list[dict]) -> None:
+        """For each file step resolved to a live step, and only for the lists it states: every live input or output
+        (of a live data entity) outside the file's I/O set — its `inputs`, `outputs` and what its own external flows
+        imply — is staged RETIRE, or KEPT with a warning when a BR CRUD or an external flow needs it; every live
+        trigger link (of a live catalogue trigger) the file does not list is staged RETIRE. Nothing else is ever
+        staged for retirement: steps, BRs, performers, parties, external flows, data entities, catalogue triggers."""
+        db = self.db
+        for i, s in enumerate(steps):
+            node = self.step_nodes.get(i)
+            if node is None:
+                continue
+            key = s["key"]
+            mine = [r for r in self.rows if r.plan.get("step") == i and r.path is not None]
+            directions = [d for d, name in (("I", "inputs"), ("O", "outputs")) if s.get(name) is not None]
+            if directions:
+                keep = {(r.plan["direction"], self.de_rows[r.plan["de"]].target_id)
+                        for r in mine if r.kind == "STEP_IO"}
+                links = db.execute(select(BfcNodeDataEntity, DataEntity)
+                                   .join(DataEntity, DataEntity.data_entity_id == BfcNodeDataEntity.data_entity_id)
+                                   .where(BfcNodeDataEntity.bfc_node_id == node.bfc_node_id,
+                                          BfcNodeDataEntity.direction.in_(directions),
+                                          BfcNodeDataEntity.is_active, DataEntity.is_active)
+                                   .order_by(BfcNodeDataEntity.direction, DataEntity.de_number)).all()
+                for link, de in links:
+                    if (link.direction, link.data_entity_id) in keep:
+                        continue
+                    what = "input" if link.direction == "I" else "output"
+                    r = self._retire_row("STEP_IO", i, f"{key}/{link.direction}/{de.de_number}", link,
+                                         "bfc_node_data_entity",
+                                         f"{node.hier_code} {node.node_name} — {what} {de.de_number} {de.de_name}")
+                    if needs := step_io.dependents(db, link):
+                        r.verdict = "KEPT"
+                        r.warnings.append(msg("KEPT_DEPENDENT", f"{de.de_number} {de.de_name} stays this step's "
+                                              f"{what}: still needed by {', '.join(needs)}.", None,
+                                              dependents=needs))
+            if s.get("triggers") is not None:
+                keep = {self.trigger_rows[r.plan["trigger"]].target_id for r in mine if r.kind == "STEP_TRIGGER"}
+                links = db.execute(select(BfcNodeTrigger, ProcessTrigger)
+                                   .join(ProcessTrigger,
+                                         ProcessTrigger.process_trigger_id == BfcNodeTrigger.process_trigger_id)
+                                   .where(BfcNodeTrigger.bfc_node_id == node.bfc_node_id, BfcNodeTrigger.is_active,
+                                          ProcessTrigger.is_active)
+                                   .order_by(ProcessTrigger.trigger_name)).all()
+                for link, t in links:
+                    if link.process_trigger_id not in keep:
+                        self._retire_row("STEP_TRIGGER", i, f"{key}/{t.trigger_name}", link, "bfc_node_trigger",
+                                         f"{node.hier_code} {node.node_name} — trigger {t.trigger_name}")
+
+    def _retire_row(self, kind: str, i: int, business_key: str, link, table: str, label: str) -> Row:
+        link_id = getattr(link, link.__mapper__.primary_key[0].name)
+        r = Row(kind, None, verdict="RETIRE", business_key=business_key[:KEY_CAP], plan={"step": i},
+                target={"table": table, "id": link_id, "label": label})
+        r.target_id = link_id
+        r.pins = {"link": link_id, "row_version": link.row_version}       # an edit after the preview → rejected
+        self.rows.append(r)
+        return r
 
     @staticmethod
     def _link_verdict(r: Row, link) -> None:
@@ -729,9 +835,6 @@ def validate(db: Session, actor_id: int, project_id: int, anchor_id: int, mode: 
     in one object is that row's error, and the rest still stages (FI-3)."""
     if mode not in MODES:
         raise HTTPException(422, "mode: choose merge or replace")
-    if mode == "replace":
-        raise HTTPException(422, "Replace mode arrives in a later release. Import in merge mode — it never retires "
-                                 "anything. Nothing was staged.")
     anchor = _anchor(db, project_id, anchor_id, lock=False)
     doc = read_file(body)
     if doc["parent"]["hier_code"] != anchor.hier_code:
@@ -739,7 +842,7 @@ def validate(db: Session, actor_id: int, project_id: int, anchor_id: int, mode: 
                                  f"{anchor.hier_code}. Nothing was staged.")
     if doc.get("mode", "merge") != mode:
         raise HTTPException(422, f"The file says mode {doc['mode']}; you chose {mode}. Nothing was staged.")
-    resolver = _Resolver(db, anchor, doc, lock=False)
+    resolver = _Resolver(db, anchor, doc, lock=False, mode=mode)
     rows = resolver.run()
     status = bulk._statuses(db)
     warnings = [msg("NOT_IN_FILE", f"{n.hier_code} {n.node_name} is not in this file — kept as is.", None,
@@ -770,6 +873,8 @@ def _payload(r: Row, sha: str) -> dict:
         p["resolved"] = {"target_id": r.target_id}
     if r.pins:
         p["pins"] = r.pins
+    if r.target is not None:
+        p["target"] = r.target                       # ck_ir_db_staged_target: what a RETIRE or KEPT row acts on
     return p
 
 
@@ -780,6 +885,7 @@ def _count(batch: ImportBatch, rows: list[Row]) -> None:
     batch.warning_count = sum(1 for r in rows if r.warnings)
     batch.insert_count = sum(1 for r in rows if r.verdict == "INSERT" and not r.errors)
     batch.update_count = sum(1 for r in rows if r.verdict == "UPDATE" and not r.errors)
+    batch.retire_count = sum(1 for r in rows if r.verdict == "RETIRE" and not r.errors)    # KEPT is not counted
 
 
 # ---- preview -------------------------------------------------------------------------------------------------------
@@ -809,6 +915,8 @@ def preview_rows(db: Session, batch: ImportBatch, stored: list[ImportRow]) -> li
                     "verdict": r.verdict, "business_key": r.business_key, "is_valid": r.is_valid,
                     "errors": r.error_detail, "warnings": r.warning_detail, "changes": changes,
                     "resolved": None, "br_number": r.payload.get("br_number"),
+                    "ext_number": r.payload.get("ext_number"),
+                    "target_label": (r.payload.get("target") or {}).get("label"),
                     "committed_target_id": r.committed_target_id})
     return out
 
@@ -825,20 +933,26 @@ def _rebuild(stored: list[ImportRow]) -> dict:
 
 
 def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str, int], acknowledged_inserts,
-                acknowledged_updates, source_ip: str | None) -> ImportBatch:
+                acknowledged_updates, source_ip: str | None, acknowledged_retires=None) -> ImportBatch:
     """§7.2b's commit inside bulk.commit's lock, status and error handling: every row resolved again under lock and
     compared with its staged row (rule 14, D5); the counts acknowledged (R2-P1, FI-7); then one transaction, in
     dependency order, with no writer committing on its own."""
     stored = bulk._rows_of(db, batch)
     anchor = _anchor(db, batch.project_id, batch.anchor_bfc_node_id, lock=True)
-    resolver = _Resolver(db, anchor, _rebuild(stored), lock=True)
+    resolver = _Resolver(db, anchor, _rebuild(stored), lock=True, mode=batch.import_mode.lower())
     try:
         fresh = {r.pair: r for r in resolver.run()}
     except HTTPException as e:
         raise bulk._RuleFailure(str(e.detail), {})
+    # §7.2b: the RETIRE set re-computed inside the lock. Any difference from the preview — a row more or less, a
+    # RETIRE now KEPT or the other way — and nothing is written.
+    if {(r.pair, r.verdict) for r in fresh.values() if r.verdict in ("RETIRE", "KEPT")} != \
+            {(_stored_pair(s), s.verdict) for s in stored if s.verdict in ("RETIRE", "KEPT")}:
+        raise HTTPException(409, "The flow changed since the preview, so what this import would remove changed too. "
+                                 "Nothing was written — validate the file again.")
     errors: dict[int, list[dict]] = {}
     for s in stored:
-        r = fresh.pop((s.row_kind, s.source_path), None)
+        r = fresh.pop(_stored_pair(s), None)
         errs = []
         if r is None:
             errs.append(msg("VERDICT_CHANGED", "This object no longer resolves as it did: the data changed since the "
@@ -857,14 +971,17 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
     if errors or fresh:
         raise bulk._RuleFailure(f"{len(errors) + len(fresh)} objects changed since the upload, so nothing was applied "
                                 "and the batch was rejected. Export again, re-apply your edits and upload.", errors)
-    rows = {(s.row_kind, s.source_path): s for s in stored}
+    rows = {_stored_pair(s): s for s in stored}
     plan_rows = list(resolver.rows)
     inserts = sum(1 for r in plan_rows if r.verdict == "INSERT")
     updates = sum(1 for r in plan_rows if r.verdict == "UPDATE")
+    retires = sum(1 for r in plan_rows if r.verdict == "RETIRE")
     if inserts and acknowledged_inserts != inserts:
         raise HTTPException(422, f"This will CREATE {inserts} new rows. Confirm the count.")
     if updates and acknowledged_updates != updates:                                    # rule 15 (FI-7)
         raise HTTPException(422, f"This will CHANGE {updates} existing steps. Confirm the count.")
+    if retires and acknowledged_retires != retires:                                    # §7.11 property 6
+        raise HTTPException(422, f"This will RETIRE {retires} rows. Confirm the count.")
 
     current: Row | None = None
     try:
@@ -885,7 +1002,7 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
         updated = []
         for r in plan_rows:
             row = rows[r.pair]
-            row.committed_target_id = None if r.kind == "PERFORMER" else r.target_id
+            row.committed_target_id = None if r.kind == "PERFORMER" or r.verdict == "KEPT" else r.target_id
             extra = {}
             if r.kind == "STEP" and r.verdict == "UPDATE":
                 extra["before"] = r.plan["changes"]
@@ -894,6 +1011,8 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
                                 "description_before": r.plan["before"]["description"]})
             if r.plan.get("br_number"):
                 extra["br_number"] = r.plan["br_number"]
+            if r.plan.get("ext_number"):                 # a new party's number, minted at commit (§9.8)
+                extra["ext_number"] = r.plan["ext_number"]
             if extra:
                 row.payload = {**row.payload, **extra}
         batch.status_code_id = status["COMMITTED"]
@@ -905,7 +1024,7 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
                              "anchor": anchor.hier_code, "mode": batch.import_mode,
                              "insert_count": inserts, "update_count": updates,
                              "match_count": sum(1 for r in plan_rows if r.verdict == "MATCH"),
-                             "retire_count": 0, "file_sha256": stored[0].payload.get("file", {}).get("sha256"),
+                             "retire_count": retires, "file_sha256": stored[0].payload.get("file", {}).get("sha256"),
                              "updated_steps": updated},                               # FI-7: kept past the purge
                      source_ip=source_ip)
         db.flush()
@@ -913,14 +1032,23 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
 
 
 def _apply(db: Session, actor_id: int, anchor: BfcNode, res: _Resolver):
-    """§7.2b's order: new data entities and triggers; new steps (with their BR when to-be); changed steps — name and
-    description, then performer, each call on the step's current row_version (rule 17); then the links. A generator,
-    so a failure names the object being written."""
+    """§7.2b's order: new parties, data entities and triggers; new steps (with their BR when to-be); changed steps —
+    name and description, then performer, each call on the step's current row_version (rule 17); then the links and
+    external flows; last the retirements, each re-checked for a dependent. A generator, so a failure names the object
+    being written."""
     pid = anchor.project_id
     nodes = {}
     by_kind = {}
     for r in res.rows:
         by_kind.setdefault(r.kind, []).append(r)
+    for r in res.party_rows.values():
+        yield r
+        if r.verdict == "INSERT":
+            party = external_entity.create_party(db, actor_id, pid, r.plan["name"], r.plan["kind"], None,
+                                                 commit=False)
+            r.target_id = party.external_entity_id
+            r.plan["ext_number"] = party.ext_number
+            res.party_keys[r.local_key] = party
     for r in res.de_rows.values():
         yield r
         if r.verdict == "INSERT":
@@ -975,6 +1103,22 @@ def _apply(db: Session, actor_id: int, anchor: BfcNode, res: _Resolver):
             r.target_id = trigger.link(db, actor_id, nodes[r.plan["step"]],
                                        res.trigger_rows[r.plan["trigger"]].target_id, None,
                                        commit=False).bfc_node_trigger_id
+    for r in by_kind.get("EXTERNAL_FLOW", []):
+        yield r
+        if r.verdict == "INSERT":
+            de = res.de_rows[r.plan["de"]].target_id if r.plan["de"] is not None else None
+            r.target_id = bfc.link_external_flow(db, actor_id, nodes[r.plan["step"]],
+                                                 res.party_keys[r.plan["party"]].external_entity_id,
+                                                 r.plan["direction"], de, None, None, commit=False,
+                                                 keep_text=True).bfc_node_external_flow_id
+    for r in res.rows:
+        if r.verdict != "RETIRE":
+            continue
+        yield r
+        if r.kind == "STEP_IO":                      # its dependents checked again, inside this transaction
+            step_io.unlink(db, actor_id, db.get(BfcNodeDataEntity, r.target_id), r.pins["row_version"], commit=False)
+        else:
+            trigger.unlink(db, actor_id, db.get(BfcNodeTrigger, r.target_id), r.pins["row_version"], commit=False)
 
 
 def _set_performer(db: Session, actor_id: int, node: BfcNode, p: dict | None) -> None:

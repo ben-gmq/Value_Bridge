@@ -1,6 +1,6 @@
 """Slice 1e-b piece (a2): re-importing a `vb-process-flow/2.0` file in merge mode (design §7.2b, D-25; spec §4 rules
 1–8 and 10–17, §7, §10). Grade 2: a wrong flow reaches a client deliverable, but every change is audited and merge
-never retires anything. Outside parties and flows are matched only, and replace mode is refused — both piece (b)."""
+never retires anything. New outside parties and flows, and replace mode, are piece (b): test_flow_import_replace."""
 import copy
 import json
 import random
@@ -31,10 +31,11 @@ def stage(client, ed, anchor, doc, mode="merge", expect=201, raw=None):
     return r.json()
 
 
-def commit(client, ed, pv, ack=None, upd=None, expect=200):
+def commit(client, ed, pv, ack=None, upd=None, expect=200, ret=None):
     b = pv["batch"]
     r = client.post(f"{API}/bulk/batches/{b['import_batch_id']}/commit", headers=ed["h"],
-                    json={"row_version": b["row_version"], "acknowledged_inserts": ack, "acknowledged_updates": upd})
+                    json={"row_version": b["row_version"], "acknowledged_inserts": ack, "acknowledged_updates": upd,
+                          "acknowledged_retires": ret})
     assert r.status_code == expect, r.text
     return r.json()
 
@@ -101,10 +102,11 @@ def test_an_export_reimported_unchanged_changes_nothing(client, ed, flow):
     assert export(client, ed, flow["parent"]) == doc                         # nothing moved, not even a version
 
 
-def test_replace_mode_is_refused_with_nothing_staged(client, ed, db, flow):
+def test_a_file_cannot_turn_itself_into_a_replace_or_out_of_one(client, ed, db, flow):
+    """R2-P3: the mode is chosen on screen; the file's own must agree, both ways, with nothing staged."""
     doc = export(client, ed, flow["parent"])
     before = batches(db)
-    assert "later release" in stage(client, ed, flow["parent"], doc, mode="replace", expect=422)["detail"]
+    assert "you chose replace" in stage(client, ed, flow["parent"], doc, mode="replace", expect=422)["detail"]
     doc["mode"] = "replace"
     assert "you chose merge" in stage(client, ed, flow["parent"], doc, expect=422)["detail"]
     assert batches(db) == before
@@ -184,16 +186,18 @@ def test_triggers_keep_their_kind_and_a_new_name_given_two_kinds_is_an_error(cli
     assert codes(at(pv, "TRIGGER", "/steps/0/triggers/1")) == ["TWO_KINDS"]
 
 
-def test_a_new_party_or_flow_waits_for_piece_b_and_an_unknown_ext_number_is_an_error(client, ed, flow):
-    """Spec §12 piece 1, rule 8."""
+def test_new_parties_and_flows_stage_as_inserts_and_an_unknown_ext_number_is_an_error(client, ed, flow):
+    """Rule 8 (piece b): a new name is a new party, a new flow is an insert; an unknown number is an error."""
     doc = export(client, ed, flow["parent"])
-    doc["external_entities"].append({"key": "X2", "name": "Bank"})
+    doc["external_entities"].append({"key": "X2", "name": "Bank", "kind": "SUPPLIER"})
     doc["external_entities"].append({"key": "X3", "ext_number": "EXT-0999", "name": "Ghost"})
     doc["steps"][1]["external_flows"] = [{"external": "X1", "direction": "O", "data_entity": None}]
     pv = stage(client, ed, flow["parent"], doc)
-    assert codes(at(pv, "EXTERNAL_ENTITY", "/external_entities/1")) == ["PARTY_LATER"]
+    bank = at(pv, "EXTERNAL_ENTITY", "/external_entities/1")
+    assert (bank["verdict"], bank["errors"], codes(bank, "warnings")) == ("INSERT", [], ["NEW_PARTY"])
     assert codes(at(pv, "EXTERNAL_ENTITY", "/external_entities/2")) == ["PARTY_UNKNOWN"]
-    assert codes(at(pv, "EXTERNAL_FLOW", "/steps/1/external_flows/0")) == ["FLOW_LATER"]
+    new_flow = at(pv, "EXTERNAL_FLOW", "/steps/1/external_flows/0")
+    assert (new_flow["verdict"], new_flow["errors"]) == ("INSERT", [])
     assert at(pv, "EXTERNAL_FLOW", "/steps/0/external_flows/0")["verdict"] == "MATCH"
 
 
