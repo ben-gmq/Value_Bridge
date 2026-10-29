@@ -7,7 +7,7 @@ import { keys, links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
 import { Card, Code, ListRow, Tag } from '../../components/kit';
 import { t } from '../../i18n/t';
-import { Generated, Loading, Off } from './reportKit';
+import { Loading, Off, Printable } from './reportKit';
 
 // Coverage (spec §3.2, function 56): one card per gap kind, in the server's order, each with the rows it lists. A line
 // whose component is off is null (A1) and names the component it waits for — the first one off, FR before SOLUTION.
@@ -77,12 +77,13 @@ export function Coverage({ projectId }) {
   if (!d) return <Loading />;
   const on = { has: (c) => isOn(c) };
   return (
-    <Stack sx={{ gap: 2 }}>
-      <Box>
-        <Generated at={d.generated_at} />
-        <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('reports.cov.intro')}</Typography>
-      </Box>
-      {d.lines.map((line) => <Line key={line.code} projectId={projectId} line={line} on={on} />)}
-    </Stack>
+    <Printable projectId={projectId} report="coverage" query={q} data={d}>
+      <Stack sx={{ gap: 2 }}>
+        <Box>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('reports.cov.intro')}</Typography>
+        </Box>
+        {d.lines.map((line) => <Line key={line.code} projectId={projectId} line={line} on={on} />)}
+      </Stack>
+    </Printable>
   );
 }

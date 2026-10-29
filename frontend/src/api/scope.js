@@ -170,6 +170,8 @@ export const reportApi = {                                            // slice 1
   traceability: (projectId) => d(http.get(`${P(projectId)}/traceability`)),
   coverage: (projectId) => d(http.get(`${P(projectId)}/coverage`)),
   solutionMatrix: (projectId) => d(http.get(`${P(projectId)}/solution-matrix`)),
+  // §3.6: writes one REPORT_PRINTED row. A plain one-shot call on the Print / PDF press — never a query (round 1 P1).
+  printStamp: (projectId, params) => d(http.get(`${P(projectId)}/print-stamp`, { params })),
 };
 
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)

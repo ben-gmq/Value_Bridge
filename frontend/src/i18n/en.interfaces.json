@@ -53,5 +53,7 @@
   "interfaces.card.removeEntity": "Remove {de}",
   "interfaces.tiles.shown": "Interfaces",
   "interfaces.tiles.incomplete": "Incomplete",
-  "interfaces.tiles.incompleteNote": "Missing a source and target, a method or the data carried"
+  "interfaces.tiles.incompleteNote": "Missing a source and target, a method or the data carried",
+  "interfaces.completeHead": "Complete",
+  "interfaces.printFilters": "source {source}, target {target}, status {status}"
 }

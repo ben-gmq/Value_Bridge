@@ -623,4 +623,9 @@ place.
 - **2026-10-28 · slice 1f piece 4, interface list to Excel (`sara`, PASS):** (L1) the filters line prints the raw
   status code from the address and accepts an unknown one; resolve it to its label and 422 an unknown code, once in
   `interface_list` so the screen route gets it too. (L2) `reports.ICT` should move to one shared stamp helper when the
-  §3.6 PDF stamp lands, so the two never drift.
+  §3.6 PDF stamp lands, so the two never drift. — **L2 FIXED 2026-10-29 (piece 143):** `reports.stamp_time`.
+- **2026-10-29 · slice 1f piece 143, print to PDF (`sara`, PASS; M1–M3, L2–L4 fixed):** (L1) the interface filter
+  wording is built twice — Excel in `reports.interface_workbook` (raw status code, "any"), print in
+  `InterfacesPage.jsx` (label, "Any"); build it once in the backend (joins piece-4 L1). (L5) pressing Print / PDF and
+  then changing a filter before the stamp returns writes a REPORT_PRINTED row for a print that shows only the notice;
+  accepted under spec A3 (the row proves the stamp was fetched, not that a PDF was saved).

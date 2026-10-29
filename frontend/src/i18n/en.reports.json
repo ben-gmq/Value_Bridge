@@ -62,5 +62,11 @@
   "reports.trace.untracedEmpty": "Every function requirement is traced.",
   "reports.trace.without": "Answered without software",
   "reports.trace.withoutNote": "Solutions that answer a business requirement and need no function requirement (people, process and the like).",
-  "reports.trace.withoutEmpty": "None."
+  "reports.trace.withoutEmpty": "None.",
+  "reports.print.button": "Print / PDF",
+  "reports.print.failed": "The report could not be prepared for printing",
+  "reports.print.live": "LIVE — not a baseline",
+  "reports.print.stamp": "{project} · generated {at} by {by}",
+  "reports.print.filters": "Filters: {filters}",
+  "reports.print.useButton": "Use Print / PDF to print this report."
 }

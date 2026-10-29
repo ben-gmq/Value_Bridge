@@ -258,7 +258,7 @@ function Header({ onMenu, narrow }) {
   if (crumb) crumbs.push({ label: crumb });
   return (
     <Box component="header" sx={(th) => ({ minHeight: 56, flexShrink: 0, px: { xs: 2, md: 3 }, display: 'flex', alignItems: 'center',
-      gap: 2, borderBottom: `1px solid ${th.vars.palette.divider}` })}>
+      gap: 2, borderBottom: `1px solid ${th.vars.palette.divider}`, displayPrint: 'none' })}>
       {narrow && <IconButton onClick={onMenu} aria-label={t('shell.menu')} edge="start"><MenuRounded /></IconButton>}
       <Box component="ol" aria-label={t('shell.breadcrumb')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, m: 0, p: 0,
         listStyle: 'none', minWidth: 0, flexWrap: 'wrap' }}>
@@ -312,7 +312,7 @@ export function AppShell({ children }) {
             <Rail onNavigate={() => setOpen(false)} />
           </Drawer>
         ) : (
-          <Box sx={{ position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', flexShrink: 0 }}><Rail /></Box>
+          <Box sx={{ position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', flexShrink: 0, displayPrint: 'none' }}><Rail /></Box>
         )}
         <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <Header narrow={narrow} onMenu={() => setOpen(true)} />
