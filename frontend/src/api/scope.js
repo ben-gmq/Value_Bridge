@@ -170,6 +170,7 @@ export const reportApi = {                                            // slice 1
   traceability: (projectId) => d(http.get(`${P(projectId)}/traceability`)),
   coverage: (projectId) => d(http.get(`${P(projectId)}/coverage`)),
   solutionMatrix: (projectId) => d(http.get(`${P(projectId)}/solution-matrix`)),
+  applicationGap: (projectId, level) => d(http.get(`${P(projectId)}/application-gap`, { params: { level } })),
   // §3.6: writes one REPORT_PRINTED row. A plain one-shot call on the Print / PDF press — never a query (round 1 P1).
   printStamp: (projectId, params) => d(http.get(`${P(projectId)}/print-stamp`, { params })),
 };

@@ -105,6 +105,7 @@ export const keys = {
   traceability: (p) => ['reports', String(p), 'traceability'],                       // slice 1f
   coverage: (p) => ['reports', String(p), 'coverage'],
   solutionMatrix: (p) => ['reports', String(p), 'solution-matrix'],
+  applicationGap: (p, level) => ['reports', String(p), 'application-gap', String(level)],
   solutionDeps: (solId) => ['solution-deps', String(solId)],
   allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],

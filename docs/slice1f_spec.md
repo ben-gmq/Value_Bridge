@@ -190,6 +190,9 @@ projects (no performance test); Excel opening in Excel itself (read back with op
   be allocated (§4.4), so the design's literal wording would list every AS_IS application.
 - **A8** Excel exports are not audited; only PDFs are (D-42).
 - **A9** A project with an open removal request can still be printed, and the print is audited.
+- **A10** In the system gap, a to-be allocation (and "allocated anywhere" for `retiring`) runs only through a live,
+  non-REJECTED solution, as coverage counts answers (S5-2): a rejected solution will not be built, so its systems
+  replace nothing. Put to Ben 2026-10-29, not settled.
 
 ## 7. Design review round 1 (design-auditor, 2026-10-28) — dispositions
 | Id | Sev | Finding | Disposition |
