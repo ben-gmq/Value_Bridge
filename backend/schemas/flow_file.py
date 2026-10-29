@@ -66,10 +66,13 @@ class Step(_Strict):
     performer: Annotated[CodedPerformer | AiPerformer, Field(discriminator="kind")] | None = Field(
         None, description="Left out, or an unknown code: kept as it is. null: cleared (FI-2).")
     triggers: Annotated[list[Trigger], Field(max_length=MAX_LIST)] | None = Field(
-        None, description="Left out: kept as they are. [] means none (FI-1).")
-    inputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = None
-    outputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = None
-    external_flows: Annotated[list[ExternalFlow], Field(max_length=MAX_LIST)] | None = None
+        None, description="Left out or null: kept as they are. [] means none (FI-1).")
+    inputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = Field(
+        None, description="Left out or null: kept as they are. [] means none (FI-1).")
+    outputs: Annotated[list[DeRef], Field(max_length=MAX_LIST)] | None = Field(
+        None, description="Left out or null: kept as they are. [] means none (FI-1).")
+    external_flows: Annotated[list[ExternalFlow], Field(max_length=MAX_LIST)] | None = Field(
+        None, description="Left out or null: kept as they are. An import never removes an external flow.")
     source_ref: Ref | None = None
 
 

@@ -841,7 +841,7 @@ def validate(db: Session, actor_id: int, project_id: int, anchor_id: int, mode: 
         raise HTTPException(422, f"This file is for {doc['parent']['hier_code'][:40]}; you chose "
                                  f"{anchor.hier_code}. Nothing was staged.")
     if doc.get("mode", "merge") != mode:
-        raise HTTPException(422, f"The file says mode {doc['mode']}; you chose {mode}. Nothing was staged.")
+        raise HTTPException(422, f"The file says mode {doc.get('mode', 'merge')}; you chose {mode}. Nothing was staged.")
     resolver = _Resolver(db, anchor, doc, lock=False, mode=mode)
     rows = resolver.run()
     status = bulk._statuses(db)
@@ -1025,7 +1025,8 @@ def commit_rows(db: Session, actor_id: int, batch: ImportBatch, status: dict[str
                              "insert_count": inserts, "update_count": updates,
                              "match_count": sum(1 for r in plan_rows if r.verdict == "MATCH"),
                              "retire_count": retires, "file_sha256": stored[0].payload.get("file", {}).get("sha256"),
-                             "updated_steps": updated},                               # FI-7: kept past the purge
+                             "updated_steps": updated,                                # FI-7: kept past the purge
+                             "retired": [r.target for r in plan_rows if r.verdict == "RETIRE"]},   # sara L1
                      source_ip=source_ip)
         db.flush()
     return batch

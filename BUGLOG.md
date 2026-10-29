@@ -648,3 +648,6 @@ place.
   the wrong `other_code` (reason text only; carried over from `process_volume`); keep name → codes and say
   NAME_ELSEWHERE only when exactly one holds it. (L3) `reports.SUPPORTING` (S6b-5) should live beside
   `application.is_as_is`, so one file owns what a lifecycle means.
+- **2026-10-29 · slice 1e-b piece b, flow import replace mode (`sara`, PASS; M1, L1–L3 fixed):** (L4)
+  `flow_import._Resolver._replace` rescans every staged row once per step, and `step_io.dependents` reads each dependent
+  by `db.get`; fine at 99 steps × 100 links, index rows by step once if larger files ever appear.

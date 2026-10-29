@@ -7,7 +7,7 @@ import random
 
 from sqlalchemy import select
 
-from models import (AuditEvent, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeTrigger, DataEntity, ExternalEntity,
+from models import (AppUser, AuditEvent, BfcNodeDataEntity, BfcNodeExternalFlow, BfcNodeTrigger, DataEntity, ExternalEntity,
                     ImportBatch, ProcessTrigger)
 from tests.test_dfd_api import area, ext_flow, io, party, starts, trigger  # noqa: F401
 from tests.test_flow_import import at, batches, codes, commit, export, flow, preview, rows, stage  # noqa: F401
@@ -84,6 +84,14 @@ def test_triggers_left_out_are_kept_and_an_empty_list_retires_them(client, ed, d
     event = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "IMPORT_COMMITTED")
                        .order_by(AuditEvent.audit_event_id.desc())).first()
     assert event.detail["retire_count"] == 3 and event.detail["mode"] == "REPLACE"
+    assert sorted(t["label"].rsplit("trigger ", 1)[1] for t in event.detail["retired"]) == \
+        ["Customer calls", "Month end", "Order e-mail"]                       # kept past the 90-day purge (sara L1)
+    me = db.scalar(select(AppUser.app_user_id).where(AppUser.email == "editor@example.test"))
+    soft = list(db.scalars(select(BfcNodeTrigger).where(BfcNodeTrigger.bfc_node_id == s1["bfc_node_id"])))
+    assert len(soft) == 3 and all(not x.is_active and x.deleted_at and x.deleted_by == me for x in soft)
+    deleted = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "RECORD_DELETED",
+                                                  AuditEvent.target_table == "bfc_node_trigger")).all()
+    assert len(deleted) == 3 and {e.app_user_id for e in deleted} == {me}                   # sara L2
     assert export(client, ed, flow["parent"])["steps"][0]["triggers"] == []
 
 

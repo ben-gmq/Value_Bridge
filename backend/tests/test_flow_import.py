@@ -109,6 +109,8 @@ def test_a_file_cannot_turn_itself_into_a_replace_or_out_of_one(client, ed, db, 
     assert "you chose replace" in stage(client, ed, flow["parent"], doc, mode="replace", expect=422)["detail"]
     doc["mode"] = "replace"
     assert "you chose merge" in stage(client, ed, flow["parent"], doc, expect=422)["detail"]
+    del doc["mode"]                                                           # left out means merge (sara M1)
+    assert "says mode merge" in stage(client, ed, flow["parent"], doc, mode="replace", expect=422)["detail"]
     assert batches(db) == before
 
 

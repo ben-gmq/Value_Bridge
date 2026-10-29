@@ -610,7 +610,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                     <TextField id="import-confirm-updates" label={t('data.import.flow.confirmUpdatesLabel')} value={typedUpdates}
                       onChange={(e) => setTypedUpdates(e.target.value)} sx={{ width: 220 }}
                       error={typedUpdates.trim() !== '' && !updatesOk}
-                      helperText={typedUpdates.trim() !== '' && !updatesOk ? t('data.import.confirmMismatch') : ' '}
+                      helperText={typedUpdates.trim() !== '' && !updatesOk ? t('data.import.flow.countMismatch') : ' '}
                       slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
                   </Box>
                 )}
@@ -620,7 +620,7 @@ export function ImportWizard({ projectId, targets = Object.keys(IMPORT_TARGETS),
                     <TextField id="import-confirm-retires" label={t('data.import.flow.confirmRetiresLabel')} value={typedRetires}
                       onChange={(e) => setTypedRetires(e.target.value)} sx={{ width: 220 }}
                       error={typedRetires.trim() !== '' && !retiresOk}
-                      helperText={typedRetires.trim() !== '' && !retiresOk ? t('data.import.confirmMismatch') : ' '}
+                      helperText={typedRetires.trim() !== '' && !retiresOk ? t('data.import.flow.countMismatch') : ' '}
                       slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }} />
                   </Box>
                 )}

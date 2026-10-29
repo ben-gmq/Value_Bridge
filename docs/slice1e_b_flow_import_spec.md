@@ -214,7 +214,9 @@ the Claude Enterprise vendor terms (§1a). FI-11: on an as-is anchor `hier_code`
    staged MATCH when already live; a **new** party or flow is a row error "added in a later release — add it on
    screen", so an exported file always round-trips. Replace is refused (422) and hidden in the picker.
 2. **Piece (b): outside parties and flows + replace.** EXTERNAL_ENTITY / EXTERNAL_FLOW inserts and restores; replace
-   mode with RETIRE / KEPT, the in-lock re-computation and the acknowledgement.
+   mode with RETIRE / KEPT, the in-lock re-computation and the acknowledgement. **Built 2026-10-29**; a RETIRE or KEPT
+   row pairs at commit by `payload.target` (D5), and a different RETIRE / KEPT set under the lock is 409 with nothing
+   written (`tests/test_flow_import_replace.py`).
 
 Each piece: Sara before commit, its direct tests, one browser pass, full suite before merge.
 

@@ -380,6 +380,7 @@
   "data.import.flow.retireTile": "To remove",
   "data.import.flow.confirmRetires": "This will REMOVE {n} inputs, outputs or trigger links from the steps listed above. Type {n} to confirm.",
   "data.import.flow.confirmRetiresLabel": "Links to remove",
+  "data.import.flow.countMismatch": "That is not the number shown above.",
   "data.import.flow.pickHelp": "A .json file of up to 2 MB. It is read when you choose it: if you change it afterwards, choose it again.",
   "data.import.flow.notJson": "Choose a .json flow file.",
   "data.import.flow.tooBig": "The file is over 2 MB. A flow file is never that large — check it is the right file.",

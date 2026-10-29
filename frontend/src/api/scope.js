@@ -328,8 +328,9 @@ export const importApi = {
     buffer, { params: { anchor_bfc_node_id: anchorId, mode },
       headers: { 'Content-Type': 'application/json', 'X-VB-File-Name': encodeURIComponent(fileName) } })),
   // acknowledged_inserts / _updates are the counts the user typed; the server re-validates and compares (R2-P2, FI-7).
-  commit: (batchId, { row_version, acknowledged_inserts, acknowledged_updates = null }) =>
-    d(http.post(`${V}/bulk/batches/${batchId}/commit`, { row_version, acknowledged_inserts, acknowledged_updates })),
+  commit: (batchId, { row_version, acknowledged_inserts, acknowledged_updates = null, acknowledged_retires = null }) =>
+    d(http.post(`${V}/bulk/batches/${batchId}/commit`,
+      { row_version, acknowledged_inserts, acknowledged_updates, acknowledged_retires })),
 };
 
 // Slice 6b-1 (docs/slice6b1_spec.md). Allocations are written through the solution's routes and
