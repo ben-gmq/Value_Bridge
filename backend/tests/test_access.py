@@ -1,6 +1,8 @@
 """Slice 7b access (D-40, OR-5, OR-6; slice7_schema §8): admin / USER / VIEWER, restricted projects
 and their members. Grade 1: who can see a client's data. Replaces the D-32 grant tests."""
 import re
+from datetime import UTC, datetime
+from urllib.parse import quote
 
 from fastapi.routing import APIRoute
 from sqlalchemy import create_engine, select
@@ -383,8 +385,11 @@ def test_no_get_route_leaks_a_restricted_project(client, world):
     # slice 8 (sara L6): the parameterised baseline reads, as admin (positive) and as each non-member
     bl = max(i for i in ids if client.get(f"{API}/baselines/{i}", headers=w["admin"]).status_code == 200)
     extra = [f"{API}/baselines/{bl}/rows/business_requirement",
-             f"{API}/projects/{pid}/baselines/diff?from={bl}&to=live"]
+             f"{API}/projects/{pid}/baselines/diff?from={bl}&to=live",
+             # slice 1f §5 (S3): the print stamp needs its query, so the bare sweep only ever sees its 422
+             f"{API}/projects/{pid}/print-stamp?report=traceability&generated_at={quote(datetime.now(UTC).isoformat())}"]
     assert all(client.get(u, headers=w["admin"]).status_code == 200 for u in extra)
+    assert marks["name"] in client.get(extra[-1], headers=w["admin"]).text                 # positive control
     assert any(marks["baseline"] in client.get(f"{API}/baselines/{bl}", headers=w["admin"]).text for _ in [0])
     # D-71: the admin of another project in the same program is a non-member here like anyone else
     r = client.post(f"{API}/projects/{w['p_fin']}/members", headers=w["admin"],

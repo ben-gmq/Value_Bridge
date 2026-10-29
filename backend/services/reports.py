@@ -2,20 +2,22 @@
 owns access: every route is project_ctx(VIEW).
 
 A part that needs a component the project has switched off is None, never an empty list — an empty list would read
-"no gaps" (spec A1)."""
+"no gaps" (spec A1). The one thing stored is the REPORT_PRINTED audit row a print writes (§3.6)."""
 import io
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import openpyxl
+from fastapi import HTTPException
 from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from models import (Application, ApplicationSolution, BfcNode, BrDataEntity, BrFunctionRequirement, BrSolution,
-                    BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Project, Solution)
+from models import (AppUser, Application, ApplicationSolution, BfcNode, BrDataEntity, BrFunctionRequirement,
+                    BrSolution, BrSystemFlow, BusinessRequirement, DataEntity, FunctionRequirement, Project, Solution)
 from models.shared import FR_BEHAVIOURS
-from services import br_flows, components, function_requirement as fr_service, interface as iface_service, xlsx
+from services import audit, br_flows, components, function_requirement as fr_service, interface as iface_service, xlsx
 from services.code_master import resolve
 
 BEHAVIOUR_ORDER = ("FORM", "BATCH", "INTERFACE", "REPORT", "OTHER")
@@ -24,6 +26,16 @@ assert set(BEHAVIOUR_ORDER) == set(FR_BEHAVIOURS)          # a new behaviour get
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ---- the stamp every printed or exported report carries (D-42) ----------------------------------------------------
+ICT = ZoneInfo("Asia/Bangkok")
+
+
+def stamp_time(at: datetime) -> str:
+    """The one way a report states when it was worked out: ICT, as text with its zone (D8). The Excel stamp and the
+    print stamp both use it, so the two never drift (VB-005 piece-4 L2)."""
+    return at.astimezone(ICT).strftime("%Y-%m-%d %H:%M ICT")
 
 
 def _hier_key(code: str) -> tuple:
@@ -267,7 +279,6 @@ def solution_matrix(db: Session, project_id: int) -> dict:
 
 
 # ---- §3.5 the interface list as an Excel file (function 61) -------------------------------------------------------
-ICT = ZoneInfo("Asia/Bangkok")
 IFACE_HEADERS = ("Interface", "Name", "Type", "Source → target", "Pattern", "Method", "Frequency", "Data entities carried",
                  "Solution", "BRs", "Status", "Effort (days)", "Complete")
 IFACE_WIDTHS = (12, 40, 16, 22, 14, 12, 14, 44, 12, 22, 16, 12, 34)
@@ -294,7 +305,7 @@ def interface_workbook(db: Session, project_id: int, by: str, source: int | None
     w = xlsx.write_cell
     w(ws, 1, 1, f"{project.project_code} {project.project_name}", bold=True)
     w(ws, 2, 1, "LIVE — not a baseline")
-    w(ws, 3, 1, f"Generated {datetime.now(ICT).strftime('%Y-%m-%d %H:%M')} ICT by {by}")    # text with its zone (D8)
+    w(ws, 3, 1, f"Generated {stamp_time(datetime.now(timezone.utc))} by {by}")
     filtered = source is not None or target is not None or status is not None
     w(ws, 4, 1, "Filters: " + (f"source {_app_label(db, project_id, source)}, target {_app_label(db, project_id, target)}"
                                f", status {status or 'any'}" if filtered else "none"))
@@ -322,3 +333,43 @@ def interface_workbook(db: Session, project_id: int, by: str, source: int | None
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+# ---- §3.6 print to PDF (function 143): the stamp, and the one audit row a print writes -------------------------------
+PRINTABLE = ("traceability", "coverage", "solution_matrix", "interfaces")   # + application_gap once built (N4)
+STAMP_WINDOW_MINUTES = 30
+FILTERS_CAP = 200
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _checked_time(value: str) -> datetime:
+    """Round 2 N2: the report's own generated_at, sent back by the browser — an ISO time with its zone, within the
+    last 30 minutes, so a malformed or backdated value never reaches the append-only audit row."""
+    try:
+        at = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        raise HTTPException(422, "generated_at is not a time") from None
+    if at.tzinfo is None:
+        raise HTTPException(422, "generated_at must carry its time zone")
+    now = datetime.now(timezone.utc)
+    if not now - timedelta(minutes=STAMP_WINDOW_MINUTES) <= at <= now + timedelta(seconds=5):
+        raise HTTPException(422, "The report is out of date — refresh it, then print")
+    return at.astimezone(timezone.utc)
+
+
+def print_stamp(db: Session, actor: AppUser, project: Project, report: str, filters: str | None, generated_at: str,
+                source_ip: str | None = None) -> dict:
+    """D-42: what every printed page carries, and one REPORT_PRINTED row. Called once per press of Print / PDF, after
+    the screen refetched the report; generated_at is that response's own time (P3)."""
+    if report not in PRINTABLE:
+        raise HTTPException(422, "That report cannot be printed")
+    if filters is not None and (len(filters) > FILTERS_CAP or _CONTROL.search(filters)):
+        raise HTTPException(422, f"Filters must be plain text of at most {FILTERS_CAP} characters")
+    at = _checked_time(generated_at)
+    audit.record(db, "REPORT_PRINTED", actor_id=actor.app_user_id, project_id=project.project_id,
+                 target_table="project", target_id=project.project_id, source_ip=source_ip,
+                 detail={"report": report, "filters": filters, "generated_at": at.isoformat()})
+    db.commit()
+    return {"report": report, "project_code": project.project_code, "project_name": project.project_name,
+            "is_live": True, "generated_at": at.isoformat(), "generated_at_text": stamp_time(at),
+            "generated_by": actor.display_name, "filters": filters}

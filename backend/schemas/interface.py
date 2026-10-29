@@ -84,3 +84,4 @@ class InterfaceRowOut(BaseModel):
 class InterfaceListOut(BaseModel):
     rows: list[InterfaceRowOut]
     unfilterable_incomplete: int
+    generated_at: str

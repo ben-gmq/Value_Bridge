@@ -93,3 +93,15 @@ class SolutionMatrixOut(BaseModel):
     live_count: int | None                # live non-REJECTED solutions: the share's denominator (Q7)
     rejected_count: int | None
     technology_share: float | None        # None also when there is no live solution
+
+
+class PrintStampOut(BaseModel):
+    """§3.6: what every printed page carries (D-42). generated_at is the report response's own time (P3)."""
+    report: str
+    project_code: str
+    project_name: str
+    is_live: bool
+    generated_at: str
+    generated_at_text: str                 # the same ICT text the Excel stamp prints
+    generated_by: str
+    filters: str | None

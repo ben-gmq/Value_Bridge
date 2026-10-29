@@ -214,7 +214,8 @@ def interface_list(db: Session, project_id: int, source: int | None = None, targ
             if not _pair_matches(r, source, target):
                 continue
         out.append(r)
-    return {"rows": out, "unfilterable_incomplete": unfilterable}
+    return {"rows": out, "unfilterable_incomplete": unfilterable,
+            "generated_at": datetime.now(UTC).isoformat()}                       # the print stamp's time (1f P3)
 
 
 def _pair_matches(r: dict, source: int | None, target: int | None) -> bool:
