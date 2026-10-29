@@ -16,7 +16,11 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open.
+- **2026-10-29 · ERD as SVG (function 41, after EX-1).** Ben chose `html-to-image` to save the ERD as shown. Its PNG
+  is built; its SVG is held, because the library's SVG wraps the page's HTML in a `foreignObject`, which §14.5 forbids
+  in an exported SVG. Open: (a) PNG only; (b) an SVG drawn from the diagram's own shapes and text, ~1.5 days; (c)
+  amend §14.5 to allow the library's SVG (text is DOM-escaped, but the defence-in-depth rule goes). Lilly recommends (a)
+  now, (b) if a deck needs vector.
 
 
 ---
@@ -44,6 +48,8 @@ Nothing open.
   144 and A-51: Claude Enterprise is the only AI service (D-36 narrowed); updates confirmed by count.
 - **2026-10-28** — FI-10: the Claude Enterprise data terms checked by Ben, recorded in the 1e-b spec §1a; the design
   text is unchanged (it never stated the terms as open).
+- **2026-10-29** — EX-1 folded into §4 `export_erd` and §14 (ERD export): the ERD is saved in the browser as a PNG,
+  exactly as shown; SVG is open (§1).
 
 ---
 
@@ -600,6 +606,14 @@ system*, "accept the ~2 extra hours".
 | # | Decision | Supersedes / answers |
 |---|---|---|
 | RP-1 | **`application_gap` checks per system, inside each matched area.** An as-is step's support by an application is `unallocated` when that same application has no to-be allocation in the matched to-be area; a to-be step's allocation to an application is `unsupported` when that application supports no as-is step in the matched as-is area. One allocation in an area no longer hides the area's other supported steps | §7.9 `application_gap` "per matched area" (an area with any allocation read as having no backlog) |
+
+### Ben's ruling, 2026-10-29 — how the ERD is saved as a picture (slice 1f, function 41, EX-1)
+
+Ben, via Ren, 2026-10-29: option (a), *add `html-to-image` and save the ERD exactly as shown on screen*.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| EX-1 | **The ERD is saved as a PNG in the browser, exactly as shown** (current zoom and positions; zoom controls and minimap left out), through `html-to-image` pinned at 1.11.11 and one saver for every canvas (`canvas/saveImage.js`). Not audited (only PDFs are, D-42). Nothing is rendered on the server. SVG is not offered: the library's SVG wraps the page's HTML in a `foreignObject`, which §14.5 forbids — open in §1 | Function 41 "PNG/SVG" left open by the 1f spec; options (b) hand-drawn SVG and (c) server-side Mermaid render not taken |
 
 ### Ben's rulings, 2026-10-28 — the process-flow file import (slice 1e-b, FI-1…FI-10)
 

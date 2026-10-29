@@ -17,6 +17,7 @@ import { ModelCanvas } from '../../canvas/ModelCanvas';
 import { useLayoutSave } from '../../canvas/useLayoutSave';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { CopyMermaidButton } from '../../components/CopyMermaidButton';
+import { SavePictureButton } from '../../components/SavePictureButton';
 import { Card, Code, Segmented, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { MONO } from '../../theme/theme';
@@ -104,6 +105,7 @@ export default function ErdPage() {
   const [focusId, setFocusId] = useState(null);
   const [focusRequest, setFocusRequest] = useState(null);
   const [layoutError, setLayoutError] = useState('');
+  const pictureRef = useRef(null);                     // function 41: the canvas and its marker defs, saved as shown
   const [confirmReset, setConfirmReset] = useState(false);
   const [arrangeTick, setArrangeTick] = useState(0);
   const [resetTick, setResetTick] = useState(0);
@@ -247,6 +249,8 @@ export default function ErdPage() {
           <span><Button sx={NOWRAP} disabled={!g || empty} onClick={() => setArrangeTick((n) => n + 1)}>{t('data.erd.arrange')}</Button></span>
         </Tooltip>
         <CopyMermaidButton area="data.erd" disabled={!g} fetchText={() => erdApi.mermaid(projectId, area)} />
+        <SavePictureButton target={pictureRef} fileName={`vb-erd-${projectId}-${area ?? WHOLE}`}
+          disabled={!g || empty || view !== 'diagram'} />
         {canEdit && (
           <Button color="warning" sx={NOWRAP} disabled={!g || reset.isPending} onClick={() => setConfirmReset(true)}>
             {t('data.erd.reset')}</Button>)}
@@ -284,8 +288,9 @@ export default function ErdPage() {
               </>)} />
             {view === 'diagram' ? (
               <ErdContext.Provider value={ctx}>
-                <ErdMarkers />
-                <Box sx={{ [`& .react-flow__node.${DIM}`]: { opacity: 0.2 }, [`& .react-flow__edge.${DIM}`]: { opacity: 0.1 } }}>
+                <Box ref={pictureRef}
+                  sx={{ [`& .react-flow__node.${DIM}`]: { opacity: 0.2 }, [`& .react-flow__edge.${DIM}`]: { opacity: 0.1 } }}>
+                  <ErdMarkers />
                   <ModelCanvas kind="erd" bare nodes={nodes} edges={edges} nodeTypes={ERD_NODE_TYPES} edgeTypes={ERD_EDGE_TYPES}
                     onNodesChange={handleNodesChange} draggable={canEdit} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
                     onNodeDoubleClick={onNodeDoubleClick} minimap height="max(480px, 70vh)"

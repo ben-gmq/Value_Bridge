@@ -258,7 +258,7 @@ list, so the marks change when the rule changes.
 | `manage_data_fields` | `DATA_FIELD` | U | If `is_foreign_key`, `fk_target_entity_id` is mandatory and must be a DE in the **same project** — cross-project FK is rejected |
 | `validate_entity_model` | `DATA_ENTITY`, `DATA_FIELD`, `PROJECT` | R | Report DEs with no PK field, FK fields pointing at a DE with no PK, and **DEs with no fields at all**; under data model depth `FULL` also DEs with keys but no other attributes (D-39; never under `KEYS_ONLY`) → validation warning list. Warnings, never blocks — a partial logical model is the expected state during an assessment. A freeze with entities that have no fields warns and proceeds (S4-12) |
 | `generate_erd` | `DATA_ENTITY`, `DATA_FIELD`, `DIAGRAM_LAYOUT` | R | **D-29.** Entities as boxes (PK, FK and attribute rows), one relationship per FK field → parent entity. Cardinality: parent side `1` if the FK is mandatory, `0..1` if optional or unknown; child side `many`, or `1` only when the FK field set equals the child's PK field set (`DATA_FIELD` models no alternate keys). Saved positions from `DIAGRAM_LAYOUT`. Filter by **subject area** = the entities a BFC L1/L2 branch reads or writes. The "attributes missing" hint follows the project's depth (D-39) |
-| `export_erd` | — | R | The ERD as Mermaid `erDiagram` text, and as PNG/SVG from the canvas |
+| `export_erd` | — | R | The ERD as Mermaid `erDiagram` text, and as a PNG of the canvas as shown (EX-1) |
 | `save_diagram_layout` | `DIAGRAM_LAYOUT` | C/U | **D-30.** Upsert (diagram × scope × object) → x, y, for the listed objects only. Last write wins, per object — two consultants dragging different entities never conflict, and a lost position is not a data-integrity event. A separate audited reset clears one diagram's positions (S2-6) |
 
 ### 4.3 Business Requirement (scope area 2)
@@ -6100,8 +6100,8 @@ refuses new ones (S7-5).
 - **Subject areas.** A filter by BFC L1/L2 branch shows only the entities that branch reads
   or writes. FKs leaving the area are drawn as short stubs labelled with the target, so a
   200-entity model stays readable one area at a time.
-- **Export.** PNG and SVG for decks, Mermaid `erDiagram` text for documents (§7.12b), and PDF
-  (D-42).
+- **Export.** A PNG for decks, saved in the browser exactly as shown (EX-1), Mermaid `erDiagram` text for
+  documents (§7.12b), and PDF (D-42).
 
 **What the DFD looks like** (the process diagram, as-is and to-be, D-38, D-47). It is **generated** (D-31):
 every element comes from the process records (`generate_dfd`, §7.2a), and a connection drawn on it writes one of
