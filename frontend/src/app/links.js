@@ -50,6 +50,7 @@ export const keys = {
   project: (p) => ['project', String(p)],
   projectAccess: (p) => ['access', String(p)],
   memberCandidates: (p) => ['memberCandidates', String(p)],
+  program: (g) => ['program', String(g)],
   programMembers: (g) => ['programMembers', String(g)],
   programMemberCandidates: (g) => ['programMemberCandidates', String(g)],
   codeLists: (p) => ['codeLists', String(p ?? 'company')],

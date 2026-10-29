@@ -10,7 +10,7 @@ from schemas.common import (CodeOut, ComponentOut, ComponentsChangeOut, Componen
                             DfdRuleOut, DfdRulePreviewIn, DfdRulePreviewOut,
                             EffectiveAccessOut, MemberIn, MemberOut, MemberPatch, PersonOut,
                             ProgramIn, ProgramMemberOut, ProgramMoveIn, ProgramOut, ProjectIn, ProjectOut, ProjectPatch,
-                            ProjectRetireIn, ProjectStatusIn,
+                            ProgramUpdateIn, ProjectRetireIn, ProjectStatusIn,
                             RestrictionIn, RestrictionOut, TemplateOut)
 from schemas.process_flow import FteBasisIn, FteBasisOut, VolumeSummaryOut
 from services import access, code_master, components, dfd_rule, process_volume, project_status
@@ -215,6 +215,14 @@ def list_programs(user: AppUser = Depends(_auth.dep), db: Session = Depends(get_
 def create_program(body: ProgramIn, actor: AppUser = Depends(_admin.dep), db: Session = Depends(get_db)):
     return program_service.create_program(db, actor, body.client_id, body.program_code,
                                           body.program_name, body.description)
+
+
+@router.patch("/programs/{program_id}", response_model=ProgramOut, **_admin.route)
+def update_program(program_id: int, body: ProgramUpdateIn, actor: AppUser = Depends(_admin.dep),
+                   db: Session = Depends(get_db)):
+    """Slice 1f §3.7: the program header, platform admins only."""
+    return program_service.update_program(db, actor, program_id, body.row_version,
+                                          body.model_dump(exclude_unset=True, exclude={"row_version"}))
 
 
 @router.get("/programs/{program_id}", response_model=ProgramOut, **_prog_reader.route)

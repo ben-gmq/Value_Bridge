@@ -629,3 +629,8 @@ place.
   `InterfacesPage.jsx` (label, "Any"); build it once in the backend (joins piece-4 L1). (L5) pressing Print / PDF and
   then changing a filter before the stamp returns writes a REPORT_PRINTED row for a print that shows only the notice;
   accepted under spec A3 (the row proves the stamp was fetched, not that a PDF was saved).
+- **2026-10-29 · slice 1f piece 134, program edit (`sara`, PASS; L1, L3, L4 fixed):** (L2) the Edit dialog locks the
+  client picker from the live project list only, so a program holding only retired projects offers a client change
+  the server then refuses with a 409 naming them; add an all-projects count to `ProgramOut`. Also: Edit still shows on
+  a retired program (server 409). (Forward, for Ben) a client change keeps the program's members; harmless while
+  every member is staff, a cross-client leak once CLIENT_VIEWER lands — decide when that kind is designed.

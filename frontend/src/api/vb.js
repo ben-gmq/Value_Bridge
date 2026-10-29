@@ -64,5 +64,6 @@ export const api = {
   removeProgramMember: (id, rowVersion) => d(http.delete(`/api/v1/program-members/${id}`, { params: { row_version: rowVersion } })),
   programProjects: (id) => d(http.get(`/api/v1/programs/${id}/projects`)),
   createProgram: (body) => d(http.post('/api/v1/programs', body)),
+  updateProgram: (id, body) => d(http.patch(`/api/v1/programs/${id}`, body)),      // slice 1f §3.7
   moveIntoProgram: (id, body) => d(http.post(`/api/v1/programs/${id}/projects`, body)),
 };

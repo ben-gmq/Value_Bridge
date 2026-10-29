@@ -112,6 +112,15 @@ class ProgramIn(BaseModel):
     description: str | None = None
 
 
+class ProgramUpdateIn(BaseModel):
+    """Slice 1f §3.7: only the fields sent change; description may be sent as null to clear it."""
+    row_version: int
+    program_code: str | None = Field(None, min_length=1, max_length=30)
+    program_name: str | None = Field(None, min_length=1, max_length=200)
+    client_id: int | None = None
+    description: str | None = None
+
+
 class ProgramOut(Orm):
     program_id: int
     client_id: int
