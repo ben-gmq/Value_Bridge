@@ -16,11 +16,7 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **2026-10-29 · ERD as SVG (function 41, after EX-1).** Ben chose `html-to-image` to save the ERD as shown. Its PNG
-  is built; its SVG is held, because the library's SVG wraps the page's HTML in a `foreignObject`, which §14.5 forbids
-  in an exported SVG. Open: (a) PNG only; (b) an SVG drawn from the diagram's own shapes and text, ~1.5 days; (c)
-  amend §14.5 to allow the library's SVG (text is DOM-escaped, but the defence-in-depth rule goes). Lilly recommends (a)
-  now, (b) if a deck needs vector.
+Nothing open. (The ERD-as-SVG question of 2026-10-29 is decided: CC-7, §3.)
 
 
 ---
@@ -634,6 +630,22 @@ round 1 in its §11). No migration.
 | CB-4 | **`data_migration_map` counts the to-be entities needing a data-ownership decision** — seen on as-is steps with no supporting system, or held by two or more systems today. **Flag > 0, escalate > 5.** Entities never seen on as-is (new data) and as-is entities no to-be BR uses (retiring) are listed, not counted; NOT MEASURED until any in-scope entity is mapped on as-is | §7.9 "entities with no source, or with >1 source"; §7.13 table "no source / conflicting sources" |
 | CB-5 | **A rule backfilled into a running engagement arrives switched off until the client agrees it, but is still measured:** the panel shows every switched-off rule's figure greyed with no verdict — "Not yet agreed with the client" when never edited (row version 1), otherwise "Switched off" with who and when. New projects get the rules on | Control-A round 2 Q1; §7.13 `control_panel` measuring enabled rules only |
 
+### Ben's rulings, 2026-10-30 — the last Phase 1 control slice (slice Control-C, CC-1…CC-7)
+
+Ben, via Ren, 2026-10-30: *"Let's go with the Ctrl+C. Yeah, tell Lilly all recommended."* — the eight plan questions
+(`docs/plans/control_c_plan_2026-10-30.md` §7) each as recommended. Spec: `docs/slice_control_c_spec.md` (design
+review rounds 1 and 2 in its §11, §13). Migration 0082 for CC-3 only.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| CC-1 | **`process_change_intensity`: every changed step counts the same; headline = the share of changed steps in the busiest L1 area. Flag > 50 %, escalate > 70 %.** Action: "Check the change workload and the change-management plan for that area before the next gate" | §7.9 "weighted by solution category" (categories are context only) |
+| CC-2 | **`master_data_candidates`: entities used in 3+ L1 areas; headline = those with no business owner noted. Flag > 0, escalate > 5.** Action as §7.9 | §7.9 "across many L1 areas" (no number) |
+| CC-3 | **`fr_unlinked` gets a rule: live FRs with no live BR link (the register's unlinked set), flag > 0, escalate > 5**, via migration 0082 adding it to the registry, once the migration slot is free | §7.13 registry without `fr_unlinked` |
+| CC-4 | **Reset to FTC defaults overwrites thresholds, prescribed action and escalation path; keeps each rule's owner and on/off.** Missing rules arrive off | §7.13 reset "preserving owner_org_role_id" (on/off was unstated) |
+| CC-5 | **The other five analyses (application gap, value ranking, issue dashboard, phase plan, consistency check) get no rules for now** — revisit after the first engagement | A-42 "ten seeded" |
+| CC-6 | **Edits to the FTC company defaults need a reason and an audit entry, as project rules** | §7.13 `maintain_house_default` with no reason or audit |
+| CC-7 | **The ERD stays PNG only**; a vector drawing (~1.5 days) only if a deck needs one. The `vb_s2` Control-B databases are dropped once Control-C's browser check is done | History §1 open item "ERD as SVG" (2026-10-29), option (a) |
+
 ### Ben's ruling, 2026-10-29 — how the ERD is saved as a picture (slice 1f, function 41, EX-1)
 
 Ben, via Ren, 2026-10-29: option (a), *add `html-to-image` and save the ERD exactly as shown on screen*.
@@ -931,6 +943,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-11) | 2026-10-24, 2026-10-28 |
 | `docs/slice_control_a_spec.md` | Slice Control-A — control rules and the control panel, first cut (CT-1…CT-4) | 2026-10-30 |
 | `docs/slice_control_b_spec.md` | Slice Control-B — volatility, org impact, stakeholder engagement, data migration map (CB-1…CB-5) | 2026-10-30 |
+| `docs/slice_control_c_spec.md` | Slice Control-C — where change lands, master data, FTC defaults and reset, `fr_unlinked` (CC-1…CC-7) | 2026-10-30 |
 
 ---
 

@@ -492,12 +492,12 @@ from a number into an action.
 | `maintain_control_rule` | `CONTROL_RULE` | C/U | (project × `analysis_code`) → threshold value, comparison, owning `org_role_id`, escalation path, at EDIT. Agreed at mobilisation; the thresholds are **the client's, not hard-coded** |
 | `control_panel` | `CONTROL_RULE` + every analysis | R | Runs every analysis, compares to its rule → **GREEN / FLAG / ESCALATE**, with the owning role and the prescribed action per row. The PMO's one screen |
 | `requirement_volatility` | `BASELINE_BUSINESS_REQUIREMENT` | R | ADDED/CHANGED/REMOVED per L1 area across baseline generations. **The earliest warning the app produces** — an area churning across two consecutive baselines is not understood. *Action: pull it out of the current wave; do not let a vendor start there* |
-| `process_change_intensity` | `BFC_NODE`, `BR_SOLUTION`, `SOLUTION` | R | Process steps carrying a solution, rolled up per L1 area, weighted by solution category. Where the transformation actually lands versus where it was said it would |
+| `process_change_intensity` | `BFC_NODE`, `BR_SOLUTION`, `SOLUTION` | R | Process steps carrying a change (a live BR with a live, non-rejected solution), rolled up per L1 area; every changed step weighs the same, solution categories are context (CC-1). Where the transformation actually lands versus where it was said it would. *Action: check the change workload and the change-management plan for that area before the next gate* |
 | `org_impact_heatmap` | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `BR_SOLUTION`, `ORG_UNIT` | R | Change absorbed per org unit: the share of changes it is Responsible or Accountable on (to-be RACI; the as-is RACI is context, CB-2). *Action: a unit carrying a concentrated share gets a dedicated change agent and a capacity check — they are usually the SMEs too* |
 | `stakeholder_engagement` | `STAKEHOLDER`, `ISSUE`, `ORG_UNIT` | R | Issues raised per stakeholder per org unit. **Silence is the signal**: high impact and no issues raised is adoption risk. *Action: interview before sign-off* |
 | `interface_load` | `v_interface_list` | R | Interface FRs per source → target application pair (from `FR_INTERFACE`, D-27), and as a share of all FRs. *Action: over ~25–30%, stand up an integration workstream and book test environments early* |
 | `data_migration_map` | `DATA_ENTITY`, `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION` | R | Source (as-is) → target (to-be) per data entity. Entities with no source, or with conflicting sources → data ownership decision before design freeze |
-| `master_data_candidates` | `BR_DATA_ENTITY`, `BFC_NODE` | R | Entities referenced by BRs across many L1 areas. *Action: assign a single owner; it becomes a managed cross-workstream dependency* |
+| `master_data_candidates` | `BR_DATA_ENTITY`, `BFC_NODE`, `DATA_ENTITY` | R | Entities referenced by BRs under 3+ L1 areas; headline = those with no business owner noted (CC-2). *Action: assign a single owner; it becomes a managed cross-workstream dependency* |
 | `fr_unlinked` | `FUNCTION_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT` | R | **D-28, re-based on D-52.** FRs with no live BR link, count and effort. *Action: link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement* |
 
 ### 4.14 Programs (D-32, D-71)
@@ -5071,9 +5071,12 @@ requirement_volatility(project_id):            # the earliest warning the app pr
     → churning L1 areas per generation; headline = the longest run of consecutive generations,
       ending at the latest baseline, in which one area churned (COUNT)
 
-process_change_intensity(project_id):
-    BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION ⋈ SOLUTION
-    count process steps carrying a solution, rolled to L1, weighted by solution category
+process_change_intensity(project_id):          # CC-1
+    BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION(live, non-rejected) ⋈ SOLUTION
+    a changed step = a live to-be process step with such a BR; every changed step weighs the same
+    → per L1 area (keyed by the L1 node's id): changed steps, all process steps, changed steps per
+      solution category (context); headline = the busiest area's share of all changed steps (PCT).
+      NOT MEASURED with SOLUTION off, fewer than two areas holding a step, or no changed step
 
 org_impact_heatmap(project_id):                # CB-2
     changes = live to-be BRs with a live, non-rejected BR_SOLUTION
@@ -5104,9 +5107,15 @@ data_migration_map(project_id):
       system, or with >1 source (COUNT). Never seen on as-is (new data) and as-is-only (retiring) are
       listed, not counted; NOT MEASURED until any in-scope entity is mapped on an as-is step
 
-master_data_candidates(project_id):
-    BR_DATA_ENTITY ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE
-    → data entities referenced from BRs under 3+ distinct L1 ancestors
+master_data_candidates(project_id):            # CC-2
+    BR_DATA_ENTITY ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE (live, to-be)
+    → data entities referenced from BRs under 3+ distinct L1 ancestors, with their business_owner_note;
+      headline = candidates whose note is empty or blank (COUNT); NOT MEASURED while no BR uses an entity
+
+fr_unlinked(project_id):                       # CC-3
+    live FRs with no live BR link — the FR register's unlinked=true set
+    → headline = their count (COUNT), their effort days beside it (EFFORT on);
+      NOT MEASURED with FUNCTION_REQUIREMENT off or no live FR
 
 effort_summary(project_id):                    # D-13
     FUNCTION_REQUIREMENT.effort_days grouped by FR type, solution tag (Unassigned when the
@@ -6026,7 +6035,7 @@ ANALYSIS_REGISTRY = {                # closed vocabulary; a rule must name one o
   'application_gap', 'interface_load', 'org_impact_heatmap', 'stakeholder_engagement',
   'value_ranking', 'benefit_gap', 'risk_register', 'issue_dashboard',
   'data_migration_map', 'master_data_candidates', 'process_change_intensity',
-  'phase_plan', 'consistency_check',
+  'phase_plan', 'consistency_check', 'fr_unlinked',            # fr_unlinked: CC-3, migration 0082
 }
 
 maintain_control_rule(project_id, analysis_code, fields, change_rationale):
@@ -6042,17 +6051,25 @@ maintain_control_rule(project_id, analysis_code, fields, change_rationale):
     # Without the audit row, a project that never went red is indistinguishable from one
     # whose thresholds were widened until it stopped going red.
 
-maintain_house_default(analysis_code, fields):
+maintain_house_default(analysis_code, fields, change_rationale, row_version):       # CC-6
     require user.is_platform_admin
-    upsert CONTROL_RULE(project_id=NULL, analysis_code, ..., is_house_default=True)
-    # Affects FUTURE projects only — see the entity note. No in-flight engagement moves.
+    fields = threshold, escalate, prescribed_action, escalation_path only — never owner, comparison, on/off
+    if not change_rationale.strip(): raise 422;  update CONTROL_RULE(project_id=NULL, ...) WHERE row_version   # 409
+    AUDIT_EVENT('CONTROL_RULE_CHANGED', project_id=NULL, detail={house: true, analysis_code, from, to,
+                text_changed, change_rationale})                         # CT-3 for the two text fields
+    # Affects FUTURE projects only — see the entity note. No in-flight engagement moves. The house text reaches
+    # every future client: it names roles, never people or clients.
 
-reset_project_rules_to_house_default(project_id, change_rationale):
+reset_project_rules_to_house_default(project_id, change_rationale, stamp):           # CC-4
     access.require_project(user, project_id, EDIT)
-    overwrite this project's rules from the project_id IS NULL tier, preserving
-      owner_org_role_id where the analysis_code still exists
-    AUDIT_EVENT(event_type='CONTROL_RULES_RESET', project_id, detail={change_rationale})
-    # The explicit opt-in that the copy-on-create rule otherwise denies.
+    lock the project's rules FOR UPDATE, the house rows FOR SHARE
+    if stamp != the row_version of every project rule and house row: raise 409       # what the preview showed
+    per house rule: the project has it → overwrite threshold, escalate, prescribed_action, escalation_path;
+      keep owner_org_role_id and is_enabled; unchanged rules untouched.  It lacks it → add it switched off
+    nothing to change → write nothing
+    AUDIT_EVENT('CONTROL_RULES_RESET', project_id, detail={change_rationale, changed, added, from/to numbers})
+    # The explicit opt-in that the copy-on-create rule otherwise denies. A reset rule shows "reset to FTC
+    # defaults" on the panel until a person next edits it (from the audit trail).
 
 control_panel(project_id):
     access.require_project(user, project_id, VIEW)
@@ -6084,7 +6101,8 @@ negotiates — inside its own transaction. A rule joins the house tier only once
 headline (CT-4); the first four are `priced_diff` (net growth % from the agreed baseline), `coverage`
 (rows on the coverage report's warning lines), `solution_matrix` (TECHNOLOGY share %) and
 `interface_load` (INTERFACE FRs as % of live FRs); then `requirement_volatility`, `org_impact_heatmap`,
-`stakeholder_engagement` and `data_migration_map` (CB-1…CB-4). A rule copied into a running engagement by
+`stakeholder_engagement` and `data_migration_map` (CB-1…CB-4); then `process_change_intensity`,
+`master_data_candidates` and `fr_unlinked` (CC-1…CC-3). The other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
 `seeds.seed_control_rules` arrives switched off until the client agrees it (CB-5); a new project's arrive on.
 `benefit_gap` and `risk_register` are the starting point their slices sign off with Ben. These thresholds are
 starting points, not doctrine:
@@ -6101,6 +6119,9 @@ starting points, not doctrine:
 | `benefit_gap` | any solution with effort and no benefit | >20% of solutions | Challenge at the next gate |
 | `risk_register` | exposure ≥ 12 open | ≥ 16 | Mitigation owner + date; steering if unmitigated |
 | `data_migration_map` | any entity with no source system or conflicting sources | >5 entities | Data ownership decision before design freeze |
+| `process_change_intensity` | >50% of changed steps in one L1 area | >70% | Check the change workload and the change-management plan for that area before the next gate |
+| `master_data_candidates` | any entity used in 3+ L1 areas with no business owner noted | >5 | Assign a single owner; it becomes a managed cross-workstream dependency |
+| `fr_unlinked` | any live FR with no live BR link | >5 | Link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement |
 
 ---
 
@@ -6476,8 +6497,8 @@ component.
 | `PATCH /programs/{program_id}` | platform_admin | program fields | program |
 | PDF export of each client-facing report | project_ctx(VIEW) | — | prints project, baseline version or "LIVE — not a baseline", time and author; audited (D-42, OR-8). Route shapes fixed by the 1f spec |
 | **Phase 1 — control rules and the control panel (D-19)** | | | |
-| `GET/PUT /control-rules/defaults` | platform_admin | analysis_code, threshold, escalate, action | **the FTC house defaults** (`project_id IS NULL`); affect future projects only |
-| `GET/PUT /projects/{project_id}/control-rules` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
+| `GET /control-rules/defaults` · `PATCH /control-rules/defaults/{analysis_code}` | platform_admin | threshold, escalate, action, escalation path, **change_rationale**, row_version | **the FTC house defaults** (`project_id IS NULL`) with their change history; affect future projects only (CC-6) |
+| `GET /projects/{project_id}/control-rules` · `PATCH …/{analysis_code}` · `GET …/control-rules/reset-preview` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
 | `GET /projects/{project_id}/control-panel` · `GET /projects/{project_id}/analysis/{analysis_code}` | project_ctx(VIEW) | — | **every analysis vs its rule → GREEN / FLAG / ESCALATE, with owner and action. The PMO's one screen**; any single analysis with its `headline_value` |
 | **Slice 1g — code maintenance (built)** | | | |
 | `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / ADMIN) (G-5) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
@@ -7156,12 +7177,12 @@ decision are recorded in the design history, not here.
      negotiated with the client at mobilisation. Threshold, escalate value, comparison,
      owning role, prescribed action, escalation path and on/off are editable by a User
      (D-40), with a mandatory rationale and an audit row.
-  3. **Which analyses are governed at all** — any of the 17 in `ANALYSIS_REGISTRY` can carry
-     a rule; the ten seeded are the ones worth governing on a first engagement.
+  3. **Which analyses are governed at all** — any of the 18 in `ANALYSIS_REGISTRY` can carry
+     a rule; the thirteen seeded (CC-1…CC-3, CC-5) are the ones worth governing on a first engagement.
 
   The house defaults should be set before the first engagement: they become the starting
   point on every project after.
-- `ASSUMPTION A-43` — **`control_panel` computes live on request.** With 17 analyses over a
+- `ASSUMPTION A-43` — **`control_panel` computes live on request.** With 18 analyses over a
   large project this may be slow enough to need caching or a materialised view. The same
   "how big is a real project" question as A-57.
 - `ASSUMPTION A-44` — **A project's thresholds do not vary by phase.** Tolerance usually
