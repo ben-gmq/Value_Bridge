@@ -9,7 +9,9 @@ on, both CHECK-listed (deviation 7j). Not shadowed — governance config, not sc
 SELECT/INSERT/UPDATE from 0001's default privileges and no DELETE. A live rule blocks retiring its owning org role
 through the FK (lifecycle, law 1).
 
-Downgrade: refuses while any project row exists (the house rows are seed data and go with the table).
+Downgrade: refuses while any project rule has been edited (row_version > 1) — that row is what a client agreed and
+nothing could recreate it. Unedited rows are copies of the house tier, which seeds.seed_control_rules recreates, so
+they go with the table.
 
 Revision ID: 0081
 Revises: 0080
@@ -70,7 +72,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM control_rule WHERE project_id IS NOT NULL) THEN "
-               "RAISE EXCEPTION 'projects hold control rules: downgrade refused'; END IF; END $$")
+    op.execute("DO $$ DECLARE n bigint; BEGIN "
+               "SELECT count(*) INTO n FROM control_rule WHERE project_id IS NOT NULL AND row_version > 1; "
+               "IF n > 0 THEN RAISE EXCEPTION '% edited project control rule(s) exist: downgrade refused; "
+               "nothing dropped', n; END IF; END $$")
     drop_updated_at_trigger("control_rule")
     op.drop_table("control_rule")

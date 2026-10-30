@@ -2,8 +2,8 @@
 
 **Design:** `VB_design.md` §4.13 (`maintain_control_rule`, `control_panel`), §5.3 `CONTROL_RULE`, §5 constraint table
 (`control_rule` row), §7.9 (`headline_value` contract), §7.13 (registry, seeded rules, `control_panel`), D-19, SC-7.
-**Status:** approved by Ben 2026-10-30 (via Ren) with decisions CT-1…CT-3 as recommended (§9); design review round 1
-done (§10). **Not in this slice:** see §8.
+**Status:** approved by Ben 2026-10-30 (via Ren) with decisions CT-1…CT-4 (§9); design review rounds 1 and 2 done
+(§10, §11). **Not in this slice:** see §8.
 
 **The plan line** "Control rules + control panel" (4 days) is cut into three vertical slices:
 - **Control-A (this spec, ~1.5 days):** the rules table, the four rules the app can measure today on every project,
@@ -110,7 +110,8 @@ ones) — plus `change_rationale` and `row_version`. `comparison`, `agreed_at`, 
 ## 5. Screen — "Control" in the project left rail
 `features/control/ControlPanelPage.jsx`, `<Page crumb=…>`, strings in `i18n/en.control.json`, routes in
 `app/links.js`, one API function per route in `api/scope.js`. Rows built from `components/kit.jsx`: `Status` for the
-verdict (colours from `STATUS_COLOR_MAP`; amber not used — reserved for regret-able actions), the measured figure beside
+verdict (semantic tones from `STATUS_COLOR_MAP`: ok / caution / escalate / neutral — never the MUI `warning` button
+colour, which is reserved for regret-able actions), the measured figure beside
 the threshold, owner ("Owner not named" tag when NULL), action, escalation path, and **"Last changed <date> by <name>"**
 (review D2 — never "agreed"). Each row links to its report (Coverage / Solution matrix tabs, Interfaces, Compare
 baselines). An Edit button per row (hidden through `useCanEdit`) opens a dialog: number fields, an org-role picker
@@ -171,5 +172,21 @@ shows a red outline with no message) are not touched — this slice does not tou
 - **P4 LOW** transaction wording — **fixed** (§2). **D3 LOW** coverage all-off reads 0 — **fixed** (§3).
   **D4 LOW** damaged baseline — **fixed** (§3). **D5 LOW** org-role retire block unlabelled — **fixed** (§2, test 7).
 - Also corrected: `ROUTE_COMPONENTS` has no exempt list (§4); PATCH is full replacement (§4).
-Round 2 is the re-check of these changes and of the CT-1…CT-3 wording; whatever it leaves open is settled against the
+Round 2 is the re-check of these changes and of the CT-1…CT-4 wording; whatever it leaves open is settled against the
 running code.
+
+## 11. Design review round 2 (design-auditor, 2026-10-30) — the final round
+Every round-1 finding CLOSED. 3 new (0 HIGH, 1 MEDIUM, 2 LOW), none structural — settled in the code:
+- **N1 MED** a removed unrated FR would FLAG forever — **fixed**: CT-2 counts only ADDED / CHANGED lines whose live side
+  is unrated; `test_priced_diff_from_the_agreed_baseline_and_uncosted_growth` retires one and expects GREEN.
+- **N2 LOW** an unedited rule said "last changed by" whoever copied it — **fixed**: at row_version 1 the panel says
+  "FTC house default, copied <date>".
+- **N4 LOW** a partly filled house tier passed `create_project` — **fixed**: every measurable analysis must have its
+  house row (409 otherwise), and a measurable rule a project lacks is listed under "Still to come" as missing.
+- **N3 LOW** names can reach the audit through the reason — **wording fixed** (CT-3); the reason field asks for "the
+  decision, not the person".
+- **Q1, for every later control slice:** a rule backfilled into a live engagement arrives switched on or off pending
+  the client's agreement — each later slice spec states it and Ben decides there. **Q2:** the four numbers are listed
+  in CT-4.
+- **Downgrade (found in build):** 0081 refuses only while an *edited* project rule exists; unedited rows are house
+  copies the seed recreates.

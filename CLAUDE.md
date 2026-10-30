@@ -22,7 +22,10 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   and its own database; never stop a server by pattern (`pkill -f vite`) — stop your own by PID.
 - **First time on a machine:** `cd backend && VB_EMAIL_DOMAINS=fortience.com ./scripts/bootstrap_local_db.sh`
   (creates roles `vb_owner`/`vb_app`, databases `vb_db`/`vb_test_db`, writes a gitignored `.env`),
-  then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates`.
+  then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates && ./venv/bin/python -m seeds.seed_control_rules`
+  (no house control rules → `create_project` is 409).
+  **Control-A deploy (and every later control slice that adds a rule):** `seeds.seed_control_rules --actor-email <admin>`
+  adds the house rules and copies any a live project lacks (idempotent).
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's
@@ -169,6 +172,7 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
    must re-seed.
 2. `audit_event` is append-only by grant **and** trigger; even the owner role cannot UPDATE it.
 3. `request.client.host` is not always an IP — `services/audit.py` stores only valid addresses.
-4. `code_master.created_by` is nullable **only** because seeded library rows have no author.
+4. `code_master.created_by` (and `control_rule`'s on house rows) is nullable **only** because seeded library rows have
+   no author. Both are two-tier library tables in the test harness (`conftest.TWO_TIER`).
 5. Start Vite with the frontend folder as root (`npm run dev` from `frontend/`); run from the repo
    root it serves 404s.

@@ -83,6 +83,8 @@ LABELS = {
     "solution_dependency": ("Solution dependency",
                             lambda r: f"{r.solution_row.solution_number} needs {r.prereq_row.solution_number}"),
     "bfc_node_trigger": ("Step trigger", lambda r: f"{r.trigger_row.trigger_name} ↔ {r.node_row.hier_code}"),
+    # Control-A (review D5): an owning role cannot retire until the rule is re-pointed; named by its analysis.
+    "control_rule": ("Control rule", lambda r: r.analysis_code),
     "bfc_node_flow": ("Flow edge",
                       lambda r: f"{r.flow_type.title()} {r.condition_label or ''}".strip()),
 }

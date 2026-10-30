@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import AppUser, Client, Program, Project, ProjectMember
-from services import access, audit, components, effort, numbering
+from services import access, audit, components, control, effort, numbering
 from services import dfd_rule as dfd_rule_service
 from services.lifecycle import soft_delete
 from services.code_master import validate_required_code
@@ -90,13 +90,13 @@ def create_project(db: Session, actor: AppUser, client_id: int, project_code: st
     cells = effort.seed_rate_card(db, p.project_id, actor.app_user_id)   # same transaction (§7.10, S6c-1)
     on = components.initial_rows(db, p.project_id, component_codes, actor.app_user_id)   # D-37
     rule = dfd_rule_service.initial_rows(db, p.project_id, dfd_rule, actor.app_user_id)  # D-70 (Q-4), same tx
-    # A later slice copies CONTROL_RULE house defaults here (§7.13).
+    rules = control.copy_to_project(db, p.project_id, actor.app_user_id, require_house=True)   # §7.13, CT-4, same tx
     # D-71: a project created inside a program opens at once to the program's members — restricted or not — so the
     # audit names them (design-auditor; D-62's "no members yet" no longer means "nobody sees it").
     admitted = [{"user_id": r["user"].app_user_id, "level": r["level"]}
                 for r in access.who_can_open(db, p)["program_members"]] if program_id else []
     audit.record(db, "PROJECT_CREATED", actor_id=actor.app_user_id, project_id=p.project_id,
-                 detail={"program_id": program_id, **cells, "template_code": template_code,
+                 detail={"program_id": program_id, **cells, "control_rules": rules, "template_code": template_code,
                          "components": on, "data_model_depth": data_model_depth, "dfd_rule": rule,
                          "is_restricted": is_restricted, "program_members_admitted": admitted})
     db.commit()

@@ -33,6 +33,7 @@ export const links = {
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
   reports: (p, tab) => (tab ? `/p/${p}/reports?tab=${tab}` : `/p/${p}/reports`),   // slice 1f
+  control: (p) => `/p/${p}/control`,                                  // Control-A: the control panel
   rateCard: (p) => `/p/${p}/settings/rate-card`,
   codeLists: (p) => `/p/${p}/settings/code-lists`,                  // wave 1g
   effort: (p) => `/p/${p}/br-fr/effort`,
@@ -106,6 +107,8 @@ export const keys = {
   coverage: (p) => ['reports', String(p), 'coverage'],
   solutionMatrix: (p) => ['reports', String(p), 'solution-matrix'],
   applicationGap: (p, level) => ['reports', String(p), 'application-gap', String(level)],
+  controlPanel: (p) => ['control', String(p), 'panel'],                              // Control-A; a rule save
+  controlRules: (p) => ['control', String(p), 'rules'],                              // invalidates ['control', p]
   solutionDeps: (solId) => ['solution-deps', String(solId)],
   allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],
