@@ -193,3 +193,19 @@ Ports and databases: API 8102, web 5182, `vb_s2_db`, `vb_s2_test_db` (+ worker c
 - **R1-P2 LOW** one deploy line for two deploys — **fixed** (§5). **R1-S3 LOW** identity and privilege — nothing to fix.
 - Its four questions are answered in the spec (two freezes running; added BRs count; no impact roll-up) or put to Ben
   (to-be RACI only, inside CB-2).
+
+## 12. Design review round 2 (design-auditor, 2026-10-30) — the final round
+Round 1: 8 CLOSED, 1 partly (R1-S2). 3 new (0 HIGH, 1 MEDIUM, 2 LOW), none structural — settled in the code:
+- **N1 MED** an area re-carved by moving its sub-processes (BR rows untouched, only `bfc_node` MOVED) never churns —
+  **fixed in the build:** an area also churns when **the set of BRs under it differs** between the two sides (each
+  side's area → BR ids, from its own frozen chart), beside the diff rows. Test 1 adds re-parenting an L2 sub-tree.
+- **N2 LOW** naming an owner on a backfilled-off rule flipped it to "switched off by …" — **fixed in the build:** "not
+  yet agreed" = off and **never switched on** (no `CONTROL_RULE_CHANGED` whose `to.is_enabled` is true), not
+  `row_version = 1`; its "agreed" date is not shown. Test 5 names an owner and expects "not yet agreed" still.
+- **N3 LOW** the whole-chain check is costly — **fixed in the build:** speed measured at the acceptance-76 size, not
+  the demo data; the damaged baseline is named in the reason (already §2.1), so it is repaired, not lived with.
+- **R1-S2 (partly open)** one entity mapped on as-is makes `data_migration_map` measured, so a mostly-unmapped
+  project can read GREEN — **accepted for now, to Ben as a WHENEVER question** (what share must be mapped first); the
+  "never seen on as-is" count beside the figure keeps it visible.
+- **Build note:** `copy_to_project` gains an `enabled` argument — `create_project` copies rules on, the backfill off
+  (CB-5); test 6. The two CLAUDE.md deploy lines land with each slice's commit.
