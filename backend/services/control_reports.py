@@ -299,8 +299,10 @@ def stakeholder_engagement(db: Session, project_id: int) -> dict:
                        "voice": "OWN" if own else "PARENT" if parent else None,
                        "speakers": people.get(r["org_unit_id"], [])})
     silent = [r for r in rows if r["voice"] is None]           # rows are already most affected first
-    figures = {"issues": issues, "affected_units": len(rows), "silent_units": len(silent)}
+    # sara B2 M1: a change with no R/A role has no unit to be silent, so it is named beside the figure, never hidden
+    figures = {"issues": issues, "affected_units": len(rows), "silent_units": len(silent),
+               "changes_without_ra": impact["headline"]["changes_without_ra"]}
     out = {**out, "units": rows}
     if not silent:
-        return {**out, "headline": _head(Decimal(0), **figures)}
+        return {**out, "headline": _head(Decimal(0).quantize(CENT), **figures)}       # sara L1: as the panel
     return {**out, "headline": _head(silent[0]["share"], top_unit=silent[0]["org_unit_name"], **figures)}

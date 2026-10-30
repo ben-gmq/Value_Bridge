@@ -160,11 +160,11 @@ def test_a_direct_parent_gives_voice_and_a_grandparent_does_not(client, ed):
     assert (got["SALES"]["voice"], got["SALES"]["parent_issues_raised"]) == ("PARENT", 1)
     assert got["TEAM"]["voice"] is None                                      # the grandparent does not speak for it
     assert out["headline"] == {"measured": "25.00", "reason": None, "top_unit": "Unit TEAM", "issues": 1,
-                               "affected_units": 3, "silent_units": 1}
+                               "affected_units": 3, "silent_units": 1, "changes_without_ra": 1}   # sara M1
     assert row(panel(client, ed), "stakeholder_engagement")["verdict"] == "FLAG"
     speak(client, ed, team)
     out = engagement(client, ed)
-    assert (out["headline"]["measured"], out["headline"]["silent_units"]) == ("0", 0)
+    assert (out["headline"]["measured"], out["headline"]["silent_units"]) == ("0.00", 0)
     assert row(panel(client, ed), "stakeholder_engagement")["verdict"] == "GREEN"
     engagement(client, ed, headers=ed["out"], expect=404)
 

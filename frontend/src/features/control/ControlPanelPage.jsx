@@ -45,7 +45,7 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.volatility', { n: f.generations })}</Typography>)}
       {r.analysis_code === 'org_impact_heatmap' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.impact', { unit: f.top_unit, n: f.changes })}</Typography>)}
-      {r.analysis_code === 'org_impact_heatmap' && f.changes_without_ra > 0 && (
+      {['org_impact_heatmap', 'stakeholder_engagement'].includes(r.analysis_code) && f.changes_without_ra > 0 && (
         <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.withoutRa', { n: f.changes_without_ra })}</Typography>)}
       {r.analysis_code === 'stakeholder_engagement' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>

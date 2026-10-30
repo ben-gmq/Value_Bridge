@@ -110,7 +110,7 @@ threshold is GREEN, as in Control-A.
 | Method + path | Guard | Does |
 |---|---|---|
 | `GET /projects/{id}/requirement-volatility` | `project_ctx(VIEW)` | areas × generations grid, headline |
-| `GET /projects/{id}/org-impact` | `project_ctx(VIEW)` | units with change counts, shares, R/A and C/I roles, headline |
+| `GET /projects/{id}/org-impact` | `project_ctx(VIEW)` | units with change counts, shares, R/A roles, a C/I-only count, as-is R/A steps (context), headline |
 | `GET /projects/{id}/stakeholder-engagement` | `project_ctx(VIEW)` | units with share, issues raised, voice, headline |
 | `GET /projects/{id}/data-migration` | `project_ctx(VIEW)` | entity → sources → targets, the decision list, headline |
 
@@ -214,3 +214,16 @@ Round 1: 8 CLOSED, 1 partly (R1-S2). 3 new (0 HIGH, 1 MEDIUM, 2 LOW), none struc
   "never seen on as-is" count beside the figure keeps it visible.
 - **Build note:** `copy_to_project` gains an `enabled` argument — `create_project` copies rules on, the backfill off
   (CB-5); test 6. The two CLAUDE.md deploy lines land with each slice's commit.
+
+## 13. Control-B2 build notes (2026-10-30)
+- **Built:** `control_reports.org_impact_heatmap` / `stakeholder_engagement`, `GET …/org-impact` and
+  `…/stakeholder-engagement`, the two house rules (40 / 60, 10 / 25), the panel rows, the Organisation impact and
+  Stakeholder engagement tabs. Tests: `tests/test_control_b2.py` (spec §7 tests 2, 3; acceptance 73 on twelve units;
+  acceptance 74 — every registry code returns a headline, the eight house rules are built).
+- **Share's denominator** is every change, as §2.2 says; a change with no R/A role yet stays in it and the count
+  `changes_without_ra` stands beside the figure on the tab and the panel (as the data map's "not yet mapped" count),
+  so a half-filled RACI is visible rather than silent. Put to Ben as a WHENEVER question.
+- **Context shown, never counted:** Consulted / Informed changes per unit; as-is steps the unit is R/A on (AS_IS on).
+- **Stakeholder issues** count from every stakeholder who raised one, retired or not (assumption B3: the unit spoke);
+  each affected unit lists who raised them.
+- No migration, no hash-spec change. Deploy: `seeds.seed_control_rules --actor-email <admin>` (CLAUDE.md line).

@@ -34,6 +34,8 @@ export function Engagement({ projectId }) {
           <PurpleTile label={t('reports.engagement.silent')} value={h.silent_units}
             note={t('reports.engagement.ofAffected', { n: h.affected_units })} />
         </Stack>)}
+      {h.changes_without_ra > 0 && (
+        <Alert severity="warning">{t('control.withoutRa', { n: h.changes_without_ra })}</Alert>)}
       {d.units?.length > 0 && (
         <Card title={t('reports.tab.engagement')} bodySx={{ overflowX: 'auto' }}>
           <Box component="table" sx={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
@@ -59,7 +61,7 @@ export function Engagement({ projectId }) {
                     {t('reports.engagement.raisedCell', { own: u.issues_raised, parent: u.parent_issues_raised })}
                   </Box>
                   <Box component="td" sx={{ ...cellSx, color: 'text.secondary' }}>
-                    {u.speakers.length ? u.speakers.map((s) => `${s.stakeholder_name} (${s.issues})`).join(', ') : '–'}
+                    {u.speakers.length ? u.speakers.map((s) => t('reports.engagement.speaker', { name: s.stakeholder_name, n: s.issues })).join(', ') : '–'}
                   </Box>
                 </tr>))}
             </tbody>

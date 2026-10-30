@@ -81,7 +81,7 @@
   "control.reason.FEWER_THAN_TWO_UNITS": "Fewer than two org units hold roles: one unit always carries everything",
   "control.reason.ISSUE_OFF": "The Issues component is off",
   "control.reason.NO_ISSUES": "No issue is logged on this project yet, so silence means nothing",
-  "control.impact": "Most changes fall on {unit}, of {n} changes",
+  "control.impact": "The largest share falls on {unit}, of {n} changes",
   "control.withoutRa": "{n} changes have no responsible or accountable role yet",
   "control.withoutRa_one": "1 change has no responsible or accountable role yet",
   "control.silent": "{unit} has raised nothing · {s} of {n} affected units silent",

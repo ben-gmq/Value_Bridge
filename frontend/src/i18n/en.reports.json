@@ -140,5 +140,7 @@
   "reports.engagement.raisedCell": "{own} by the unit · {parent} by the unit above",
   "reports.engagement.voice.OWN": "Has spoken",
   "reports.engagement.voice.PARENT": "Through the unit above",
-  "reports.engagement.voice.NONE": "Silent"
+  "reports.engagement.voice.NONE": "Silent",
+  "reports.engagement.speaker": "{name} ({n})",
+  "reports.impact.pct": "{v} %"
 }

@@ -661,6 +661,10 @@ place.
   baseline and diffs every consecutive pair — measured at the design bound before merge (spec §12 N3); cache the
   verdict per baseline (baselines never change) if the cloud showcase is slow. (L5) a BR whose frozen parent chain is
   broken is left out of every area silently; count and show them.
+- **2026-10-30 · slice Control-B2, organisation impact and stakeholder engagement (`sara`, PASS; M1, L1, L3, L4 fixed,
+  L2 wording fixed):** (L2) on a tie for the highest share the panel names one unit by code order; pass a `tied` count.
+  (L5) the panel computes `org_impact_heatmap` twice (its own row, and inside `stakeholder_engagement`) and the as-is
+  step query is written twice in `control_reports`; pass the computed impact in and share one helper if the panel is slow.
 - **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
   preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
   shows a red outline with no mismatch message.

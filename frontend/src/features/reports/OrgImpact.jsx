@@ -11,7 +11,7 @@ import { Generated, Loading, Off } from './reportKit';
 // roles is responsible or accountable for, on the future-state RACI. Consulted / informed and the as-is RACI are
 // context, never counted. The server works out every share; the screen only lays it out.
 const cellSx = { px: 1.25, py: 1, fontSize: 13.5, borderBottom: 1, borderColor: 'divider', textAlign: 'left' };
-const pct = (v) => `${Number(v)} %`;
+const pct = (v) => t('reports.impact.pct', { v: Number(v) });
 
 export function ShareBar({ value }) {
   return (
