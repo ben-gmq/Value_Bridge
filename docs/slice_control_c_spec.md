@@ -222,3 +222,20 @@ Round 1: 6 CLOSED but R1-S1, which is PARTLY. 2 new (both LOW), none structural 
   build:** that violation returns 409 "the rules changed since the preview; open it again".
 - **N2 LOW** where the reset marker comes from — **fixed** (§4: from the audit trail).
 - Two questions carried to Ben (WHENEVER): does a rule left on after a reset count as agreed; assumption C1.
+
+## 14. Build notes, C1 + C2 (2026-10-30)
+- **Built:** C1 `e113af0`, C2 `13841f2`, sara L1 `cf47f7c`. Tests `tests/test_control_c.py` (§8 tests 1, 2, 6) and
+  `tests/test_control_c2.py` (tests 3, 4); the rule-list pins in `test_control.py` / `test_control_b2.py` now name ten.
+- **Platform-admin routes** (`platform_admin` guard) carry no project level, so they are not in
+  `test_project_admin.PLATFORM_ROUTES` (project-level only); the refusal is tested per identity in `test_control_c2`
+  (project ADMIN, editor, staff → 403; no token → 401). A table of every platform-admin route is on VB-005 (sara L2).
+- **Sara:** no CRITICAL / HIGH / MEDIUM. L1 fixed (a retired rule or default never splits the reset preview from the
+  write); L2 to VB-005.
+- **Full suite on `cf47f7c`** (origin/main `923a4e7` is its ancestor): 1,243 passed, 0 failed, 12 min 48 s, `-n 4`.
+  Lint and build clean.
+- **Browser (ui-verifier, `vb_s2_uat_db`, ports 8122 / 5192):** 8 / 8 — both tabs, panel rows and links, reset
+  preview → confirm → marker, "nothing to reset", reviewer sees no reset, admin edits a default with history, editor
+  kept off `/admin`. The two snackbars closed before a screenshot. `Evidence/2026-10-30/control-c/`.
+- **Not done:** a timed run at the 2,000-BR bound; both analyses read the same scope as `org_impact_heatmap` in one
+  pass (Control-B measured the panel at 1.62 s there).
+- **C3 waits** for the migration slot (§7).
