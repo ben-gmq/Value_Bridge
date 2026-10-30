@@ -206,6 +206,9 @@ Round 1: 8 CLOSED, 1 partly (R1-S2). 3 new (0 HIGH, 1 MEDIUM, 2 LOW), none struc
   `row_version = 1`; its "agreed" date is not shown. Test 5 names an owner and expects "not yet agreed" still.
 - **N3 LOW** the whole-chain check is costly — **fixed in the build:** speed measured at the acceptance-76 size, not
   the demo data; the damaged baseline is named in the reason (already §2.1), so it is repaired, not lived with.
+  **Measured 2026-10-30** (temporary probe, not kept): 2,000 BRs on 40 groups, four baselines with 50 BR changes
+  between each — volatility tab 1.41 s, the whole panel 1.62 s; each freeze 3.5–7.0 s. The cost grows with the number
+  of baselines (one diff per pair); the per-baseline cache stays on VB-005 (Control-B1 M3).
 - **R1-S2 (partly open)** one entity mapped on as-is makes `data_migration_map` measured, so a mostly-unmapped
   project can read GREEN — **accepted for now, to Ben as a WHENEVER question** (what share must be mapped first); the
   "never seen on as-is" count beside the figure keeps it visible.
