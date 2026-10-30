@@ -22,7 +22,7 @@ from auth.security import hash_password
 from database import SessionLocal
 from models import AppUser, BrOrgRole, BusinessRequirement
 from services import audit, bfc, bfc_set, client_org, data_entity, external_entity, raci, step_io, trigger
-from services import components
+from services import components, control
 from services.project import create_client, create_project
 from services.user_admin import check_ftc_address, create_user
 
@@ -82,6 +82,7 @@ def build_project(db, admin: AppUser, domain: str, pw: str) -> int:
     importer cannot use it to seed a real database around main()'s checks (sara L2)."""
     assert_throwaway_db(db, (*SAFE_MARKERS, "test"))
     a = admin.app_user_id
+    control.seed_house(db)                  # sara L6: a demo database gets the house control rules create_project needs
     client = create_client(db, admin, "DEMO", "Demo Trading Co", "Distribution")
     proj = create_project(db, admin, client.client_id, "DEMO", "Order to cash demo", None, None, None,
                           component_codes=list(components.ALL), is_restricted=False)

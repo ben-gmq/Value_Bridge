@@ -61,5 +61,6 @@
   "control.dialog.cancel": "Cancel",
   "control.dialog.save": "Save",
   "control.saved": "Rule saved",
-  "control.stale": "Someone changed this rule meanwhile. It has been reloaded; check it and save again."
+  "control.stale": "Someone changed this rule meanwhile. The panel has been reloaded: open Edit again to see their change.",
+  "control.reason.NOT_BUILT": "This analysis is not measured yet"
 }

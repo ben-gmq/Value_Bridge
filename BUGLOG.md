@@ -651,3 +651,10 @@ place.
 - **2026-10-29 · slice 1e-b piece b, flow import replace mode (`sara`, PASS; M1, L1–L3 fixed):** (L4)
   `flow_import._Resolver._replace` rescans every staged row once per step, and `step_io.dependents` reads each dependent
   by `db.get`; fine at 99 steps × 100 links, index rows by step once if larger files ever appear.
+- **2026-10-30 · slice Control-A, control rules and panel (`sara`, PASS; M1–M3, L1, L2, L4, L6 fixed):** (L3) a rule
+  with `is_active = false` (reachable only by SQL) is listed as "missing: run the seed", which the seed never re-adds;
+  say RETIRED instead, or drop `is_active` from the read. (L5) every panel load re-verifies the agreed baseline and runs
+  a full diff; time it on the demo showcase before the cloud and cache the integrity verdict per baseline if slow.
+- **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
+  preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
+  shows a red outline with no mismatch message.

@@ -8,6 +8,7 @@ each later slice adds its own row to HOUSE_RULES and runs seeds.seed_control_rul
 Every analysis returns {measured, unit, reason, note}. measured None + reason is NOT_MEASURED, never 0 (§7.9)."""
 import getpass
 import socket
+from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
@@ -313,5 +314,5 @@ def panel(project_id: int) -> dict:
     have = {r["analysis_code"] for r in rows}
     # round 2 N4: a measurable rule the project lacks is listed too, so a missing rule always shows somewhere.
     missing = [{"analysis_code": c, "brought_by": "SEED"} for c in ORDER if c not in have]
-    return {"generated_at": reports._now(), "rows": rows,
+    return {"generated_at": datetime.now(timezone.utc).isoformat(), "rows": rows,
             "coming": missing + [{"analysis_code": c, "brought_by": by} for c, by in COMING if c not in have]}

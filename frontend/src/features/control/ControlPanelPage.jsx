@@ -81,7 +81,7 @@ function RuleRow({ projectId, r, canEdit, onEdit }) {
   );
 }
 
-function EditDialog({ projectId, rule, onClose, onSaved }) {
+function EditDialog({ projectId, rule, onClose, onSaved, onStale }) {
   const qc = useQueryClient();
   const roles = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
   const lt = rule.comparison === 'LT';
@@ -103,7 +103,8 @@ function EditDialog({ projectId, rule, onClose, onSaved }) {
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onSaved(); },
     onError: (err) => {
-      if (isStale(err)) { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); setError(t('control.stale')); }
+      // sara M1: the dialog holds the row version it opened with, so a stale save closes it; reopening reads the new row
+      if (isStale(err)) { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onStale(); }
       else setError(errorText(err));
     },
   });
@@ -114,6 +115,7 @@ function EditDialog({ projectId, rule, onClose, onSaved }) {
       <DialogContent>
         <Stack sx={{ gap: 2, pt: 1 }}>
           {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+          {roles.error && <Alert severity="error">{errorText(roles.error)}</Alert>}
           <Stack direction="row" sx={{ gap: 2 }}>
             <TextField label={t(lt ? 'control.dialog.thresholdLt' : 'control.dialog.threshold')} type="number" required
               value={form.threshold_value} onChange={set('threshold_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
@@ -167,7 +169,8 @@ export default function ControlPanelPage() {
         </Stack>)}
       {editing && (
         <EditDialog projectId={projectId} rule={editing} onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); setNotice(t('control.saved')); }} />)}
+          onSaved={() => { setEditing(null); setNotice(t('control.saved')); }}
+          onStale={() => { setEditing(null); setNotice(t('control.stale')); }} />)}
       <Snackbar open={Boolean(notice)} autoHideDuration={5000} onClose={() => setNotice('')} message={notice} />
     </Page>
   );
