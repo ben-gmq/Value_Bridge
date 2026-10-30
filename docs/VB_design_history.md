@@ -609,6 +609,18 @@ system*, "accept the ~2 extra hours".
 |---|---|---|
 | RP-1 | **`application_gap` checks per system, inside each matched area.** An as-is step's support by an application is `unallocated` when that same application has no to-be allocation in the matched to-be area; a to-be step's allocation to an application is `unsupported` when that application supports no as-is step in the matched as-is area. One allocation in an area no longer hides the area's other supported steps | §7.9 `application_gap` "per matched area" (an area with any allocation read as having no backlog) |
 
+### Ben's rulings, 2026-10-30 — control rules, first cut (slice Control-A, CT-1…CT-4)
+
+Ben, via Ren, 2026-10-30: decisions 1, 2 and 3 *"all (a), as you recommended"*, and the spec approved to build.
+Spec: `docs/slice_control_a_spec.md`; migration 0081.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| CT-1 | **A project's control rule may exist before its owner is named.** `owner_org_role_id` is nullable on project rows as on house rows; the panel tags "Owner not named" and the coverage check reports it as an incomplete framework | The constraint table's `CHECK (project_id IS NULL OR owner_org_role_id IS NOT NULL)`, which could not hold with copy-on-create before the client's org chart exists |
+| CT-2 | **Uncosted growth is not GREEN.** While any FR added or changed since the agreed baseline is unrated, a `priced_diff` verdict that would be GREEN is FLAG, and the row names the count | §7.13 `control_panel` reading unrated FRs as 0 days |
+| CT-3 | **The audit keeps the numbers, not the people.** `CONTROL_RULE_CHANGED` records thresholds, owner id, on/off and the reason in full; `prescribed_action` and `escalation_path` only as "changed" (slice 14 R7: append-only audit holds no names) | §7.13 `maintain_control_rule`'s full `from/to` of every field |
+| CT-4 | **A rule is seeded only once its analysis has a headline.** Control-A seeds four (`priced_diff`, `coverage`, `solution_matrix`, `interface_load`); each later slice adds its own rows to the house tier and existing projects through `seeds.seed_control_rules`, with numbers Ben signs off then. `agreed_at` is set once and never moved by an edit; the panel shows "last changed by" | §7.13 "create_project seeds the registry below" (ten rows at once, some with no measurable headline — design review P1, D2) |
+
 ### Ben's ruling, 2026-10-29 — how the ERD is saved as a picture (slice 1f, function 41, EX-1)
 
 Ben, via Ren, 2026-10-29: option (a), *add `html-to-image` and save the ERD exactly as shown on screen*.
@@ -904,6 +916,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice15_phasing_spec.md · slice15_phasing_schema.md` | Slice 15 — waves (phasing) and solution dependencies (approved 2026-10-18, W-1…W-9) | 2026-10-18 |
 | `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-13; approved 2026-10-20) | 2026-10-18, 2026-10-20 |
 | `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-11) | 2026-10-24, 2026-10-28 |
+| `docs/slice_control_a_spec.md` | Slice Control-A — control rules and the control panel, first cut (CT-1…CT-4) | 2026-10-30 |
 
 ---
 

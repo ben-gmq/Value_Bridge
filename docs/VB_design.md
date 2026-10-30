@@ -2368,10 +2368,17 @@ the governance model would be something the client never signed up to. Same reas
 (A-38) and the frozen `code_master` labels in `baseline_*` (§5.4.4): **an agreed number is copied, never
 referenced.**
 
-`owner_org_role_id` is `NOT NULL` on a project rule and **nullable on a house default** — FTC cannot know
-which of a client's roles owns a response before the client's org chart exists, so `create_project`
-copies the thresholds and the project assigns the roles at mobilisation. A project rule with no owner is
-reported by `coverage` as an incomplete control framework.
+`owner_org_role_id` is **nullable on both tiers** (CT-1) and always `NULL` on a house default — FTC cannot
+know which of a client's roles owns a response before the client's org chart exists, so `create_project`
+copies the thresholds and the project assigns the roles at mobilisation. The panel tags a project rule with
+no owner "Owner not named", and `coverage` reports it as an incomplete control framework. When set, the owner
+is a role of the same project (composite FK to `org_role (org_role_id, project_id)`); retiring a role that owns
+a rule is refused until the rule is re-pointed. `agreed_at` is when the row was set up and is never moved by an
+edit (CT-4). A house row's `created_by` is `NULL` (seeded by the CLI, as `code_master`'s library rows).
+
+**A rule is seeded only once its analysis has a headline** (CT-4): the house tier holds a row per analysis
+that can be measured, and each slice that adds a headline adds its rule to the house tier and to every
+existing project through `seeds.seed_control_rules`.
 
 #### Diagram presentation (D-29, D-30)
 
@@ -3640,7 +3647,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN, APPROVED, or the SUPERSEDED one carrying the agreed approval (SC-2); `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8, SC-2** — a CR challenges something agreed: a baseline in force, or the superseded one that still carries the agreed client approval (DR8-P1). Point-in-time: an existing CR keeps its target when that baseline is later superseded |
 | `effort_delta_days` / `benefit_delta_value` writable **only** by `price_cr` | `change_request` *(when built)* | D-16 — a change priced by its requester is not priced |
 | topological check on insert; a cycle is rejected | `solution_dependency` *(when built)* | D-18 — a dependency cycle makes the phase plan unsolvable and is silent until someone tries to schedule |
-| `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NULL OR owner_org_role_id IS NOT NULL)` | `control_rule` *(when built)* | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; **an analysis without a named owner is a report nobody acts on** (relaxed on the house tier, which precedes the client's org chart) |
+| `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NOT NULL OR owner_org_role_id IS NULL)`; `CHECK (is_house_default = (project_id IS NULL))`; `CHECK (project_id IS NULL OR created_by IS NOT NULL)`; composite FK (`owner_org_role_id`, `project_id`) → `org_role` | `control_rule` | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; the owner is the same project's role. **An analysis without a named owner is a report nobody acts on** — so an unowned project rule is shown and reported, not refused (CT-1: rules are copied before the client's org chart exists) |
 | `CHECK (num_nonnulls(impacted_br_id, impacted_solution_id, impacted_fr_id, impacted_application_id, impacted_data_entity_id, impacted_phase_id, impacted_benefit_id) = 1)` + composite `(id, project_id)` FK on each | `cr_impact` *(when built)* | A-37 — the database enforces which object a CR row points at, and that it belongs to this project |
 | `BEFORE UPDATE OR DELETE` reject trigger; **exempt from soft delete**; no `UPDATE`/`DELETE` grant | `decision` *(when built)* | A-41 — the decision log is evidential. Corrections are a new row with `supersedes_decision_id` |
 | `bfc_node_flow` constraints (`ck_bnf_has_end`, `ck_bnf_flow_type`, `ck_bnf_conditional_label`, `ck_bnf_seq`, process guards, partial `uq_bfc_node_flow_edge`) | `bfc_node_flow` | retired (D-38): they remain on the read-only history rows; no row can be inserted or updated by `vb_app` (§6.6) |
@@ -6016,9 +6023,11 @@ maintain_control_rule(project_id, analysis_code, fields, change_rationale):
     if analysis_code not in ANALYSIS_REGISTRY: raise 422 "No such analysis"
     if not change_rationale.strip(): raise 422 "Changing a control threshold is a "
                                                "governance decision and needs a reason"
-    upsert CONTROL_RULE(project_id, analysis_code, ..., agreed_at=now())
+    update CONTROL_RULE(project_id, analysis_code, ...) WHERE row_version = :v      # 409 on 0
     AUDIT_EVENT(event_type='CONTROL_RULE_CHANGED', project_id,
                 detail={analysis_code, from: old_values, to: new_values, change_rationale})
+    # CT-3: from/to carry the thresholds, the owner id and is_enabled; prescribed_action and
+    # escalation_path are recorded only as changed — they name people, and the audit is append-only.
     # Without the audit row, a project that never went red is indistinguishable from one
     # whose thresholds were widened until it stopped going red.
 
@@ -6039,9 +6048,12 @@ control_panel(project_id):
     out = []
     for rule in CONTROL_RULE where project_id = :p and is_enabled:
         measured = ANALYSIS_REGISTRY[rule.analysis_code](project_id).headline_value
-        state = ('ESCALATE' if breaches(measured, rule.escalate_value, rule.comparison)
+        state = ('NOT_MEASURED' if measured is None                # never read as 0
+                 else 'ESCALATE' if breaches(measured, rule.escalate_value, rule.comparison)
                  else 'FLAG'  if breaches(measured, rule.threshold_value, rule.comparison)
                  else 'GREEN')
+        # CT-2: priced_diff is FLAG, not GREEN, while an FR added or changed since the agreed
+        # baseline is unrated — uncosted growth is not no growth.
         out.append({rule.analysis_code, measured, rule.threshold_value, state,
                     owner: rule.owner_org_role_id,          # a ROLE, never "the PMO"
                     action: rule.prescribed_action,
@@ -6053,8 +6065,12 @@ control_panel(project_id):
 ```
 `decide_cr` and `reset_project_rules_to_house_default` run at **EDIT** — project editors, and admins always (SC-7).
 
-**Seeded control rules.** `create_project` seeds the registry below with FTC defaults, which
-the client then negotiates. These thresholds are starting points, not doctrine:
+**Seeded control rules.** `create_project` copies the house tier — FTC defaults the client then
+negotiates — inside its own transaction. A rule joins the house tier only once its analysis has a
+headline (CT-4); the first four are `priced_diff` (net growth % from the agreed baseline), `coverage`
+(rows on the coverage report's warning lines), `solution_matrix` (TECHNOLOGY share %) and
+`interface_load` (INTERFACE FRs as % of live FRs). The rest of the table is the starting point each later
+slice signs off with Ben. These thresholds are starting points, not doctrine:
 
 | `analysis_code` | Flag | Escalate | Prescribed action |
 |---|---|---|---|

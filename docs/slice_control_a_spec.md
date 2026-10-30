@@ -2,7 +2,8 @@
 
 **Design:** `VB_design.md` §4.13 (`maintain_control_rule`, `control_panel`), §5.3 `CONTROL_RULE`, §5 constraint table
 (`control_rule` row), §7.9 (`headline_value` contract), §7.13 (registry, seeded rules, `control_panel`), D-19, SC-7.
-**Status:** draft for Ben's approval; design review round 1 done (§10). **Not in this slice:** see §8.
+**Status:** approved by Ben 2026-10-30 (via Ren) with decisions CT-1…CT-3 as recommended (§9); design review round 1
+done (§10). **Not in this slice:** see §8.
 
 **The plan line** "Control rules + control panel" (4 days) is cut into three vertical slices:
 - **Control-A (this spec, ~1.5 days):** the rules table, the four rules the app can measure today on every project,
@@ -149,15 +150,14 @@ House-default editing and reset (Control-C), the analyses without a headline yet
 history. The two piece-b import-preview items (preview opens filtered to errors and warnings; a wrong removal count
 shows a red outline with no message) are not touched — this slice does not touch the import screen.
 
-## 9. Decisions for Ben
-- **D1 — Can a project's rule exist before its owner is named?** The design says a project rule's owner is NOT NULL
-  and that `create_project` copies rules before the client's org chart exists; both cannot hold. Recommend: nullable,
-  panel tags "Owner not named", Control-C's coverage line reports it.
-- **D2 — Uncosted growth.** New FRs with no rating count 0 days, so growth reads GREEN until estimating. Recommend: a
-  GREEN becomes FLAG while any added/changed FR is unrated.
-- **D3 — What the audit keeps of the free text.** The audit log can never be corrected; escalation paths usually name
-  people. Recommend: numbers, owner id, on/off and the reason in full; the two text fields recorded as "changed" only
-  (the slice 14 R7 precedent). The design's §7.13 says full from/to, so this changes the design wording.
+## 9. Decisions (Ben, 2026-10-30, all as recommended — history §3 CT-1…CT-4)
+- **CT-1 (D1)** A project's rule may exist before its owner is named: owner nullable on project rows; the panel tags
+  "Owner not named"; Control-C's coverage line reports it.
+- **CT-2 (D2)** Uncosted growth is not GREEN: a `priced_diff` GREEN becomes FLAG while any FR added or changed since
+  the agreed baseline is unrated.
+- **CT-3 (D3)** The audit keeps thresholds, owner id, on/off and the reason in full; `prescribed_action` and
+  `escalation_path` only as "changed" (slice 14 R7).
+- **CT-4** Rules seeded only once their analysis has a headline; `agreed_at` never moved by an edit (review P1, D2).
 
 ## 10. Design review round 1 (design-auditor, 2026-10-30) — dispositions
 9 findings (2 HIGH, 3 MEDIUM, 4 LOW), none structural.
@@ -171,4 +171,5 @@ shows a red outline with no message) are not touched — this slice does not tou
 - **P4 LOW** transaction wording — **fixed** (§2). **D3 LOW** coverage all-off reads 0 — **fixed** (§3).
   **D4 LOW** damaged baseline — **fixed** (§3). **D5 LOW** org-role retire block unlabelled — **fixed** (§2, test 7).
 - Also corrected: `ROUTE_COMPONENTS` has no exempt list (§4); PATCH is full replacement (§4).
-Round 2 is the re-check of these changes, run once Ben has answered D1–D3.
+Round 2 is the re-check of these changes and of the CT-1…CT-3 wording; whatever it leaves open is settled against the
+running code.
