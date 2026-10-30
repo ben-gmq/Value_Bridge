@@ -21,6 +21,7 @@ const REPORT = {
   priced_diff: (p) => links.baselines(p), coverage: (p) => links.reports(p, 'coverage'),
   solution_matrix: (p) => links.reports(p, 'solution_matrix'), interface_load: (p) => links.interfaces(p),
   requirement_volatility: (p) => links.reports(p, 'volatility'), data_migration_map: (p) => links.reports(p, 'data_migration'),
+  org_impact_heatmap: (p) => links.reports(p, 'org_impact'), stakeholder_engagement: (p) => links.reports(p, 'engagement'),
 };
 
 const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
@@ -42,6 +43,15 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.iface', { i: f.interface_count, n: f.fr_count })}</Typography>)}
       {r.analysis_code === 'requirement_volatility' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.volatility', { n: f.generations })}</Typography>)}
+      {r.analysis_code === 'org_impact_heatmap' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.impact', { unit: f.top_unit, n: f.changes })}</Typography>)}
+      {r.analysis_code === 'org_impact_heatmap' && f.changes_without_ra > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.withoutRa', { n: f.changes_without_ra })}</Typography>)}
+      {r.analysis_code === 'stakeholder_engagement' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {f.top_unit ? t('control.silent', { unit: f.top_unit, s: f.silent_units, n: f.affected_units })
+            : t('control.allHeard', { n: f.affected_units })}
+        </Typography>)}
       {r.analysis_code === 'data_migration_map' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
           {t('control.migration', { none: f.no_source, two: f.conflicting, n: f.in_scope })}

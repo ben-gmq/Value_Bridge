@@ -23,7 +23,7 @@ from services.lifecycle import check_version
 
 CENT = Decimal("0.01")
 
-# CT-4: the four analyses with a headline today, in panel order. (code, unit, comparison, flag, escalate, action)
+# CT-4: the analyses with a headline today, in panel order (Control-B in its spec's order, §2). (code, unit, comparison, flag, escalate, action)
 HOUSE_RULES = (
     ("priced_diff", "PCT", "PCT_GT", Decimal(5), Decimal(10),
      "Raise a CR to steering; name the displacement"),
@@ -37,14 +37,19 @@ HOUSE_RULES = (
     # data-ownership decision flags, more than five escalate.
     ("requirement_volatility", "COUNT", "GT", Decimal(1), Decimal(2),
      "Pull the area out of the current wave; re-run the workshop"),
+    # Control-B2 (CB-2, CB-3): one org unit responsible or accountable for more than 40 % of the changes flags, over
+    # 60 % escalates; an affected unit with no voice on more than 10 % flags, over 25 % escalates.
+    ("org_impact_heatmap", "PCT", "PCT_GT", Decimal(40), Decimal(60),
+     "Dedicated change agent and a capacity check — they are usually the SMEs too"),
+    ("stakeholder_engagement", "PCT", "PCT_GT", Decimal(10), Decimal(25),
+     "Interview before sign-off — silence becomes rejection at UAT"),
     ("data_migration_map", "COUNT", "GT", Decimal(0), Decimal(5),
      "Data ownership decision before design freeze"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
 # Shown under the panel: the analyses still to come and what brings each (spec §1).
-COMING = (("org_impact_heatmap", "CONTROL_B"), ("stakeholder_engagement", "CONTROL_B"),
-          ("benefit_gap", "BENEFITS"), ("risk_register", "RISKS"))
+COMING = (("benefit_gap", "BENEFITS"), ("risk_register", "RISKS"))
 EDITABLE = ("threshold_value", "escalate_value", "owner_org_role_id", "prescribed_action", "escalation_path",
             "is_enabled")
 TEXT_FIELDS = ("prescribed_action", "escalation_path")         # CT-3: audited as "changed" only — they name people
@@ -290,6 +295,10 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _interface_load(db, project_id, on)
     if code == "requirement_volatility":
         return _from_report(control_reports.requirement_volatility(db, project_id))
+    if code == "org_impact_heatmap":
+        return _from_report(control_reports.org_impact_heatmap(db, project_id))
+    if code == "stakeholder_engagement":
+        return _from_report(control_reports.stakeholder_engagement(db, project_id))
     if code == "data_migration_map":
         return _from_report(control_reports.data_migration_map(db, project_id))
     return _measure(reason="NOT_BUILT")

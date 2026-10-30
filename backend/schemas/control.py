@@ -51,7 +51,7 @@ class PanelRow(ControlRuleOut):
 
 class Coming(BaseModel):
     analysis_code: str
-    brought_by: str                            # CONTROL_B | BENEFITS | RISKS | SEED
+    brought_by: str                            # BENEFITS | RISKS | SEED
 
 
 class ControlPanelOut(BaseModel):
@@ -113,4 +113,48 @@ class DataMigrationOut(BaseModel):
     entities: list[MigrationEntity] | None     # None: AS_IS or APPLICATION off
     new_data: list[EntityRef] | None
     retiring: list[EntityRef] | None
+    headline: Headline
+
+
+class ImpactUnit(BaseModel):
+    org_unit_id: int
+    org_unit_code: str
+    org_unit_name: str
+    level_no: int
+    parent_org_unit_id: int | None
+    changes: int                               # changes one of its roles is Responsible or Accountable on
+    share: Decimal                             # changes ÷ all changes, %
+    heard_only: int                            # changes it is only Consulted / Informed on — shown, not counted
+    ra_roles: list[str]
+    as_is_steps: int | None                    # as-is steps it is R/A on — context, never counted; None: AS_IS off
+
+
+class OrgImpactOut(BaseModel):
+    generated_at: str
+    units: list[ImpactUnit] | None             # None: SOLUTION off
+    headline: Headline
+
+
+class Speaker(BaseModel):
+    stakeholder_id: int
+    stakeholder_name: str
+    issues: int                                # live issues raised, any status
+
+
+class EngagementUnit(BaseModel):
+    org_unit_id: int
+    org_unit_code: str
+    org_unit_name: str
+    level_no: int
+    changes: int
+    share: Decimal
+    issues_raised: int                         # live issues raised by stakeholders in the unit
+    parent_issues_raised: int                  # ... in its direct parent unit
+    voice: str | None                          # OWN | PARENT | None (silent)
+    speakers: list[Speaker]                    # its own stakeholders who raised a live issue
+
+
+class EngagementOut(BaseModel):
+    generated_at: str
+    units: list[EngagementUnit] | None         # None: not measured
     headline: Headline

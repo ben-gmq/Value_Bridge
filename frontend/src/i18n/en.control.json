@@ -44,7 +44,6 @@
   "control.open": "Open the report",
   "control.edit": "Edit",
   "control.coming": "Still to come",
-  "control.comingBy.CONTROL_B": "with the next control slice",
   "control.comingBy.BENEFITS": "with the Benefits module",
   "control.comingBy.RISKS": "with the Risks module",
   "control.comingBy.SEED": "missing on this project: an administrator runs the control-rule seed",
@@ -76,5 +75,15 @@
   "control.verdict.pending": "Not yet agreed",
   "control.pendingTitle": "Not yet agreed with the client",
   "control.pendingIntro": "These rules were added to this engagement after it started. They are measured but give no verdict until the client agrees the threshold and someone switches them on.",
-  "control.pendingNote": "Copied into this engagement, not yet agreed"
+  "control.pendingNote": "Copied into this engagement, not yet agreed",
+  "control.reason.NO_CHANGES": "No future-state requirement has a live solution yet, so nothing is changing",
+  "control.reason.NO_RA_ON_CHANGES": "No role is responsible or accountable on any change yet",
+  "control.reason.FEWER_THAN_TWO_UNITS": "Fewer than two org units hold roles: one unit always carries everything",
+  "control.reason.ISSUE_OFF": "The Issues component is off",
+  "control.reason.NO_ISSUES": "No issue is logged on this project yet, so silence means nothing",
+  "control.impact": "Most changes fall on {unit}, of {n} changes",
+  "control.withoutRa": "{n} changes have no responsible or accountable role yet",
+  "control.withoutRa_one": "1 change has no responsible or accountable role yet",
+  "control.silent": "{unit} has raised nothing · {s} of {n} affected units silent",
+  "control.allHeard": "Every one of the {n} affected units has raised an issue, or its parent unit has"
 }

@@ -5,13 +5,16 @@ import { t } from '../../i18n/t';
 import { ApplicationGap } from './ApplicationGap';
 import { Coverage } from './Coverage';
 import { DataMigration } from './DataMigration';
+import { Engagement } from './Engagement';
+import { OrgImpact } from './OrgImpact';
 import { SolutionMatrix } from './SolutionMatrix';
 import { Traceability } from './Traceability';
 import { Volatility } from './Volatility';
 
 // Slice 1f (spec §4): one Reports page, a Segmented choice of the reports (?tab=). Every report is read-only and
 // worked out on each read; the screen never adds anything up itself.
-const TABS = ['traceability', 'coverage', 'solution_matrix', 'application_gap', 'volatility', 'data_migration'];
+const TABS = ['traceability', 'coverage', 'solution_matrix', 'application_gap', 'volatility', 'org_impact', 'engagement',
+  'data_migration'];
 
 export default function ReportsPage() {
   const { projectId } = useParams();
@@ -27,6 +30,8 @@ export default function ReportsPage() {
       {tab === 'solution_matrix' && <SolutionMatrix projectId={projectId} />}
       {tab === 'application_gap' && <ApplicationGap projectId={projectId} />}
       {tab === 'volatility' && <Volatility projectId={projectId} />}
+      {tab === 'org_impact' && <OrgImpact projectId={projectId} />}
+      {tab === 'engagement' && <Engagement projectId={projectId} />}
       {tab === 'data_migration' && <DataMigration projectId={projectId} />}
     </Page>
   );

@@ -19,7 +19,8 @@ from tests.test_function_requirement_api import fr
 from tests.test_scope_api import API, ed  # noqa: F401 — ed is a fixture
 from tests.test_solution_api import link, sol
 
-CODES = ["priced_diff", "coverage", "solution_matrix", "interface_load", "requirement_volatility", "data_migration_map"]
+CODES = ["priced_diff", "coverage", "solution_matrix", "interface_load", "requirement_volatility", "org_impact_heatmap",
+         "stakeholder_engagement", "data_migration_map"]
 
 
 def panel(client, ed, headers=None, expect=200):
@@ -201,7 +202,9 @@ def test_an_empty_project_measures_what_it_can(client, ed):
     assert row(out, "interface_load")["reason"] == "NO_FRS"
     assert row(out, "requirement_volatility")["reason"] == "NO_BASELINE_PAIR"
     assert row(out, "data_migration_map")["reason"] == "NO_TO_BE_ENTITIES"
-    assert [c["analysis_code"] for c in out["coming"]][:2] == ["org_impact_heatmap", "stakeholder_engagement"]
+    assert row(out, "org_impact_heatmap")["reason"] == "NO_CHANGES"
+    assert row(out, "stakeholder_engagement")["reason"] == "NO_ISSUES"
+    assert [c["analysis_code"] for c in out["coming"]] == ["benefit_gap", "risk_register"]
     panel(client, ed, headers=ed["rv"])                                      # VIEW reads it
     panel(client, ed, headers=ed["out"], expect=404)
 
@@ -212,6 +215,7 @@ def test_components_off_are_not_measured_never_zero(client, ed, world):
     assert {r["analysis_code"]: r["reason"] for r in out["rows"]} == {
         "priced_diff": "NO_AGREED_BASELINE", "coverage": "COMPONENTS_OFF", "solution_matrix": "SOLUTION_OFF",
         "interface_load": "FUNCTION_REQUIREMENT_OFF", "requirement_volatility": "NO_BASELINE_PAIR",
+        "org_impact_heatmap": "SOLUTION_OFF", "stakeholder_engagement": "ISSUE_OFF",
         "data_migration_map": "APPLICATION_OFF"}
     assert {r["verdict"] for r in out["rows"]} == {"NOT_MEASURED"}
 

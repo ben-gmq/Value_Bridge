@@ -7,7 +7,8 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, project_ctx
-from schemas.control import ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut, VolatilityOut
+from schemas.control import (ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut, EngagementOut,
+                             OrgImpactOut, VolatilityOut)
 from services import control, control_reports
 
 router = GuardedRouter(tags=["control"])
@@ -36,6 +37,16 @@ def maintain_control_rule(project_id: int, analysis_code: str, body: ControlRule
 @router.get("/projects/{project_id}/requirement-volatility", response_model=VolatilityOut, **_read.route)
 def requirement_volatility(project_id: int, db: Session = Depends(get_db)):
     return control_reports.requirement_volatility(db, project_id)
+
+
+@router.get("/projects/{project_id}/org-impact", response_model=OrgImpactOut, **_read.route)
+def org_impact(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.org_impact_heatmap(db, project_id)
+
+
+@router.get("/projects/{project_id}/stakeholder-engagement", response_model=EngagementOut, **_read.route)
+def stakeholder_engagement(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.stakeholder_engagement(db, project_id)
 
 
 @router.get("/projects/{project_id}/data-migration", response_model=DataMigrationOut, **_read.route)

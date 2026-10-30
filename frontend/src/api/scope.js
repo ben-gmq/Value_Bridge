@@ -181,6 +181,8 @@ export const controlApi = {                                           // Control
   update: (projectId, analysisCode, body) => d(http.patch(`${P(projectId)}/control-rules/${analysisCode}`, body)),
   volatility: (projectId) => d(http.get(`${P(projectId)}/requirement-volatility`)),   // Control-B1 (spec §4)
   dataMigration: (projectId) => d(http.get(`${P(projectId)}/data-migration`)),
+  orgImpact: (projectId) => d(http.get(`${P(projectId)}/org-impact`)),                 // Control-B2
+  engagement: (projectId) => d(http.get(`${P(projectId)}/stakeholder-engagement`)),
 };
 
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)

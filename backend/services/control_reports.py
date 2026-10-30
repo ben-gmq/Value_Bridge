@@ -3,11 +3,13 @@ on every read. Each returns its table AND its headline, so the report tab and th
 
 `headline` is {measured, reason, **figures}: measured None + a reason is NOT MEASURED, never 0 (§7.9)."""
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import ApplicationBfcNode, BfcNode, BfcNodeDataEntity, BrDataEntity, DataEntity
+from models import (ApplicationBfcNode, BfcNode, BfcNodeDataEntity, BfcNodeOrgRole, BrDataEntity, BrOrgRole, DataEntity, Issue, OrgRole,
+                    OrgUnit, Stakeholder)
 from services import baseline, components, reports
 
 CHURN = ("ADDED", "CHANGED", "REMOVED")                    # a MOVED (re-order) is not churn
@@ -188,3 +190,117 @@ def data_migration_map(db: Session, project_id: int) -> dict:
     if not rows:                                          # the as-is mapping has not started (review R1-S2)
         return {**out, "headline": _head(reason="AS_IS_NOT_MAPPED", **figures)}
     return {**out, "headline": _head(figures["no_source"] + figures["conflicting"], **figures)}
+
+
+# ---- 2.2 organisation impact (CB-2) ---------------------------------------------------------------------------------
+RA = ("RESPONSIBLE", "ACCOUNTABLE")                        # by RACI behaviour, never by code (VB law 5)
+CENT = Decimal("0.01")
+
+
+def _pct(n: int, total: int) -> Decimal:
+    return (Decimal(n) * 100 / Decimal(total)).quantize(CENT, ROUND_HALF_UP)
+
+
+def org_impact_heatmap(db: Session, project_id: int) -> dict:
+    """§7.9 org_impact_heatmap: per org unit, the share of changes (live to-be BRs with a live, non-rejected solution)
+    one of its roles is Responsible or Accountable on. To-be RACI only; no roll-up to parent units; every change weighs
+    the same (CB-2, assumption B2). Consulted / Informed are listed, never counted. Headline = the highest share."""
+    out = {"generated_at": _now(), "units": None}
+    sc = reports._Scope(db, project_id)
+    if "SOLUTION" not in sc.on:
+        return {**out, "headline": _head(reason="SOLUTION_OFF")}
+    changes = {b for b, _ in sc.answers()}
+    units = {u.org_unit_id: u for u in db.scalars(select(OrgUnit).where(
+        OrgUnit.project_id == project_id, OrgUnit.is_active))}
+    roles = {r.org_role_id: r for r in db.scalars(select(OrgRole).where(
+        OrgRole.project_id == project_id, OrgRole.is_active)) if r.org_unit_id in units}
+    on: dict[int, set[int]] = {}
+    heard: dict[int, set[int]] = {}
+    ra_roles: dict[int, set[str]] = {}
+    for br_id, role_id, behaviour in db.execute(select(BrOrgRole.br_id, BrOrgRole.org_role_id, BrOrgRole.raci_behaviour)
+                                                .where(BrOrgRole.project_id == project_id, BrOrgRole.is_active)):
+        if br_id not in changes or role_id not in roles:
+            continue
+        unit = roles[role_id].org_unit_id
+        if behaviour in RA:
+            on.setdefault(unit, set()).add(br_id)
+            ra_roles.setdefault(unit, set()).add(roles[role_id].org_role_code)
+        else:
+            heard.setdefault(unit, set()).add(br_id)
+    as_is = None                                          # context only, never counted (CB-2): as-is steps R/A on
+    if "AS_IS" in sc.on:
+        steps = set(db.scalars(select(BfcNode.bfc_node_id).where(
+            BfcNode.project_id == project_id, BfcNode.is_active, BfcNode.bfc_set_code == "AS_IS", BfcNode.is_process)))
+        as_is = {}
+        for step_id, role_id, behaviour in db.execute(select(
+                BfcNodeOrgRole.bfc_node_id, BfcNodeOrgRole.org_role_id, BfcNodeOrgRole.raci_behaviour).where(
+                BfcNodeOrgRole.project_id == project_id, BfcNodeOrgRole.is_active)):
+            if step_id in steps and role_id in roles and behaviour in RA:
+                as_is.setdefault(roles[role_id].org_unit_id, set()).add(step_id)
+    with_ra = set().union(*on.values()) if on else set()
+    figures = {"changes": len(changes), "changes_without_ra": len(changes - with_ra), "units_on": len(on)}
+    rows = []
+    for unit_id in on.keys() | heard.keys():
+        u, mine = units[unit_id], on.get(unit_id, set())
+        rows.append({"org_unit_id": unit_id, "org_unit_code": u.org_unit_code, "org_unit_name": u.org_unit_name,
+                     "level_no": u.level_no, "parent_org_unit_id": u.parent_org_unit_id, "changes": len(mine),
+                     "share": _pct(len(mine), len(changes)), "heard_only": len(heard.get(unit_id, set()) - mine),
+                     "ra_roles": sorted(ra_roles.get(unit_id, set())),
+                     "as_is_steps": None if as_is is None else len(as_is.get(unit_id, set()))})
+    rows.sort(key=lambda r: (-r["changes"], r["org_unit_code"].lower()))
+    out = {**out, "units": rows}
+    if not changes:
+        return {**out, "headline": _head(reason="NO_CHANGES", **figures)}
+    if not with_ra:
+        return {**out, "headline": _head(reason="NO_RA_ON_CHANGES", **figures)}
+    if len({r.org_unit_id for r in roles.values()}) < 2:          # a one-unit chart always reads 100 % (R1-D5)
+        return {**out, "headline": _head(reason="FEWER_THAN_TWO_UNITS", **figures)}
+    top = rows[0]
+    return {**out, "headline": _head(top["share"], top_unit=top["org_unit_name"], **figures)}
+
+
+# ---- 2.3 stakeholder engagement (CB-3) ------------------------------------------------------------------------------
+def stakeholder_engagement(db: Session, project_id: int) -> dict:
+    """§7.9 stakeholder_engagement: each unit on a change (2.2) and whether it has a voice — a stakeholder in it or in
+    its DIRECT parent raised a live issue, any status (R1-S1, assumption B3). Headline = the share of changes of the
+    most affected unit with no voice; 0 when every affected unit has one."""
+    out = {"generated_at": _now(), "units": None}
+    on = components.enabled(db, project_id)
+    for need in ("ISSUE", "SOLUTION"):
+        if need not in on:
+            return {**out, "headline": _head(reason=f"{need}_OFF")}
+    raised: dict[int, int] = {}
+    people: dict[int, list[dict]] = {}
+    issues = 0
+    for stk_id, name, unit_id, n in db.execute(
+            select(Stakeholder.stakeholder_id, Stakeholder.stakeholder_name, Stakeholder.org_unit_id,
+                   func.count(Issue.issue_id))
+            .join(Issue, (Issue.raised_by_stakeholder_id == Stakeholder.stakeholder_id)
+                  & (Issue.project_id == Stakeholder.project_id))
+            .where(Stakeholder.project_id == project_id, Issue.is_active)
+            .group_by(Stakeholder.stakeholder_id).order_by(func.lower(Stakeholder.stakeholder_name))):
+        issues += n                                       # a retired stakeholder's issues still spoke (B3)
+        if unit_id is not None:
+            raised[unit_id] = raised.get(unit_id, 0) + n
+            people.setdefault(unit_id, []).append({"stakeholder_id": stk_id, "stakeholder_name": name, "issues": n})
+    if not issues:                                        # the log is not in use yet: silence is not a signal
+        return {**out, "headline": _head(reason="NO_ISSUES")}
+    impact = org_impact_heatmap(db, project_id)
+    if impact["headline"]["measured"] is None:
+        return {**out, "headline": _head(reason=impact["headline"]["reason"])}
+    rows = []
+    for r in impact["units"]:
+        if not r["changes"]:
+            continue
+        own, parent = raised.get(r["org_unit_id"], 0), raised.get(r["parent_org_unit_id"], 0)
+        rows.append({k: r[k] for k in ("org_unit_id", "org_unit_code", "org_unit_name", "level_no", "changes",
+                                       "share")}
+                    | {"issues_raised": own, "parent_issues_raised": parent,
+                       "voice": "OWN" if own else "PARENT" if parent else None,
+                       "speakers": people.get(r["org_unit_id"], [])})
+    silent = [r for r in rows if r["voice"] is None]           # rows are already most affected first
+    figures = {"issues": issues, "affected_units": len(rows), "silent_units": len(silent)}
+    out = {**out, "units": rows}
+    if not silent:
+        return {**out, "headline": _head(Decimal(0), **figures)}
+    return {**out, "headline": _head(silent[0]["share"], top_unit=silent[0]["org_unit_name"], **figures)}
