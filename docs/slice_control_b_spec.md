@@ -3,8 +3,8 @@
 **Design:** `VB_design.md` §7.9 (`requirement_volatility`, `org_impact_heatmap`, `stakeholder_engagement`,
 `data_migration_map`, the `headline_value` contract), §7.13 (registry, seeded-rule table, `control_panel`), D-19,
 acceptance 72–74; Control-A (`slice_control_a_spec.md`, CT-1…CT-4, round 2 Q1).
-**Status:** DRAFT for Ben — four thresholds (§2, CB-1…CB-4) and the on/off question (§6, CB-5) to sign off. Design
-review round 1 done (§11); round 2 re-checks the fixes after sign-off. **Not in this slice:** §9.
+**Status:** approved by Ben 2026-10-30 (via Ren), *"yes to all five"* — CB-1…CB-5 as recommended (history §3).
+Design review round 1 in §11; round 2 in §12. **Not in this slice:** §9.
 
 **What it adds.** Each of the four analyses becomes (1) a report tab under Reports, (2) one headline number, and (3) a
 seeded control rule on the panel. After it, the panel's "still to come" line names only `benefit_gap` and

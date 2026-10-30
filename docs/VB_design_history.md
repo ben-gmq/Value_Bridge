@@ -621,6 +621,19 @@ Spec: `docs/slice_control_a_spec.md`; migration 0081.
 | CT-3 | **The audit keeps the numbers, not the action and escalation text.** `CONTROL_RULE_CHANGED` records thresholds, owner id, on/off and the reason in full; `prescribed_action` and `escalation_path` only as "changed" (slice 14 R7). The reason is kept in full, as the rate card's is, so the screen asks for "the decision, not the person" (round 2 N3) | §7.13 `maintain_control_rule`'s full `from/to` of every field |
 | CT-4 | **A rule is seeded only once its analysis has a headline.** Control-A seeds four, at the numbers Ben approved with the spec (round 2 Q2): `priced_diff` flag > 5 %, escalate > 10 %; `coverage` flag > 0, never escalates; `solution_matrix` flag > 70 %, escalate > 85 %; `interface_load` flag > 25 %, escalate > 35 %. Each later slice adds its own rows to the house tier and existing projects through `seeds.seed_control_rules`, with numbers Ben signs off then. `agreed_at` is set once and never moved by an edit; the panel shows "last changed by" | §7.13 "create_project seeds the registry below" (ten rows at once, some with no measurable headline — design review P1, D2) |
 
+### Ben's rulings, 2026-10-30 — four more control analyses (slice Control-B, CB-1…CB-5)
+
+Ben, via Ren, 2026-10-30: *"yes to all five"*, each as recommended. Spec: `docs/slice_control_b_spec.md` (design review
+round 1 in its §11). No migration.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| CB-1 | **`requirement_volatility` flags an area changed at two freezes running, escalates at three** (stored `GT 1` / `GT 2`). Headline = the longest current run of consecutive baseline pairs in which one L1 area (identified by its node id) had a BR added, changed or removed; a re-order is not churn; a new area is not churn only if all its BRs are ADDED | §7.13 table "area churns 2 baselines / 3" (which side of the count) |
+| CB-2 | **`org_impact_heatmap` measures concentration: the highest share of changes (live to-be BRs with a live non-rejected solution) one org unit is Responsible or Accountable on. Flag > 40 %, escalate > 60 %. To-be RACI only** — the as-is RACI is not linked step to step to the to-be chart (D-47). The "top decile + zero issues" escalate moves to `stakeholder_engagement` | §7.9 `org_impact_heatmap` "headline = the top decile" and its as-is RACI join; §7.13 table "unit in top decile / top decile + zero issues raised" (a top decile always exists, so it was red on every project) |
+| CB-3 | **`stakeholder_engagement` headline = the share of changes of the most affected org unit with no voice** (no live issue raised by a stakeholder in it or its direct parent). **Flag > 10 %, escalate > 25 %.** NOT MEASURED while the project has no issue at all | §7.9 "org units with high impact and ZERO issues raised"; §7.13 table "zero issues / high impact + zero issues" |
+| CB-4 | **`data_migration_map` counts the to-be entities needing a data-ownership decision** — seen on as-is steps with no supporting system, or held by two or more systems today. **Flag > 0, escalate > 5.** Entities never seen on as-is (new data) and as-is entities no to-be BR uses (retiring) are listed, not counted; NOT MEASURED until any in-scope entity is mapped on as-is | §7.9 "entities with no source, or with >1 source"; §7.13 table "no source / conflicting sources" |
+| CB-5 | **A rule backfilled into a running engagement arrives switched off until the client agrees it, but is still measured:** the panel shows every switched-off rule's figure greyed with no verdict — "Not yet agreed with the client" when never edited (row version 1), otherwise "Switched off" with who and when. New projects get the rules on | Control-A round 2 Q1; §7.13 `control_panel` measuring enabled rules only |
+
 ### Ben's ruling, 2026-10-29 — how the ERD is saved as a picture (slice 1f, function 41, EX-1)
 
 Ben, via Ren, 2026-10-29: option (a), *add `html-to-image` and save the ERD exactly as shown on screen*.
@@ -917,6 +930,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice16_archive_purge_spec.md · slice16_archive_purge_schema.md` | Slice 16 — baseline and project archive files, `purge_project` (rulings AR-1…AR-13; approved 2026-10-20) | 2026-10-18, 2026-10-20 |
 | `docs/slice1e_imports_spec.md · slice1e_b_flow_import_spec.md` | Slice 1e — BR, FR and Issue Excel import (1e-a); the process-flow file (1e-b, FI-1…FI-11) | 2026-10-24, 2026-10-28 |
 | `docs/slice_control_a_spec.md` | Slice Control-A — control rules and the control panel, first cut (CT-1…CT-4) | 2026-10-30 |
+| `docs/slice_control_b_spec.md` | Slice Control-B — volatility, org impact, stakeholder engagement, data migration map (CB-1…CB-5) | 2026-10-30 |
 
 ---
 

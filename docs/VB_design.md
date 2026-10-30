@@ -493,7 +493,7 @@ from a number into an action.
 | `control_panel` | `CONTROL_RULE` + every analysis | R | Runs every analysis, compares to its rule → **GREEN / FLAG / ESCALATE**, with the owning role and the prescribed action per row. The PMO's one screen |
 | `requirement_volatility` | `BASELINE_BUSINESS_REQUIREMENT` | R | ADDED/CHANGED/REMOVED per L1 area across baseline generations. **The earliest warning the app produces** — an area churning across two consecutive baselines is not understood. *Action: pull it out of the current wave; do not let a vendor start there* |
 | `process_change_intensity` | `BFC_NODE`, `BR_SOLUTION`, `SOLUTION` | R | Process steps carrying a solution, rolled up per L1 area, weighted by solution category. Where the transformation actually lands versus where it was said it would |
-| `org_impact_heatmap` | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `BR_SOLUTION`, `ORG_UNIT` | R | Change absorbed per org unit. *Action: top decile gets a dedicated change agent and a capacity check — they are usually the SMEs too* |
+| `org_impact_heatmap` | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `BR_SOLUTION`, `ORG_UNIT` | R | Change absorbed per org unit: the share of changes it is Responsible or Accountable on (to-be RACI; the as-is RACI is context, CB-2). *Action: a unit carrying a concentrated share gets a dedicated change agent and a capacity check — they are usually the SMEs too* |
 | `stakeholder_engagement` | `STAKEHOLDER`, `ISSUE`, `ORG_UNIT` | R | Issues raised per stakeholder per org unit. **Silence is the signal**: high impact and no issues raised is adoption risk. *Action: interview before sign-off* |
 | `interface_load` | `v_interface_list` | R | Interface FRs per source → target application pair (from `FR_INTERFACE`, D-27), and as a share of all FRs. *Action: over ~25–30%, stand up an integration workstream and book test environments early* |
 | `data_migration_map` | `DATA_ENTITY`, `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION` | R | Source (as-is) → target (to-be) per data entity. Entities with no source, or with conflicting sources → data ownership decision before design freeze |
@@ -5061,26 +5061,34 @@ issue_dashboard(project_id):
 ```
 ```
 # ---- the analyses that need no new entities (D-19's inputs) ----------------
-requirement_volatility(project_id):            # the earliest warning the app produces
+requirement_volatility(project_id):            # the earliest warning the app produces (CB-1)
+    every baseline in the chain passes verify(), else NOT MEASURED naming it   # tab and panel alike
     for each consecutive baseline pair (v_n, v_n+1):
-        d = diff(v_n, v_n+1).business_requirement
-        group ADDED|CHANGED|REMOVED by the L1 ancestor of each BR's bfc_node
-    → churn rate per L1 area per generation; headline = max areas churning 2+ in a row
+        d = diff(v_n, v_n+1).business_requirement (+ its requirement lines, as _exposed)
+        group ADDED|CHANGED|REMOVED (never MOVED) by the L1 ancestor of each BR's bfc_node,
+          as frozen on that side and keyed by the L1 node's id, never its hier_code
+        # a BR that moved area counts in both; an area with no BR in v_n churns unless all its BRs are ADDED
+    → churning L1 areas per generation; headline = the longest run of consecutive generations,
+      ending at the latest baseline, in which one area churned (COUNT)
 
 process_change_intensity(project_id):
     BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION ⋈ SOLUTION
     count process steps carrying a solution, rolled to L1, weighted by solution category
 
-org_impact_heatmap(project_id):
-    ORG_UNIT ⋈ ORG_ROLE ⋈ (BR_ORG_ROLE on to-be BRs ∪ BFC_NODE_ORG_ROLE on as-is steps)
-             ⋈ BR_SOLUTION
-    # one RACI per process: to-be roles live on the BR, as-is roles on the step (D-64, S10d-1)
-    → change absorbed per org unit; headline = the top decile
+org_impact_heatmap(project_id):                # CB-2
+    changes = live to-be BRs with a live, non-rejected BR_SOLUTION
+    ORG_UNIT ⋈ ORG_ROLE ⋈ BR_ORG_ROLE (raci_behaviour RESPONSIBLE | ACCOUNTABLE) ⋈ changes
+    # to-be RACI only: as-is roles sit on as-is steps, and the two charts are not linked step to step (D-47).
+    # C / I roles and the as-is RACI are shown as context, never counted. No roll-up to parent units.
+    → per org unit: changes it is on, share = that ÷ all changes (%);
+      headline = the highest share (PCT); NOT MEASURED when fewer than two units hold roles
 
-stakeholder_engagement(project_id):
+stakeholder_engagement(project_id):            # CB-3
     STAKEHOLDER ⋈ ORG_UNIT, LEFT JOIN ISSUE on raised_by_stakeholder_id
-    → issues raised per stakeholder and per org unit.
-      Headline = org units with high impact and ZERO issues raised. Silence is the signal.
+    a unit has a voice when a stakeholder in it or in its direct parent raised a live issue (any status)
+    → issues raised per stakeholder and per org unit, beside org_impact_heatmap's shares.
+      Headline = the share of the most affected unit with no voice (PCT). Silence is the signal.
+      NOT MEASURED while the project has no issue at all — an unused log is not silence.
 
 interface_load(project_id):
     v_interface_list grouped by (source_application_id, target_application_id)   # D-27
@@ -5091,7 +5099,10 @@ data_migration_map(project_id):
     source = DATA_ENTITY ⋈ BFC_NODE_DATA_ENTITY (as-is processes) ⋈ APPLICATION_BFC_NODE
              ⋈ APPLICATION(AS_IS)
     target = DATA_ENTITY ⋈ BR_DATA_ENTITY ⋈ BR_SOLUTION ⋈ APPLICATION_SOLUTION ⋈ APPLICATION
-    → source → target per entity; headline = entities with no source, or with >1 source
+    # CB-4. In scope: entities used by a live to-be BR. Source systems are lifecycle AS_IS | BOTH.
+    → source → target per entity; headline = in-scope entities seen on as-is steps with no source
+      system, or with >1 source (COUNT). Never seen on as-is (new data) and as-is-only (retiring) are
+      listed, not counted; NOT MEASURED until any in-scope entity is mapped on an as-is step
 
 master_data_candidates(project_id):
     BR_DATA_ENTITY ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE
@@ -6046,9 +6057,12 @@ reset_project_rules_to_house_default(project_id, change_rationale):
 control_panel(project_id):
     access.require_project(user, project_id, VIEW)
     out = []
-    for rule in CONTROL_RULE where project_id = :p and is_enabled:
+    for rule in CONTROL_RULE where project_id = :p:
         measured = ANALYSIS_REGISTRY[rule.analysis_code](project_id).headline_value
-        state = ('NOT_MEASURED' if measured is None                # never read as 0
+        # CB-5: a switched-off rule is still measured, shown greyed, and gets no verdict —
+        # "not yet agreed with the client" while never edited (row_version 1), else "switched off"
+        state = (None if not rule.is_enabled
+                 else 'NOT_MEASURED' if measured is None           # never read as 0
                  else 'ESCALATE' if breaches(measured, rule.escalate_value, rule.comparison)
                  else 'FLAG'  if breaches(measured, rule.threshold_value, rule.comparison)
                  else 'GREEN')
@@ -6069,21 +6083,24 @@ control_panel(project_id):
 negotiates — inside its own transaction. A rule joins the house tier only once its analysis has a
 headline (CT-4); the first four are `priced_diff` (net growth % from the agreed baseline), `coverage`
 (rows on the coverage report's warning lines), `solution_matrix` (TECHNOLOGY share %) and
-`interface_load` (INTERFACE FRs as % of live FRs). The rest of the table is the starting point each later
-slice signs off with Ben. These thresholds are starting points, not doctrine:
+`interface_load` (INTERFACE FRs as % of live FRs); then `requirement_volatility`, `org_impact_heatmap`,
+`stakeholder_engagement` and `data_migration_map` (CB-1…CB-4). A rule copied into a running engagement by
+`seeds.seed_control_rules` arrives switched off until the client agrees it (CB-5); a new project's arrive on.
+`benefit_gap` and `risk_register` are the starting point their slices sign off with Ben. These thresholds are
+starting points, not doctrine:
 
 | `analysis_code` | Flag | Escalate | Prescribed action |
 |---|---|---|---|
 | `priced_diff` | >5% cumulative effort growth | >10% | Raise a CR to steering; name the displacement |
-| `requirement_volatility` | area churns 2 baselines | 3 | Pull the area out of the current wave; re-run the workshop |
+| `requirement_volatility` | an area changed at 2 freezes running | 3 running | Pull the area out of the current wave; re-run the workshop |
 | `coverage` | any open gap at a gate | — | Assign owner + date per gap; do not pass the gate |
 | `solution_matrix` | TECHNOLOGY >70% of solutions | >85% | Commission the org/process workstream, or lower the benefit forecast |
 | `interface_load` | INTERFACE >25% of FRs | >35% | Stand up an integration workstream; book test environments |
-| `org_impact_heatmap` | unit in top decile of impact | top decile + zero issues raised | Dedicated change agent; capacity check; interview before sign-off |
-| `stakeholder_engagement` | org unit with zero issues raised | high impact + zero issues | Interview before sign-off — silence becomes rejection at UAT |
+| `org_impact_heatmap` | one unit R/A on >40% of changes | >60% | Dedicated change agent and a capacity check — they are usually the SMEs too |
+| `stakeholder_engagement` | a silent unit on >10% of changes | >25% | Interview before sign-off — silence becomes rejection at UAT |
 | `benefit_gap` | any solution with effort and no benefit | >20% of solutions | Challenge at the next gate |
 | `risk_register` | exposure ≥ 12 open | ≥ 16 | Mitigation owner + date; steering if unmitigated |
-| `data_migration_map` | entity with no source system | conflicting sources | Data ownership decision before design freeze |
+| `data_migration_map` | any entity with no source system or conflicting sources | >5 entities | Data ownership decision before design freeze |
 
 ---
 
@@ -6689,10 +6706,11 @@ Each is observable by someone who did not build it.
 71. **(D-19)** With `priced_diff` flagged at 5% and escalating at 10%, a project at 7%
     growth returns **FLAG**, at 12% returns **ESCALATE**, and each row carries the owning
     role and the prescribed action.
-72. **(D-19)** An L1 area whose BRs changed in two consecutive baselines appears in
-    `requirement_volatility` and raises its control rule to FLAG.
-73. **(D-19)** An org unit in the top decile of `org_impact_heatmap` with zero issues raised
-    appears in `stakeholder_engagement` as ESCALATE — the adoption-risk signal.
+72. **(D-19, CB-1)** An L1 area whose BRs changed at two consecutive freezes (v1→v2, v2→v3)
+    appears in `requirement_volatility` and raises its control rule to FLAG.
+73. **(D-19, CB-3)** An org unit Responsible or Accountable on more than 25 % of the changes, with
+    zero issues raised by it or its direct parent, makes `stakeholder_engagement` ESCALATE — the
+    adoption-risk signal.
 74. **(D-19)** Every analysis in the registry returns a `headline_value`, verified by a test
     that iterates the registry.
 75. **(S6)** A workbook containing an external entity declaration is rejected, not resolved.
