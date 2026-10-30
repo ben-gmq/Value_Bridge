@@ -48,12 +48,15 @@ def _side(db: Session, project_id: int, b) -> dict:
     return {"baseline": b, "nodes": nodes, "brs": brs, "members": members}
 
 
-def _touched(db: Session, project_id: int, a: dict, b: dict) -> set[int]:
+def _touched(db: Session, project_id: int, a: dict, b: dict) -> set[int] | None:
     """BRs added, changed or removed between two sides; a change to one of a BR's requirement lines is a change to the
-    BR (sara H2, as baseline._exposed). Lines one side never froze are new structure, not a change."""
+    BR (sara H2, as baseline._exposed). Lines one side never froze are new structure, not a change. None when the two
+    sides cannot be compared (SCHEMA_VERSION_MISMATCH): an empty list there would read as no churn (sara B1 M1)."""
     d = baseline.diff(db, project_id, a["baseline"], b["baseline"])
-    out = {r["source_id"] for r in d["entities"][BR]["rows"] if r["change"] in CHURN}
     lines = d["entities"].get(BRL, {})
+    if d["entities"][BR]["status"] != "OK" or lines.get("status", "OK") != "OK":
+        return None
+    out = {r["source_id"] for r in d["entities"][BR]["rows"] if r["change"] in CHURN}
     if not lines.get("not_frozen_in") and lines.get("rows"):
         la = baseline._side_rows(db, project_id, a["baseline"], BRL)
         lb = baseline._side_rows(db, project_id, b["baseline"], BRL)
@@ -71,8 +74,11 @@ def _churning(a: dict, b: dict, touched: set[int]) -> set[int]:
     out = set()
     for area in a["members"].keys() | b["members"].keys():
         was, now = a["members"].get(area, set()), b["members"].get(area, set())
-        if not was:
+        if area not in a["nodes"]:                        # brand new: churn only if a BR moved in from elsewhere
             if any(br in a["brs"] for br in now):
+                out.add(area)
+        elif not was:                                     # frozen empty, now holds BRs: an existing area (sara B1 L4)
+            if now:
                 out.add(area)
         elif was != now or (was | now) & touched:
             out.add(area)
@@ -90,7 +96,12 @@ def requirement_volatility(db: Session, project_id: int) -> dict:
         if not baseline.verify(db, b):
             return {**out, "headline": _head(reason="CHAIN_BASELINE_DAMAGED", baseline_label=b.version_label)}
     sides = [_side(db, project_id, b) for b in chain]
-    gens = [_churning(a, b, _touched(db, project_id, a, b)) for a, b in zip(sides, sides[1:])]
+    gens = []
+    for a, b in zip(sides, sides[1:]):
+        touched = _touched(db, project_id, a, b)
+        if touched is None:
+            return {**out, "headline": _head(reason="SCHEMA_VERSION_MISMATCH", baseline_label=b["baseline"].version_label)}
+        gens.append(_churning(a, b, touched))
     names: dict[int, dict] = {}
     for s in sides:                                       # the latest side naming an area wins
         for area in s["members"].keys() | {i for i, n in s["nodes"].items() if n["parent_bfc_node_id"] is None

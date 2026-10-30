@@ -318,7 +318,8 @@ def verdict(rule: ControlRule, m: dict) -> str | None:
 def _switched_on_ever(db: Session, rules: list[ControlRule]) -> set[int]:
     """Rules whose on/off a person has ever set — any CONTROL_RULE_CHANGED carrying is_enabled. A rule that is off and
     never was set arrived off from the backfill: "not yet agreed with the client" (CB-5, review round 2 N2 — naming
-    an owner does not make it "switched off")."""
+    an owner does not make it "switched off"). A rule copied off because its house row was off reads the same way
+    (sara B1 L6, accepted: the house tier switches rules off only when FTC has not agreed them either)."""
     ids = [r.control_rule_id for r in rules if not r.is_enabled]
     if not ids:
         return set()

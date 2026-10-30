@@ -655,6 +655,12 @@ place.
   with `is_active = false` (reachable only by SQL) is listed as "missing: run the seed", which the seed never re-adds;
   say RETIRED instead, or drop `is_active` from the read. (L5) every panel load re-verifies the agreed baseline and runs
   a full diff; time it on the demo showcase before the cloud and cache the integrity verdict per baseline if slow.
+- **2026-10-30 · slice Control-B1, volatility and data migration map (`sara`, PASS; M1, L4 fixed, L6 accepted):** (M2)
+  `services/control_reports` calls `baseline._Labeller` / `_side_rows` and `reports._Scope` / `_hier_key` / `_app_out`;
+  make them public or keep the cross-module use named in both modules' docstrings. (M3) every panel load verifies every
+  baseline and diffs every consecutive pair — measured at the design bound before merge (spec §12 N3); cache the
+  verdict per baseline (baselines never change) if the cloud showcase is slow. (L5) a BR whose frozen parent chain is
+  broken is left out of every area silently; count and show them.
 - **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
   preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
   shows a red outline with no mismatch message.

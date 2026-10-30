@@ -65,6 +65,7 @@
   "control.reason.NOT_BUILT": "This analysis is not measured yet",
   "control.reason.NO_BASELINE_PAIR": "Needs at least two frozen baselines",
   "control.reason.CHAIN_BASELINE_DAMAGED": "Baseline {label} failed its integrity check. Report this to an administrator.",
+  "control.reason.SCHEMA_VERSION_MISMATCH": "Baseline {label} cannot be compared with the one before it. Report this to an administrator.",
   "control.reason.AS_IS_OFF": "The As-is component is off",
   "control.reason.APPLICATION_OFF": "The Applications component is off",
   "control.reason.NO_TO_BE_ENTITIES": "No future-state requirement uses a data entity yet",

@@ -119,6 +119,25 @@ def test_a_moved_sub_tree_churns_both_areas_and_a_brand_new_one_does_not():
     a2 = _side({1: None, 2: None, 10: 1, 20: 2}, {100: 10, 200: 20})
     assert control_reports._churning(a2, c, touched={400}) == set()        # a new area, every BR ADDED
     assert control_reports._churning(a2, c, touched={100}) == {1}
+    empty = _side({1: None, 5: None, 10: 1, 50: 5}, {100: 10})               # area 5 frozen with no BR yet
+    gains = _side({1: None, 5: None, 10: 1, 50: 5}, {100: 10, 500: 50})
+    assert control_reports._churning(empty, gains, touched={500}) == {5}    # sara B1 L4: an existing area
+
+
+def test_two_sides_that_cannot_be_compared_are_not_measured(client, ed, monkeypatch):
+    """sara B1 M1: a schema-version mismatch on the BR entry is never read as no churn."""
+    scope(client, ed)
+    freeze(client, ed)
+    freeze(client, ed)
+    real = control_reports.baseline.diff
+
+    def mismatched(*a, **k):
+        d = real(*a, **k)
+        d["entities"]["business_requirement"] = {**d["entities"]["business_requirement"],
+                                                 "status": "SCHEMA_VERSION_MISMATCH", "rows": []}
+        return d
+    monkeypatch.setattr(control_reports.baseline, "diff", mismatched)
+    assert vol(client, ed)["headline"]["reason"] == "SCHEMA_VERSION_MISMATCH"
 
 
 # ---- 4. data migration map -------------------------------------------------------------------------------------------

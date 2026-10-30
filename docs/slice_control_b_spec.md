@@ -95,7 +95,9 @@ threshold is GREEN, as in Control-A.
   `GT 5`). Action: "Data ownership decision before design freeze".
 
 ## 3. Services (`services/reports.py` + `services/control.py`)
-- Four report functions in `reports.py`, each returning its table **and** its headline, so the tab and the panel can
+- Four report functions in `services/control_reports.py` (built: a module of their own beside `reports.py`, which
+  is already the slice 1f reports' file; it reads `baseline` and `reports` helpers — VB-005 Control-B1 M2), each
+  returning its table **and** its headline, so the tab and the panel can
   never disagree. They read through existing helpers: `baseline.list_baselines` / `diff` / `verify` for volatility;
   the RACI and solution links for impact; `reports.SUPPORTING` for sources. No new cross-project SQL.
 - `control.HOUSE_RULES` gains the four rows (panel order: after the Control-A four). `COMING` loses them.
