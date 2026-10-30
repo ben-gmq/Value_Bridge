@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from models import (ApplicationBfcNode, BfcNode, BfcNodeDataEntity, BfcNodeOrgRole, BrDataEntity, BrOrgRole, DataEntity, Issue, OrgRole,
                     OrgUnit, Stakeholder)
 from services import baseline, components, reports
+from services.code_master import resolve
 
 CHURN = ("ADDED", "CHANGED", "REMOVED")                    # a MOVED (re-order) is not churn
 BR, BRL, BFC = "business_requirement", "br_requirement_line", "bfc_node"
@@ -306,3 +307,87 @@ def stakeholder_engagement(db: Session, project_id: int) -> dict:
     if not silent:
         return {**out, "headline": _head(Decimal(0).quantize(CENT), **figures)}       # sara L1: as the panel
     return {**out, "headline": _head(silent[0]["share"], top_unit=silent[0]["org_unit_name"], **figures)}
+
+
+# ---- Control-C: where change lands and master data (docs/slice_control_c_spec.md §2; CC-1, CC-2) -------------------
+def _live_areas(sc: "reports._Scope") -> dict[int, int]:
+    """Each live to-be node's L1 area, keyed by the L1 node's id (never its hier_code, as CB-1). A node whose live
+    parent chain breaks has no area."""
+    nodes = {i: {"parent_bfc_node_id": n.parent_bfc_node_id} for i, n in sc.steps.items()}
+    return {i: a for i in nodes if (a := _l1_of(nodes, i)) is not None}
+
+
+def _area_out(n: BfcNode) -> dict:
+    return {"bfc_node_id": n.bfc_node_id, "hier_code": n.hier_code, "area_name": n.node_name}
+
+
+def process_change_intensity(db: Session, project_id: int) -> dict:
+    """§7.9 process_change_intensity: per L1 area, the live to-be process steps carrying a change (a live BR with a live,
+    non-rejected solution, as CB-2) and all its live process steps. Every changed step weighs the same (CC-1); the
+    solution categories are context. Headline = the busiest area's share of all changed steps."""
+    out = {"generated_at": _now(), "categories": None, "areas": None}
+    sc = reports._Scope(db, project_id)
+    if "SOLUTION" not in sc.on:
+        return {**out, "headline": _head(reason="SOLUTION_OFF")}
+    area_of = _live_areas(sc)
+    cats = [{"code": c.code, "label": c.label} for c in resolve(db, project_id, "SOLUTION_CATEGORY")]
+    steps: dict[int, set[int]] = {}
+    for i, n in sc.steps.items():
+        if n.is_process and i in area_of:
+            steps.setdefault(area_of[i], set()).add(i)
+    changed: dict[int, set[str]] = {}                    # step → the categories of its changes
+    for br_id, sol_id in sc.answers():
+        step = sc.brs[br_id].bfc_node_id
+        if sc.steps[step].is_process and step in area_of:
+            changed.setdefault(step, set()).add(sc.sols[sol_id].category_code)
+    rows = []
+    for area, mine in steps.items():
+        hit = mine & changed.keys()
+        rows.append({**_area_out(sc.steps[area]), "steps": len(mine), "changed_steps": len(hit),
+                     "share": _pct(len(hit), len(changed)) if changed else None,
+                     "by_category": {c["code"]: sum(1 for s in hit if c["code"] in changed[s]) for c in cats}})
+    rows.sort(key=lambda r: reports._hier_key(r["hier_code"]))
+    out = {**out, "categories": cats, "areas": rows}
+    figures = {"changed_steps": len(changed), "steps": sum(r["steps"] for r in rows), "areas": len(rows)}
+    if len(rows) < 2:                                     # one area always reads 100 %
+        return {**out, "headline": _head(reason="FEWER_THAN_TWO_AREAS", **figures)}
+    if not changed:
+        return {**out, "headline": _head(reason="NO_CHANGES", **figures)}
+    top = max(r["changed_steps"] for r in rows)
+    busiest = [r for r in rows if r["changed_steps"] == top]          # chart order: the first named on a tie
+    return {**out, "headline": _head(busiest[0]["share"], top_area=busiest[0]["area_name"],
+                                     areas_at_top=len(busiest), **figures)}
+
+
+MASTER_AREAS = 3                                          # CC-2: used under three or more L1 areas
+
+
+def master_data_candidates(db: Session, project_id: int) -> dict:
+    """§7.9 master_data_candidates: live entities used by live to-be BRs under three or more L1 areas. Headline = those
+    with no business owner noted (empty or spaces; any other text counts, assumption C1)."""
+    out = {"generated_at": _now(), "entities": None}
+    sc = reports._Scope(db, project_id)
+    area_of = _live_areas(sc)
+    ents = {e.data_entity_id: e for e in db.scalars(select(DataEntity).where(
+        DataEntity.project_id == project_id, DataEntity.is_active))}
+    used: dict[int, set[int]] = {}
+    for br_id, de_id in db.execute(select(BrDataEntity.br_id, BrDataEntity.data_entity_id).where(
+            BrDataEntity.project_id == project_id, BrDataEntity.is_active)):
+        if br_id in sc.brs and de_id in ents:
+            used.setdefault(de_id, set()).add(br_id)
+    if not used:
+        return {**out, "headline": _head(reason="NO_ENTITIES_USED")}
+    rows = []
+    for de_id, brs in used.items():
+        areas = {area_of[sc.brs[b].bfc_node_id] for b in brs if sc.brs[b].bfc_node_id in area_of}
+        if len(areas) < MASTER_AREAS:
+            continue
+        e = ents[de_id]
+        note = (e.business_owner_note or "").strip() or None
+        rows.append({**_entity_out(e), "business_owner_note": note, "br_count": len(brs),
+                     "areas": sorted((_area_out(sc.steps[a]) for a in areas),
+                                     key=lambda a: reports._hier_key(a["hier_code"]))})
+    rows.sort(key=lambda r: (r["business_owner_note"] is not None, -len(r["areas"]), r["de_number"]))
+    unowned = sum(1 for r in rows if r["business_owner_note"] is None)
+    return {**out, "entities": rows,
+            "headline": _head(unowned, candidates=len(rows), entities_used=len(used))}

@@ -158,3 +158,44 @@ class EngagementOut(BaseModel):
     generated_at: str
     units: list[EngagementUnit] | None         # None: not measured
     headline: Headline
+
+
+# ---- Control-C report tabs (docs/slice_control_c_spec.md §5) -------------------------------------------------------
+class Category(BaseModel):
+    code: str
+    label: str
+
+
+class ChangeArea(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+    steps: int
+    changed_steps: int
+    share: Decimal | None                      # None: no changed step anywhere
+    by_category: dict[str, int]                # context only, never counted (CC-1)
+
+
+class ChangeIntensityOut(BaseModel):
+    generated_at: str
+    categories: list[Category] | None          # None: SOLUTION off
+    areas: list[ChangeArea] | None
+    headline: Headline
+
+
+class AreaRef(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+
+
+class MasterEntity(EntityRef):
+    business_owner_note: str | None            # None: no owner noted (blank counts as none)
+    br_count: int
+    areas: list[AreaRef]
+
+
+class MasterDataOut(BaseModel):
+    generated_at: str
+    entities: list[MasterEntity] | None        # None: no entity used yet
+    headline: Headline

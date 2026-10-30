@@ -7,8 +7,8 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, project_ctx
-from schemas.control import (ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut, EngagementOut,
-                             OrgImpactOut, VolatilityOut)
+from schemas.control import (ChangeIntensityOut, ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut,
+                             EngagementOut, MasterDataOut, OrgImpactOut, VolatilityOut)
 from services import control, control_reports
 
 router = GuardedRouter(tags=["control"])
@@ -52,3 +52,14 @@ def stakeholder_engagement(project_id: int, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/data-migration", response_model=DataMigrationOut, **_read.route)
 def data_migration(project_id: int, db: Session = Depends(get_db)):
     return control_reports.data_migration_map(db, project_id)
+
+
+# ---- Control-C report tabs (docs/slice_control_c_spec.md §5) -------------------------------------------------------
+@router.get("/projects/{project_id}/change-intensity", response_model=ChangeIntensityOut, **_read.route)
+def change_intensity(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.process_change_intensity(db, project_id)
+
+
+@router.get("/projects/{project_id}/master-data", response_model=MasterDataOut, **_read.route)
+def master_data(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.master_data_candidates(db, project_id)

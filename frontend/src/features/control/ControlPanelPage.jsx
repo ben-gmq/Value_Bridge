@@ -22,6 +22,7 @@ const REPORT = {
   solution_matrix: (p) => links.reports(p, 'solution_matrix'), interface_load: (p) => links.interfaces(p),
   requirement_volatility: (p) => links.reports(p, 'volatility'), data_migration_map: (p) => links.reports(p, 'data_migration'),
   org_impact_heatmap: (p) => links.reports(p, 'org_impact'), stakeholder_engagement: (p) => links.reports(p, 'engagement'),
+  process_change_intensity: (p) => links.reports(p, 'change_intensity'), master_data_candidates: (p) => links.reports(p, 'master_data'),
 };
 
 const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
@@ -56,6 +57,10 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
           {t('control.migration', { none: f.no_source, two: f.conflicting, n: f.in_scope })}
         </Typography>)}
+      {r.analysis_code === 'process_change_intensity' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.intensity', { area: f.top_area, n: f.changed_steps })}</Typography>)}
+      {r.analysis_code === 'master_data_candidates' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.master', { n: f.candidates, used: f.entities_used })}</Typography>)}
       {r.analysis_code === 'data_migration_map' && f.not_seen_on_as_is > 0 && (
         <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.notMapped', { n: f.not_seen_on_as_is })}</Typography>)}
     </Stack>

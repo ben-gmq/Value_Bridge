@@ -85,5 +85,11 @@
   "control.withoutRa": "{n} changes have no responsible or accountable role yet",
   "control.withoutRa_one": "1 change has no responsible or accountable role yet",
   "control.silent": "{unit} has raised nothing · {s} of {n} affected units silent",
-  "control.allHeard": "Every one of the {n} affected units has raised an issue, or its parent unit has"
+  "control.allHeard": "Every one of the {n} affected units has raised an issue, or its parent unit has",
+  "control.analysis.process_change_intensity": "Where change lands",
+  "control.analysis.master_data_candidates": "Shared data with no owner",
+  "control.reason.FEWER_THAN_TWO_AREAS": "Fewer than two top-level areas hold a process step: one area always carries all the change",
+  "control.reason.NO_ENTITIES_USED": "No future-state requirement uses a data entity yet",
+  "control.intensity": "The largest share lands on {area}, of {n} changed process steps",
+  "control.master": "{n} entities are used in three or more areas, of {used} in use"
 }

@@ -23,7 +23,7 @@ from services.lifecycle import check_version
 
 CENT = Decimal("0.01")
 
-# CT-4: the analyses with a headline today, in panel order (Control-B in its spec's order, §2). (code, unit, comparison, flag, escalate, action)
+# CT-4: the analyses with a headline today, in panel order (Control-B / C in their specs' order, §2). (code, unit, comparison, flag, escalate, action)
 HOUSE_RULES = (
     ("priced_diff", "PCT", "PCT_GT", Decimal(5), Decimal(10),
      "Raise a CR to steering; name the displacement"),
@@ -45,6 +45,12 @@ HOUSE_RULES = (
      "Interview before sign-off — silence becomes rejection at UAT"),
     ("data_migration_map", "COUNT", "GT", Decimal(0), Decimal(5),
      "Data ownership decision before design freeze"),
+    # Control-C (CC-1, CC-2): more than half of the changed steps in one L1 area flags, over 70 % escalates; any shared
+    # entity with no business owner flags, more than five escalate.
+    ("process_change_intensity", "PCT", "PCT_GT", Decimal(50), Decimal(70),
+     "Check the change workload and the change-management plan for that area before the next gate"),
+    ("master_data_candidates", "COUNT", "GT", Decimal(0), Decimal(5),
+     "Assign a single owner; it becomes a managed cross-workstream dependency"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
@@ -301,6 +307,10 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _from_report(control_reports.stakeholder_engagement(db, project_id))
     if code == "data_migration_map":
         return _from_report(control_reports.data_migration_map(db, project_id))
+    if code == "process_change_intensity":
+        return _from_report(control_reports.process_change_intensity(db, project_id))
+    if code == "master_data_candidates":
+        return _from_report(control_reports.master_data_candidates(db, project_id))
     return _measure(reason="NOT_BUILT")
 
 

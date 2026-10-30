@@ -215,4 +215,4 @@ def test_every_registry_analysis_returns_a_headline_and_every_house_rule_is_buil
         h = control.headline(db, ed["p"], code, on)
         assert set(h) == {"measured", "reason", "figures"}
         assert (h["reason"] == "NOT_BUILT") == (code not in control.ORDER), code
-    assert len(control.ORDER) == 8
+    assert len(control.ORDER) == 10                        # Control-C C1 (CC-1, CC-2)
