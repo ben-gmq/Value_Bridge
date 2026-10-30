@@ -665,6 +665,11 @@ place.
   L2 wording fixed):** (L2) on a tie for the highest share the panel names one unit by code order; pass a `tied` count.
   (L5) the panel computes `org_impact_heatmap` twice (its own row, and inside `stakeholder_engagement`) and the as-is
   step query is written twice in `control_reports`; pass the computed impact in and share one helper if the panel is slow.
+- **2026-10-30 · slice Control-C C1 + C2, where change lands, master data, FTC defaults and reset (`sara`, no CRITICAL /
+  HIGH / MEDIUM; L1 fixed — a retired rule or default no longer splits the reset preview from the write):** (L2) the
+  platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
+  `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
+  the editor-gets-403 check over it.
 - **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
   preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
   shows a red outline with no mismatch message.

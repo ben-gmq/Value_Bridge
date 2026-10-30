@@ -83,7 +83,7 @@ def copy_to_project(db: Session, project_id: int, actor_id: int, require_house: 
     """Copy each house rule the project lacks (CT-4); owner NULL until the project names one (CT-1). No commit —
     create_project owns the transaction. An empty house tier is a 409 when `require_house` (create_project).
     CB-5: a running engagement's copies arrive switched off (`enabled=False`) until the client agrees them."""
-    house = db.scalars(select(ControlRule).where(ControlRule.project_id.is_(None))
+    house = db.scalars(select(ControlRule).where(ControlRule.project_id.is_(None), ControlRule.is_active)
                        .order_by(ControlRule.control_rule_id)).all()
     # round 2 N4: every analysis the code can measure must have its house row, not merely one row.
     if require_house and set(ORDER) - {h.analysis_code for h in house}:
@@ -302,14 +302,18 @@ def _stamp(rules: list[ControlRule], house: list[ControlRule]) -> dict:
             "house": {h.analysis_code: h.row_version for h in house}}
 
 
-def _plan(rules: list[ControlRule], house: list[ControlRule]) -> tuple[list[tuple], list[ControlRule]]:
-    """(rule, house row, diff) for each rule a reset would change, and the house rows the project lacks."""
+def _plan(db: Session, project_id: int, rules: list[ControlRule],
+          house: list[ControlRule]) -> tuple[list[tuple], list[ControlRule]]:
+    """(rule, house row, diff) for each rule a reset would change, and the house rows the project lacks. A rule the
+    project holds retired is not "lacking" — copy_to_project never re-adds it, so the preview never offers it (sara L1)."""
     mine = {r.analysis_code: r for r in rules}
+    held = set(db.scalars(select(ControlRule.analysis_code).where(ControlRule.project_id == project_id)))
     changes, added = [], []
     for h in house:
         r = mine.get(h.analysis_code)
         if r is None:
-            added.append(h)
+            if h.analysis_code not in held:
+                added.append(h)
             continue
         diff = {f: (getattr(r, f), getattr(h, f)) for f in RESET_FIELDS if getattr(r, f) != getattr(h, f)}
         if diff:
@@ -323,7 +327,7 @@ def _side(row) -> dict:
 
 def reset_preview(db: Session, project_id: int) -> dict:
     rules, house = _rules(db, project_id), _house(db)
-    changes, added = _plan(rules, house)
+    changes, added = _plan(db, project_id, rules, house)
     return {"changes": [{"analysis_code": r.analysis_code, "unit": UNIT.get(r.analysis_code, "COUNT"),
                          "comparison": r.comparison, "is_enabled": r.is_enabled, "current": _side(r),
                          "default": _side(h), "fields": list(diff)} for r, h, diff in changes],
@@ -340,7 +344,7 @@ def reset(db: Session, actor: AppUser, project_id: int, change_rationale: str, s
     house = _house(db, lock="share")
     if _stamp(rules, house) != {"project": stamp.get("project"), "house": stamp.get("house")}:
         raise HTTPException(409, STALE_RESET)
-    changes, added = _plan(rules, house)
+    changes, added = _plan(db, project_id, rules, house)
     if not changes and not added:
         db.rollback()
         return {"changed": [], "added": []}

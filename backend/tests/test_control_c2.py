@@ -161,3 +161,19 @@ def test_a_viewer_cannot_preview_or_reset_and_an_outsider_sees_nothing(client, e
     do_reset(client, ed, stamp, headers=ed["rv"], expect=403)
     preview(client, ed, headers=ed["out"], expect=404)
     do_reset(client, ed, stamp, headers=ed["out"], expect=404)
+
+
+def test_a_retired_rule_is_never_offered_as_added_and_a_retired_default_is_never_copied(client, world, ed, db):
+    """sara C2 L1: the preview and the write agree when a project rule or a company default is retired."""
+    with owner_engine().begin() as c:
+        c.execute(text(f"UPDATE control_rule SET is_active = false WHERE project_id = {ed['p']} "
+                       "AND analysis_code = 'coverage'"))
+    pv = preview(client, ed)
+    assert pv["added"] == [] and pv["changes"] == []
+    assert do_reset(client, ed, pv["stamp"]) == {"changed": [], "added": []}
+    with owner_engine().begin() as c:
+        c.execute(text(f"DELETE FROM control_rule WHERE project_id = {ed['p']} AND analysis_code = 'interface_load'"))
+        c.execute(text("UPDATE control_rule SET is_active = false WHERE project_id IS NULL "
+                       "AND analysis_code = 'interface_load'"))
+    assert preview(client, ed)["added"] == []
+    assert "interface_load" not in rules(client, ed)
