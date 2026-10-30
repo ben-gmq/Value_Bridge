@@ -88,7 +88,7 @@ def requirement_volatility(db: Session, project_id: int) -> dict:
         return {**out, "headline": _head(reason="NO_BASELINE_PAIR", baselines=len(chain))}
     for b in chain:                                       # the whole chain, on the tab and the panel alike (R1-D3)
         if not baseline.verify(db, b):
-            return {**out, "headline": _head(reason="BASELINE_DAMAGED", baseline_label=b.version_label)}
+            return {**out, "headline": _head(reason="CHAIN_BASELINE_DAMAGED", baseline_label=b.version_label)}
     sides = [_side(db, project_id, b) for b in chain]
     gens = [_churning(a, b, _touched(db, project_id, a, b)) for a, b in zip(sides, sides[1:])]
     names: dict[int, dict] = {}

@@ -62,5 +62,18 @@
   "control.dialog.save": "Save",
   "control.saved": "Rule saved",
   "control.stale": "Someone changed this rule meanwhile. The panel has been reloaded: open Edit again to see their change.",
-  "control.reason.NOT_BUILT": "This analysis is not measured yet"
+  "control.reason.NOT_BUILT": "This analysis is not measured yet",
+  "control.reason.NO_BASELINE_PAIR": "Needs at least two frozen baselines",
+  "control.reason.CHAIN_BASELINE_DAMAGED": "Baseline {label} failed its integrity check. Report this to an administrator.",
+  "control.reason.AS_IS_OFF": "The As-is component is off",
+  "control.reason.APPLICATION_OFF": "The Applications component is off",
+  "control.reason.NO_TO_BE_ENTITIES": "No future-state requirement uses a data entity yet",
+  "control.reason.AS_IS_NOT_MAPPED": "None of the {n} data entities the future state uses is mapped on today's processes yet",
+  "control.volatility": "Longest run of consecutive freezes in which one area changed, over {n} comparisons",
+  "control.migration": "{none} with no source system · {two} held by two or more systems, of {n} in scope",
+  "control.notMapped": "{n} never seen on today's processes: new data, or not mapped yet",
+  "control.verdict.pending": "Not yet agreed",
+  "control.pendingTitle": "Not yet agreed with the client",
+  "control.pendingIntro": "These rules were added to this engagement after it started. They are measured but give no verdict until the client agrees the threshold and someone switches them on.",
+  "control.pendingNote": "Copied into this engagement, not yet agreed"
 }

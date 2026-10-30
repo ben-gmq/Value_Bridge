@@ -25,7 +25,10 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   then `./venv/bin/alembic upgrade head && ./venv/bin/python -m seeds.seed_code_master && ./venv/bin/python -m seeds.seed_project_templates && ./venv/bin/python -m seeds.seed_control_rules`
   (no house control rules → `create_project` is 409).
   **Control-A deploy (and every later control slice that adds a rule):** `seeds.seed_control_rules --actor-email <admin>`
-  adds the house rules and copies any a live project lacks (idempotent).
+  adds the house rules and copies any a live project lacks (idempotent). Copies into a live project arrive switched
+  off — measured, no verdict, "not yet agreed" — until someone switches them on (CB-5); a new project's arrive on.
+  **Control-B1 deploy:** run it straight after the deploy (adds `requirement_volatility`, `data_migration_map`);
+  until it runs `create_project` is 409.
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's

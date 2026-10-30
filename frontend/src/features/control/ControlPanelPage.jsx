@@ -20,6 +20,7 @@ const TONE = { GREEN: 'ok', FLAG: 'caution', ESCALATE: 'escalate', NOT_MEASURED:
 const REPORT = {
   priced_diff: (p) => links.baselines(p), coverage: (p) => links.reports(p, 'coverage'),
   solution_matrix: (p) => links.reports(p, 'solution_matrix'), interface_load: (p) => links.interfaces(p),
+  requirement_volatility: (p) => links.reports(p, 'volatility'), data_migration_map: (p) => links.reports(p, 'data_migration'),
 };
 
 const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
@@ -27,7 +28,7 @@ const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}$
 function Figures({ r }) {
   const f = r.figures ?? {};
   if (r.reason) {
-    return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t(`control.reason.${r.reason}`, { label: f.baseline_label })}</Typography>;
+    return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t(`control.reason.${r.reason}`, { label: f.baseline_label, n: f.in_scope })}</Typography>;
   }
   return (
     <Stack sx={{ gap: 0.5 }}>
@@ -39,21 +40,32 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.unrated', { n: f.unrated_count })}</Typography>)}
       {r.analysis_code === 'interface_load' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.iface', { i: f.interface_count, n: f.fr_count })}</Typography>)}
+      {r.analysis_code === 'requirement_volatility' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.volatility', { n: f.generations })}</Typography>)}
+      {r.analysis_code === 'data_migration_map' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {t('control.migration', { none: f.no_source, two: f.conflicting, n: f.in_scope })}
+        </Typography>)}
+      {r.analysis_code === 'data_migration_map' && f.not_seen_on_as_is > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.notMapped', { n: f.not_seen_on_as_is })}</Typography>)}
     </Stack>
   );
 }
 
 function RuleRow({ projectId, r, canEdit, onEdit }) {
   const lt = r.comparison === 'LT';
-  const changed = r.last_changed_at
-    ? t('control.lastChanged', { date: fmtDate(r.last_changed_at), name: r.last_changed_by ?? '' })
-    : t('control.houseDefault', { date: fmtDate(r.agreed_at) });
+  // CB-5: a rule copied into a running engagement is off until the client agrees it — measured, greyed, no verdict, and
+  // no "agreed" date shown (review round 2 N2).
+  const pending = r.off_state === 'NOT_YET_AGREED';
+  const changed = pending ? t('control.pendingNote')
+    : r.last_changed_at ? t('control.lastChanged', { date: fmtDate(r.last_changed_at), name: r.last_changed_by ?? '' })
+      : t('control.houseDefault', { date: fmtDate(r.agreed_at) });
   return (
     <Card title={t(`control.analysis.${r.analysis_code}`)}
       action={(
         <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
           {r.is_enabled ? <Status tone={TONE[r.verdict]}>{t(`control.verdict.${r.verdict}`)}</Status>
-            : <Tag tone="neutral">{t('control.verdict.off')}</Tag>}
+            : <Tag tone="neutral">{t(pending ? 'control.verdict.pending' : 'control.verdict.off')}</Tag>}
           {canEdit && <Button size="small" variant="outlined" onClick={() => onEdit(r)}>{t('control.edit')}</Button>}
         </Stack>)}
       sx={r.is_enabled ? undefined : { opacity: 0.7 }}>
@@ -156,7 +168,15 @@ export default function ControlPanelPage() {
     <Page title={t('control.title')} subtitle={t('control.subtitle')} error={q.error && errorText(q.error)}>
       {d && (
         <Stack sx={{ gap: 2 }}>
-          {d.rows.map((r) => <RuleRow key={r.analysis_code} projectId={projectId} r={r} canEdit={canEdit} onEdit={setEditing} />)}
+          {d.rows.filter((r) => r.off_state !== 'NOT_YET_AGREED').map((r) => (
+            <RuleRow key={r.analysis_code} projectId={projectId} r={r} canEdit={canEdit} onEdit={setEditing} />))}
+          {d.rows.some((r) => r.off_state === 'NOT_YET_AGREED') && (
+            <Box>
+              <Typography variant="h6" component="h2" sx={{ mt: 1 }}>{t('control.pendingTitle')}</Typography>
+              <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('control.pendingIntro')}</Typography>
+            </Box>)}
+          {d.rows.filter((r) => r.off_state === 'NOT_YET_AGREED').map((r) => (
+            <RuleRow key={r.analysis_code} projectId={projectId} r={r} canEdit={canEdit} onEdit={setEditing} />))}
           {d.coming.length > 0 && (
             <Card title={t('control.coming')}>
               <Box component="ul" sx={{ m: 0, pl: 2.5 }}>

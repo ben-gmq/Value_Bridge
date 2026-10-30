@@ -96,8 +96,8 @@ def test_a_damaged_baseline_anywhere_in_the_chain_is_not_measured_on_tab_and_pan
     freeze(client, ed)
     monkeypatch.setattr(control_reports.baseline, "verify", lambda db, b: b.baseline_id != first["baseline_id"])
     h = vol(client, ed)["headline"]
-    assert (h["reason"], h["baseline_label"]) == ("BASELINE_DAMAGED", first["version_label"])
-    assert row(panel(client, ed), "requirement_volatility")["reason"] == "BASELINE_DAMAGED"
+    assert (h["reason"], h["baseline_label"]) == ("CHAIN_BASELINE_DAMAGED", first["version_label"])
+    assert row(panel(client, ed), "requirement_volatility")["reason"] == "CHAIN_BASELINE_DAMAGED"
 
 
 def _side(nodes, brs):

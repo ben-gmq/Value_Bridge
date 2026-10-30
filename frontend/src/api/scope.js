@@ -179,6 +179,8 @@ export const controlApi = {                                           // Control
   panel: (projectId) => d(http.get(`${P(projectId)}/control-panel`)),
   rules: (projectId) => d(http.get(`${P(projectId)}/control-rules`)),
   update: (projectId, analysisCode, body) => d(http.patch(`${P(projectId)}/control-rules/${analysisCode}`, body)),
+  volatility: (projectId) => d(http.get(`${P(projectId)}/requirement-volatility`)),   // Control-B1 (spec §4)
+  dataMigration: (projectId) => d(http.get(`${P(projectId)}/data-migration`)),
 };
 
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
