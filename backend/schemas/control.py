@@ -46,6 +46,7 @@ class PanelRow(ControlRuleOut):
     reason: str | None                         # why NOT_MEASURED (a code the screen translates)
     figures: dict                              # the analysis' supporting numbers (e.g. added / removed days)
     verdict: str | None                        # GREEN | FLAG | ESCALATE | NOT_MEASURED; None when switched off
+    off_state: str | None                      # NOT_YET_AGREED | SWITCHED_OFF; None when on (CB-5)
 
 
 class Coming(BaseModel):
@@ -57,3 +58,59 @@ class ControlPanelOut(BaseModel):
     generated_at: str
     rows: list[PanelRow]
     coming: list[Coming]
+
+
+# ---- Control-B report tabs (docs/slice_control_b_spec.md §4) -------------------------------------------------------
+class Headline(BaseModel):
+    model_config = ConfigDict(extra="allow")   # the analysis' supporting figures ride beside measured / reason
+    measured: Decimal | None
+    reason: str | None
+
+
+class VolatilityGeneration(BaseModel):
+    from_label: str
+    to_label: str
+    churning: int
+
+
+class VolatilityArea(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+    in_latest: bool
+    churned: list[bool]                        # one per generation, oldest first
+    current_run: int
+
+
+class VolatilityOut(BaseModel):
+    generated_at: str
+    generations: list[VolatilityGeneration]
+    areas: list[VolatilityArea]
+    headline: Headline
+
+
+class AppRef(BaseModel):
+    application_id: int
+    application_code: str
+    application_name: str
+
+
+class EntityRef(BaseModel):
+    data_entity_id: int
+    de_number: str
+    de_name: str
+
+
+class MigrationEntity(EntityRef):
+    state: str                                 # OK | NO_SOURCE | CONFLICTING
+    as_is_steps: int
+    sources: list[AppRef]
+    targets: list[AppRef] | None               # None: SOLUTION off
+
+
+class DataMigrationOut(BaseModel):
+    generated_at: str
+    entities: list[MigrationEntity] | None     # None: AS_IS or APPLICATION off
+    new_data: list[EntityRef] | None
+    retiring: list[EntityRef] | None
+    headline: Headline

@@ -7,8 +7,8 @@ from auth.dependencies import current_user
 from database import get_db
 from models import AppUser
 from routers.guards import GuardedRouter, project_ctx
-from schemas.control import ControlPanelOut, ControlRuleIn, ControlRuleOut
-from services import control
+from schemas.control import ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut, VolatilityOut
+from services import control, control_reports
 
 router = GuardedRouter(tags=["control"])
 _read = project_ctx("VIEW")
@@ -30,3 +30,14 @@ def maintain_control_rule(project_id: int, analysis_code: str, body: ControlRule
                           user: AppUser = Depends(current_user), db: Session = Depends(get_db)):
     values = body.model_dump(exclude={"change_rationale", "row_version"})
     return control.update_rule(db, user, project_id, analysis_code, values, body.change_rationale, body.row_version)
+
+
+# ---- Control-B report tabs (docs/slice_control_b_spec.md §4): read-only, VIEW, no component ------------------------
+@router.get("/projects/{project_id}/requirement-volatility", response_model=VolatilityOut, **_read.route)
+def requirement_volatility(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.requirement_volatility(db, project_id)
+
+
+@router.get("/projects/{project_id}/data-migration", response_model=DataMigrationOut, **_read.route)
+def data_migration(project_id: int, db: Session = Depends(get_db)):
+    return control_reports.data_migration_map(db, project_id)

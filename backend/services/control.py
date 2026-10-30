@@ -16,9 +16,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import AppUser, Baseline, ControlRule, FunctionRequirement, OrgRole, Project
+from models import AppUser, AuditEvent, Baseline, ControlRule, FunctionRequirement, OrgRole, Project
 from models.control import REGISTRY
-from services import audit, baseline, components, reports
+from services import audit, baseline, components, control_reports, reports
 from services.lifecycle import check_version
 
 CENT = Decimal("0.01")
@@ -33,12 +33,17 @@ HOUSE_RULES = (
      "Commission the org/process workstream, or lower the benefit forecast"),
     ("interface_load", "PCT", "PCT_GT", Decimal(25), Decimal(35),
      "Stand up an integration workstream; book test environments"),
+    # Control-B1 (CB-1, CB-4): an area changed at two freezes running flags, three escalates; any entity needing a
+    # data-ownership decision flags, more than five escalate.
+    ("requirement_volatility", "COUNT", "GT", Decimal(1), Decimal(2),
+     "Pull the area out of the current wave; re-run the workshop"),
+    ("data_migration_map", "COUNT", "GT", Decimal(0), Decimal(5),
+     "Data ownership decision before design freeze"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
 # Shown under the panel: the analyses still to come and what brings each (spec §1).
-COMING = (("requirement_volatility", "CONTROL_B"), ("org_impact_heatmap", "CONTROL_B"),
-          ("stakeholder_engagement", "CONTROL_B"), ("data_migration_map", "CONTROL_B"),
+COMING = (("org_impact_heatmap", "CONTROL_B"), ("stakeholder_engagement", "CONTROL_B"),
           ("benefit_gap", "BENEFITS"), ("risk_register", "RISKS"))
 EDITABLE = ("threshold_value", "escalate_value", "owner_org_role_id", "prescribed_action", "escalation_path",
             "is_enabled")
@@ -61,9 +66,11 @@ def seed_house(db: Session) -> list[str]:
     return added
 
 
-def copy_to_project(db: Session, project_id: int, actor_id: int, require_house: bool = False) -> list[str]:
+def copy_to_project(db: Session, project_id: int, actor_id: int, require_house: bool = False,
+                    enabled: bool = True) -> list[str]:
     """Copy each house rule the project lacks (CT-4); owner NULL until the project names one (CT-1). No commit —
-    create_project owns the transaction. An empty house tier is a 409 when `require_house` (create_project)."""
+    create_project owns the transaction. An empty house tier is a 409 when `require_house` (create_project).
+    CB-5: a running engagement's copies arrive switched off (`enabled=False`) until the client agrees them."""
     house = db.scalars(select(ControlRule).where(ControlRule.project_id.is_(None))
                        .order_by(ControlRule.control_rule_id)).all()
     # round 2 N4: every analysis the code can measure must have its house row, not merely one row.
@@ -77,7 +84,7 @@ def copy_to_project(db: Session, project_id: int, actor_id: int, require_house: 
         db.add(ControlRule(project_id=project_id, analysis_code=h.analysis_code, comparison=h.comparison,
                            threshold_value=h.threshold_value, escalate_value=h.escalate_value,
                            prescribed_action=h.prescribed_action, escalation_path=h.escalation_path,
-                           is_enabled=h.is_enabled, is_house_default=False, created_by=actor_id))
+                           is_enabled=h.is_enabled and enabled, is_house_default=False, created_by=actor_id))
         added.append(h.analysis_code)
     db.flush()
     return added
@@ -95,7 +102,7 @@ def backfill(db: Session, actor_email: str | None) -> dict:
     if actor is None or not actor.is_active or not actor.is_platform_admin:
         raise SystemExit("--actor-email must be an active platform admin")
     for p in db.scalars(select(Project).where(Project.is_active).order_by(Project.project_id)).all():
-        added = copy_to_project(db, p.project_id, actor.app_user_id)
+        added = copy_to_project(db, p.project_id, actor.app_user_id, enabled=False)          # CB-5
         if added:
             audit.record(db, "CONTROL_RULES_SEEDED", actor_id=actor.app_user_id, project_id=p.project_id,
                          detail={"analysis_codes": added, "os_user": getpass.getuser(),
@@ -266,6 +273,12 @@ def _interface_load(db: Session, project_id: int, on: frozenset) -> dict:
     return _measure(Decimal(iface) * 100 / Decimal(total), interface_count=iface, fr_count=total)
 
 
+def _from_report(report: dict) -> dict:
+    """A Control-B report's own headline, so the tab and the panel read one computation (spec §3)."""
+    h = dict(report["headline"])
+    return _measure(h.pop("measured"), h.pop("reason"), **h)
+
+
 def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
     if code == "priced_diff":
         return _priced_diff(db, project_id, on)
@@ -275,6 +288,10 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _solution_matrix(db, project_id, on)
     if code == "interface_load":
         return _interface_load(db, project_id, on)
+    if code == "requirement_volatility":
+        return _from_report(control_reports.requirement_volatility(db, project_id))
+    if code == "data_migration_map":
+        return _from_report(control_reports.data_migration_map(db, project_id))
     return _measure(reason="NOT_BUILT")
 
 
@@ -298,18 +315,32 @@ def verdict(rule: ControlRule, m: dict) -> str | None:
     return "GREEN"
 
 
+def _switched_on_ever(db: Session, rules: list[ControlRule]) -> set[int]:
+    """Rules whose on/off a person has ever set — any CONTROL_RULE_CHANGED carrying is_enabled. A rule that is off and
+    never was set arrived off from the backfill: "not yet agreed with the client" (CB-5, review round 2 N2 — naming
+    an owner does not make it "switched off")."""
+    ids = [r.control_rule_id for r in rules if not r.is_enabled]
+    if not ids:
+        return set()
+    return set(db.scalars(select(AuditEvent.target_id).where(
+        AuditEvent.event_type == "CONTROL_RULE_CHANGED", AuditEvent.target_table == "control_rule",
+        AuditEvent.target_id.in_(ids), AuditEvent.detail["to"].has_key("is_enabled"))))
+
+
 def panel(project_id: int) -> dict:
     """§7.13 control_panel: one read-only REPEATABLE READ snapshot (as diff_for_api), so every figure describes one
-    state of the data. A disabled rule is listed with no verdict and is not measured."""
+    state of the data. CB-5: a switched-off rule is still measured and shown with no verdict."""
     with SessionLocal() as db:
         db.connection(execution_options={"isolation_level": "REPEATABLE READ", "postgresql_readonly": True})
         on = frozenset(components.enabled(db, project_id))
         rules = _rules(db, project_id)
         roles, users = _names(db, rules)
+        set_by_hand = _switched_on_ever(db, rules)
         rows = []
         for r in rules:
-            m = headline(db, project_id, r.analysis_code, on) if r.is_enabled else _measure()
-            rows.append({**_rule_out(r, roles, users), **m, "verdict": verdict(r, m)})
+            m = headline(db, project_id, r.analysis_code, on)
+            off = None if r.is_enabled else "SWITCHED_OFF" if r.control_rule_id in set_by_hand else "NOT_YET_AGREED"
+            rows.append({**_rule_out(r, roles, users), **m, "verdict": verdict(r, m), "off_state": off})
         db.rollback()
     have = {r["analysis_code"] for r in rows}
     # round 2 N4: a measurable rule the project lacks is listed too, so a missing rule always shows somewhere.

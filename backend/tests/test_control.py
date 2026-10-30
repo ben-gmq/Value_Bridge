@@ -19,7 +19,7 @@ from tests.test_function_requirement_api import fr
 from tests.test_scope_api import API, ed  # noqa: F401 — ed is a fixture
 from tests.test_solution_api import link, sol
 
-CODES = ["priced_diff", "coverage", "solution_matrix", "interface_load"]
+CODES = ["priced_diff", "coverage", "solution_matrix", "interface_load", "requirement_volatility", "data_migration_map"]
 
 
 def panel(client, ed, headers=None, expect=200):
@@ -199,8 +199,9 @@ def test_an_empty_project_measures_what_it_can(client, ed):
     assert (row(out, "coverage")["measured"], row(out, "coverage")["verdict"]) == ("0.00", "GREEN")
     assert row(out, "solution_matrix")["reason"] == "NO_SOLUTIONS"
     assert row(out, "interface_load")["reason"] == "NO_FRS"
-    assert [c["analysis_code"] for c in out["coming"]][:4] == ["requirement_volatility", "org_impact_heatmap",
-                                                              "stakeholder_engagement", "data_migration_map"]
+    assert row(out, "requirement_volatility")["reason"] == "NO_BASELINE_PAIR"
+    assert row(out, "data_migration_map")["reason"] == "NO_TO_BE_ENTITIES"
+    assert [c["analysis_code"] for c in out["coming"]][:2] == ["org_impact_heatmap", "stakeholder_engagement"]
     panel(client, ed, headers=ed["rv"])                                      # VIEW reads it
     panel(client, ed, headers=ed["out"], expect=404)
 
@@ -210,7 +211,8 @@ def test_components_off_are_not_measured_never_zero(client, ed, world):
     out = panel(client, ed)
     assert {r["analysis_code"]: r["reason"] for r in out["rows"]} == {
         "priced_diff": "NO_AGREED_BASELINE", "coverage": "COMPONENTS_OFF", "solution_matrix": "SOLUTION_OFF",
-        "interface_load": "FUNCTION_REQUIREMENT_OFF"}
+        "interface_load": "FUNCTION_REQUIREMENT_OFF", "requirement_volatility": "NO_BASELINE_PAIR",
+        "data_migration_map": "APPLICATION_OFF"}
     assert {r["verdict"] for r in out["rows"]} == {"NOT_MEASURED"}
 
 
@@ -227,7 +229,7 @@ def test_interface_share_and_technology_share_against_their_thresholds(client, e
     assert row(panel(client, ed), "interface_load")["verdict"] == "FLAG"
     edit(client, ed, "interface_load", is_enabled=False)
     off = row(panel(client, ed), "interface_load")
-    assert (off["verdict"], off["measured"]) == (None, None)
+    assert (off["verdict"], off["measured"], off["off_state"]) == (None, "40.00", "SWITCHED_OFF")   # CB-5
     for name in ("Portal", "Engine", "Mobile"):
         sol(client, ed, name, "TECHNOLOGY")
     sol(client, ed, "Approval matrix", "PEOPLE")                             # 3 of 4 = 75 %
