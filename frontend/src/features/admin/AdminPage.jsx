@@ -10,6 +10,7 @@ import { errorText } from '../../api/client';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Card } from '../../components/kit';
 import { Page } from '../../components/Page';
+import { ControlDefaultsTab } from '../control/ControlDefaultsTab';
 import { CodeListsView } from '../settings/CodeListsPage';
 import { RemovalsTab } from './RemovalsTab';
 import { PendingGrants, RequestGrantDialog } from './GrantRequests';
@@ -354,7 +355,7 @@ function CompanyCodeLists() {
 }
 
 const TABS = [['admin.users', Users], ['admin.clients', Clients], ['admin.programs', Programs], ['admin.projects', Projects],
-  ['admin.codeLists', CompanyCodeLists], ['removals.tab', RemovalsTab]];
+  ['admin.codeLists', CompanyCodeLists], ['control.house.tab', ControlDefaultsTab], ['removals.tab', RemovalsTab]];
 
 // 0079 (Ben 2026-10-24): while this installation lets one admin approve alone, every admin page says so.
 function SingleOwnerBanner() {

@@ -47,6 +47,7 @@ class PanelRow(ControlRuleOut):
     figures: dict                              # the analysis' supporting numbers (e.g. added / removed days)
     verdict: str | None                        # GREEN | FLAG | ESCALATE | NOT_MEASURED; None when switched off
     off_state: str | None                      # NOT_YET_AGREED | SWITCHED_OFF; None when on (CB-5)
+    reset: "ResetMark | None" = None           # last set by a reset to the FTC defaults (Control-C R1-P2)
 
 
 class Coming(BaseModel):
@@ -199,3 +200,78 @@ class MasterDataOut(BaseModel):
     generated_at: str
     entities: list[MasterEntity] | None        # None: no entity used yet
     headline: Headline
+
+
+# ---- Control-C: FTC company defaults and reset (docs/slice_control_c_spec.md §3–§4) --------------------------------
+class ResetMark(BaseModel):
+    at: datetime
+    by: str | None
+    change_rationale: str | None
+
+
+class HouseChange(BaseModel):
+    at: datetime
+    by: str | None
+    model_config = ConfigDict(populate_by_name=True)
+    from_: dict = Field(alias="from", serialization_alias="from")
+    to: dict
+    text_changed: list[str]
+    change_rationale: str | None
+
+
+class HouseRuleOut(ControlRuleOut):
+    history: list[HouseChange]
+
+
+class HouseRuleIn(BaseModel):
+    """R1-D1: the four fields a company default carries — never an owner, the comparison or on / off."""
+    model_config = ConfigDict(extra="forbid")
+    threshold_value: Decimal = Field(max_digits=12, decimal_places=2)
+    escalate_value: Decimal | None = Field(max_digits=12, decimal_places=2)
+    prescribed_action: str | None = Field(max_length=2000)
+    escalation_path: str | None = Field(max_length=2000)
+    change_rationale: str = Field(max_length=2000)
+    row_version: int
+
+
+class RuleValues(BaseModel):
+    threshold_value: Decimal
+    escalate_value: Decimal | None
+    prescribed_action: str | None
+    escalation_path: str | None
+
+
+class ResetChange(BaseModel):
+    analysis_code: str
+    unit: str
+    comparison: str
+    is_enabled: bool
+    current: RuleValues
+    default: RuleValues
+    fields: list[str]
+
+
+class ResetStamp(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project: dict[str, int]
+    house: dict[str, int]
+
+
+class ResetPreviewOut(BaseModel):
+    changes: list[ResetChange]
+    added: list[str]
+    stamp: ResetStamp
+
+
+class ResetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    change_rationale: str = Field(max_length=2000)
+    stamp: ResetStamp
+
+
+class ResetOut(BaseModel):
+    changed: list[str]
+    added: list[str]
+
+
+PanelRow.model_rebuild()

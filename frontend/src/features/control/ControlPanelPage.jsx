@@ -72,7 +72,9 @@ function RuleRow({ projectId, r, canEdit, onEdit }) {
   // CB-5: a rule copied into a running engagement is off until the client agrees it — measured, greyed, no verdict, and
   // no "agreed" date shown (review round 2 N2).
   const pending = r.off_state === 'NOT_YET_AGREED';
+  // Control-C R1-P2: a rule last set by a reset says so until a person edits it — FTC's numbers, not an agreed threshold.
   const changed = pending ? t('control.pendingNote')
+    : r.reset ? t('control.resetNote', { date: fmtDate(r.reset.at), name: r.reset.by ?? '' })
     : r.last_changed_at ? t('control.lastChanged', { date: fmtDate(r.last_changed_at), name: r.last_changed_by ?? '' })
       : t('control.houseDefault', { date: fmtDate(r.agreed_at) });
   return (
@@ -172,15 +174,80 @@ function EditDialog({ projectId, rule, onClose, onSaved, onStale }) {
   );
 }
 
+function shown(c, side, f) {
+  const v = c[side][f];
+  if (f === 'escalate_value' && v === null) return t('control.never');
+  if (f.endsWith('_value')) return num(v, c.unit);
+  return v ?? '–';
+}
+
+// Control-C (spec §4; CC-4): what a reset would change, shown before it happens — the audit keeps the agreed action and
+// escalation text only as "changed" (CT-3), so this is the editor's one look at what they replace. The reset carries
+// the preview's version stamp; anything changed since is refused (409) and the preview reloads (R1-P1).
+function ResetDialog({ projectId, onClose, onDone }) {
+  const qc = useQueryClient();
+  const pv = useQuery({ queryKey: keys.resetPreview(projectId), queryFn: () => controlApi.resetPreview(projectId),
+    staleTime: 0, gcTime: 0 });
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const go = useMutation({
+    mutationFn: () => controlApi.reset(projectId, { change_rationale: reason, stamp: pv.data.stamp }),
+    onSuccess: (res) => { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onDone(res); },
+    onError: (err) => {
+      setError(errorText(err));
+      if (isStale(err)) qc.invalidateQueries({ queryKey: keys.resetPreview(projectId) });
+    },
+  });
+  const p = pv.data;
+  const nothing = p && p.changes.length === 0 && p.added.length === 0;
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="md" aria-labelledby="control-reset-title">
+      <DialogTitle id="control-reset-title">{t('control.reset.title')}</DialogTitle>
+      <DialogContent>
+        <Stack sx={{ gap: 2, pt: 1 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('control.reset.intro')}</Typography>
+          {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+          {pv.error && <Alert severity="error">{errorText(pv.error)}</Alert>}
+          {nothing && <Alert severity="success">{t('control.reset.nothing')}</Alert>}
+          {p && p.changes.map((c) => (
+            <Box key={c.analysis_code}>
+              <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t(`control.analysis.${c.analysis_code}`)}</Typography>
+              {c.fields.map((f) => (
+                <Typography key={f} sx={{ fontSize: 13.5 }}>
+                  {t(`control.reset.field.${f}`)}: <Box component="span" sx={{ color: 'text.secondary' }}>{shown(c, 'current', f)}</Box>
+                  {' → '}{shown(c, 'default', f)}
+                </Typography>))}
+            </Box>))}
+          {p && p.added.length > 0 && (
+            <Typography sx={{ fontSize: 13.5 }}>
+              {t('control.reset.added', { names: p.added.map((code) => t(`control.analysis.${code}`)).join(', ') })}
+            </Typography>)}
+          {p && !nothing && (
+            <TextField label={t('control.dialog.reason')} helperText={t('control.dialog.reasonHelp')} required multiline minRows={2}
+              value={reason} onChange={(e) => setReason(e.target.value)} slotProps={{ htmlInput: { maxLength: 2000 } }} />)}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('control.dialog.cancel')}</Button>
+        {p && !nothing && (
+          <Button variant="contained" color="warning" disabled={go.isPending || !reason.trim()}
+            onClick={() => { setError(''); go.mutate(); }}>{t('control.reset.confirm')}</Button>)}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function ControlPanelPage() {
   const { projectId } = useParams();
   const canEdit = useCanEdit();
   const q = useQuery({ queryKey: keys.controlPanel(projectId), queryFn: () => controlApi.panel(projectId) });
   const [editing, setEditing] = useState(null);
+  const [resetting, setResetting] = useState(false);
   const [notice, setNotice] = useState('');
   const d = q.data;
   return (
-    <Page title={t('control.title')} subtitle={t('control.subtitle')} error={q.error && errorText(q.error)}>
+    <Page title={t('control.title')} subtitle={t('control.subtitle')} error={q.error && errorText(q.error)}
+      actions={canEdit && <Button variant="outlined" onClick={() => setResetting(true)}>{t('control.reset.button')}</Button>}>
       {d && (
         <Stack sx={{ gap: 2 }}>
           {d.rows.filter((r) => r.off_state !== 'NOT_YET_AGREED').map((r) => (
@@ -206,6 +273,9 @@ export default function ControlPanelPage() {
         <EditDialog projectId={projectId} rule={editing} onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); setNotice(t('control.saved')); }}
           onStale={() => { setEditing(null); setNotice(t('control.stale')); }} />)}
+      {resetting && (
+        <ResetDialog projectId={projectId} onClose={() => setResetting(false)}
+          onDone={(res) => { setResetting(false); setNotice(t('control.reset.done', { n: res.changed.length, a: res.added.length })); }} />)}
       <Snackbar open={Boolean(notice)} autoHideDuration={5000} onClose={() => setNotice('')} message={notice} />
     </Page>
   );

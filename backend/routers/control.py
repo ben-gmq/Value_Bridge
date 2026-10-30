@@ -6,14 +6,16 @@ from sqlalchemy.orm import Session
 from auth.dependencies import current_user
 from database import get_db
 from models import AppUser
-from routers.guards import GuardedRouter, project_ctx
+from routers.guards import GuardedRouter, platform_admin, project_ctx
 from schemas.control import (ChangeIntensityOut, ControlPanelOut, ControlRuleIn, ControlRuleOut, DataMigrationOut,
-                             EngagementOut, MasterDataOut, OrgImpactOut, VolatilityOut)
+                             EngagementOut, HouseRuleIn, HouseRuleOut, MasterDataOut, OrgImpactOut, ResetIn,
+                             ResetOut, ResetPreviewOut, VolatilityOut)
 from services import control, control_reports
 
 router = GuardedRouter(tags=["control"])
 _read = project_ctx("VIEW")
 _edit = project_ctx("EDIT")
+_ftc = platform_admin()
 
 
 @router.get("/projects/{project_id}/control-panel", response_model=ControlPanelOut, **_read.route)
@@ -63,3 +65,27 @@ def change_intensity(project_id: int, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/master-data", response_model=MasterDataOut, **_read.route)
 def master_data(project_id: int, db: Session = Depends(get_db)):
     return control_reports.master_data_candidates(db, project_id)
+
+
+# ---- Control-C: FTC company defaults (platform admins) and reset (EDIT) — spec §3–§5 -------------------------------
+@router.get("/control-rules/defaults", response_model=list[HouseRuleOut], **_ftc.route)
+def list_house_defaults(db: Session = Depends(get_db)):
+    return control.list_house(db)
+
+
+@router.patch("/control-rules/defaults/{analysis_code}", response_model=HouseRuleOut, **_ftc.route)
+def maintain_house_default(analysis_code: str, body: HouseRuleIn, user: AppUser = Depends(current_user),
+                           db: Session = Depends(get_db)):
+    values = body.model_dump(exclude={"change_rationale", "row_version"})
+    return control.update_house(db, user, analysis_code, values, body.change_rationale, body.row_version)
+
+
+@router.get("/projects/{project_id}/control-rules/reset-preview", response_model=ResetPreviewOut, **_edit.route)
+def reset_preview(project_id: int, db: Session = Depends(get_db)):
+    return control.reset_preview(db, project_id)
+
+
+@router.post("/projects/{project_id}/control-rules/reset", response_model=ResetOut, **_edit.route)
+def reset_to_house_defaults(project_id: int, body: ResetIn, user: AppUser = Depends(current_user),
+                            db: Session = Depends(get_db)):
+    return control.reset(db, user, project_id, body.change_rationale, body.stamp.model_dump())

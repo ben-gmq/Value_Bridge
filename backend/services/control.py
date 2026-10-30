@@ -13,6 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
@@ -167,6 +168,36 @@ def _plain(v):
     return format(v.normalize(), "f") if isinstance(v, Decimal) else v
 
 
+def _reason(change_rationale: str | None) -> str:
+    reason = (change_rationale or "").strip()
+    if not reason:
+        raise HTTPException(422, "Changing a control threshold is a governance decision and needs a reason")
+    return reason
+
+
+def _checked(r: ControlRule, values: dict) -> dict:
+    """The number and text checks every rule edit shares — a project rule, a company default (CC-6)."""
+    for f in TEXT_FIELDS:
+        values[f] = _clean_text(values[f])
+    threshold, escalate = values["threshold_value"], values["escalate_value"]
+    if threshold is None or threshold < 0 or (escalate is not None and escalate < 0):
+        raise HTTPException(422, "Thresholds are zero or more")
+    if escalate is not None:
+        beyond = escalate < threshold if r.comparison == "LT" else escalate > threshold
+        if not beyond:
+            side = "below" if r.comparison == "LT" else "above"
+            raise HTTPException(422, f"The escalate value must be {side} the threshold")
+    return values
+
+
+def _change_detail(code: str, diff: dict, reason: str) -> dict:
+    """CT-3: numbers, owner and on/off from / to; the two text fields only as changed; the reason in full."""
+    return {"analysis_code": code,
+            "from": {f: _plain(old) for f, (old, _) in diff.items() if f not in TEXT_FIELDS},
+            "to": {f: _plain(new) for f, (_, new) in diff.items() if f not in TEXT_FIELDS},
+            "text_changed": [f for f in TEXT_FIELDS if f in diff], "change_rationale": reason}
+
+
 def update_rule(db: Session, actor: AppUser, project_id: int, analysis_code: str, values: dict,
                 change_rationale: str, row_version: int) -> dict:
     """§7.13 maintain_control_rule at EDIT (SC-7). The body replaces every editable field (spec §4). A change with
@@ -180,20 +211,8 @@ def update_rule(db: Session, actor: AppUser, project_id: int, analysis_code: str
     if r is None:
         raise HTTPException(404, "This project has no rule for that analysis")
     check_version(r, row_version)
-    reason = (change_rationale or "").strip()
-    if not reason:
-        raise HTTPException(422, "Changing a control threshold is a governance decision and needs a reason")
-    values = {f: values[f] for f in EDITABLE}
-    for f in TEXT_FIELDS:
-        values[f] = _clean_text(values[f])
-    threshold, escalate = values["threshold_value"], values["escalate_value"]
-    if threshold is None or threshold < 0 or (escalate is not None and escalate < 0):
-        raise HTTPException(422, "Thresholds are zero or more")
-    if escalate is not None:
-        beyond = escalate < threshold if r.comparison == "LT" else escalate > threshold
-        if not beyond:
-            side = "below" if r.comparison == "LT" else "above"
-            raise HTTPException(422, f"The escalate value must be {side} the threshold")
+    reason = _reason(change_rationale)
+    values = _checked(r, {f: values[f] for f in EDITABLE})
     owner = values["owner_org_role_id"]
     if owner is not None:
         role = db.get(OrgRole, owner)
@@ -208,11 +227,7 @@ def update_rule(db: Session, actor: AppUser, project_id: int, analysis_code: str
     r.updated_by = actor.app_user_id
     audit.record(db, "CONTROL_RULE_CHANGED", actor_id=actor.app_user_id, project_id=project_id,
                  target_table="control_rule", target_id=r.control_rule_id,
-                 detail={"analysis_code": analysis_code,
-                         "from": {f: _plain(old) for f, (old, _) in diff.items() if f not in TEXT_FIELDS},
-                         "to": {f: _plain(new) for f, (_, new) in diff.items() if f not in TEXT_FIELDS},
-                         "text_changed": [f for f in TEXT_FIELDS if f in diff],
-                         "change_rationale": reason})
+                 detail=_change_detail(analysis_code, diff, reason))
     db.commit()
     db.refresh(r)
     return list_rules_one(db, r)
@@ -221,6 +236,153 @@ def update_rule(db: Session, actor: AppUser, project_id: int, analysis_code: str
 def list_rules_one(db: Session, r: ControlRule) -> dict:
     roles, users = _names(db, [r])
     return _rule_out(r, roles, users)
+
+
+# ---- the FTC company defaults (docs/slice_control_c_spec.md §3; CC-6) ----------------------------------------------
+HOUSE_EDITABLE = ("threshold_value", "escalate_value", "prescribed_action", "escalation_path")   # R1-D1: never owner
+RESET_FIELDS = HOUSE_EDITABLE                                                                  # CC-4: nor on / off
+
+
+def _house(db: Session, lock=None) -> list[ControlRule]:
+    q = select(ControlRule).where(ControlRule.project_id.is_(None), ControlRule.is_active)
+    if lock == "share":
+        q = q.with_for_update(read=True)
+    rows = db.scalars(q).all()
+    return sorted(rows, key=lambda r: (ORDER.get(r.analysis_code, len(ORDER)), r.analysis_code))
+
+
+def list_house(db: Session) -> list[dict]:
+    """Each company default with its change history from the audit trail (R1-P4) — what FTC's close-out review reads."""
+    rows = _house(db)
+    events = db.execute(select(AuditEvent, AppUser.display_name).outerjoin(
+        AppUser, AppUser.app_user_id == AuditEvent.app_user_id).where(
+        AuditEvent.event_type == "CONTROL_RULE_CHANGED", AuditEvent.target_table == "control_rule",
+        AuditEvent.project_id.is_(None), AuditEvent.target_id.in_([r.control_rule_id for r in rows]))
+        .order_by(AuditEvent.audit_event_id.desc())).all()
+    history: dict[int, list[dict]] = {}
+    for e, name in events:
+        d = e.detail or {}
+        history.setdefault(e.target_id, []).append({
+            "at": e.occurred_at, "by": name, "from": d.get("from", {}), "to": d.get("to", {}),
+            "text_changed": d.get("text_changed", []), "change_rationale": d.get("change_rationale")})
+    _, users = _names(db, rows)
+    return [{**_rule_out(r, {}, users), "history": history.get(r.control_rule_id, [])} for r in rows]
+
+
+def update_house(db: Session, actor: AppUser, analysis_code: str, values: dict, change_rationale: str,
+                 row_version: int) -> dict:
+    """§7.13 maintain_house_default (CC-6): a platform admin, a reason, a current version; future projects only."""
+    r = db.scalar(select(ControlRule).where(ControlRule.project_id.is_(None), ControlRule.analysis_code == analysis_code,
+                                            ControlRule.is_active).with_for_update())
+    if r is None:
+        raise HTTPException(404, "There is no company default for that analysis")
+    check_version(r, row_version)
+    reason = _reason(change_rationale)
+    values = _checked(r, {f: values[f] for f in HOUSE_EDITABLE})
+    diff = {f: (getattr(r, f), v) for f, v in values.items() if getattr(r, f) != v}
+    if diff:
+        for f, (_, v) in diff.items():
+            setattr(r, f, v)
+        r.change_rationale = reason
+        r.updated_by = actor.app_user_id
+        audit.record(db, "CONTROL_RULE_CHANGED", actor_id=actor.app_user_id, project_id=None,
+                     target_table="control_rule", target_id=r.control_rule_id,
+                     detail={"house": True, **_change_detail(analysis_code, diff, reason)})
+        db.commit()
+        db.refresh(r)
+    return next(h for h in list_house(db) if h["analysis_code"] == analysis_code)
+
+
+# ---- reset a project's rules to the company defaults (spec §4; CC-4) -----------------------------------------------
+STALE_RESET = "The rules or the FTC defaults changed since the preview. Open the preview again"
+
+
+def _stamp(rules: list[ControlRule], house: list[ControlRule]) -> dict:
+    return {"project": {r.analysis_code: r.row_version for r in rules},
+            "house": {h.analysis_code: h.row_version for h in house}}
+
+
+def _plan(rules: list[ControlRule], house: list[ControlRule]) -> tuple[list[tuple], list[ControlRule]]:
+    """(rule, house row, diff) for each rule a reset would change, and the house rows the project lacks."""
+    mine = {r.analysis_code: r for r in rules}
+    changes, added = [], []
+    for h in house:
+        r = mine.get(h.analysis_code)
+        if r is None:
+            added.append(h)
+            continue
+        diff = {f: (getattr(r, f), getattr(h, f)) for f in RESET_FIELDS if getattr(r, f) != getattr(h, f)}
+        if diff:
+            changes.append((r, h, diff))
+    return changes, added
+
+
+def _side(row) -> dict:
+    return {f: getattr(row, f) for f in RESET_FIELDS}
+
+
+def reset_preview(db: Session, project_id: int) -> dict:
+    rules, house = _rules(db, project_id), _house(db)
+    changes, added = _plan(rules, house)
+    return {"changes": [{"analysis_code": r.analysis_code, "unit": UNIT.get(r.analysis_code, "COUNT"),
+                         "comparison": r.comparison, "is_enabled": r.is_enabled, "current": _side(r),
+                         "default": _side(h), "fields": list(diff)} for r, h, diff in changes],
+            "added": [h.analysis_code for h in added], "stamp": _stamp(rules, house)}
+
+
+def reset(db: Session, actor: AppUser, project_id: int, change_rationale: str, stamp: dict) -> dict:
+    """§7.13 reset_project_rules_to_house_default at EDIT. Locks the project's rules and the house rows, refuses unless
+    every version matches the preview's stamp (R1-P1, R1-P3), keeps owner and on/off (CC-4), adds missing rules off.
+    Nothing to change → nothing written."""
+    reason = _reason(change_rationale)
+    rules = db.scalars(select(ControlRule).where(ControlRule.project_id == project_id, ControlRule.is_active)
+                       .order_by(ControlRule.control_rule_id).with_for_update()).all()
+    house = _house(db, lock="share")
+    if _stamp(rules, house) != {"project": stamp.get("project"), "house": stamp.get("house")}:
+        raise HTTPException(409, STALE_RESET)
+    changes, added = _plan(rules, house)
+    if not changes and not added:
+        db.rollback()
+        return {"changed": [], "added": []}
+    for r, _h, diff in changes:
+        for f, (_, v) in diff.items():
+            setattr(r, f, v)
+        r.change_rationale = reason
+        r.updated_by = actor.app_user_id
+    try:
+        new = copy_to_project(db, project_id, actor.app_user_id, enabled=False) if added else []
+    except IntegrityError:                         # round 2 N1: the seed added the same rule meanwhile
+        db.rollback()
+        raise HTTPException(409, STALE_RESET) from None
+    db.flush()
+    audit.record(db, "CONTROL_RULES_RESET", actor_id=actor.app_user_id, project_id=project_id,
+                 detail={"change_rationale": reason, "changed": [r.analysis_code for r, _, _ in changes],
+                         "added": new, "rule_ids": [r.control_rule_id for r, _, _ in changes],
+                         "rules": [{k: v for k, v in _change_detail(r.analysis_code, diff, reason).items()
+                                    if k != "change_rationale"} for r, _, diff in changes]})
+    db.commit()
+    return {"changed": [r.analysis_code for r, _, _ in changes], "added": new}
+
+
+def _reset_marks(db: Session, project_id: int, rules: list[ControlRule]) -> dict[int, dict]:
+    """Rules whose latest event is a reset (round 2 N2): a later CONTROL_RULE_CHANGED on the rule clears the mark, so
+    a threshold the client then agreed never reads as "reset to FTC defaults" (R1-P2)."""
+    resets = db.execute(select(AuditEvent, AppUser.display_name).outerjoin(
+        AppUser, AppUser.app_user_id == AuditEvent.app_user_id).where(
+        AuditEvent.event_type == "CONTROL_RULES_RESET", AuditEvent.project_id == project_id)
+        .order_by(AuditEvent.audit_event_id)).all()
+    if not resets:
+        return {}
+    last: dict[int, tuple] = {}
+    for e, name in resets:
+        for rid in (e.detail or {}).get("rule_ids", []):
+            last[rid] = (e, name)
+    edited = dict(db.execute(select(AuditEvent.target_id, func.max(AuditEvent.audit_event_id)).where(
+        AuditEvent.event_type == "CONTROL_RULE_CHANGED", AuditEvent.target_table == "control_rule",
+        AuditEvent.target_id.in_(list(last))).group_by(AuditEvent.target_id)).all())
+    ids = {r.control_rule_id for r in rules}
+    return {rid: {"at": e.occurred_at, "by": name, "change_rationale": (e.detail or {}).get("change_rationale")}
+            for rid, (e, name) in last.items() if rid in ids and edited.get(rid, 0) < e.audit_event_id}
 
 
 # ---- the analyses' headlines (§7.9 contract) -----------------------------------------------------------------------
@@ -356,11 +518,13 @@ def panel(project_id: int) -> dict:
         rules = _rules(db, project_id)
         roles, users = _names(db, rules)
         set_by_hand = _switched_on_ever(db, rules)
+        marks = _reset_marks(db, project_id, rules)
         rows = []
         for r in rules:
             m = headline(db, project_id, r.analysis_code, on)
             off = None if r.is_enabled else "SWITCHED_OFF" if r.control_rule_id in set_by_hand else "NOT_YET_AGREED"
-            rows.append({**_rule_out(r, roles, users), **m, "verdict": verdict(r, m), "off_state": off})
+            rows.append({**_rule_out(r, roles, users), **m, "verdict": verdict(r, m), "off_state": off,
+                         "reset": marks.get(r.control_rule_id)})
         db.rollback()
     have = {r["analysis_code"] for r in rows}
     # round 2 N4: a measurable rule the project lacks is listed too, so a missing rule always shows somewhere.

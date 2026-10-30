@@ -185,6 +185,10 @@ export const controlApi = {                                           // Control
   engagement: (projectId) => d(http.get(`${P(projectId)}/stakeholder-engagement`)),
   changeIntensity: (projectId) => d(http.get(`${P(projectId)}/change-intensity`)),     // Control-C (spec §5)
   masterData: (projectId) => d(http.get(`${P(projectId)}/master-data`)),
+  houseDefaults: () => d(http.get(`${V}/control-rules/defaults`)),                          // platform admins (CC-6)
+  updateHouseDefault: (analysisCode, body) => d(http.patch(`${V}/control-rules/defaults/${analysisCode}`, body)),
+  resetPreview: (projectId) => d(http.get(`${P(projectId)}/control-rules/reset-preview`)),  // EDIT (CC-4)
+  reset: (projectId, body) => d(http.post(`${P(projectId)}/control-rules/reset`, body)),
 };
 
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
