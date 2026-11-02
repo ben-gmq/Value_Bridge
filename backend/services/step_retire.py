@@ -25,7 +25,8 @@ from services import audit, bfc, components, lifecycle
 RETIRED = "STEP_RETIRED_WITH_DEPENDENTS"
 RESTORED = "STEP_RESTORED_WITH_DEPENDENTS"
 
-# A-SR-1 / SR-4: exactly these, and a future FK-declared table blocks until it is added here.
+# A-SR-1 / SR-4: exactly these, and a future FK-declared table blocks until it is added here. `risk` is deliberately
+# NOT owned (design §5.4.7, slice Risks R1-5): a risk is not part of its step, so a live one blocks the step's retire.
 # BfcNodeFlow left with D-38 (0045: retired, SELECT-only); BfcNodeTrigger joined with D-49.
 OWNED_BY_STEP = (BusinessRequirement, BfcNodeDataEntity, BfcNodeOrgRole, BfcNodeExternalFlow,
                  ApplicationBfcNode, BfcNodeTrigger)       # ApplicationBfcNode: S6b-1 (Ben, 2026-10-11)

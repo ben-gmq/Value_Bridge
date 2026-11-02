@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from models import (Application, Base, BfcNode, BrRequirementLine, BusinessRequirement, DataEntity, DataField,
                     ExternalEntity, FunctionRequirement, Issue, OrgRole, OrgUnit, ProcessTrigger, Solution,
-                    Phase, Stakeholder)
+                    Phase, Risk, Stakeholder)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -33,7 +33,8 @@ RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntit
               Solution, FunctionRequirement, Application, ProcessTrigger,
               BrRequirementLine,                                       # D-59: a line comes back with its number
               Stakeholder, Issue,                                      # slice 14
-              Phase)                                                   # slice 15 (schema §6): not the link tables
+              Phase,                                                   # slice 15 (schema §6): not the link tables
+              Risk)                                                    # slice Risks
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -75,6 +76,7 @@ LABELS = {
     # R7 (slice14): ids and numbers only — these labels reach audit_event, which a purge cannot clean.
     "stakeholder": ("Stakeholder", lambda r: f"#{r.stakeholder_id}"),
     "issue": ("Issue", lambda r: r.issue_number),
+    "risk": ("Risk", lambda r: r.risk_number),                         # slice Risks: number only (R7)
     "issue_br": ("Issue ↔ requirement", lambda r: f"{r.issue_row.issue_number} ↔ {r.br_row.br_number}"),
     # slice 15 (W-1: every word a user sees says "wave"); both ends named (DR1-P1)
     "phase": ("Wave", lambda r: r.phase_code),
