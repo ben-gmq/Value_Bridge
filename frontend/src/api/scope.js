@@ -191,6 +191,16 @@ export const controlApi = {                                           // Control
   reset: (projectId, body) => d(http.post(`${P(projectId)}/control-rules/reset`, body)),
 };
 
+export const riskApi = {                                              // slice Risks (§4.10)
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/risks`, { params })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/risks`, body)),
+  get: (id) => d(http.get(`${V}/risks/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/risks/${id}`, body)),
+  materialise: (id, body) => d(http.post(`${V}/risks/${id}/materialise`, body)),
+  retire: (id, rowVersion) => del(`${V}/risks/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/risks/${id}/restore`)),
+};
+
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
   list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/phases`, { params: { include_retired: includeRetired } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/phases`, body)),

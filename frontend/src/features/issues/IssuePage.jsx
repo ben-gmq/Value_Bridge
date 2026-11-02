@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, TextField,
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Stack, TextField,
   Typography } from '@mui/material';
 import { errorText, isStale } from '../../api/client';
-import { issueApi, stakeholderApi } from '../../api/scope';
-import { keys } from '../../app/links';
+import { issueApi, riskApi, stakeholderApi } from '../../api/scope';
+import { keys, links } from '../../app/links';
 import { useCanEdit } from '../../app/useCanEdit';
 import { useCodes } from '../../app/useCodes';
 import { useComponents } from '../../app/useComponents';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ConflictDialog } from '../../components/ConflictDialog';
-import { Card } from '../../components/kit';
+import { Card, Code } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { SimpleSelect, blankToNull, useEditForm, useFormSave } from '../processes/chartKit';
@@ -63,6 +63,10 @@ export default function IssuePage() {
   const canEdit = useCanEdit() && isOn('ISSUE');
   const q = useQuery({ queryKey: keys.issue(issueId), queryFn: () => issueApi.get(issueId) });
   const issue = q.data;
+  // Slice Risks: the risk this issue materialised from, if any (one at most, uq_risk_issue).
+  const fromRisk = useQuery({ queryKey: [...keys.risks(projectId), { issue: issueId }],
+    queryFn: () => riskApi.list(projectId, { issue_id: issueId, include_retired: true }), enabled: isOn('RISK') });
+  const origin = fromRisk.data?.[0];
   const stk = useQuery({ queryKey: keys.stakeholders(projectId), queryFn: () => stakeholderApi.list(projectId, true) });
   const sev = useCodes(projectId, 'ISSUE_SEVERITY');
   const typ = useCodes(projectId, 'ISSUE_TYPE');
@@ -186,6 +190,13 @@ export default function IssuePage() {
   );
   const side = (
     <>
+    {origin && (
+      <Card title={t('risks.materialisedFrom')} bodySx={{ gap: 1 }}>
+        <Typography sx={{ fontSize: 13.5 }}>
+          <Link component={RouterLink} to={links.risk(projectId, origin.risk_id)} underline="hover">
+            <Code>{origin.risk_number}</Code></Link>{' '}{origin.title}
+        </Typography>
+      </Card>)}
     <IssueBrLinks projectId={projectId} issue={issue} canEdit={canEdit} />
     <Card title={t('issues.resolutionTitle')} bodySx={{ gap: 1 }}>
       {issue.resolution ? (

@@ -49,5 +49,11 @@
   "codes.behaviour.INFORMED": "Informed",
   "codes.behaviour.SUPPORT": "Support",
   "codes.behaviour.OPEN": "Open",
+  "codes.behaviour.MATERIALISED": "Materialised",
+  "codes.behaviour.W1": "Weight 1 (lowest)",
+  "codes.behaviour.W2": "Weight 2",
+  "codes.behaviour.W3": "Weight 3",
+  "codes.behaviour.W4": "Weight 4",
+  "codes.behaviour.W5": "Weight 5 (highest)",
   "codes.behaviour.CLOSED": "Closed"
 }

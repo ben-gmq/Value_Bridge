@@ -36,6 +36,8 @@ import CodeListsPage from '../features/settings/CodeListsPage';
 import StakeholdersPage from '../features/settings/StakeholdersPage';
 import IssuesPage from '../features/issues/IssuesPage';
 import IssuePage from '../features/issues/IssuePage';
+import RisksPage from '../features/risks/RisksPage';
+import RiskPage from '../features/risks/RiskPage';
 import WavesPage from '../features/waves/WavesPage';
 import ReportsPage from '../features/reports/ReportsPage';
 import ControlPanelPage from '../features/control/ControlPanelPage';
@@ -62,6 +64,7 @@ const PAGES = [
   ['settings/rate-card', RateCardPage], ['settings/code-lists', CodeListsPage],
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
   ['issues', IssuesPage], ['issues/:issueId', IssuePage],
+  ['risks', RisksPage], ['risks/:riskId', RiskPage],                     // slice Risks
   ['waves', WavesPage],                                                                            // slice 15
   ['reports', ReportsPage],                                                                        // slice 1f
   ['control', ControlPanelPage],                                                                   // Control-A
@@ -75,7 +78,7 @@ const NEEDS = {
   'br-fr/effort': ['EFFORT'], 'settings/rate-card': ['EFFORT'], interfaces: ['APPLICATION'],
   systems: ['APPLICATION'], 'systems/:appId': ['APPLICATION'],
   'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
-  issues: ['ISSUE'], 'issues/:issueId': ['ISSUE'], 'settings/stakeholders': ['ISSUE'],
+  issues: ['ISSUE'], 'issues/:issueId': ['ISSUE'], risks: ['RISK'], 'risks/:riskId': ['RISK'], 'settings/stakeholders': ['ISSUE'],
   waves: ['PHASING'],
 };
 

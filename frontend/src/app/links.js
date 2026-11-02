@@ -30,6 +30,8 @@ export const links = {
   stakeholders: (p) => `/p/${p}/settings/stakeholders`,              // slice 14
   issues: (p) => `/p/${p}/issues`,
   issue: (p, id) => `/p/${p}/issues/${id}`,
+  risks: (p) => `/p/${p}/risks`,                                     // slice Risks
+  risk: (p, id) => `/p/${p}/risks/${id}`,
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
   reports: (p, tab) => (tab ? `/p/${p}/reports?tab=${tab}` : `/p/${p}/reports`),   // slice 1f
@@ -96,6 +98,8 @@ export const keys = {
   erd: (p, area) => ['entities', String(p), 'erd', String(area ?? 'project')],   // under entities(p): field edits refresh it
   parties: (p) => ['parties', String(p)],
   stakeholders: (p) => ['stakeholders', String(p)],
+  risks: (p) => ['risks', String(p)],                                                // slice Risks
+  risk: (id) => ['risk', String(id)],
   issues: (p) => ['issues', String(p)],
   issue: (id) => ['issue', String(id)],
   issueBrs: (id) => ['issue', String(id), 'brs'],                                   // under issue(id)

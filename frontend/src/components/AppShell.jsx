@@ -20,6 +20,7 @@ import LayersOutlined from '@mui/icons-material/LayersOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
+import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
@@ -60,6 +61,7 @@ export const NAV = [
     ['nav.volume', 'volume', SpeedOutlined],                              // D-67: as-is vs to-be time
     ['nav.baselines', 'baselines', LayersOutlined],
     ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
+    ['nav.risks', 'risks', ShieldOutlined, ['RISK']],                     // slice Risks
     ['nav.waves', 'waves', ViewTimelineOutlined, ['PHASING']],           // slice 15 (W-1: "Wave" on screen)
     ['nav.reports', 'reports', AssessmentOutlined],                       // slice 1f
   ] },
