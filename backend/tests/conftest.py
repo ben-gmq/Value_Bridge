@@ -1,5 +1,6 @@
 """Test harness. Runs against vb_test_db: migrations as vb_owner, the app as vb_app — so a
 missing grant fails a test instead of hiding behind owner privileges."""
+import copy
 import os
 import re
 from pathlib import Path
@@ -346,6 +347,16 @@ def _cols(c, schema_name: str, copy: str, t: str) -> str:
         "ORDER BY s.ordinal_position"), {"s": schema_name, "copy": copy, "t": t}))
 
 
+@pytest.fixture(autouse=True)
+def _no_states_in_migration_tests(request):
+    """A migration test reads the catalog across every schema (test_migration_0079 counts a column by name anywhere), so
+    no saved copy may exist while one runs (VB-015; sara HIGH of 2026-10-23 is the same class). Every saved state is
+    dropped before it; the next test that wants one builds and saves it again."""
+    if request.path.name.startswith("test_migration_") and _STATES:
+        with owner_engine().begin() as c:
+            drop_states(c)
+
+
 def has_state(name: str) -> bool:
     return name in _STATES
 
@@ -477,11 +488,45 @@ def login(client, email, remember=False) -> dict:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+# VB-015 (Ben 2026-11-02, suite speed): `world` is the setup of most tests (~20 API calls, ~1 s under load). It is built
+# through the API once per worker, saved with save_state, and restored for every later test that asks for it — the same
+# mechanism and row-for-row proof as test_purge_run's showcase. A restore happens only when it gives the test exactly what
+# a build would: the database is fresh (no fixture before `world` has written anything, the library equals its
+# snapshot) and the settings are the ones the saved build ran under. Otherwise the test builds its own world as before.
+# The logins it returns are the build's: a token carries only the user id and a days-long expiry, and every request
+# re-reads the user from the database, so a token over a restored copy acts as one over a fresh build.
+_WORLD: dict = {}
+
+
+def _settings_key() -> str:
+    from config import get_settings
+    return repr(sorted(get_settings().model_dump().items()))
+
+
+def _is_fresh() -> bool:
+    with owner_engine().connect() as c:
+        return not _dirty_tables(c) and not _project_rows(c)
+
+
 @pytest.fixture
-def world(client):
+def world(client, request):
     """An admin, a client with a program of two projects plus one standalone project, and four
     staff users (D-40): owner, editor and outsider are USERs, reviewer a VIEWER. Every project is
     unrestricted; a test that needs a wall restricts one (restrict())."""
+    if request.path.name.startswith("test_migration_"):          # no saved copy beside a migration test, ever
+        return _build_world(client)
+    fresh, key = _is_fresh(), _settings_key()
+    if fresh and has_state("world") and _WORLD.get("key") == key:
+        restore_state("world")
+        return copy.deepcopy(_WORLD["value"])
+    value = _build_world(client)
+    if fresh and not has_state("world"):
+        save_state("world")
+        _WORLD.update(key=key, value=copy.deepcopy(value))
+    return value
+
+
+def _build_world(client) -> dict:
     r = client.post("/auth/setup", json={"email": "admin@example.test", "display_name": "Admin",
                                          "password": PW})
     assert r.status_code == 201, r.text
