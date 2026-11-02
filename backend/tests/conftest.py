@@ -8,7 +8,7 @@ from dotenv import dotenv_values
 from sqlalchemy.engine import make_url
 
 _env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
-# pytest-xdist (`-n 4`): each worker runs against its own test database, `<TEST db>_<worker>` (e.g. vb_test_db_gw0),
+# pytest-xdist (`-n 6`): each worker runs against its own test database, `<TEST db>_<worker>` (e.g. vb_test_db_gw0),
 # created beforehand by scripts/make_test_worker_dbs.sh — the suite wipes its database, so workers never share one.
 _worker = os.environ.get("PYTEST_XDIST_WORKER")
 _app_url, _owner_url = make_url(_env["TEST_DATABASE_URL"]), make_url(_env["TEST_MIGRATION_DATABASE_URL"])

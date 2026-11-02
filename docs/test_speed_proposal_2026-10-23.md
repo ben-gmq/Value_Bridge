@@ -119,3 +119,23 @@ only help once A has removed that wait.
 
 ## Recommendation
 Approve **A** now (about 1 hour, ~3 minutes saved on every full run). Then decide on **B** once A's real number is in.
+
+## VB-015 (2026-11-02): six workers, not four — full run 9–11 min → 6¾–7½ min
+The suite had grown to 1,273 tests and crossed 10 minutes again (632 s on `c32e174`). Measured, all 1,273 passed each time:
+
+| Run (full suite, `-m ""`) | In pytest | Wall |
+|---|---|---|
+| 4 workers, first session, busy machine (×2) | 652 s / 584 s | 707 s / — |
+| 4 workers, quiet machine | 518 s | 566 s |
+| 6 workers, unchanged harness | **405 s** | **441 s** |
+
+- **Where the time goes:** each test costs ~1.6 s whether run alone or in the full run (two files: 67 s alone, 72 s in
+  the run), so the workers do not queue on a shared resource. With 4 workers the 14-core machine sat ~60% idle; 6 workers
+  cost each test ~15–28% more and finish ~25% sooner. Memory with 6: ~3.9 GB still free.
+- **Tried and dropped:** building `world` (the shared admin, users and four projects) once per worker and restoring it with
+  `save_state`. A restore costs 0.14 s against a 0.39 s build on a quiet worker, but the full run with it was no faster
+  (442 s vs 405 s at 6 workers), and a saved copy beside a migration test broke `test_migration_0079` (it counts a column
+  in every schema). Not worth its risk. One test-client portal per test instead of per request saves ~1.5 ms a request
+  (~15 s a run) — not taken.
+- **Changed:** the documented full run is `pytest -q -m "" -n 6`; `scripts/make_test_worker_dbs.sh` defaults to 6. A
+  worktree made with 4 runs it once more (`./scripts/make_test_worker_dbs.sh 6`) before its next full run.

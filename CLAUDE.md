@@ -61,8 +61,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
 - **Run:** `cd backend && ./venv/bin/uvicorn main:app --port 8100 --reload` ·
   `cd frontend && npm run dev` → http://localhost:5180 (proxies `/api` and `/auth`).
 - **Test:** `cd backend && ./venv/bin/pytest -q` (runs as `vb_app` against `vb_test_db`; skips the `slow` mark) ·
-  **before every merge, the full suite:** `./venv/bin/pytest -q -m "" -n 4` (needs `pip install -r requirements-dev.txt`
-  and `./scripts/make_test_worker_dbs.sh 4` once: one test DB per worker) · `cd frontend && npm run lint && npm run build`.
+  **before every merge, the full suite:** `./venv/bin/pytest -q -m "" -n 6` (needs `pip install -r requirements-dev.txt`
+  and `./scripts/make_test_worker_dbs.sh 6` once: one test DB per worker; VB-015: 6, not 4) · `cd frontend && npm run lint && npm run build`.
 - **Test screenshots** go to `Evidence/<YYYY-MM-DD>/<slice>/NN-<check>.png` (date of the test run),
   never loose in the repo root and never directly in `Evidence/`. ui-verifier saves PNGs in the repo root
   (sometimes `.playwright-mcp/`); move them after every run. PNGs are gitignored; see `Evidence/README.md`.

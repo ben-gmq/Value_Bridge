@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # LOCAL DEVELOPMENT ONLY. Creates one test database per pytest-xdist worker — <test db>_gw0 … _gw<N-1> — next to the
 # test database named in backend/.env (TEST_DATABASE_URL), owned by vb_owner with the same grants as
-# bootstrap_local_db.sh. Existing ones are left alone. Usage, from backend/:  ./scripts/make_test_worker_dbs.sh 4
+# bootstrap_local_db.sh. Existing ones are left alone. Usage, from backend/:  ./scripts/make_test_worker_dbs.sh 6
 #
 # The harness (tests/conftest.py) already makes its own connections commit without waiting for the disk; nothing to set
 # on the databases themselves.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-N="${1:-4}"
+N="${1:-6}"
 url=$(grep '^TEST_DATABASE_URL=' .env | cut -d= -f2-)
 base="${url##*/}"
 case "$base" in
