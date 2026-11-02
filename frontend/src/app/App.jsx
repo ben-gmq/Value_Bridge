@@ -38,6 +38,7 @@ import IssuesPage from '../features/issues/IssuesPage';
 import IssuePage from '../features/issues/IssuePage';
 import WavesPage from '../features/waves/WavesPage';
 import ReportsPage from '../features/reports/ReportsPage';
+import ControlPanelPage from '../features/control/ControlPanelPage';
 import ComponentOff from '../features/common/ComponentOff';
 import { useComponents } from './useComponents';
 import ApplicationsPage from '../features/applications/ApplicationsPage';
@@ -63,6 +64,7 @@ const PAGES = [
   ['issues', IssuesPage], ['issues/:issueId', IssuePage],
   ['waves', WavesPage],                                                                            // slice 15
   ['reports', ReportsPage],                                                                        // slice 1f
+  ['control', ControlPanelPage],                                                                   // Control-A
 ];
 
 // D-37: a screen of a component that is off shows why instead of its content. Any one listed

@@ -175,6 +175,22 @@ export const reportApi = {                                            // slice 1
   printStamp: (projectId, params) => d(http.get(`${P(projectId)}/print-stamp`, { params })),
 };
 
+export const controlApi = {                                           // Control-A (spec §4): rules and the panel
+  panel: (projectId) => d(http.get(`${P(projectId)}/control-panel`)),
+  rules: (projectId) => d(http.get(`${P(projectId)}/control-rules`)),
+  update: (projectId, analysisCode, body) => d(http.patch(`${P(projectId)}/control-rules/${analysisCode}`, body)),
+  volatility: (projectId) => d(http.get(`${P(projectId)}/requirement-volatility`)),   // Control-B1 (spec §4)
+  dataMigration: (projectId) => d(http.get(`${P(projectId)}/data-migration`)),
+  orgImpact: (projectId) => d(http.get(`${P(projectId)}/org-impact`)),                 // Control-B2
+  engagement: (projectId) => d(http.get(`${P(projectId)}/stakeholder-engagement`)),
+  changeIntensity: (projectId) => d(http.get(`${P(projectId)}/change-intensity`)),     // Control-C (spec §5)
+  masterData: (projectId) => d(http.get(`${P(projectId)}/master-data`)),
+  houseDefaults: () => d(http.get(`${V}/control-rules/defaults`)),                          // platform admins (CC-6)
+  updateHouseDefault: (analysisCode, body) => d(http.patch(`${V}/control-rules/defaults/${analysisCode}`, body)),
+  resetPreview: (projectId) => d(http.get(`${P(projectId)}/control-rules/reset-preview`)),  // EDIT (CC-4)
+  reset: (projectId, body) => d(http.post(`${P(projectId)}/control-rules/reset`, body)),
+};
+
 export const phaseApi = {                                             // slice 15: "Wave" on screen (W-1)
   list: (projectId, includeRetired = false) => d(http.get(`${P(projectId)}/phases`, { params: { include_retired: includeRetired } })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/phases`, body)),

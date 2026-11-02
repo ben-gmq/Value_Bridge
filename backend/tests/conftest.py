@@ -70,7 +70,13 @@ TODAYS_RULE = {"TO_BE": ["STARTED", "DATA_OUT"], "AS_IS": ["STARTED", "DATA_OUT"
 # copied into a side schema, and copied back after every wipe in one statement each — the same rows, ids included,
 # as re-running the seeds after RESTART IDENTITY produced (Ben 2026-10-16: the suite took ~1 h, 2.8 s of every test
 # was this re-seed).
-LIBRARY = ("code_master", "project_template_component")       # in FK order
+LIBRARY = ("code_master", "project_template_component", "control_rule")       # in FK order
+# Two-tier library tables: the shared rows have project_id NULL; a project's own rows belong to the test (and to a saved
+# state), not to the library (code_master overrides; control_rule copies, Control-A).
+TWO_TIER = ("code_master", "control_rule")
+# Library tables whose project rows every test project gets (create_project copies the house control rules): wiped as
+# ordinary data, so creating a project never forces a library restore (sara M2).
+PROJECT_ROWS = ("control_rule",)
 SNAPSHOT = "vb_test_snapshot"
 _owner_engine = None
 
@@ -173,14 +179,25 @@ def _step_through(cfg) -> None:
 def _seed_library():
     from seeds.seed_code_master import seed
     from seeds.seed_project_templates import seed as seed_templates
+    from seeds.seed_control_rules import seed as seed_control
     with SessionLocal() as s:
         seed(s)
         seed_templates(s)
+        seed_control(s)
 
 
 def _fingerprint(c, schema_name: str, t: str) -> str:
+    """The library rows of `t` — for a PROJECT_ROWS table only its shared (house) rows: the copies every new project
+    takes are ordinary test data, wiped by _wipe without restoring the library (sara M2, Control-A)."""
+    where = " WHERE x.project_id IS NULL" if t in PROJECT_ROWS else ""
     return c.execute(text(f"SELECT md5(coalesce(string_agg(x::text, '|' ORDER BY x::text), '')) "
-                          f"FROM {schema_name}.{t} x")).scalar()
+                          f"FROM {schema_name}.{t} x{where}")).scalar()
+
+
+def _project_rows(c) -> set[str]:
+    """The PROJECT_ROWS tables holding any project's rows."""
+    return {t for t in PROJECT_ROWS
+            if c.execute(text(f"SELECT EXISTS (SELECT 1 FROM public.{t} WHERE project_id IS NOT NULL)")).scalar()}
 
 
 def _dirty_tables(c) -> set[str]:
@@ -254,22 +271,26 @@ def clean():
 def _wipe(c) -> None:
     """clean()'s wipe, inside the caller's owner transaction (restore_state uses it too)."""
     dirty = _dirty_tables(c)
-    if not dirty:
+    owned = _project_rows(c)                             # sara M2: project copies of house rows, ordinary data
+    if not dirty and not owned:
         return
     library = dirty & set(LIBRARY)
     tables = dirty | (set(LIBRARY) if library else set())
-    order = _delete_order(c, tables)
+    order = _delete_order(c, tables | owned)
     if order is None:                                    # an FK cycle among the touched tables: the full wipe
         c.execute(text(f"TRUNCATE {', '.join(sorted(tables | set(LIBRARY)))} RESTART IDENTITY CASCADE"))
         _restore_library(c)
     else:
-        guards = _own_triggers(c, tables, on_delete=True)
+        guards = _own_triggers(c, tables | owned, on_delete=True)
         for t, g in guards:
             c.execute(text(f"ALTER TABLE {t} DISABLE TRIGGER {g}"))
         for t in order:
             if t == "project" and "code_master" in tables:              # CODE_CYCLE: the overrides go first
                 c.execute(text("DELETE FROM code_master WHERE project_id IS NOT NULL"))
-            c.execute(text(f"DELETE FROM {t}"))
+            if t in tables:
+                c.execute(text(f"DELETE FROM {t}"))
+            else:                                                       # owned only: the house rows stay
+                c.execute(text(f"DELETE FROM {t} WHERE project_id IS NOT NULL"))
         for t, g in guards:
             c.execute(text(f"ALTER TABLE {t} ENABLE TRIGGER {g}"))
         for (seq,) in c.execute(text(
@@ -281,7 +302,7 @@ def _wipe(c) -> None:
             _restore_library(c)
         else:
             _reset_library_ids(c)                        # sara L1: a rolled-back library insert used ids too
-    left = _dirty_tables(c)
+    left = _dirty_tables(c) | _project_rows(c)
     if left:
         raise RuntimeError(f"the wipe left rows or used ids in {sorted(left)}: the next test would not start fresh")
 
@@ -346,15 +367,17 @@ def save_state(name: str) -> None:
             if c.execute(text(f"SELECT EXISTS (SELECT 1 FROM public.{t})")).scalar():
                 c.execute(text(f"CREATE TABLE {s}.s_{t} AS SELECT * FROM public.{t}"))
                 kept.append(t)
-        c.execute(text(f"CREATE TABLE {s}.s_code_master AS SELECT * FROM public.code_master WHERE project_id IS NOT NULL"))
+        for t in TWO_TIER:
+            c.execute(text(f"CREATE TABLE {s}.s_{t} AS SELECT * FROM public.{t} WHERE project_id IS NOT NULL"))
         c.execute(text(f"CREATE TABLE {s}.s_sequences AS SELECT schemaname || '.' || sequencename AS seq, last_value "
                        "FROM pg_sequences WHERE schemaname = 'public'"))
     _STATES[name] = kept
 
 
 def _fingerprint_shared(c, schema_name: str, t: str) -> str:
-    """The library's shared rows only: a project's own code overrides are part of a saved state, not the library."""
-    where = " WHERE x.project_id IS NULL" if t == "code_master" else ""
+    """The library's shared rows only: a project's own rows (code overrides, control rules) are part of a saved state,
+    not the library."""
+    where = " WHERE x.project_id IS NULL" if t in TWO_TIER else ""
     return c.execute(text(f"SELECT md5(coalesce(string_agg(x::text, '|' ORDER BY x::text), '')) "
                           f"FROM {schema_name}.{t} x{where}")).scalar()
 
@@ -364,10 +387,10 @@ def restore_state(name: str) -> None:
     with owner_engine().begin() as c:
         c.execute(text("SET LOCAL lock_timeout = '10s'"))           # sara LOW: a held lock fails, never hangs
         _wipe(c)
-        order = _delete_order(c, set(tables) | {"code_master"})
+        order = _delete_order(c, set(tables) | set(TWO_TIER))
         if order is None:
             raise RuntimeError(f"state {name}: its tables form a reference cycle; it cannot be restored")
-        triggers = _own_triggers(c, set(tables) | {"code_master"})
+        triggers = _own_triggers(c, set(tables) | set(TWO_TIER))
         for t, g in triggers:
             c.execute(text(f"ALTER TABLE {t} DISABLE TRIGGER {g}"))
         for t in reversed(order):                            # parents first
@@ -378,13 +401,17 @@ def restore_state(name: str) -> None:
                 cols = _cols(c, s, "s_code_master", "code_master")
                 c.execute(text(f"INSERT INTO public.code_master ({cols}) OVERRIDING SYSTEM VALUE "
                                f"SELECT {cols} FROM {s}.s_code_master"))
+            if t == "control_rule":                          # a project's rules after its project and owner roles
+                cols = _cols(c, s, "s_control_rule", "control_rule")
+                c.execute(text(f"INSERT INTO public.control_rule ({cols}) OVERRIDING SYSTEM VALUE "
+                               f"SELECT {cols} FROM {s}.s_control_rule"))
         for t, g in triggers:
             c.execute(text(f"ALTER TABLE {t} ENABLE TRIGGER {g}"))
         for seq, last in c.execute(text(f"SELECT seq, last_value FROM {s}.s_sequences")).all():
             c.execute(text("SELECT setval(:q, :v, :called)"), {"q": seq, "v": last or 1, "called": last is not None})
         # The proof.
-        for t in tables + ["code_master"]:
-            where = " WHERE project_id IS NOT NULL" if t == "code_master" else ""
+        for t in tables + list(TWO_TIER):
+            where = " WHERE project_id IS NOT NULL" if t in TWO_TIER else ""
             diff = c.execute(text(
                 f"SELECT count(*) FROM ((SELECT md5(x::text) FROM public.{t} x{where} EXCEPT ALL "
                 f"SELECT md5(y::text) FROM {s}.s_{t} y) UNION ALL (SELECT md5(y::text) FROM {s}.s_{t} y EXCEPT ALL "

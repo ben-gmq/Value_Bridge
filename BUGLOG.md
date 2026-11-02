@@ -651,3 +651,31 @@ place.
 - **2026-10-29 · slice 1e-b piece b, flow import replace mode (`sara`, PASS; M1, L1–L3 fixed):** (L4)
   `flow_import._Resolver._replace` rescans every staged row once per step, and `step_io.dependents` reads each dependent
   by `db.get`; fine at 99 steps × 100 links, index rows by step once if larger files ever appear.
+- **2026-10-30 · slice Control-A, control rules and panel (`sara`, PASS; M1–M3, L1, L2, L4, L6 fixed):** (L3) a rule
+  with `is_active = false` (reachable only by SQL) is listed as "missing: run the seed", which the seed never re-adds;
+  say RETIRED instead, or drop `is_active` from the read. (L5) every panel load re-verifies the agreed baseline and runs
+  a full diff; time it on the demo showcase before the cloud and cache the integrity verdict per baseline if slow.
+- **2026-10-30 · slice Control-B1, volatility and data migration map (`sara`, PASS; M1, L4 fixed, L6 accepted):** (M2)
+  `services/control_reports` calls `baseline._Labeller` / `_side_rows` and `reports._Scope` / `_hier_key` / `_app_out`;
+  make them public or keep the cross-module use named in both modules' docstrings. (M3) every panel load verifies every
+  baseline and diffs every consecutive pair — measured at the design bound before merge (spec §12 N3); cache the
+  verdict per baseline (baselines never change) if the cloud showcase is slow. (L5) a BR whose frozen parent chain is
+  broken is left out of every area silently; count and show them.
+- **2026-10-30 · slice Control-B2, organisation impact and stakeholder engagement (`sara`, PASS; M1, L1, L3, L4 fixed,
+  L2 wording fixed):** (L2) on a tie for the highest share the panel names one unit by code order; pass a `tied` count.
+  (L5) the panel computes `org_impact_heatmap` twice (its own row, and inside `stakeholder_engagement`) and the as-is
+  step query is written twice in `control_reports`; pass the computed impact in and share one helper if the panel is slow.
+- **2026-10-30 · slice Control-C C1 + C2, where change lands, master data, FTC defaults and reset (`sara`, no CRITICAL /
+  HIGH / MEDIUM; L1 fixed — a retired rule or default no longer splits the reset preview from the write):** (L2) the
+  platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
+  `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
+  the editor-gets-403 check over it.
+- **2026-11-02 · slice Control-C C3, FRs nobody traced to a requirement (`sara`, no CRITICAL / HIGH / MEDIUM; L3 index
+  comment and L4 "0 / 1 effort days" wording fixed):** (L1) "untraced" is computed three ways — the panel and register
+  (`function_requirement.list_frs`, live link to a live BR), the effort summary (`effort.py`, live link only) and the
+  scope summary (`scope_summary.py`); they agree only because `step_retire.OWNED_BY_BR` retires a BR's links with it.
+  Read one `traced_fr_ids` helper from all three. (L2) with "show retired" ticked, the register's untraced view also
+  lists retired FRs, so it shows more than the panel figure; ignore the tick on that view or say so on screen.
+- **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
+  preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
+  shows a red outline with no mismatch message.

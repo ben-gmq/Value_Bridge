@@ -1,6 +1,6 @@
 // Every UI string lives in en*.json, so a Japanese UI is a translation, not a refactor (§14.8).
 // One file per screen area, so parallel work never edits the same file; keys are prefixed by
-// area (processes.*, requirements.*, data.*, settings.*, solutions.*, frs.*, applications.*, interfaces.*, effort.*, components.*, baselines.*, home.*, codes.*, issues.*, waves.*, removals.*, grants.*, reports.*) and must not collide.
+// area (processes.*, requirements.*, data.*, settings.*, solutions.*, frs.*, applications.*, interfaces.*, effort.*, components.*, baselines.*, home.*, codes.*, issues.*, waves.*, removals.*, grants.*, reports.*, control.*) and must not collide.
 import en from './en.json';
 import processes from './en.processes.json';
 import requirements from './en.requirements.json';
@@ -20,8 +20,9 @@ import waves from './en.waves.json';
 import removals from './en.removals.json';
 import grants from './en.grants.json';
 import reports from './en.reports.json';
+import control from './en.control.json';
 
-const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components, ...baselines, ...home, ...codes, ...issues, ...waves, ...removals, ...grants, ...reports };
+const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components, ...baselines, ...home, ...codes, ...issues, ...waves, ...removals, ...grants, ...reports, ...control };
 
 export function t(key, vars = {}) {
   const s = (vars.n === 1 && ALL[`${key}_one`]) || ALL[key] || key;      // "{n} fields" → "1 field"

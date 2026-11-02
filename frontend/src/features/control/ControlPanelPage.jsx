@@ -1,0 +1,285 @@
+import { useState } from 'react';
+import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, MenuItem,
+  Snackbar, Stack, Switch, TextField, Typography } from '@mui/material';
+import { errorText, isStale } from '../../api/client';
+import { controlApi, orgApi } from '../../api/scope';
+import { keys, links } from '../../app/links';
+import { useCanEdit } from '../../app/useCanEdit';
+import { Card, KV, Status, Tag } from '../../components/kit';
+import { Page } from '../../components/Page';
+import { t } from '../../i18n/t';
+import { MONO } from '../../theme/theme';
+import { fmtDate } from '../baselines/baselineKit';
+
+// Control-A (docs/slice_control_a_spec.md §5; D-19, CT-1…CT-4): one row per agreed rule — today's figure against the
+// threshold, the verdict, the owning role and the agreed response. The server measures and decides the verdict; the
+// screen only lays it out. Free text renders as text (VB law 9).
+const TONE = { GREEN: 'ok', FLAG: 'caution', ESCALATE: 'escalate', NOT_MEASURED: 'neutral' };
+const REPORT = {
+  priced_diff: (p) => links.baselines(p), coverage: (p) => links.reports(p, 'coverage'),
+  solution_matrix: (p) => links.reports(p, 'solution_matrix'), interface_load: (p) => links.interfaces(p),
+  requirement_volatility: (p) => links.reports(p, 'volatility'), data_migration_map: (p) => links.reports(p, 'data_migration'),
+  org_impact_heatmap: (p) => links.reports(p, 'org_impact'), stakeholder_engagement: (p) => links.reports(p, 'engagement'),
+  process_change_intensity: (p) => links.reports(p, 'change_intensity'), master_data_candidates: (p) => links.reports(p, 'master_data'),
+  fr_unlinked: (p) => links.frs(p, 'untraced'),
+};
+
+const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
+
+function Figures({ r }) {
+  const f = r.figures ?? {};
+  if (r.reason) {
+    return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t(`control.reason.${r.reason}`, { label: f.baseline_label, n: f.in_scope })}</Typography>;
+  }
+  return (
+    <Stack sx={{ gap: 0.5 }}>
+      {r.analysis_code === 'priced_diff' && f.base_days !== undefined && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {t('control.growth', { added: f.added_days, removed: Math.abs(f.removed_days), base: f.base_days, label: f.baseline_label })}
+        </Typography>)}
+      {f.unrated_count > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.unrated', { n: f.unrated_count })}</Typography>)}
+      {r.analysis_code === 'interface_load' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.iface', { i: f.interface_count, n: f.fr_count })}</Typography>)}
+      {r.analysis_code === 'requirement_volatility' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.volatility', { n: f.generations })}</Typography>)}
+      {r.analysis_code === 'org_impact_heatmap' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.impact', { unit: f.top_unit, n: f.changes })}</Typography>)}
+      {['org_impact_heatmap', 'stakeholder_engagement'].includes(r.analysis_code) && f.changes_without_ra > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.withoutRa', { n: f.changes_without_ra })}</Typography>)}
+      {r.analysis_code === 'stakeholder_engagement' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {f.top_unit ? t('control.silent', { unit: f.top_unit, s: f.silent_units, n: f.affected_units })
+            : t('control.allHeard', { n: f.affected_units })}
+        </Typography>)}
+      {r.analysis_code === 'data_migration_map' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {t('control.migration', { none: f.no_source, two: f.conflicting, n: f.in_scope })}
+        </Typography>)}
+      {r.analysis_code === 'process_change_intensity' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.intensity', { area: f.top_area, n: f.changed_steps })}</Typography>)}
+      {r.analysis_code === 'master_data_candidates' && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.master', { n: f.candidates, used: f.entities_used })}</Typography>)}
+      {r.analysis_code === 'fr_unlinked' && Number(f.effort_days) > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.unlinkedDays', { n: Number(f.effort_days) })}</Typography>)}
+      {r.analysis_code === 'data_migration_map' && f.not_seen_on_as_is > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.notMapped', { n: f.not_seen_on_as_is })}</Typography>)}
+    </Stack>
+  );
+}
+
+function RuleRow({ projectId, r, canEdit, onEdit }) {
+  const lt = r.comparison === 'LT';
+  // CB-5: a rule copied into a running engagement is off until the client agrees it — measured, greyed, no verdict, and
+  // no "agreed" date shown (review round 2 N2).
+  const pending = r.off_state === 'NOT_YET_AGREED';
+  // Control-C R1-P2: a rule last set by a reset says so until a person edits it — FTC's numbers, not an agreed threshold.
+  const changed = pending ? t('control.pendingNote')
+    : r.reset ? t('control.resetNote', { date: fmtDate(r.reset.at), name: r.reset.by ?? '' })
+    : r.last_changed_at ? t('control.lastChanged', { date: fmtDate(r.last_changed_at), name: r.last_changed_by ?? '' })
+      : t('control.houseDefault', { date: fmtDate(r.agreed_at) });
+  return (
+    <Card title={t(`control.analysis.${r.analysis_code}`)}
+      action={(
+        <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+          {r.is_enabled ? <Status tone={TONE[r.verdict]}>{t(`control.verdict.${r.verdict}`)}</Status>
+            : <Tag tone="neutral">{t(pending ? 'control.verdict.pending' : 'control.verdict.off')}</Tag>}
+          {canEdit && <Button size="small" variant="outlined" onClick={() => onEdit(r)}>{t('control.edit')}</Button>}
+        </Stack>)}
+      sx={r.is_enabled ? undefined : { opacity: 0.7 }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 3 }}>
+        <Stack sx={{ minWidth: 220, gap: 1 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 26, fontWeight: 600 }}>{num(r.measured, r.unit)}</Typography>
+          <Figures r={r} />
+          <KV k={t(lt ? 'control.thresholdLt' : 'control.threshold')} v={num(r.threshold_value, r.unit)} mono />
+          <KV k={t(lt ? 'control.escalateLt' : 'control.escalate')}
+            v={r.escalate_value === null ? t('control.never') : num(r.escalate_value, r.unit)} mono />
+        </Stack>
+        <Stack sx={{ flex: 1, gap: 1 }}>
+          <KV k={t('control.owner')} v={r.owner ? `${r.owner.org_role_code} · ${r.owner.org_role_name}`
+            : <Tag tone="caution">{t('control.ownerNone')}</Tag>} />
+          <KV k={t('control.action')} v={r.prescribed_action ?? '–'} />
+          <KV k={t('control.path')} v={r.escalation_path ?? '–'} />
+          <Stack direction="row" sx={{ gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{changed}</Typography>
+            {REPORT[r.analysis_code] && (
+              <Link component={RouterLink} to={REPORT[r.analysis_code](projectId)} sx={{ fontSize: 13 }}>{t('control.open')}</Link>)}
+          </Stack>
+        </Stack>
+      </Stack>
+    </Card>
+  );
+}
+
+function EditDialog({ projectId, rule, onClose, onSaved, onStale }) {
+  const qc = useQueryClient();
+  const roles = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
+  const lt = rule.comparison === 'LT';
+  const [form, setForm] = useState({
+    threshold_value: String(Number(rule.threshold_value)),
+    escalate_value: rule.escalate_value === null ? '' : String(Number(rule.escalate_value)),
+    owner_org_role_id: rule.owner_org_role_id ?? '', prescribed_action: rule.prescribed_action ?? '',
+    escalation_path: rule.escalation_path ?? '', is_enabled: rule.is_enabled,
+  });
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const save = useMutation({
+    mutationFn: () => controlApi.update(projectId, rule.analysis_code, {
+      threshold_value: form.threshold_value, escalate_value: form.escalate_value === '' ? null : form.escalate_value,
+      owner_org_role_id: form.owner_org_role_id === '' ? null : Number(form.owner_org_role_id),
+      prescribed_action: form.prescribed_action, escalation_path: form.escalation_path, is_enabled: form.is_enabled,
+      change_rationale: reason, row_version: rule.row_version,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onSaved(); },
+    onError: (err) => {
+      // sara M1: the dialog holds the row version it opened with, so a stale save closes it; reopening reads the new row
+      if (isStale(err)) { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onStale(); }
+      else setError(errorText(err));
+    },
+  });
+  const live = (roles.data ?? []).filter((o) => o.is_active !== false);
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm" aria-labelledby="control-edit-title">
+      <DialogTitle id="control-edit-title">{t('control.dialog.title', { name: t(`control.analysis.${rule.analysis_code}`) })}</DialogTitle>
+      <DialogContent>
+        <Stack sx={{ gap: 2, pt: 1 }}>
+          {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+          {roles.error && <Alert severity="error">{errorText(roles.error)}</Alert>}
+          <Stack direction="row" sx={{ gap: 2 }}>
+            <TextField label={t(lt ? 'control.dialog.thresholdLt' : 'control.dialog.threshold')} type="number" required
+              value={form.threshold_value} onChange={set('threshold_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
+            <TextField label={t(lt ? 'control.dialog.escalateLt' : 'control.dialog.escalate')} type="number"
+              value={form.escalate_value} onChange={set('escalate_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
+          </Stack>
+          <TextField select label={t('control.dialog.owner')} value={form.owner_org_role_id} onChange={set('owner_org_role_id')}>
+            <MenuItem value="">{t('control.dialog.noOwner')}</MenuItem>
+            {live.map((o) => <MenuItem key={o.org_role_id} value={o.org_role_id}>{o.org_role_code} · {o.org_role_name}</MenuItem>)}
+          </TextField>
+          <TextField label={t('control.action')} multiline minRows={2} value={form.prescribed_action}
+            onChange={set('prescribed_action')} slotProps={{ htmlInput: { maxLength: 2000 } }} />
+          <TextField label={t('control.path')} multiline minRows={2} value={form.escalation_path}
+            onChange={set('escalation_path')} slotProps={{ htmlInput: { maxLength: 2000 } }} />
+          <FormControlLabel label={t('control.dialog.enabled')}
+            control={<Switch checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} />} />
+          <TextField label={t('control.dialog.reason')} helperText={t('control.dialog.reasonHelp')} required multiline minRows={2}
+            value={reason} onChange={(e) => setReason(e.target.value)} slotProps={{ htmlInput: { maxLength: 2000 } }} />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('control.dialog.cancel')}</Button>
+        <Button variant="contained" disabled={save.isPending || !reason.trim() || form.threshold_value === ''}
+          onClick={() => { setError(''); save.mutate(); }}>{t('control.dialog.save')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function shown(c, side, f) {
+  const v = c[side][f];
+  if (f === 'escalate_value' && v === null) return t('control.never');
+  if (f.endsWith('_value')) return num(v, c.unit);
+  return v ?? '–';
+}
+
+// Control-C (spec §4; CC-4): what a reset would change, shown before it happens — the audit keeps the agreed action and
+// escalation text only as "changed" (CT-3), so this is the editor's one look at what they replace. The reset carries
+// the preview's version stamp; anything changed since is refused (409) and the preview reloads (R1-P1).
+function ResetDialog({ projectId, onClose, onDone }) {
+  const qc = useQueryClient();
+  const pv = useQuery({ queryKey: keys.resetPreview(projectId), queryFn: () => controlApi.resetPreview(projectId),
+    staleTime: 0, gcTime: 0 });
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const go = useMutation({
+    mutationFn: () => controlApi.reset(projectId, { change_rationale: reason, stamp: pv.data.stamp }),
+    onSuccess: (res) => { qc.invalidateQueries({ queryKey: ['control', String(projectId)] }); onDone(res); },
+    onError: (err) => {
+      setError(errorText(err));
+      if (isStale(err)) qc.invalidateQueries({ queryKey: keys.resetPreview(projectId) });
+    },
+  });
+  const p = pv.data;
+  const nothing = p && p.changes.length === 0 && p.added.length === 0;
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="md" aria-labelledby="control-reset-title">
+      <DialogTitle id="control-reset-title">{t('control.reset.title')}</DialogTitle>
+      <DialogContent>
+        <Stack sx={{ gap: 2, pt: 1 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('control.reset.intro')}</Typography>
+          {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+          {pv.error && <Alert severity="error">{errorText(pv.error)}</Alert>}
+          {nothing && <Alert severity="success">{t('control.reset.nothing')}</Alert>}
+          {p && p.changes.map((c) => (
+            <Box key={c.analysis_code}>
+              <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t(`control.analysis.${c.analysis_code}`)}</Typography>
+              {c.fields.map((f) => (
+                <Typography key={f} sx={{ fontSize: 13.5 }}>
+                  {t(`control.reset.field.${f}`)}: <Box component="span" sx={{ color: 'text.secondary' }}>{shown(c, 'current', f)}</Box>
+                  {' → '}{shown(c, 'default', f)}
+                </Typography>))}
+            </Box>))}
+          {p && p.added.length > 0 && (
+            <Typography sx={{ fontSize: 13.5 }}>
+              {t('control.reset.added', { names: p.added.map((code) => t(`control.analysis.${code}`)).join(', ') })}
+            </Typography>)}
+          {p && !nothing && (
+            <TextField label={t('control.dialog.reason')} helperText={t('control.dialog.reasonHelp')} required multiline minRows={2}
+              value={reason} onChange={(e) => setReason(e.target.value)} slotProps={{ htmlInput: { maxLength: 2000 } }} />)}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('control.dialog.cancel')}</Button>
+        {p && !nothing && (
+          <Button variant="contained" color="warning" disabled={go.isPending || !reason.trim()}
+            onClick={() => { setError(''); go.mutate(); }}>{t('control.reset.confirm')}</Button>)}
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export default function ControlPanelPage() {
+  const { projectId } = useParams();
+  const canEdit = useCanEdit();
+  const q = useQuery({ queryKey: keys.controlPanel(projectId), queryFn: () => controlApi.panel(projectId) });
+  const [editing, setEditing] = useState(null);
+  const [resetting, setResetting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const d = q.data;
+  return (
+    <Page title={t('control.title')} subtitle={t('control.subtitle')} error={q.error && errorText(q.error)}
+      actions={canEdit && <Button variant="outlined" onClick={() => setResetting(true)}>{t('control.reset.button')}</Button>}>
+      {d && (
+        <Stack sx={{ gap: 2 }}>
+          {d.rows.filter((r) => r.off_state !== 'NOT_YET_AGREED').map((r) => (
+            <RuleRow key={r.analysis_code} projectId={projectId} r={r} canEdit={canEdit} onEdit={setEditing} />))}
+          {d.rows.some((r) => r.off_state === 'NOT_YET_AGREED') && (
+            <Box>
+              <Typography variant="h6" component="h2" sx={{ mt: 1 }}>{t('control.pendingTitle')}</Typography>
+              <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('control.pendingIntro')}</Typography>
+            </Box>)}
+          {d.rows.filter((r) => r.off_state === 'NOT_YET_AGREED').map((r) => (
+            <RuleRow key={r.analysis_code} projectId={projectId} r={r} canEdit={canEdit} onEdit={setEditing} />))}
+          {d.coming.length > 0 && (
+            <Card title={t('control.coming')}>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {d.coming.map((c) => (
+                  <Typography component="li" key={c.analysis_code} sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+                    {t(`control.analysis.${c.analysis_code}`)} — {t(`control.comingBy.${c.brought_by}`)}
+                  </Typography>))}
+              </Box>
+            </Card>)}
+        </Stack>)}
+      {editing && (
+        <EditDialog projectId={projectId} rule={editing} onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); setNotice(t('control.saved')); }}
+          onStale={() => { setEditing(null); setNotice(t('control.stale')); }} />)}
+      {resetting && (
+        <ResetDialog projectId={projectId} onClose={() => setResetting(false)}
+          onDone={(res) => { setResetting(false); setNotice(t('control.reset.done', { n: res.changed.length, a: res.added.length })); }} />)}
+      <Snackbar open={Boolean(notice)} autoHideDuration={5000} onClose={() => setNotice('')} message={notice} />
+    </Page>
+  );
+}

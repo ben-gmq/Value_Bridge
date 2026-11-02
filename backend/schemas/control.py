@@ -1,0 +1,277 @@
+"""Control rules and the control panel (docs/slice_control_a_spec.md §3–§4). The PATCH body replaces every editable
+field: each is required, and null clears a nullable one. comparison, agreed_at and the authors are server-set (law 6)."""
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class OwnerRef(BaseModel):
+    org_role_code: str
+    org_role_name: str
+
+
+class ControlRuleOut(BaseModel):
+    analysis_code: str
+    unit: str                                  # PCT | COUNT
+    comparison: str
+    threshold_value: Decimal
+    escalate_value: Decimal | None
+    owner_org_role_id: int | None
+    owner: OwnerRef | None                     # None: "Owner not named" (CT-1)
+    prescribed_action: str | None
+    escalation_path: str | None
+    is_enabled: bool
+    change_rationale: str | None
+    agreed_at: datetime
+    last_changed_at: datetime | None           # None: never edited — the FTC house default as copied (round 2 N2)
+    last_changed_by: str | None
+    row_version: int
+
+
+class ControlRuleIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    threshold_value: Decimal = Field(max_digits=12, decimal_places=2)
+    escalate_value: Decimal | None = Field(max_digits=12, decimal_places=2)
+    owner_org_role_id: int | None
+    prescribed_action: str | None = Field(max_length=2000)
+    escalation_path: str | None = Field(max_length=2000)
+    is_enabled: bool
+    change_rationale: str = Field(max_length=2000)
+    row_version: int
+
+
+class PanelRow(ControlRuleOut):
+    measured: Decimal | None
+    reason: str | None                         # why NOT_MEASURED (a code the screen translates)
+    figures: dict                              # the analysis' supporting numbers (e.g. added / removed days)
+    verdict: str | None                        # GREEN | FLAG | ESCALATE | NOT_MEASURED; None when switched off
+    off_state: str | None                      # NOT_YET_AGREED | SWITCHED_OFF; None when on (CB-5)
+    reset: "ResetMark | None" = None           # last set by a reset to the FTC defaults (Control-C R1-P2)
+
+
+class Coming(BaseModel):
+    analysis_code: str
+    brought_by: str                            # BENEFITS | RISKS | SEED
+
+
+class ControlPanelOut(BaseModel):
+    generated_at: str
+    rows: list[PanelRow]
+    coming: list[Coming]
+
+
+# ---- Control-B report tabs (docs/slice_control_b_spec.md §4) -------------------------------------------------------
+class Headline(BaseModel):
+    model_config = ConfigDict(extra="allow")   # the analysis' supporting figures ride beside measured / reason
+    measured: Decimal | None
+    reason: str | None
+
+
+class VolatilityGeneration(BaseModel):
+    from_label: str
+    to_label: str
+    churning: int
+
+
+class VolatilityArea(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+    in_latest: bool
+    churned: list[bool]                        # one per generation, oldest first
+    current_run: int
+
+
+class VolatilityOut(BaseModel):
+    generated_at: str
+    generations: list[VolatilityGeneration]
+    areas: list[VolatilityArea]
+    headline: Headline
+
+
+class AppRef(BaseModel):
+    application_id: int
+    application_code: str
+    application_name: str
+
+
+class EntityRef(BaseModel):
+    data_entity_id: int
+    de_number: str
+    de_name: str
+
+
+class MigrationEntity(EntityRef):
+    state: str                                 # OK | NO_SOURCE | CONFLICTING
+    as_is_steps: int
+    sources: list[AppRef]
+    targets: list[AppRef] | None               # None: SOLUTION off
+
+
+class DataMigrationOut(BaseModel):
+    generated_at: str
+    entities: list[MigrationEntity] | None     # None: AS_IS or APPLICATION off
+    new_data: list[EntityRef] | None
+    retiring: list[EntityRef] | None
+    headline: Headline
+
+
+class ImpactUnit(BaseModel):
+    org_unit_id: int
+    org_unit_code: str
+    org_unit_name: str
+    level_no: int
+    parent_org_unit_id: int | None
+    changes: int                               # changes one of its roles is Responsible or Accountable on
+    share: Decimal                             # changes ÷ all changes, %
+    heard_only: int                            # changes it is only Consulted / Informed on — shown, not counted
+    ra_roles: list[str]
+    as_is_steps: int | None                    # as-is steps it is R/A on — context, never counted; None: AS_IS off
+
+
+class OrgImpactOut(BaseModel):
+    generated_at: str
+    units: list[ImpactUnit] | None             # None: SOLUTION off
+    headline: Headline
+
+
+class Speaker(BaseModel):
+    stakeholder_id: int
+    stakeholder_name: str
+    issues: int                                # live issues raised, any status
+
+
+class EngagementUnit(BaseModel):
+    org_unit_id: int
+    org_unit_code: str
+    org_unit_name: str
+    level_no: int
+    changes: int
+    share: Decimal
+    issues_raised: int                         # live issues raised by stakeholders in the unit
+    parent_issues_raised: int                  # ... in its direct parent unit
+    voice: str | None                          # OWN | PARENT | None (silent)
+    speakers: list[Speaker]                    # its own stakeholders who raised a live issue
+
+
+class EngagementOut(BaseModel):
+    generated_at: str
+    units: list[EngagementUnit] | None         # None: not measured
+    headline: Headline
+
+
+# ---- Control-C report tabs (docs/slice_control_c_spec.md §5) -------------------------------------------------------
+class Category(BaseModel):
+    code: str
+    label: str
+
+
+class ChangeArea(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+    steps: int
+    changed_steps: int
+    share: Decimal | None                      # None: no changed step anywhere
+    by_category: dict[str, int]                # context only, never counted (CC-1)
+
+
+class ChangeIntensityOut(BaseModel):
+    generated_at: str
+    categories: list[Category] | None          # None: SOLUTION off
+    areas: list[ChangeArea] | None
+    headline: Headline
+
+
+class AreaRef(BaseModel):
+    bfc_node_id: int
+    hier_code: str
+    area_name: str
+
+
+class MasterEntity(EntityRef):
+    business_owner_note: str | None            # None: no owner noted (blank counts as none)
+    br_count: int
+    areas: list[AreaRef]
+
+
+class MasterDataOut(BaseModel):
+    generated_at: str
+    entities: list[MasterEntity] | None        # None: no entity used yet
+    headline: Headline
+
+
+# ---- Control-C: FTC company defaults and reset (docs/slice_control_c_spec.md §3–§4) --------------------------------
+class ResetMark(BaseModel):
+    at: datetime
+    by: str | None
+    change_rationale: str | None
+
+
+class HouseChange(BaseModel):
+    at: datetime
+    by: str | None
+    model_config = ConfigDict(populate_by_name=True)
+    from_: dict = Field(alias="from", serialization_alias="from")
+    to: dict
+    text_changed: list[str]
+    change_rationale: str | None
+
+
+class HouseRuleOut(ControlRuleOut):
+    history: list[HouseChange]
+
+
+class HouseRuleIn(BaseModel):
+    """R1-D1: the four fields a company default carries — never an owner, the comparison or on / off."""
+    model_config = ConfigDict(extra="forbid")
+    threshold_value: Decimal = Field(max_digits=12, decimal_places=2)
+    escalate_value: Decimal | None = Field(max_digits=12, decimal_places=2)
+    prescribed_action: str | None = Field(max_length=2000)
+    escalation_path: str | None = Field(max_length=2000)
+    change_rationale: str = Field(max_length=2000)
+    row_version: int
+
+
+class RuleValues(BaseModel):
+    threshold_value: Decimal
+    escalate_value: Decimal | None
+    prescribed_action: str | None
+    escalation_path: str | None
+
+
+class ResetChange(BaseModel):
+    analysis_code: str
+    unit: str
+    comparison: str
+    is_enabled: bool
+    current: RuleValues
+    default: RuleValues
+    fields: list[str]
+
+
+class ResetStamp(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project: dict[str, int]
+    house: dict[str, int]
+
+
+class ResetPreviewOut(BaseModel):
+    changes: list[ResetChange]
+    added: list[str]
+    stamp: ResetStamp
+
+
+class ResetIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    change_rationale: str = Field(max_length=2000)
+    stamp: ResetStamp
+
+
+class ResetOut(BaseModel):
+    changed: list[str]
+    added: list[str]
+
+
+PanelRow.model_rebuild()

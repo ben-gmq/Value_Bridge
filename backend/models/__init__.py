@@ -7,6 +7,7 @@ from models.bfc import (  # noqa: F401
     ProcessTrigger,
 )
 from models.client_org import OrgRole, OrgUnit  # noqa: F401
+from models.control import ControlRule  # noqa: F401
 from models.data_model import DataEntity, DataField  # noqa: F401
 from models.diagram import DiagramLayout  # noqa: F401
 from models.effort import EffortRate  # noqa: F401

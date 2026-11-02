@@ -492,12 +492,12 @@ from a number into an action.
 | `maintain_control_rule` | `CONTROL_RULE` | C/U | (project × `analysis_code`) → threshold value, comparison, owning `org_role_id`, escalation path, at EDIT. Agreed at mobilisation; the thresholds are **the client's, not hard-coded** |
 | `control_panel` | `CONTROL_RULE` + every analysis | R | Runs every analysis, compares to its rule → **GREEN / FLAG / ESCALATE**, with the owning role and the prescribed action per row. The PMO's one screen |
 | `requirement_volatility` | `BASELINE_BUSINESS_REQUIREMENT` | R | ADDED/CHANGED/REMOVED per L1 area across baseline generations. **The earliest warning the app produces** — an area churning across two consecutive baselines is not understood. *Action: pull it out of the current wave; do not let a vendor start there* |
-| `process_change_intensity` | `BFC_NODE`, `BR_SOLUTION`, `SOLUTION` | R | Process steps carrying a solution, rolled up per L1 area, weighted by solution category. Where the transformation actually lands versus where it was said it would |
-| `org_impact_heatmap` | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `BR_SOLUTION`, `ORG_UNIT` | R | Change absorbed per org unit. *Action: top decile gets a dedicated change agent and a capacity check — they are usually the SMEs too* |
+| `process_change_intensity` | `BFC_NODE`, `BR_SOLUTION`, `SOLUTION` | R | Process steps carrying a change (a live BR with a live, non-rejected solution), rolled up per L1 area; every changed step weighs the same, solution categories are context (CC-1). Where the transformation actually lands versus where it was said it would. *Action: check the change workload and the change-management plan for that area before the next gate* |
+| `org_impact_heatmap` | `BFC_NODE_ORG_ROLE`, `BR_ORG_ROLE`, `BR_SOLUTION`, `ORG_UNIT` | R | Change absorbed per org unit: the share of changes it is Responsible or Accountable on (to-be RACI; the as-is RACI is context, CB-2). *Action: a unit carrying a concentrated share gets a dedicated change agent and a capacity check — they are usually the SMEs too* |
 | `stakeholder_engagement` | `STAKEHOLDER`, `ISSUE`, `ORG_UNIT` | R | Issues raised per stakeholder per org unit. **Silence is the signal**: high impact and no issues raised is adoption risk. *Action: interview before sign-off* |
 | `interface_load` | `v_interface_list` | R | Interface FRs per source → target application pair (from `FR_INTERFACE`, D-27), and as a share of all FRs. *Action: over ~25–30%, stand up an integration workstream and book test environments early* |
 | `data_migration_map` | `DATA_ENTITY`, `APPLICATION_BFC_NODE`, `APPLICATION_SOLUTION` | R | Source (as-is) → target (to-be) per data entity. Entities with no source, or with conflicting sources → data ownership decision before design freeze |
-| `master_data_candidates` | `BR_DATA_ENTITY`, `BFC_NODE` | R | Entities referenced by BRs across many L1 areas. *Action: assign a single owner; it becomes a managed cross-workstream dependency* |
+| `master_data_candidates` | `BR_DATA_ENTITY`, `BFC_NODE`, `DATA_ENTITY` | R | Entities referenced by BRs under 3+ L1 areas; headline = those with no business owner noted (CC-2). *Action: assign a single owner; it becomes a managed cross-workstream dependency* |
 | `fr_unlinked` | `FUNCTION_REQUIREMENT`, `BR_FUNCTION_REQUIREMENT` | R | **D-28, re-based on D-52.** FRs with no live BR link, count and effort. *Action: link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement* |
 
 ### 4.14 Programs (D-32, D-71)
@@ -2368,10 +2368,17 @@ the governance model would be something the client never signed up to. Same reas
 (A-38) and the frozen `code_master` labels in `baseline_*` (§5.4.4): **an agreed number is copied, never
 referenced.**
 
-`owner_org_role_id` is `NOT NULL` on a project rule and **nullable on a house default** — FTC cannot know
-which of a client's roles owns a response before the client's org chart exists, so `create_project`
-copies the thresholds and the project assigns the roles at mobilisation. A project rule with no owner is
-reported by `coverage` as an incomplete control framework.
+`owner_org_role_id` is **nullable on both tiers** (CT-1) and always `NULL` on a house default — FTC cannot
+know which of a client's roles owns a response before the client's org chart exists, so `create_project`
+copies the thresholds and the project assigns the roles at mobilisation. The panel tags a project rule with
+no owner "Owner not named", and `coverage` reports it as an incomplete control framework. When set, the owner
+is a role of the same project (composite FK to `org_role (org_role_id, project_id)`); retiring a role that owns
+a rule is refused until the rule is re-pointed. `agreed_at` is when the row was set up and is never moved by an
+edit (CT-4). A house row's `created_by` is `NULL` (seeded by the CLI, as `code_master`'s library rows).
+
+**A rule is seeded only once its analysis has a headline** (CT-4): the house tier holds a row per analysis
+that can be measured, and each slice that adds a headline adds its rule to the house tier and to every
+existing project through `seeds.seed_control_rules`.
 
 #### Diagram presentation (D-29, D-30)
 
@@ -3640,7 +3647,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN, APPROVED, or the SUPERSEDED one carrying the agreed approval (SC-2); `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8, SC-2** — a CR challenges something agreed: a baseline in force, or the superseded one that still carries the agreed client approval (DR8-P1). Point-in-time: an existing CR keeps its target when that baseline is later superseded |
 | `effort_delta_days` / `benefit_delta_value` writable **only** by `price_cr` | `change_request` *(when built)* | D-16 — a change priced by its requester is not priced |
 | topological check on insert; a cycle is rejected | `solution_dependency` *(when built)* | D-18 — a dependency cycle makes the phase plan unsolvable and is silent until someone tries to schedule |
-| `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NULL OR owner_org_role_id IS NOT NULL)` | `control_rule` *(when built)* | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; **an analysis without a named owner is a report nobody acts on** (relaxed on the house tier, which precedes the client's org chart) |
+| `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NOT NULL OR owner_org_role_id IS NULL)`; `CHECK (is_house_default = (project_id IS NULL))`; `CHECK (project_id IS NULL OR created_by IS NOT NULL)`; composite FK (`owner_org_role_id`, `project_id`) → `org_role` | `control_rule` | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; the owner is the same project's role. **An analysis without a named owner is a report nobody acts on** — so an unowned project rule is shown and reported, not refused (CT-1: rules are copied before the client's org chart exists) |
 | `CHECK (num_nonnulls(impacted_br_id, impacted_solution_id, impacted_fr_id, impacted_application_id, impacted_data_entity_id, impacted_phase_id, impacted_benefit_id) = 1)` + composite `(id, project_id)` FK on each | `cr_impact` *(when built)* | A-37 — the database enforces which object a CR row points at, and that it belongs to this project |
 | `BEFORE UPDATE OR DELETE` reject trigger; **exempt from soft delete**; no `UPDATE`/`DELETE` grant | `decision` *(when built)* | A-41 — the decision log is evidential. Corrections are a new row with `supersedes_decision_id` |
 | `bfc_node_flow` constraints (`ck_bnf_has_end`, `ck_bnf_flow_type`, `ck_bnf_conditional_label`, `ck_bnf_seq`, process guards, partial `uq_bfc_node_flow_edge`) | `bfc_node_flow` | retired (D-38): they remain on the read-only history rows; no row can be inserted or updated by `vb_app` (§6.6) |
@@ -3863,7 +3870,7 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `maintain_fr_types` | `code_master.maintain` (category `FR_TYPE`, with behaviour) | §7.12 (D-27) |
 | `describe_interface` | `interface.describe_interface` / `remove_interface` | §7.5 (D-27) |
 | `interface_list` | `interface.interface_list` (over `v_interface_list`) | §7.5 / §7.9 (D-27) |
-| `fr_unlinked` | `reports.fr_unlinked` | §7.13 (D-28, re-based on the BR link by D-52) |
+| `fr_unlinked` | `control._fr_unlinked` (over `function_requirement.list_frs(unlinked=True)`) | §7.13 (D-28, re-based on the BR link by D-52) |
 | `fr_traceability_matrix` | `reports.traceability` | §7.9 |
 | `raise_issue` | `issue.raise_issue` | §7.6 |
 | `link_issue_br` | `link_service` pattern | §7.0 (generic) |
@@ -5054,26 +5061,37 @@ issue_dashboard(project_id):
 ```
 ```
 # ---- the analyses that need no new entities (D-19's inputs) ----------------
-requirement_volatility(project_id):            # the earliest warning the app produces
+requirement_volatility(project_id):            # the earliest warning the app produces (CB-1)
+    every baseline in the chain passes verify(), else NOT MEASURED naming it   # tab and panel alike
     for each consecutive baseline pair (v_n, v_n+1):
-        d = diff(v_n, v_n+1).business_requirement
-        group ADDED|CHANGED|REMOVED by the L1 ancestor of each BR's bfc_node
-    → churn rate per L1 area per generation; headline = max areas churning 2+ in a row
+        d = diff(v_n, v_n+1).business_requirement (+ its requirement lines, as _exposed)
+        group ADDED|CHANGED|REMOVED (never MOVED) by the L1 ancestor of each BR's bfc_node,
+          as frozen on that side and keyed by the L1 node's id, never its hier_code
+        # a BR that moved area counts in both; an area with no BR in v_n churns unless all its BRs are ADDED
+    → churning L1 areas per generation; headline = the longest run of consecutive generations,
+      ending at the latest baseline, in which one area churned (COUNT)
 
-process_change_intensity(project_id):
-    BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION ⋈ SOLUTION
-    count process steps carrying a solution, rolled to L1, weighted by solution category
+process_change_intensity(project_id):          # CC-1
+    BFC_NODE(is_process, to-be) ⋈ BUSINESS_REQUIREMENT ⋈ BR_SOLUTION(live, non-rejected) ⋈ SOLUTION
+    a changed step = a live to-be process step with such a BR; every changed step weighs the same
+    → per L1 area (keyed by the L1 node's id): changed steps, all process steps, changed steps per
+      solution category (context); headline = the busiest area's share of all changed steps (PCT).
+      NOT MEASURED with SOLUTION off, fewer than two areas holding a step, or no changed step
 
-org_impact_heatmap(project_id):
-    ORG_UNIT ⋈ ORG_ROLE ⋈ (BR_ORG_ROLE on to-be BRs ∪ BFC_NODE_ORG_ROLE on as-is steps)
-             ⋈ BR_SOLUTION
-    # one RACI per process: to-be roles live on the BR, as-is roles on the step (D-64, S10d-1)
-    → change absorbed per org unit; headline = the top decile
+org_impact_heatmap(project_id):                # CB-2
+    changes = live to-be BRs with a live, non-rejected BR_SOLUTION
+    ORG_UNIT ⋈ ORG_ROLE ⋈ BR_ORG_ROLE (raci_behaviour RESPONSIBLE | ACCOUNTABLE) ⋈ changes
+    # to-be RACI only: as-is roles sit on as-is steps, and the two charts are not linked step to step (D-47).
+    # C / I roles and the as-is RACI are shown as context, never counted. No roll-up to parent units.
+    → per org unit: changes it is on, share = that ÷ all changes (%);
+      headline = the highest share (PCT); NOT MEASURED when fewer than two units hold roles
 
-stakeholder_engagement(project_id):
+stakeholder_engagement(project_id):            # CB-3
     STAKEHOLDER ⋈ ORG_UNIT, LEFT JOIN ISSUE on raised_by_stakeholder_id
-    → issues raised per stakeholder and per org unit.
-      Headline = org units with high impact and ZERO issues raised. Silence is the signal.
+    a unit has a voice when a stakeholder in it or in its direct parent raised a live issue (any status)
+    → issues raised per stakeholder and per org unit, beside org_impact_heatmap's shares.
+      Headline = the share of the most affected unit with no voice (PCT). Silence is the signal.
+      NOT MEASURED while the project has no issue at all — an unused log is not silence.
 
 interface_load(project_id):
     v_interface_list grouped by (source_application_id, target_application_id)   # D-27
@@ -5084,11 +5102,20 @@ data_migration_map(project_id):
     source = DATA_ENTITY ⋈ BFC_NODE_DATA_ENTITY (as-is processes) ⋈ APPLICATION_BFC_NODE
              ⋈ APPLICATION(AS_IS)
     target = DATA_ENTITY ⋈ BR_DATA_ENTITY ⋈ BR_SOLUTION ⋈ APPLICATION_SOLUTION ⋈ APPLICATION
-    → source → target per entity; headline = entities with no source, or with >1 source
+    # CB-4. In scope: entities used by a live to-be BR. Source systems are lifecycle AS_IS | BOTH.
+    → source → target per entity; headline = in-scope entities seen on as-is steps with no source
+      system, or with >1 source (COUNT). Never seen on as-is (new data) and as-is-only (retiring) are
+      listed, not counted; NOT MEASURED until any in-scope entity is mapped on an as-is step
 
-master_data_candidates(project_id):
-    BR_DATA_ENTITY ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE
-    → data entities referenced from BRs under 3+ distinct L1 ancestors
+master_data_candidates(project_id):            # CC-2
+    BR_DATA_ENTITY ⋈ BUSINESS_REQUIREMENT ⋈ BFC_NODE (live, to-be)
+    → data entities referenced from BRs under 3+ distinct L1 ancestors, with their business_owner_note;
+      headline = candidates whose note is empty or blank (COUNT); NOT MEASURED while no BR uses an entity
+
+fr_unlinked(project_id):                       # CC-3
+    live FRs with no live BR link — the FR register's unlinked=true set
+    → headline = their count (COUNT), their effort days beside it (EFFORT on);
+      NOT MEASURED with FUNCTION_REQUIREMENT off or no live FR
 
 effort_summary(project_id):                    # D-13
     FUNCTION_REQUIREMENT.effort_days grouped by FR type, solution tag (Unassigned when the
@@ -6008,7 +6035,7 @@ ANALYSIS_REGISTRY = {                # closed vocabulary; a rule must name one o
   'application_gap', 'interface_load', 'org_impact_heatmap', 'stakeholder_engagement',
   'value_ranking', 'benefit_gap', 'risk_register', 'issue_dashboard',
   'data_migration_map', 'master_data_candidates', 'process_change_intensity',
-  'phase_plan', 'consistency_check',
+  'phase_plan', 'consistency_check', 'fr_unlinked',            # fr_unlinked: CC-3, migration 0082
 }
 
 maintain_control_rule(project_id, analysis_code, fields, change_rationale):
@@ -6016,32 +6043,48 @@ maintain_control_rule(project_id, analysis_code, fields, change_rationale):
     if analysis_code not in ANALYSIS_REGISTRY: raise 422 "No such analysis"
     if not change_rationale.strip(): raise 422 "Changing a control threshold is a "
                                                "governance decision and needs a reason"
-    upsert CONTROL_RULE(project_id, analysis_code, ..., agreed_at=now())
+    update CONTROL_RULE(project_id, analysis_code, ...) WHERE row_version = :v      # 409 on 0
     AUDIT_EVENT(event_type='CONTROL_RULE_CHANGED', project_id,
                 detail={analysis_code, from: old_values, to: new_values, change_rationale})
+    # CT-3: from/to carry the thresholds, the owner id and is_enabled; prescribed_action and
+    # escalation_path are recorded only as changed — they name people, and the audit is append-only.
     # Without the audit row, a project that never went red is indistinguishable from one
     # whose thresholds were widened until it stopped going red.
 
-maintain_house_default(analysis_code, fields):
+maintain_house_default(analysis_code, fields, change_rationale, row_version):       # CC-6
     require user.is_platform_admin
-    upsert CONTROL_RULE(project_id=NULL, analysis_code, ..., is_house_default=True)
-    # Affects FUTURE projects only — see the entity note. No in-flight engagement moves.
+    fields = threshold, escalate, prescribed_action, escalation_path only — never owner, comparison, on/off
+    if not change_rationale.strip(): raise 422;  update CONTROL_RULE(project_id=NULL, ...) WHERE row_version   # 409
+    AUDIT_EVENT('CONTROL_RULE_CHANGED', project_id=NULL, detail={house: true, analysis_code, from, to,
+                text_changed, change_rationale})                         # CT-3 for the two text fields
+    # Affects FUTURE projects only — see the entity note. No in-flight engagement moves. The house text reaches
+    # every future client: it names roles, never people or clients.
 
-reset_project_rules_to_house_default(project_id, change_rationale):
+reset_project_rules_to_house_default(project_id, change_rationale, stamp):           # CC-4
     access.require_project(user, project_id, EDIT)
-    overwrite this project's rules from the project_id IS NULL tier, preserving
-      owner_org_role_id where the analysis_code still exists
-    AUDIT_EVENT(event_type='CONTROL_RULES_RESET', project_id, detail={change_rationale})
-    # The explicit opt-in that the copy-on-create rule otherwise denies.
+    lock the project's rules FOR UPDATE, the house rows FOR SHARE
+    if stamp != the row_version of every project rule and house row: raise 409       # what the preview showed
+    per house rule: the project has it → overwrite threshold, escalate, prescribed_action, escalation_path;
+      keep owner_org_role_id and is_enabled; unchanged rules untouched.  It lacks it → add it switched off
+    nothing to change → write nothing
+    AUDIT_EVENT('CONTROL_RULES_RESET', project_id, detail={change_rationale, changed, added, from/to numbers})
+    # The explicit opt-in that the copy-on-create rule otherwise denies. A reset rule shows "reset to FTC
+    # defaults" on the panel until a person next edits it (from the audit trail).
 
 control_panel(project_id):
     access.require_project(user, project_id, VIEW)
     out = []
-    for rule in CONTROL_RULE where project_id = :p and is_enabled:
+    for rule in CONTROL_RULE where project_id = :p:
         measured = ANALYSIS_REGISTRY[rule.analysis_code](project_id).headline_value
-        state = ('ESCALATE' if breaches(measured, rule.escalate_value, rule.comparison)
+        # CB-5: a switched-off rule is still measured, shown greyed, and gets no verdict —
+        # "not yet agreed with the client" while never edited (row_version 1), else "switched off"
+        state = (None if not rule.is_enabled
+                 else 'NOT_MEASURED' if measured is None           # never read as 0
+                 else 'ESCALATE' if breaches(measured, rule.escalate_value, rule.comparison)
                  else 'FLAG'  if breaches(measured, rule.threshold_value, rule.comparison)
                  else 'GREEN')
+        # CT-2: priced_diff is FLAG, not GREEN, while an FR added or changed since the agreed
+        # baseline is unrated — uncosted growth is not no growth.
         out.append({rule.analysis_code, measured, rule.threshold_value, state,
                     owner: rule.owner_org_role_id,          # a ROLE, never "the PMO"
                     action: rule.prescribed_action,
@@ -6053,21 +6096,32 @@ control_panel(project_id):
 ```
 `decide_cr` and `reset_project_rules_to_house_default` run at **EDIT** — project editors, and admins always (SC-7).
 
-**Seeded control rules.** `create_project` seeds the registry below with FTC defaults, which
-the client then negotiates. These thresholds are starting points, not doctrine:
+**Seeded control rules.** `create_project` copies the house tier — FTC defaults the client then
+negotiates — inside its own transaction. A rule joins the house tier only once its analysis has a
+headline (CT-4); the first four are `priced_diff` (net growth % from the agreed baseline), `coverage`
+(rows on the coverage report's warning lines), `solution_matrix` (TECHNOLOGY share %) and
+`interface_load` (INTERFACE FRs as % of live FRs); then `requirement_volatility`, `org_impact_heatmap`,
+`stakeholder_engagement` and `data_migration_map` (CB-1…CB-4); then `process_change_intensity`,
+`master_data_candidates` and `fr_unlinked` (CC-1…CC-3). The other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
+`seeds.seed_control_rules` arrives switched off until the client agrees it (CB-5); a new project's arrive on.
+`benefit_gap` and `risk_register` are the starting point their slices sign off with Ben. These thresholds are
+starting points, not doctrine:
 
 | `analysis_code` | Flag | Escalate | Prescribed action |
 |---|---|---|---|
 | `priced_diff` | >5% cumulative effort growth | >10% | Raise a CR to steering; name the displacement |
-| `requirement_volatility` | area churns 2 baselines | 3 | Pull the area out of the current wave; re-run the workshop |
+| `requirement_volatility` | an area changed at 2 freezes running | 3 running | Pull the area out of the current wave; re-run the workshop |
 | `coverage` | any open gap at a gate | — | Assign owner + date per gap; do not pass the gate |
 | `solution_matrix` | TECHNOLOGY >70% of solutions | >85% | Commission the org/process workstream, or lower the benefit forecast |
 | `interface_load` | INTERFACE >25% of FRs | >35% | Stand up an integration workstream; book test environments |
-| `org_impact_heatmap` | unit in top decile of impact | top decile + zero issues raised | Dedicated change agent; capacity check; interview before sign-off |
-| `stakeholder_engagement` | org unit with zero issues raised | high impact + zero issues | Interview before sign-off — silence becomes rejection at UAT |
+| `org_impact_heatmap` | one unit R/A on >40% of changes | >60% | Dedicated change agent and a capacity check — they are usually the SMEs too |
+| `stakeholder_engagement` | a silent unit on >10% of changes | >25% | Interview before sign-off — silence becomes rejection at UAT |
 | `benefit_gap` | any solution with effort and no benefit | >20% of solutions | Challenge at the next gate |
 | `risk_register` | exposure ≥ 12 open | ≥ 16 | Mitigation owner + date; steering if unmitigated |
-| `data_migration_map` | entity with no source system | conflicting sources | Data ownership decision before design freeze |
+| `data_migration_map` | any entity with no source system or conflicting sources | >5 entities | Data ownership decision before design freeze |
+| `process_change_intensity` | >50% of changed steps in one L1 area | >70% | Check the change workload and the change-management plan for that area before the next gate |
+| `master_data_candidates` | any entity used in 3+ L1 areas with no business owner noted | >5 | Assign a single owner; it becomes a managed cross-workstream dependency |
+| `fr_unlinked` | any live FR with no live BR link | >5 | Link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement |
 
 ---
 
@@ -6443,8 +6497,8 @@ component.
 | `PATCH /programs/{program_id}` | platform_admin | program fields | program |
 | PDF export of each client-facing report | project_ctx(VIEW) | — | prints project, baseline version or "LIVE — not a baseline", time and author; audited (D-42, OR-8). Route shapes fixed by the 1f spec |
 | **Phase 1 — control rules and the control panel (D-19)** | | | |
-| `GET/PUT /control-rules/defaults` | platform_admin | analysis_code, threshold, escalate, action | **the FTC house defaults** (`project_id IS NULL`); affect future projects only |
-| `GET/PUT /projects/{project_id}/control-rules` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
+| `GET /control-rules/defaults` · `PATCH /control-rules/defaults/{analysis_code}` | platform_admin | threshold, escalate, action, escalation path, **change_rationale**, row_version | **the FTC house defaults** (`project_id IS NULL`) with their change history; affect future projects only (CC-6) |
+| `GET /projects/{project_id}/control-rules` · `PATCH …/{analysis_code}` · `GET …/control-rules/reset-preview` · `POST …/control-rules/reset` | project_ctx(VIEW / EDIT) | analysis_code, threshold, escalate, owner org role, action, is_enabled, **change_rationale** | the project's agreed governance. Every change needs a rationale and is audited; reset re-copies the house defaults |
 | `GET /projects/{project_id}/control-panel` · `GET /projects/{project_id}/analysis/{analysis_code}` | project_ctx(VIEW) | — | **every analysis vs its rule → GREEN / FLAG / ESCALATE, with owner and action. The PMO's one screen**; any single analysis with its `headline_value` |
 | **Slice 1g — code maintenance (built)** | | | |
 | `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / ADMIN) (G-5) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
@@ -6673,10 +6727,11 @@ Each is observable by someone who did not build it.
 71. **(D-19)** With `priced_diff` flagged at 5% and escalating at 10%, a project at 7%
     growth returns **FLAG**, at 12% returns **ESCALATE**, and each row carries the owning
     role and the prescribed action.
-72. **(D-19)** An L1 area whose BRs changed in two consecutive baselines appears in
-    `requirement_volatility` and raises its control rule to FLAG.
-73. **(D-19)** An org unit in the top decile of `org_impact_heatmap` with zero issues raised
-    appears in `stakeholder_engagement` as ESCALATE — the adoption-risk signal.
+72. **(D-19, CB-1)** An L1 area whose BRs changed at two consecutive freezes (v1→v2, v2→v3)
+    appears in `requirement_volatility` and raises its control rule to FLAG.
+73. **(D-19, CB-3)** An org unit Responsible or Accountable on more than 25 % of the changes, with
+    zero issues raised by it or its direct parent, makes `stakeholder_engagement` ESCALATE — the
+    adoption-risk signal.
 74. **(D-19)** Every analysis in the registry returns a `headline_value`, verified by a test
     that iterates the registry.
 75. **(S6)** A workbook containing an external entity declaration is rejected, not resolved.
@@ -7122,12 +7177,12 @@ decision are recorded in the design history, not here.
      negotiated with the client at mobilisation. Threshold, escalate value, comparison,
      owning role, prescribed action, escalation path and on/off are editable by a User
      (D-40), with a mandatory rationale and an audit row.
-  3. **Which analyses are governed at all** — any of the 17 in `ANALYSIS_REGISTRY` can carry
-     a rule; the ten seeded are the ones worth governing on a first engagement.
+  3. **Which analyses are governed at all** — any of the 18 in `ANALYSIS_REGISTRY` can carry
+     a rule; the thirteen seeded (CC-1…CC-3, CC-5) are the ones worth governing on a first engagement.
 
   The house defaults should be set before the first engagement: they become the starting
   point on every project after.
-- `ASSUMPTION A-43` — **`control_panel` computes live on request.** With 17 analyses over a
+- `ASSUMPTION A-43` — **`control_panel` computes live on request.** With 18 analyses over a
   large project this may be slow enough to need caching or a materialised view. The same
   "how big is a real project" question as A-57.
 - `ASSUMPTION A-44` — **A project's thresholds do not vary by phase.** Tolerance usually

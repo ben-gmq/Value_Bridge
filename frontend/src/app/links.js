@@ -16,7 +16,7 @@ export const links = {
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   solutions: (p) => `/p/${p}/br-fr`,          // the BR–FR map opens on its Solutions tab (S6a-4)
   solution: (p, solId) => `/p/${p}/br-fr/${solId}`,
-  frs: (p) => `/p/${p}/br-fr/frs`,
+  frs: (p, view) => (view ? `/p/${p}/br-fr/frs?view=${view}` : `/p/${p}/br-fr/frs`),   // view: a register filter (Control-C3)
   fr: (p, frId) => `/p/${p}/br-fr/frs/${frId}`,
   data: (p) => `/p/${p}/data`,
   entity: (p, deId) => `/p/${p}/data/${deId}`,
@@ -33,6 +33,7 @@ export const links = {
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
   reports: (p, tab) => (tab ? `/p/${p}/reports?tab=${tab}` : `/p/${p}/reports`),   // slice 1f
+  control: (p) => `/p/${p}/control`,                                  // Control-A: the control panel
   rateCard: (p) => `/p/${p}/settings/rate-card`,
   codeLists: (p) => `/p/${p}/settings/code-lists`,                  // wave 1g
   effort: (p) => `/p/${p}/br-fr/effort`,
@@ -106,6 +107,16 @@ export const keys = {
   coverage: (p) => ['reports', String(p), 'coverage'],
   solutionMatrix: (p) => ['reports', String(p), 'solution-matrix'],
   applicationGap: (p, level) => ['reports', String(p), 'application-gap', String(level)],
+  volatility: (p) => ['reports', String(p), 'requirement-volatility'],               // Control-B1
+  dataMigration: (p) => ['reports', String(p), 'data-migration'],
+  orgImpact: (p) => ['reports', String(p), 'org-impact'],                            // Control-B2
+  engagement: (p) => ['reports', String(p), 'stakeholder-engagement'],
+  changeIntensity: (p) => ['reports', String(p), 'change-intensity'],                // Control-C
+  masterData: (p) => ['reports', String(p), 'master-data'],
+  houseDefaults: () => ['control', 'house-defaults'],
+  resetPreview: (p) => ['control', String(p), 'reset-preview'],
+  controlPanel: (p) => ['control', String(p), 'panel'],                              // Control-A; a rule save
+  controlRules: (p) => ['control', String(p), 'rules'],                              // invalidates ['control', p]
   solutionDeps: (solId) => ['solution-deps', String(solId)],
   allSolutionDeps: () => ['solution-deps'],                                         // every solutionDeps(id)
   units: (p) => ['org-units', String(p)],

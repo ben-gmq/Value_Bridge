@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar,
   Stack, TextField, Tooltip, Typography } from '@mui/material';
@@ -71,7 +71,9 @@ export default function FrsPage() {
   const qc = useQueryClient();
   const canEdit = useCanEdit();
   const [showRetired, setShowRetired] = useState(false);
-  const [filter, setFilter] = useState('all');
+  // Control-C3: the control panel opens the register on a view (`?view=untraced`); anything else starts on all.
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState(FILTERS.includes(params.get('view')) ? params.get('view') : 'all');
   const q = useQuery({ queryKey: keys.frList(projectId, filter, showRetired),
     queryFn: () => frApi.list(projectId, { includeRetired: showRetired, unlinked: filter === 'untraced',
       unassigned: filter === 'unassigned' }), placeholderData: (prev) => prev });
