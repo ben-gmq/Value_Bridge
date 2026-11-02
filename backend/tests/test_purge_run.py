@@ -430,3 +430,21 @@ def test_a_key_that_still_decrypts_stops_the_run_and_stays_outstanding(rich, vau
                       "WHERE project_purge_id = :pp", pp=pp)[0]
     assert run(owner, "SELECT count(*) FROM audit_event WHERE event_type = 'PURGE_KEYS_DESTROYED'")[0] == 0
     assert all(verifies(vault, f) is None for f in vault["mine"])
+
+
+DEC_INSERT = ("INSERT INTO decision (project_id, decision_number, title, decision_text, alternative_rejected, "
+              "dimension_code_id, decided_on, decided_by_user_id, created_by, supersedes_decision_id) "
+              "SELECT :p, :n, 't', 't', 't', code_id, current_date, :u, :u, :s FROM code_master "
+              "WHERE category = 'PM_DIMENSION' AND code = 'SCOPE' AND project_id IS NULL RETURNING decision_id")
+
+
+def test_a_removal_takes_the_projects_decisions_through_their_guard_and_no_other(rich, owner):
+    """Slice Decisions (0084): fn_decision_reject lets the scoped purge delete the project's decisions — a correction
+    chain included — and nothing else; DELETE_GUARDS names it, or the run would stop."""
+    first = run(app_engine, DEC_INSERT, p=rich["p"], n="DEC-0001", u=rich["a1"], s=None)[0]
+    run(app_engine, DEC_INSERT, p=rich["p"], n="DEC-0002", u=rich["a1"], s=first)
+    kept = run(app_engine, DEC_INSERT, p=rich["world"]["p_sales"], n="DEC-0001", u=rich["a1"], s=None)[0]
+    plan = purge(owner, request(rich), rich["a2_email"])
+    assert plan.counts["decision"] == 2
+    assert run(owner, "SELECT count(*) FROM decision WHERE project_id = :p", p=rich["p"])[0] == 0
+    assert run(owner, "SELECT decision_id FROM decision")[0] == kept

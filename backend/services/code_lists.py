@@ -42,7 +42,8 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
 )
 # §7.2, G-2, I-1: never overridden or hidden per project
 COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS", "PHASE_STATUS",   # + W-4
-                          "RISK_STATUS"})                                                        # + slice Risks
+                          "RISK_STATUS",                                                         # + slice Risks
+                          "PM_DIMENSION"})                      # + slice Decisions: a decision is never re-pointed
 BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS", "PROJECT_STATUS",       # + Q-89 b
                                   "RISK_PROBABILITY", "RISK_IMPACT", "RISK_STATUS"})              # + RK-1 (0083)
 # Status lists whose every pinned code keeps its behaviour: the application writes them by value (sara A M-2, R1-4).
@@ -57,6 +58,7 @@ EXCLUDED: dict[tuple[str, str], str] = {
     ("issue", "status_code_id"): "ISSUE_STATUS is company-only (I-1)",
     ("phase", "status_code_id"): "PHASE_STATUS is company-only (W-4)",
     ("risk", "status_code_id"): "RISK_STATUS is company-only (slice Risks)",
+    ("decision", "dimension_code_id"): "PM_DIMENSION is company-only; a decision row is immutable (A-41)",
     ("import_batch", "status_code_id"): "IMPORT_STATUS is a system category",
     ("project_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
     ("project_template_component", "component_code_id"): "PROJECT_COMPONENT is a system category",

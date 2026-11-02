@@ -135,7 +135,8 @@ def _catalog(c: Connection):
 
 # The only DELETE triggers a deleted table may carry: the guards that ask fn_purge_allows (0074, 0075).
 DELETE_GUARDS = ("fn_reject_modification_purgeable", "fn_baseline_header_guard", "fn_baseline_archive_guard",
-                 "fn_reject_modification_audit_purgeable")
+                 "fn_reject_modification_audit_purgeable",
+                 "fn_decision_reject")                                    # slice Decisions (0084): same purge gate
 
 
 def _no_side_effects(c: Connection, deleted: set[str]) -> None:
