@@ -39,7 +39,8 @@ def test_numbers_are_minted_and_derived_values_never_come_from_the_body(client, 
     me = db.execute(text("SELECT created_by, decided_by_user_id FROM decision WHERE decision_id = :d"),
                     {"d": a["decision_id"]}).one()
     assert me[0] == me[1] == a["decided_by_user_id"] != 1 and a["decided_by_name"]
-    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "DECISION_RECORDED")).all()
+    ev = db.scalars(select(AuditEvent).where(AuditEvent.event_type == "DECISION_RECORDED")
+                    .order_by(AuditEvent.audit_event_id)).all()
     assert len(ev) == 2 and ev[0].detail["decision_number"] == "DEC-0001" and ev[0].detail["dimension"] == "SCOPE"
     assert "Adopt" not in str(ev[0].detail)                                     # numbers and codes only (R7)
 
