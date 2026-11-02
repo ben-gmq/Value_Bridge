@@ -14,11 +14,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from models.base import AuditMixin, Base
 
-# §7.13 ANALYSIS_REGISTRY — a rule naming any other analysis is refused (also ck_ctl_analysis, 0081).
+# §7.13 ANALYSIS_REGISTRY — a rule naming any other analysis is refused (also ck_ctl_analysis, 0081;
+# fr_unlinked from 0082).
 REGISTRY = ("priced_diff", "requirement_volatility", "coverage", "solution_matrix", "application_gap",
             "interface_load", "org_impact_heatmap", "stakeholder_engagement", "value_ranking", "benefit_gap",
             "risk_register", "issue_dashboard", "data_migration_map", "master_data_candidates",
-            "process_change_intensity", "phase_plan", "consistency_check")
+            "process_change_intensity", "phase_plan", "consistency_check", "fr_unlinked")
 COMPARISONS = ("GT", "LT", "PCT_GT")
 
 

@@ -92,6 +92,8 @@
   "control.reason.NO_ENTITIES_USED": "No future-state requirement uses a data entity yet",
   "control.intensity": "The largest share lands on {area}, of {n} changed process steps",
   "control.master": "{n} entities are used in three or more areas, of {used} in use",
+  "control.analysis.fr_unlinked": "Functions nobody traced to a requirement",
+  "control.unlinkedDays": "{days} effort days on these functions",
   "control.resetNote": "Reset to the FTC defaults {date} by {name}: FTC's numbers, not yet agreed with the client",
   "control.reset.button": "Reset to FTC defaults",
   "control.reset.title": "Reset this project's rules to the FTC defaults",

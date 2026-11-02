@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import AppUser, AuditEvent, Baseline, ControlRule, FunctionRequirement, OrgRole, Project
 from models.control import REGISTRY
-from services import audit, baseline, components, control_reports, reports
+from services import audit, baseline, components, control_reports, function_requirement, reports
 from services.lifecycle import check_version
 
 CENT = Decimal("0.01")
@@ -52,6 +52,9 @@ HOUSE_RULES = (
      "Check the change workload and the change-management plan for that area before the next gate"),
     ("master_data_candidates", "COUNT", "GT", Decimal(0), Decimal(5),
      "Assign a single owner; it becomes a managed cross-workstream dependency"),
+    # Control-C3 (CC-3): any FR nobody traced to a requirement flags, more than five escalate.
+    ("fr_unlinked", "COUNT", "GT", Decimal(0), Decimal(5),
+     "Link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
@@ -450,6 +453,21 @@ def _interface_load(db: Session, project_id: int, on: frozenset) -> dict:
     return _measure(Decimal(iface) * 100 / Decimal(total), interface_count=iface, fr_count=total)
 
 
+def _fr_unlinked(db: Session, project_id: int, on: frozenset) -> dict:
+    """Live FRs with no live link to a live BR — the FR register's own `unlinked` filter, so the panel figure and the
+    register list always agree (spec §2.3). Their effort days stand beside the count when EFFORT is on."""
+    if "FUNCTION_REQUIREMENT" not in on:
+        return _measure(reason="FUNCTION_REQUIREMENT_OFF")
+    if not db.scalar(select(func.count()).where(FunctionRequirement.project_id == project_id,
+                                                FunctionRequirement.is_active)):
+        return _measure(reason="NO_FRS")
+    frs = function_requirement.list_frs(db, project_id, unlinked=True)
+    if "EFFORT" not in on:
+        return _measure(len(frs))
+    days = sum((f.effort_days for f in frs if f.effort_days is not None), Decimal(0))
+    return _measure(len(frs), effort_days=str(days.quantize(CENT, ROUND_HALF_UP)))
+
+
 def _from_report(report: dict) -> dict:
     """A Control-B report's own headline, so the tab and the panel read one computation (spec §3)."""
     h = dict(report["headline"])
@@ -477,6 +495,8 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _from_report(control_reports.process_change_intensity(db, project_id))
     if code == "master_data_candidates":
         return _from_report(control_reports.master_data_candidates(db, project_id))
+    if code == "fr_unlinked":
+        return _fr_unlinked(db, project_id, on)
     return _measure(reason="NOT_BUILT")
 
 

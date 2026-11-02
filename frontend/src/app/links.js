@@ -16,7 +16,7 @@ export const links = {
   requirement: (p, brId) => `/p/${p}/requirements/${brId}`,
   solutions: (p) => `/p/${p}/br-fr`,          // the BR–FR map opens on its Solutions tab (S6a-4)
   solution: (p, solId) => `/p/${p}/br-fr/${solId}`,
-  frs: (p) => `/p/${p}/br-fr/frs`,
+  frs: (p, view) => (view ? `/p/${p}/br-fr/frs?view=${view}` : `/p/${p}/br-fr/frs`),   // view: a register filter (Control-C3)
   fr: (p, frId) => `/p/${p}/br-fr/frs/${frId}`,
   data: (p) => `/p/${p}/data`,
   entity: (p, deId) => `/p/${p}/data/${deId}`,
