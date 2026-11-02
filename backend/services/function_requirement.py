@@ -15,7 +15,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
-from services import audit, components, effort, interface, lifecycle, numbering
+from services import audit, components, effort, fr_trace, interface, lifecycle, numbering
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -78,22 +78,16 @@ def _warnings(db: Session, fr: FunctionRequirement, sol: Solution | None) -> lis
     return out
 
 
-def _live_links():
-    return select(BrFunctionRequirement.fr_id).join(
-        BusinessRequirement, BusinessRequirement.br_id == BrFunctionRequirement.br_id).where(
-        BrFunctionRequirement.is_active, BusinessRequirement.is_active)
-
-
 def list_frs(db: Session, project_id: int, include_retired: bool = False, unlinked: bool = False,
              unassigned: bool = False) -> list[FunctionRequirement]:
-    """slice10b §6.10 [Q-17]: `unlinked` = no live BR link (untraced); `unassigned` = no solution tag. Each FR
-    carries `br_count`, its live BR links."""
+    """slice10b §6.10 [Q-17]: `unlinked` = no live BR link (untraced, `fr_trace`); `unassigned` = no solution tag.
+    Each FR carries `br_count`, its live BR links. The untraced view is live FRs only whatever `include_retired`
+    says — a retired FR is not untraced work, and the panel's `fr_unlinked` count reads this list (VB-005 C3 L2)."""
     q = select(FunctionRequirement).where(FunctionRequirement.project_id == project_id)
-    if not include_retired:
+    if not include_retired or unlinked:
         q = q.where(FunctionRequirement.is_active)
     if unlinked:
-        q = q.where(FunctionRequirement.fr_id.not_in(_live_links().where(
-            BrFunctionRequirement.project_id == project_id)))
+        q = q.where(FunctionRequirement.fr_id.not_in(fr_trace.traced_fr_query(project_id)))
     if unassigned:
         q = q.where(FunctionRequirement.solution_id.is_(None))
     frs = list(db.scalars(q.order_by(FunctionRequirement.fr_number)))
@@ -373,7 +367,7 @@ def drift_warnings(db: Session, fr_ids, include_no_br: bool = False) -> list[dic
     if include_no_br and fr_ids:
         loose = list(db.scalars(select(FunctionRequirement.fr_number).where(
             FunctionRequirement.fr_id.in_(fr_ids), FunctionRequirement.is_active,
-            FunctionRequirement.fr_id.not_in(_live_links())).order_by(FunctionRequirement.fr_number)))
+            FunctionRequirement.fr_id.not_in(fr_trace.traced_fr_query(None))).order_by(FunctionRequirement.fr_number)))
         if loose:
             out.append({"code": "no_br", "frs": loose})
     return out

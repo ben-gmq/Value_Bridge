@@ -74,8 +74,10 @@ export default function FrsPage() {
   // Control-C3: the control panel opens the register on a view (`?view=untraced`); anything else starts on all.
   const [params] = useSearchParams();
   const [filter, setFilter] = useState(FILTERS.includes(params.get('view')) ? params.get('view') : 'all');
-  const q = useQuery({ queryKey: keys.frList(projectId, filter, showRetired),
-    queryFn: () => frApi.list(projectId, { includeRetired: showRetired, unlinked: filter === 'untraced',
+  // VB-005 C3 L2: the untraced view is live FRs only (the server ignores the tick there), so it matches the panel.
+  const withRetired = showRetired && filter !== 'untraced';
+  const q = useQuery({ queryKey: keys.frList(projectId, filter, withRetired),
+    queryFn: () => frApi.list(projectId, { includeRetired: withRetired, unlinked: filter === 'untraced',
       unassigned: filter === 'unassigned' }), placeholderData: (prev) => prev });
   const solsQ = useQuery({ queryKey: keys.solutions(projectId), queryFn: () => solutionApi.list(projectId) });
   const solById = useMemo(() => new Map((solsQ.data ?? []).map((s) => [s.solution_id, s])), [solsQ.data]);
@@ -153,7 +155,9 @@ export default function FrsPage() {
           <Box sx={{ flex: 1 }} />
           <Segmented size="sm" label={t('frs.filter.label')} value={filter} onChange={setFilter}
             options={FILTERS.map((f) => ({ value: f, label: t(`frs.filter.${f}`) }))} />
-          <ShowRetired id="fr-show-retired" checked={showRetired} onChange={setShowRetired} />
+          {filter === 'untraced'
+            ? <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{t('frs.filter.untracedLiveOnly')}</Typography>
+            : <ShowRetired id="fr-show-retired" checked={showRetired} onChange={setShowRetired} />}
         </Toolbar>
         {!q.error && (
           <DataGrid autoHeight rows={rows} getRowId={(r) => r.fr_id} columns={columns} loading={q.isLoading}

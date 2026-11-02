@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import BfcNode, BrFunctionRequirement, BrSolution, BusinessRequirement, FunctionRequirement, Solution
-from services import baseline, issue as issue_service, process_flow
+from services import baseline, fr_trace, issue as issue_service, process_flow
 from services.consistency import consistency_check
 
 AGREED = {"CONFIRMED", "BASELINED"}
@@ -57,7 +57,7 @@ def summary(db: Session, project_id: int) -> dict:
         r["frs"] = len(ids)
         r["effort_days"] = float(sum((live_frs[i].effort_days or Decimal(0)) for i in ids))
         out.append(r)
-    traced = set().union(*frs_of.values()) if frs_of else set()
+    traced = fr_trace.traced_fr_ids(db, project_id) & set(live_frs)     # VB-005 C3 L1: the one definition
     totals = {k: sum(r[k] for r in out) for k in ("processes", "brs", "confirmed", "with_fr", "with_solution")}
     # sara M2: the total row is computed here, over DISTINCT FRs — an FR traced from two areas counts in each area's
     # row but once in the total, and an untraced FR is in no area. The tiles read the whole register.

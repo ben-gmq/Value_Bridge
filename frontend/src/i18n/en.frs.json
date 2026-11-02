@@ -63,6 +63,7 @@
   "frs.filter.all": "All",
   "frs.filter.untraced": "Untraced (no BR)",
   "frs.filter.unassigned": "No solution",
+  "frs.filter.untracedLiveOnly": "Live FRs only — a retired FR is not untraced work",
   "frs.warn.no_br": "Not linked to any business requirement yet — link it from a requirement to trace it.",
   "frs.warn.fr_solution_outside_its_brs": "{frs}: its solution answers none of the requirements it serves.",
   "frs.tiles.untraced": "Untraced (no BR)",

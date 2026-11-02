@@ -13,9 +13,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from models import BrFunctionRequirement, CodeMaster, EffortRate, FunctionRequirement, Solution
+from models import CodeMaster, EffortRate, FunctionRequirement, Solution
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
-from services import audit, components, errors, lifecycle
+from services import audit, components, errors, fr_trace, lifecycle
 from services.code_master import resolve, validate_required_code
 
 log = logging.getLogger("vb")
@@ -253,8 +253,7 @@ def summary(db: Session, project_id: int) -> dict:
     rej = [f for f in frs if f.solution_id in rej_ids]
     # slice10b §6.4 [Q-18]: information only — every live FR with no live BR link. Never added
     # into a total, and effort is never summed by BR (an FR serving three BRs would count three times).
-    traced = set(db.scalars(select(BrFunctionRequirement.fr_id).where(
-        BrFunctionRequirement.project_id == project_id, BrFunctionRequirement.is_active)))
+    traced = fr_trace.traced_fr_ids(db, project_id)                      # VB-005 C3 L1: the one definition
     untraced = [f for f in frs if f.fr_id not in traced]
 
     def total(rows):
