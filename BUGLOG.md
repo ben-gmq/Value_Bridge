@@ -65,20 +65,6 @@ place.
   naming that one service; the warning stays for any other.
 - **Severity:** MEDIUM, not reachable today (local only, no real data; nothing of 1e-b is built). Closes with piece (a).
 
-### VB-015 | The full test suite takes 10 min 32 s, over the 10-minute line | OPEN — FIXED, awaiting Ben's close
-- **type:** ENHANCEMENT (test setup) · **found:** 2026-11-02, slice Risks full run on `c32e174` (1,273 passed,
-  `-m "" -n 4`, 632.78 s) · **depends-on:** —
-- **What:** the full run crossed the 10-minute line the playbook treats as a finding about the test setup (it was
-  8 min 25 s at Control-C3, 1,250 tests). Where the time goes is not yet measured.
-- **Fix:** its own task, proposed to Ben before it starts: measure the slowest tests and the per-test database reset,
-  then apply the `run-tests` fast-harness pattern. Never by removing a test or an assertion.
-- **Severity:** MEDIUM — every merge waits on it; nothing is wrong in the app.
-- **FIXED 2026-11-02 (VB-015 task):** the full run is `-n 6`, not `-n 4` (`make_test_worker_dbs.sh` defaults to 6).
-  Measured on a quiet machine, 1,273 passed each time: 4 workers 518 s, 6 workers 405 s. Each test costs ~1.6 s alone
-  or in the run, and 4 workers left the 14-core machine ~60% idle. A `world` restore (save_state) was tried and dropped:
-  no faster at 6 workers, and a saved copy broke a migration test. Numbers: `docs/test_speed_proposal_2026-10-23.md`.
-  No test, assertion or app code changed.
-
 ### VB-014 | The Coverage report runs two database queries for every requirement with flows | OPEN
 - **type:** BUG (performance) · **found:** 2026-10-28, slice 1f piece 2 (`sara` M1, MEDIUM) · **depends-on:** —
 - **What:** `services/reports.coverage` asks `services/br_flows` for each BR's flows one BR at a time: two queries per
@@ -231,6 +217,26 @@ place.
   a link waiting on a retire is refused (red without the fix), the grid save leaves the field free while it waits
   on the entity (red without the H-1 change), and a retire waiting on a link is refused (an order guard; the FK's
   KEY SHARE holds it too).
+
+### VB-015 | The full test suite takes 10 min 32 s, over the 10-minute line | CLOSED
+- **type:** ENHANCEMENT (test setup) · **found:** 2026-11-02, slice Risks full run on `c32e174` (1,273 passed,
+  `-m "" -n 4`, 632.78 s) · **depends-on:** —
+- **What:** the full run crossed the 10-minute line the playbook treats as a finding about the test setup (it was
+  8 min 25 s at Control-C3, 1,250 tests). Where the time goes is not yet measured.
+- **Fix:** its own task, proposed to Ben before it starts: measure the slowest tests and the per-test database reset,
+  then apply the `run-tests` fast-harness pattern. Never by removing a test or an assertion.
+- **Severity:** MEDIUM — every merge waits on it; nothing is wrong in the app.
+- **FIXED 2026-11-02 (VB-015 task):** the full run is `-n 6`, not `-n 4` (`make_test_worker_dbs.sh` defaults to 6).
+  Measured on a quiet machine, 1,273 passed each time: 4 workers 518 s, 6 workers 405 s. Each test costs ~1.6 s alone
+  or in the run, and 4 workers left the 14-core machine ~60% idle. A `world` restore (save_state) was tried and dropped:
+  no faster at 6 workers, and a saved copy broke a migration test. Numbers: `docs/test_speed_proposal_2026-10-23.md`.
+  No test, assertion or app code changed.
+- **root cause:** the suite grew (1,021 → 1,273 tests) while the full run stayed on 4 workers; each test costs
+  ~1.6 s alone or in the run, so the run was worker-bound, with the 14-core machine ~60% idle.
+- **files:** `CLAUDE.md`, `backend/pytest.ini`, `backend/scripts/make_test_worker_dbs.sh`,
+  `backend/tests/conftest.py` (comment), `docs/test_speed_proposal_2026-10-23.md` · `5ffa62a`, on main as `da7c008`
+  (full suite there: 1,273 passed, 415 s).
+- **CLOSED 2026-11-02** — Ben: "close it ren".
 
 ---
 
