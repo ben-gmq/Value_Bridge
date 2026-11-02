@@ -15,8 +15,11 @@ docs/slice_risks_spec.md §5; RK-1…RK-6, Ben 2026-11-02).
      risk on a live issue (issue_br's guard). Live, never frozen: no shadow, no hash-spec bump (design §5 table 32).
      vb_app gets SELECT / INSERT / UPDATE from 0001's default privileges, no DELETE (law 1).
 
-Downgrade: refuses while any risk row or any GE control rule exists; then drops the table and restores the CHECKs
-and clears the risk-list behaviours.
+Downgrade: refuses while any risk row exists, or while any project rule comparing with GE has been edited
+(row_version > 1 — what a client agreed; nothing could recreate it). Otherwise, as 0082 under CC-8 (Ben 2026-11-02),
+the house GE rule and its unedited project copies are removed (the old CHECK would refuse them;
+seeds.seed_control_rules recreates them after an upgrade); then the table goes, the CHECKs are restored and the
+risk-list behaviours cleared.
 
 Revision ID: 0083
 Revises: 0082
@@ -159,10 +162,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM risk) THEN "
+    op.execute("DO $$ DECLARE n bigint; BEGIN IF EXISTS (SELECT 1 FROM risk) THEN "
                "RAISE EXCEPTION 'risks exist: downgrade refused; nothing changed'; END IF; "
-               "IF EXISTS (SELECT 1 FROM control_rule WHERE comparison = 'GE') THEN "
-               "RAISE EXCEPTION 'control rules compare with GE: downgrade refused; nothing changed'; END IF; END $$")
+               "SELECT count(*) INTO n FROM control_rule WHERE comparison = 'GE' AND project_id IS NOT NULL "
+               "AND row_version > 1; "
+               "IF n > 0 THEN RAISE EXCEPTION '% edited GE control rule(s) exist: downgrade refused; nothing changed', "
+               "n; END IF; END $$")
+    op.execute("DELETE FROM control_rule WHERE comparison = 'GE'")
     drop_updated_at_trigger("risk")
     op.drop_table("risk")
     op.drop_constraint("ck_ctl_comparison", "control_rule", type_="check")
