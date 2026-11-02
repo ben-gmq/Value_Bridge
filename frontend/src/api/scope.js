@@ -191,6 +191,12 @@ export const controlApi = {                                           // Control
   reset: (projectId, body) => d(http.post(`${P(projectId)}/control-rules/reset`, body)),
 };
 
+export const decisionApi = {                                          // slice Decisions (§4.11): no edit, ever
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/decisions`, { params })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/decisions`, body)),
+  get: (id) => d(http.get(`${V}/decisions/${id}`)),
+};
+
 export const riskApi = {                                              // slice Risks (§4.10)
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/risks`, { params })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/risks`, body)),

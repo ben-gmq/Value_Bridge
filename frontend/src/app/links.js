@@ -32,6 +32,9 @@ export const links = {
   issue: (p, id) => `/p/${p}/issues/${id}`,
   risks: (p) => `/p/${p}/risks`,                                     // slice Risks
   risk: (p, id) => `/p/${p}/risks/${id}`,
+  decisions: (p) => `/p/${p}/decisions`,                             // slice Decisions (D-17)
+  decision: (p, id) => `/p/${p}/decisions/${id}`,
+  decisionNew: (p, supersedes) => (supersedes ? `/p/${p}/decisions/new?supersedes=${supersedes}` : `/p/${p}/decisions/new`),
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
   reports: (p, tab) => (tab ? `/p/${p}/reports?tab=${tab}` : `/p/${p}/reports`),   // slice 1f
@@ -100,6 +103,8 @@ export const keys = {
   stakeholders: (p) => ['stakeholders', String(p)],
   risks: (p) => ['risks', String(p)],                                                // slice Risks
   risk: (id) => ['risk', String(id)],
+  decisions: (p) => ['decisions', String(p)],                                        // slice Decisions
+  decision: (id) => ['decision', String(id)],
   issues: (p) => ['issues', String(p)],
   issue: (id) => ['issue', String(id)],
   issueBrs: (id) => ['issue', String(id), 'brs'],                                   // under issue(id)

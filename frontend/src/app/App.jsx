@@ -38,6 +38,9 @@ import IssuesPage from '../features/issues/IssuesPage';
 import IssuePage from '../features/issues/IssuePage';
 import RisksPage from '../features/risks/RisksPage';
 import RiskPage from '../features/risks/RiskPage';
+import DecisionsPage from '../features/decisions/DecisionsPage';
+import DecisionPage from '../features/decisions/DecisionPage';
+import DecisionNewPage from '../features/decisions/DecisionNewPage';
 import WavesPage from '../features/waves/WavesPage';
 import ReportsPage from '../features/reports/ReportsPage';
 import ControlPanelPage from '../features/control/ControlPanelPage';
@@ -65,6 +68,7 @@ const PAGES = [
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
   ['issues', IssuesPage], ['issues/:issueId', IssuePage],
   ['risks', RisksPage], ['risks/:riskId', RiskPage],                     // slice Risks
+  ['decisions', DecisionsPage], ['decisions/new', DecisionNewPage], ['decisions/:decisionId', DecisionPage],  // slice Decisions
   ['waves', WavesPage],                                                                            // slice 15
   ['reports', ReportsPage],                                                                        // slice 1f
   ['control', ControlPanelPage],                                                                   // Control-A

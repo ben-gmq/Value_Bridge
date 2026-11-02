@@ -17,13 +17,14 @@ import home from './en.home.json';
 import codes from './en.codes.json';
 import issues from './en.issues.json';
 import risks from './en.risks.json';
+import decisions from './en.decisions.json';
 import waves from './en.waves.json';
 import removals from './en.removals.json';
 import grants from './en.grants.json';
 import reports from './en.reports.json';
 import control from './en.control.json';
 
-const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components, ...baselines, ...home, ...codes, ...issues, ...risks, ...waves, ...removals, ...grants, ...reports, ...control };
+const ALL = { ...en, ...processes, ...requirements, ...data, ...settings, ...solutions, ...frs, ...applications, ...interfaces, ...effortStrings, ...components, ...baselines, ...home, ...codes, ...issues, ...risks, ...decisions, ...waves, ...removals, ...grants, ...reports, ...control };
 
 export function t(key, vars = {}) {
   const s = (vars.n === 1 && ALL[`${key}_one`]) || ALL[key] || key;      // "{n} fields" → "1 field"
