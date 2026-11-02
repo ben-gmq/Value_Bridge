@@ -150,7 +150,7 @@ data. Riskiest concern: promote half-failing. ~30 tests, no mutation harness. **
 | # | Finding | Disposition |
 |---|---|---|
 | R1-1 | Promote copied an overdue target date into the issue → refused (both reviewers) | **Fixed:** not copied; the dialog takes an optional issue target date |
-| R1-2 | Retiring a materialised risk was the only way to retire its issue, and hid the foreseen record (auditor) | **Fixed by default, Ben to confirm:** a materialised risk cannot be retired; its issue is closed, not retired |
+| R1-2 | Retiring a materialised risk was the only way to retire its issue, and hid the foreseen record (auditor) | **Fixed; Ben confirmed 2026-11-02 (RK-7):** a materialised risk cannot be retired; its issue is closed, not retired |
 | R1-3 | No record of how a score changed (auditor) | **Fixed:** RISK_RAISED / RISK_UPDATED carry codes and score, before / after |
 | R1-4 | Risk status behaviours editable → promote 500s or a silent meaning change; no allowed list → 500 (both) | **Fixed:** all four pinned, behaviour fixed; allowed lists in `_behaviour` |
 | R1-5 | Plan said step retire leaves a risk live; spec cited a missing section (auditor) | **Fixed:** a live risk blocks step retire; source cited as §5.4.1 |
@@ -167,7 +167,7 @@ R1-1, R1-3, R1-6 and apple L2–L4 hold. Corrected here: R1-4 (the behaviour che
 
 | # | Finding | Disposition |
 |---|---|---|
-| NEW-1 (medium) | With R1-2, a materialised risk could neither be edited nor retired, so its owner role, node, solution and wave could never be retired | **Default built, Ben to decide:** a materialised risk's owner / node / solution / wave stay editable; everything else is fixed and it cannot be retired. Alternative: let it be retired (shown under "show retired") |
+| NEW-1 (medium) | With R1-2, a materialised risk could neither be edited nor retired, so its owner role, node, solution and wave could never be retired | **Built; Ben decided 2026-11-02 (RK-7, "Risk and issues are separate things"):** a materialised risk's owner / node / solution / wave stay editable; everything else is fixed and it cannot be retired |
 | NEW-2 (low) | A raised date moved past the target date → CHECK 500 | **Fixed:** 422 from the service |
 
 Nothing further goes back to the auditor; what remains is settled against the running code.

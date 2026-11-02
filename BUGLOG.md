@@ -1,6 +1,6 @@
 # Value Bridge — BUGLOG
 
-**Id prefix:** `VB-###` · **Next id:** VB-015 *(derive it, never trust this line — see the
+**Id prefix:** `VB-###` · **Next id:** VB-016 *(derive it, never trust this line — see the
 `buglog` skill Step 0b)*
 **Open: VB-006, VB-008 and VB-005 (the standing backlog); VB-007, VB-009 and VB-010 closed 2026-10-17 · 44 unworked lines in VB-005 (8 more fixed, awaiting Ben's close) — measured 2026-10-09.**
 **Archives:** none yet.
@@ -64,6 +64,15 @@ place.
   spec §1a terms row. FI-10 (Ben, 2026-10-28) recorded the Claude Enterprise terms, so the pack ships in piece (a)
   naming that one service; the warning stays for any other.
 - **Severity:** MEDIUM, not reachable today (local only, no real data; nothing of 1e-b is built). Closes with piece (a).
+
+### VB-015 | The full test suite takes 10 min 32 s, over the 10-minute line | OPEN
+- **type:** ENHANCEMENT (test setup) · **found:** 2026-11-02, slice Risks full run on `c32e174` (1,273 passed,
+  `-m "" -n 4`, 632.78 s) · **depends-on:** —
+- **What:** the full run crossed the 10-minute line the playbook treats as a finding about the test setup (it was
+  8 min 25 s at Control-C3, 1,250 tests). Where the time goes is not yet measured.
+- **Fix:** its own task, proposed to Ben before it starts: measure the slowest tests and the per-test database reset,
+  then apply the `run-tests` fast-harness pattern. Never by removing a test or an assertion.
+- **Severity:** MEDIUM — every merge waits on it; nothing is wrong in the app.
 
 ### VB-014 | The Coverage report runs two database queries for every requirement with flows | OPEN
 - **type:** BUG (performance) · **found:** 2026-10-28, slice 1f piece 2 (`sara` M1, MEDIUM) · **depends-on:** —

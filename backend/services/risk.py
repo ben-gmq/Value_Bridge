@@ -8,7 +8,7 @@ OPEN and MATERIALISED are the codes looked up by value (pinned, R1-4).
 Which route sets which status: raise starts OPEN; PATCH moves between OPEN- and CLOSED-behaviour codes; only
 `materialise` sets MATERIALISED, inside the transaction that raises the issue. A materialised risk keeps its score,
 codes, dates and text (the evidence it was foreseen, criterion 62) and cannot be retired (R1-2); its owner, node,
-solution and wave may still be re-pointed so a restructure is never locked (R2 NEW-1, Ben to confirm).
+solution and wave may still be re-pointed so a restructure is never locked (RK-7, Ben 2026-11-02).
 
 Audit (R1-3): RISK_RAISED / RISK_UPDATED / RISK_MATERIALISED carry codes, ids, numbers and the score — never title
 or text (R7)."""
@@ -211,7 +211,7 @@ def materialise(db: Session, actor_id: int, risk: Risk, row_version: int, fields
 
 
 def retire_risk(db: Session, actor_id: int, risk: Risk, row_version: int) -> None:
-    """R1-2: a materialised risk is the record it was foreseen — never retired (Ben to confirm with NEW-1)."""
+    """RK-7: a materialised risk is the record it was foreseen — never retired."""
     if risk.status_behaviour == MATERIALISED:
         raise HTTPException(409, f"{risk.risk_number} has materialised: it stays as the record it was foreseen")
     lifecycle.retire(db, actor_id, risk, row_version)
