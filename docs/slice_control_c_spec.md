@@ -240,3 +240,17 @@ Round 1: 6 CLOSED but R1-S1, which is PARTLY. 2 new (both LOW), none structural 
 - **Not done:** a timed run at the 2,000-BR bound; both analyses read the same scope as `org_impact_heatmap` in one
   pass (Control-B measured the panel at 1.62 s there).
 - **C3 waits** for the migration slot (§7).
+
+## 15. Build notes, C3 (2026-11-02)
+- **Built:** `40d79ee` (migration 0082, rule, panel row, seed), `908cb0f` (sara L3, L4), `fffee07` (downgrade as 0081,
+  CC-8). The panel row links to the FR register's untraced view (`links.frs(p, 'untraced')` → `?view=untraced`). Tests
+  `tests/test_control_c3.py` (§8 tests 5, 6); rule-list pins now name eleven. No third design round (two-round cap).
+- **Sara:** no CRITICAL / HIGH / MEDIUM. L3 (index name comment) and L4 (no "0 effort days" line, singular) fixed;
+  L1 (three "untraced" computations) and L2 (register's "show retired" on the untraced view) to VB-005.
+- **First full suite (`908cb0f`) red, 60 failed:** the downgrade as first specified refused whenever the seeded house
+  row existed, so every older migration test failed. Ben chose to make it work as 0081 (CC-8).
+- **Full suite on `fffee07`** (origin/main `cfd16ab` is its ancestor): 1,250 passed, 0 failed, 8 min 25 s, `-n 4`. Lint
+  and build clean.
+- **Browser (ui-verifier, `vb_s1c3_uat_db`, ports 8121 / 5191):** 7 / 7 — not measured with no FR, Flag at 2, the link
+  lands on the untraced view listing exactly those two, an unknown `?view=` opens on all, no console errors.
+  `Evidence/2026-11-02/control-c3/`.
