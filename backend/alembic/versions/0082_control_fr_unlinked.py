@@ -4,8 +4,9 @@ docs/slice_control_c_spec.md §2.3, §7; CC-3, Ben 2026-10-30).
 Re-creates ck_ctl_analysis with the code added. No table, no shadow (control_rule is not frozen), no hash-spec bump.
 The lists are literal here so a later edit to models/control.REGISTRY never changes what this revision did.
 
-Downgrade: refuses while any row, house or project, names fr_unlinked — the old constraint would refuse it, and a
-downgrade never deletes a rule. Retire nothing by hand to get past it; take it to Ben.
+Downgrade (as 0081; Ben 2026-11-02): refuses while any project fr_unlinked rule has been edited (row_version > 1) —
+that row is what a client agreed and nothing could recreate it. Otherwise the house row and the unedited project
+copies are removed (the old constraint would refuse them; seeds.seed_control_rules recreates them after an upgrade).
 
 Revision ID: 0082
 Revises: 0081
@@ -36,7 +37,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DO $$ DECLARE n bigint; BEGIN "
-               "SELECT count(*) INTO n FROM control_rule WHERE analysis_code = 'fr_unlinked'; "
-               "IF n > 0 THEN RAISE EXCEPTION '% control rule(s) name fr_unlinked: downgrade refused; "
+               "SELECT count(*) INTO n FROM control_rule WHERE analysis_code = 'fr_unlinked' "
+               "AND project_id IS NOT NULL AND row_version > 1; "
+               "IF n > 0 THEN RAISE EXCEPTION '% edited fr_unlinked control rule(s) exist: downgrade refused; "
                "nothing changed', n; END IF; END $$")
+    op.execute("DELETE FROM control_rule WHERE analysis_code = 'fr_unlinked'")
     _check(BEFORE)

@@ -12,14 +12,8 @@ def table_exists(owner) -> bool:
     return bool(q(owner, "SELECT to_regclass('public.control_rule') IS NOT NULL")[0][0])
 
 
-def before_0082(owner) -> None:
-    """Stage a database from before Control-C3: 0082's downgrade refuses while a rule names fr_unlinked."""
-    x(owner, "DELETE FROM control_rule WHERE analysis_code = 'fr_unlinked'")
-
-
 def test_unedited_copies_go_with_the_table_and_the_upgrade_recreates_it(client, ed, owner):
     assert q(owner, "SELECT count(*) FROM control_rule WHERE project_id IS NOT NULL")[0][0] > 0
-    before_0082(owner)
     command.downgrade(_cfg(), "0080")
     assert not table_exists(owner)
     command.upgrade(_cfg(), "0081")
@@ -30,7 +24,6 @@ def test_unedited_copies_go_with_the_table_and_the_upgrade_recreates_it(client, 
 def test_an_edited_rule_refuses_the_downgrade_and_keeps_the_table(client, ed, owner):
     x(owner, "UPDATE control_rule SET threshold_value = 9, change_rationale = 'Client agreed', row_version = 2 "
              "WHERE project_id = :p AND analysis_code = 'coverage'", p=ed["p"])
-    before_0082(owner)
     head = q(owner, "SELECT version_num FROM alembic_version")[0][0]
     with pytest.raises(Exception, match="edited project control rule"):
         command.downgrade(_cfg(), "0080")

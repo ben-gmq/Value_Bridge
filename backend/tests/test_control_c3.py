@@ -101,14 +101,25 @@ def test_the_rule_backfills_off_and_measured_and_a_new_project_has_it_on(client,
 
 
 # ---- 5. migration 0082 -----------------------------------------------------------------------------------------------
-def test_0082_refuses_the_downgrade_while_a_rule_names_fr_unlinked_and_round_trips_without(client, ed, owner):
+def test_0082_an_edited_rule_refuses_the_downgrade_and_changes_nothing(client, ed, owner):
+    x(owner, "UPDATE control_rule SET threshold_value = 3, change_rationale = 'Client agreed', row_version = 2 "
+             "WHERE project_id = :p AND analysis_code = 'fr_unlinked'", p=ed["p"])
     head = q(owner, "SELECT version_num FROM alembic_version")[0][0]
-    with pytest.raises(Exception, match="name fr_unlinked"):
+    n = q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0]
+    with pytest.raises(Exception, match="edited fr_unlinked control rule"):
         command.downgrade(_cfg(), "0081")
     assert q(owner, "SELECT version_num FROM alembic_version")[0][0] == head
+    assert q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0] == n >= 2
+    assert q(owner, "SELECT threshold_value FROM control_rule WHERE project_id = :p AND analysis_code = 'fr_unlinked'",
+             p=ed["p"])[0][0] == 3
+
+
+def test_0082_unedited_rules_go_with_the_downgrade_and_the_upgrade_takes_them_again(client, ed, owner):
     assert q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0] >= 2
-    x(owner, "DELETE FROM control_rule WHERE analysis_code = 'fr_unlinked'")    # stage a database from before C3
+    others = q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code <> 'fr_unlinked'")[0][0]
     command.downgrade(_cfg(), "0081")
+    assert q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0] == 0
+    assert q(owner, "SELECT count(*) FROM control_rule")[0][0] == others              # no other rule touched
     with pytest.raises(Exception, match="ck_ctl_analysis"):
         x(owner, "INSERT INTO control_rule (analysis_code, comparison, threshold_value, is_house_default) "
                  "VALUES ('fr_unlinked', 'GT', 0, true)")

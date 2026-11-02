@@ -143,8 +143,9 @@ for Control-C: run the seed with `--actor-email` straight after deploy — until
 
 ## 7. C3 — migration 0082
 `0082_control_fr_unlinked`: drop and re-create `ck_ctl_analysis` with `fr_unlinked` added; downgrade restores the
-list, and stops with a message while any row names `fr_unlinked` (the old constraint would refuse it; a downgrade
-never deletes rules). Not destructive, no table, no shadow (`control_rule` is not frozen), no hash-spec bump.
+list as 0081 does: it stops with a message while any project `fr_unlinked` rule has been edited (what a client agreed),
+and otherwise removes the house row and the unedited project copies, which the seed recreates (Ben 2026-11-02). Not
+destructive, no table, no shadow (`control_rule` is not frozen), no hash-spec bump.
 `models/control.REGISTRY` and the §7.13 registry gain the code in the same change. **C3 starts only when Ren confirms
 the migration slot is free**, on top of the latest main.
 

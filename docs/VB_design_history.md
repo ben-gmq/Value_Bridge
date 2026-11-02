@@ -645,6 +645,7 @@ review rounds 1 and 2 in its §11, §13). Migration 0082 for CC-3 only.
 | CC-5 | **The other five analyses (application gap, value ranking, issue dashboard, phase plan, consistency check) get no rules for now** — revisit after the first engagement | A-42 "ten seeded" |
 | CC-6 | **Edits to the FTC company defaults need a reason and an audit entry, as project rules** | §7.13 `maintain_house_default` with no reason or audit |
 | CC-7 | **The ERD stays PNG only**; a vector drawing (~1.5 days) only if a deck needs one. The `vb_s2` Control-B databases are dropped once Control-C's browser check is done | History §1 open item "ERD as SVG" (2026-10-29), option (a) |
+| CC-8 | **(2026-11-02) Undoing migration 0082 works as 0081**: it removes the FTC default `fr_unlinked` rule and unedited copies (the seed recreates them) and refuses while any client-agreed one exists. Ben: *"Decision 1 = (a), as you recommended"* | Control-C spec §7 "a downgrade never deletes rules" — always refused once seeded, so every older migration test failed (60) |
 
 ### Ben's ruling, 2026-10-29 — how the ERD is saved as a picture (slice 1f, function 41, EX-1)
 
