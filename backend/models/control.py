@@ -20,7 +20,7 @@ REGISTRY = ("priced_diff", "requirement_volatility", "coverage", "solution_matri
             "interface_load", "org_impact_heatmap", "stakeholder_engagement", "value_ranking", "benefit_gap",
             "risk_register", "issue_dashboard", "data_migration_map", "master_data_candidates",
             "process_change_intensity", "phase_plan", "consistency_check", "fr_unlinked")
-COMPARISONS = ("GT", "LT", "PCT_GT")
+COMPARISONS = ("GT", "LT", "PCT_GT", "GE")                    # GE: slice Risks (RK-2, migration 0083)
 
 
 class ControlRule(AuditMixin, Base):
@@ -46,7 +46,7 @@ class ControlRule(AuditMixin, Base):
         ForeignKeyConstraint(["owner_org_role_id", "project_id"], ["org_role.org_role_id", "org_role.project_id"],
                              name="fk_ctl_owner_role"),
         CheckConstraint("analysis_code IN (" + ", ".join(f"'{c}'" for c in REGISTRY) + ")", name="ck_ctl_analysis"),
-        CheckConstraint("comparison IN ('GT', 'LT', 'PCT_GT')", name="ck_ctl_comparison"),
+        CheckConstraint("comparison IN ('GT', 'LT', 'PCT_GT', 'GE')", name="ck_ctl_comparison"),
         CheckConstraint("is_house_default = (project_id IS NULL)", name="ck_ctl_house_tier"),
         CheckConstraint("project_id IS NOT NULL OR owner_org_role_id IS NULL", name="ck_ctl_house_no_owner"),
         CheckConstraint("project_id IS NULL OR created_by IS NOT NULL", name="ck_ctl_project_author"),

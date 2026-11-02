@@ -116,7 +116,9 @@ def test_0082_an_edited_rule_refuses_the_downgrade_and_changes_nothing(client, e
 
 def test_0082_unedited_rules_go_with_the_downgrade_and_the_upgrade_takes_them_again(client, ed, owner):
     assert q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0] >= 2
-    others = q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code <> 'fr_unlinked'")[0][0]
+    # 0083's downgrade (on the way to 0081) takes the GE rules too, as 0082 takes fr_unlinked (CC-8).
+    others = q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code <> 'fr_unlinked' "
+                      "AND comparison <> 'GE'")[0][0]
     command.downgrade(_cfg(), "0081")
     assert q(owner, "SELECT count(*) FROM control_rule WHERE analysis_code = 'fr_unlinked'")[0][0] == 0
     assert q(owner, "SELECT count(*) FROM control_rule")[0][0] == others              # no other rule touched

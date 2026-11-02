@@ -10,6 +10,9 @@ import { useCanEdit } from '../../app/useCanEdit';
 import { Card, KV, Status, Tag } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
+
+// Threshold wording by comparison: over (GT, PCT_GT), under (LT), or more (GE — slice Risks, RK-2).
+const cmpSuffix = (c) => ({ LT: 'Lt', GE: 'Ge' }[c] ?? '');
 import { MONO } from '../../theme/theme';
 import { fmtDate } from '../baselines/baselineKit';
 
@@ -24,6 +27,7 @@ const REPORT = {
   org_impact_heatmap: (p) => links.reports(p, 'org_impact'), stakeholder_engagement: (p) => links.reports(p, 'engagement'),
   process_change_intensity: (p) => links.reports(p, 'change_intensity'), master_data_candidates: (p) => links.reports(p, 'master_data'),
   fr_unlinked: (p) => links.frs(p, 'untraced'),
+  risk_register: (p) => links.risks(p),                                   // slice Risks: the register is the report
 };
 
 const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
@@ -62,6 +66,10 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.intensity', { area: f.top_area, n: f.changed_steps })}</Typography>)}
       {r.analysis_code === 'master_data_candidates' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.master', { n: f.candidates, used: f.entities_used })}</Typography>)}
+      {r.analysis_code === 'risk_register' && f.open_count != null && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+          {t('control.riskFigures', { open: f.open_count, undated: f.open_without_target })}
+        </Typography>)}
       {r.analysis_code === 'fr_unlinked' && Number(f.effort_days) > 0 && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.unlinkedDays', { n: Number(f.effort_days) })}</Typography>)}
       {r.analysis_code === 'data_migration_map' && f.not_seen_on_as_is > 0 && (
@@ -71,7 +79,7 @@ function Figures({ r }) {
 }
 
 function RuleRow({ projectId, r, canEdit, onEdit }) {
-  const lt = r.comparison === 'LT';
+  const lt = cmpSuffix(r.comparison);
   // CB-5: a rule copied into a running engagement is off until the client agrees it — measured, greyed, no verdict, and
   // no "agreed" date shown (review round 2 N2).
   const pending = r.off_state === 'NOT_YET_AGREED';
@@ -93,8 +101,8 @@ function RuleRow({ projectId, r, canEdit, onEdit }) {
         <Stack sx={{ minWidth: 220, gap: 1 }}>
           <Typography sx={{ fontFamily: MONO, fontSize: 26, fontWeight: 600 }}>{num(r.measured, r.unit)}</Typography>
           <Figures r={r} />
-          <KV k={t(lt ? 'control.thresholdLt' : 'control.threshold')} v={num(r.threshold_value, r.unit)} mono />
-          <KV k={t(lt ? 'control.escalateLt' : 'control.escalate')}
+          <KV k={t(`control.threshold${lt}`)} v={num(r.threshold_value, r.unit)} mono />
+          <KV k={t(`control.escalate${lt}`)}
             v={r.escalate_value === null ? t('control.never') : num(r.escalate_value, r.unit)} mono />
         </Stack>
         <Stack sx={{ flex: 1, gap: 1 }}>
@@ -116,7 +124,7 @@ function RuleRow({ projectId, r, canEdit, onEdit }) {
 function EditDialog({ projectId, rule, onClose, onSaved, onStale }) {
   const qc = useQueryClient();
   const roles = useQuery({ queryKey: keys.roles(projectId), queryFn: () => orgApi.roles(projectId) });
-  const lt = rule.comparison === 'LT';
+  const lt = cmpSuffix(rule.comparison);
   const [form, setForm] = useState({
     threshold_value: String(Number(rule.threshold_value)),
     escalate_value: rule.escalate_value === null ? '' : String(Number(rule.escalate_value)),
@@ -149,9 +157,9 @@ function EditDialog({ projectId, rule, onClose, onSaved, onStale }) {
           {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
           {roles.error && <Alert severity="error">{errorText(roles.error)}</Alert>}
           <Stack direction="row" sx={{ gap: 2 }}>
-            <TextField label={t(lt ? 'control.dialog.thresholdLt' : 'control.dialog.threshold')} type="number" required
+            <TextField label={t(`control.dialog.threshold${lt}`)} type="number" required
               value={form.threshold_value} onChange={set('threshold_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
-            <TextField label={t(lt ? 'control.dialog.escalateLt' : 'control.dialog.escalate')} type="number"
+            <TextField label={t(`control.dialog.escalate${lt}`)} type="number"
               value={form.escalate_value} onChange={set('escalate_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
           </Stack>
           <TextField select label={t('control.dialog.owner')} value={form.owner_org_role_id} onChange={set('owner_org_role_id')}>

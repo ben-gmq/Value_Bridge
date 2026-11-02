@@ -6,6 +6,9 @@ import { controlApi } from '../../api/scope';
 import { keys } from '../../app/links';
 import { Card, KV } from '../../components/kit';
 import { t } from '../../i18n/t';
+
+// Threshold wording by comparison: over (GT, PCT_GT), under (LT), or more (GE — slice Risks, RK-2).
+const cmpSuffix = (c) => ({ LT: 'Lt', GE: 'Ge' }[c] ?? '');
 import { MONO } from '../../theme/theme';
 import { fmtDate } from '../baselines/baselineKit';
 
@@ -31,7 +34,7 @@ function History({ rows, unit }) {
 
 function EditDefault({ rule, onClose, onSaved, onStale }) {
   const qc = useQueryClient();
-  const lt = rule.comparison === 'LT';
+  const lt = cmpSuffix(rule.comparison);
   const [form, setForm] = useState({
     threshold_value: String(Number(rule.threshold_value)),
     escalate_value: rule.escalate_value === null ? '' : String(Number(rule.escalate_value)),
@@ -60,9 +63,9 @@ function EditDefault({ rule, onClose, onSaved, onStale }) {
           {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
           <Alert severity="info">{t('control.house.futureOnly')}</Alert>
           <Stack direction="row" sx={{ gap: 2 }}>
-            <TextField label={t(lt ? 'control.dialog.thresholdLt' : 'control.dialog.threshold')} type="number" required
+            <TextField label={t(`control.dialog.threshold${lt}`)} type="number" required
               value={form.threshold_value} onChange={set('threshold_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
-            <TextField label={t(lt ? 'control.dialog.escalateLt' : 'control.dialog.escalate')} type="number"
+            <TextField label={t(`control.dialog.escalate${lt}`)} type="number"
               value={form.escalate_value} onChange={set('escalate_value')} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} />
           </Stack>
           <TextField label={t('control.action')} multiline minRows={2} value={form.prescribed_action}
@@ -92,14 +95,14 @@ export function ControlDefaultsTab({ notify }) {
     <Stack sx={{ gap: 2, mt: 2 }}>
       <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('control.house.intro')}</Typography>
       {(q.data ?? []).map((r) => {
-        const lt = r.comparison === 'LT';
+        const lt = cmpSuffix(r.comparison);
         return (
           <Card key={r.analysis_code} title={t(`control.analysis.${r.analysis_code}`)}
             action={<Button size="small" variant="outlined" onClick={() => setEditing(r)}>{t('control.edit')}</Button>}>
             <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 3 }}>
               <Stack sx={{ minWidth: 220, gap: 1 }}>
-                <KV k={t(lt ? 'control.thresholdLt' : 'control.threshold')} v={<Box component="span" sx={{ fontFamily: MONO }}>{num(r.threshold_value, r.unit)}</Box>} />
-                <KV k={t(lt ? 'control.escalateLt' : 'control.escalate')}
+                <KV k={t(`control.threshold${lt}`)} v={<Box component="span" sx={{ fontFamily: MONO }}>{num(r.threshold_value, r.unit)}</Box>} />
+                <KV k={t(`control.escalate${lt}`)}
                   v={<Box component="span" sx={{ fontFamily: MONO }}>{r.escalate_value === null ? t('control.never') : num(r.escalate_value, r.unit)}</Box>} />
               </Stack>
               <Stack sx={{ flex: 1, gap: 1 }}>

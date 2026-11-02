@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import AppUser, AuditEvent, Baseline, ControlRule, FunctionRequirement, OrgRole, Project
+from models import AppUser, AuditEvent, Baseline, ControlRule, FunctionRequirement, OrgRole, Project, Risk
 from models.control import REGISTRY
 from services import audit, baseline, components, control_reports, function_requirement, reports
 from services.lifecycle import check_version
@@ -55,11 +55,14 @@ HOUSE_RULES = (
     # Control-C3 (CC-3): any FR nobody traced to a requirement flags, more than five escalate.
     ("fr_unlinked", "COUNT", "GT", Decimal(0), Decimal(5),
      "Link or retire before the next freeze; a vendor cannot be held to a function nobody traced to a requirement"),
+    # Slice Risks (RK-2, RK-5; design §7.13): an open risk scoring 12 or more flags, 16 or more escalates.
+    ("risk_register", "SCORE", "GE", Decimal(12), Decimal(16),
+     "Mitigation owner + date; steering if unmitigated"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
 # Shown under the panel: the analyses still to come and what brings each (spec §1).
-COMING = (("benefit_gap", "BENEFITS"), ("risk_register", "RISKS"))
+COMING = (("benefit_gap", "BENEFITS"),)
 EDITABLE = ("threshold_value", "escalate_value", "owner_org_role_id", "prescribed_action", "escalation_path",
             "is_enabled")
 TEXT_FIELDS = ("prescribed_action", "escalation_path")         # CT-3: audited as "changed" only — they name people
@@ -468,6 +471,19 @@ def _fr_unlinked(db: Session, project_id: int, on: frozenset) -> dict:
     return _measure(len(frs), effort_days=str(days.quantize(CENT, ROUND_HALF_UP)))
 
 
+def _risk_register(db: Session, project_id: int, on: frozenset) -> dict:
+    """Slice Risks (RK-5): the highest exposure among live open risks (OPEN behaviour — MITIGATING is open). None open
+    is NOT_MEASURED, never 0: an engagement with no recorded risk is a question, not a green light."""
+    if "RISK" not in on:
+        return _measure(reason="RISK_OFF")
+    top, n, undated = db.execute(select(
+        func.max(Risk.exposure_score), func.count(), func.count().filter(Risk.target_date.is_(None))).where(
+        Risk.project_id == project_id, Risk.is_active, Risk.status_behaviour == "OPEN")).one()
+    if not n:
+        return _measure(reason="NO_OPEN_RISKS")
+    return _measure(top, open_count=n, open_without_target=undated)
+
+
 def _from_report(report: dict) -> dict:
     """A Control-B report's own headline, so the tab and the panel read one computation (spec §3)."""
     h = dict(report["headline"])
@@ -497,13 +513,19 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _from_report(control_reports.master_data_candidates(db, project_id))
     if code == "fr_unlinked":
         return _fr_unlinked(db, project_id, on)
+    if code == "risk_register":
+        return _risk_register(db, project_id, on)
     return _measure(reason="NOT_BUILT")
 
 
 def _breaches(measured: Decimal, limit: Decimal | None, comparison: str) -> bool:
     if limit is None:
         return False
-    return measured < limit if comparison == "LT" else measured > limit       # equal is not a breach
+    if comparison == "LT":
+        return measured < limit
+    if comparison == "GE":                                                     # slice Risks RK-2: equal IS a breach
+        return measured >= limit
+    return measured > limit                                                    # equal is not a breach
 
 
 def verdict(rule: ControlRule, m: dict) -> str | None:
