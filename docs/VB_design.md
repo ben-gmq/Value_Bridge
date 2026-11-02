@@ -3870,7 +3870,7 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `maintain_fr_types` | `code_master.maintain` (category `FR_TYPE`, with behaviour) | §7.12 (D-27) |
 | `describe_interface` | `interface.describe_interface` / `remove_interface` | §7.5 (D-27) |
 | `interface_list` | `interface.interface_list` (over `v_interface_list`) | §7.5 / §7.9 (D-27) |
-| `fr_unlinked` | `reports.fr_unlinked` | §7.13 (D-28, re-based on the BR link by D-52) |
+| `fr_unlinked` | `control._fr_unlinked` (over `function_requirement.list_frs(unlinked=True)`) | §7.13 (D-28, re-based on the BR link by D-52) |
 | `fr_traceability_matrix` | `reports.traceability` | §7.9 |
 | `raise_issue` | `issue.raise_issue` | §7.6 |
 | `link_issue_br` | `link_service` pattern | §7.0 (generic) |

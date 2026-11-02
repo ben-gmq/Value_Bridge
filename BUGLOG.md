@@ -670,6 +670,12 @@ place.
   platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
   `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
   the editor-gets-403 check over it.
+- **2026-11-02 · slice Control-C C3, FRs nobody traced to a requirement (`sara`, no CRITICAL / HIGH / MEDIUM; L3 index
+  comment and L4 "0 / 1 effort days" wording fixed):** (L1) "untraced" is computed three ways — the panel and register
+  (`function_requirement.list_frs`, live link to a live BR), the effort summary (`effort.py`, live link only) and the
+  scope summary (`scope_summary.py`); they agree only because `step_retire.OWNED_BY_BR` retires a BR's links with it.
+  Read one `traced_fr_ids` helper from all three. (L2) with "show retired" ticked, the register's untraced view also
+  lists retired FRs, so it shows more than the panel figure; ignore the tick on that view or say so on screen.
 - **2026-10-30 · slice 1e-b piece b UI, left unfixed on Ben's instruction (ui-verifier 2026-10-29):** the import
   preview opens filtered to "Errors and warnings", so a Remove row shows only under "All rows"; a wrong removal count
   shows a red outline with no mismatch message.

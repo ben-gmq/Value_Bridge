@@ -62,8 +62,8 @@ function Figures({ r }) {
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.intensity', { area: f.top_area, n: f.changed_steps })}</Typography>)}
       {r.analysis_code === 'master_data_candidates' && (
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.master', { n: f.candidates, used: f.entities_used })}</Typography>)}
-      {r.analysis_code === 'fr_unlinked' && f.effort_days !== undefined && (
-        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.unlinkedDays', { days: Number(f.effort_days) })}</Typography>)}
+      {r.analysis_code === 'fr_unlinked' && Number(f.effort_days) > 0 && (
+        <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('control.unlinkedDays', { n: Number(f.effort_days) })}</Typography>)}
       {r.analysis_code === 'data_migration_map' && f.not_seen_on_as_is > 0 && (
         <Typography sx={{ fontSize: 13, color: 'status.caution' }}>{t('control.notMapped', { n: f.not_seen_on_as_is })}</Typography>)}
     </Stack>

@@ -75,6 +75,7 @@ class FunctionRequirement(AuditMixin, Base):
         CheckConstraint("(complexity_code_id IS NULL) = (effort_days IS NULL)", name="ck_fr_effort_with_complexity"),
         CheckConstraint("effort_days IS NULL OR effort_days >= 0", name="ck_fr_effort_nonneg"),
         Index("ix_fr_solution", "solution_id", "project_id"),
+        # Named before slice 10b: this is the "unassigned" view (no solution), not the control rule fr_unlinked (no BR).
         Index("ix_fr_unlinked", "project_id", postgresql_where=text("solution_id IS NULL AND is_active")),
         Index("ix_fr_behaviour", "project_id", "fr_type_behaviour", postgresql_where=text("is_active")),
         Index("ix_fr_type", "fr_type_code_id"),
