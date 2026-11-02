@@ -31,7 +31,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   `data_migration_map`; B2 `org_impact_heatmap`, `stakeholder_engagement`; C `process_change_intensity`,
   `master_data_candidates`, and `fr_unlinked` after migration 0082; Risks `risk_register` after 0083, which also gives
   the three risk code lists their weights / behaviours and refuses, naming `project:code`, any risk code it cannot
-  map); until it runs `create_project` is 409.
+  map); until it runs `create_project` is 409. 0084 (Decisions) adds no rule; it refuses, naming `project:code`, while a
+  project holds its own `PM_DIMENSION` code or hide (the list is company-only).
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's

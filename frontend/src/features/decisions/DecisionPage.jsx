@@ -37,8 +37,9 @@ export default function DecisionPage() {
   if (q.error) return <Page title={t('decisions.title')} error={errorText(q.error)} />;
   if (!d) return <Page title={t('decisions.loading')} />;
 
+  const home = d.project_id;                                  // the decision's own project, not the URL's (sara L2)
   const chainLink = (id, number) => (
-    <Link component={RouterLink} to={links.decision(projectId, id)} underline="hover"><Code>{number}</Code></Link>);
+    <Link component={RouterLink} to={links.decision(home, id)} underline="hover"><Code>{number}</Code></Link>);
 
   const main = (
     <Card title={t('decisions.cardTitle')} bodySx={{ gap: 2 }}>
@@ -69,7 +70,7 @@ export default function DecisionPage() {
       subtitle={t('decisions.detailSubtitle')} crumb={d.decision_number}
       actions={canEdit && !d.superseded_by_id && (
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" onClick={() => navigate(links.decisionNew(projectId, d.decision_id))}>
+          <Button variant="outlined" onClick={() => navigate(links.decisionNew(home, d.decision_id))}>
             {t('decisions.correct')}</Button>
         </Stack>)}>
       <TwoCol main={main} side={side} />

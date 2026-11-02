@@ -16,8 +16,12 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open. (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of
-2026-10-29: CC-7, §3.)
+- **D2-2 (2026-11-02, slice Decisions review round 2):** is "decided on" the Thai (ICT) calendar day or the
+  recorder's own day? Built as the ICT day (Lilly's recommendation) while Ben is asked.
+- **DC-8 (2026-11-02, apple L2):** should a supersession say whether it is a correction (recorded wrongly) or a
+  revision (the decision changed later)?
+
+(The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of 2026-10-29: CC-7, §3.)
 
 
 ---
@@ -631,6 +635,22 @@ round 1 in its §11). No migration.
 | CB-4 | **`data_migration_map` counts the to-be entities needing a data-ownership decision** — seen on as-is steps with no supporting system, or held by two or more systems today. **Flag > 0, escalate > 5.** Entities never seen on as-is (new data) and as-is entities no to-be BR uses (retiring) are listed, not counted; NOT MEASURED until any in-scope entity is mapped on as-is | §7.9 "entities with no source, or with >1 source"; §7.13 table "no source / conflicting sources" |
 | CB-5 | **A rule backfilled into a running engagement arrives switched off until the client agrees it, but is still measured:** the panel shows every switched-off rule's figure greyed with no verdict — "Not yet agreed with the client" when never edited (row version 1), otherwise "Switched off" with who and when. New projects get the rules on | Control-A round 2 Q1; §7.13 `control_panel` measuring enabled rules only |
 
+### Ben's rulings, 2026-11-02 — the decision log (slice Decisions, DC-1…DC-5)
+
+Ben, via Ren, 2026-11-02: *"approves the Decisions slice (D-17) plan f733f15 with all five of your recommended
+answers"*. Plan `docs/plans/decisions_plan_2026-11-02.md`. Spec: `docs/slice_decisions_spec.md` (design review rounds
+in its §12, §13). Migration 0084.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| DC-1 | **The decision log is always on** — no component switch | §6.2 `PROJECT_COMPONENT` (no DECISION component) |
+| DC-2 | **Only the latest decision in a chain can be corrected** — each decision is superseded at most once | §5.3 DECISION "supersedes" (cardinality unstated) |
+| DC-3 | **"The analysis it was taken against" is optional and picked from the project's control rules** | §5.3 `analysis_code` (free text) |
+| DC-4 | **"Decided on" is the meeting date** — a date, never in the future, today by default; `created_at` keeps when it was typed | ERD `decided_at timestamptz` |
+| DC-5 | **Promoting a risk writes no decision** | §7 pseudo-code note on `RISK_MATERIALISED` ("the Decisions module records it once built") |
+| DC-6 | **(2026-11-02) A decision recorded by mistake is not withdrawn in this slice; an IS-only, audited redaction (text blanked, number kept) comes later as its own small task.** Ben, via Ren: (b), "a niche case" — logged as a low-priority enhancement | Design review D1-8 (auditor HIGH) |
+| DC-7 | **(2026-11-02) The decider stays in the decision text; no "decided by" role field.** Ben, via Ren: (b). The recorder is `decided_by_user_id` (= `created_by`) | Design review D1-1 (apple M1) |
+
 ### Ben's rulings, 2026-11-02 — the risk register (slice Risks, RK-1…RK-6)
 
 Ben, via Ren, 2026-11-02: *"all six questions (Q1–Q6) as you recommended, (a) each"* — plan
@@ -963,6 +983,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice_control_b_spec.md` | Slice Control-B — volatility, org impact, stakeholder engagement, data migration map (CB-1…CB-5) | 2026-10-30 |
 | `docs/slice_control_c_spec.md` | Slice Control-C — where change lands, master data, FTC defaults and reset, `fr_unlinked` (CC-1…CC-7) | 2026-10-30 |
 | `docs/slice_risks_spec.md` | Slice Risks — the risk register, promote to an issue, the `risk_register` rule (RK-1…RK-6) | 2026-11-02 |
+| `docs/slice_decisions_spec.md` | Slice Decisions — the append-only decision log, corrections by supersession (DC-1…DC-5) | 2026-11-02 |
 
 ---
 

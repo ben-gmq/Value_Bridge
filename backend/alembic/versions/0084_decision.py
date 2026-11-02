@@ -93,7 +93,7 @@ def upgrade() -> None:
         sa.CheckConstraint("btrim(title) <> ''", name="ck_decision_title_not_blank"),
         sa.CheckConstraint("btrim(decision_text) <> ''", name="ck_decision_text_not_blank"),
         sa.CheckConstraint("btrim(alternative_rejected) <> ''", name="ck_decision_alternative_not_blank"),
-        sa.CheckConstraint("analysis_code IS NULL OR analysis_code ~ '^[a-z_]{1,40}$'", name="ck_decision_analysis"),
+        sa.CheckConstraint("analysis_code IS NULL OR analysis_code ~ '^[a-z0-9_]{1,40}$'", name="ck_decision_analysis"),
         sa.CheckConstraint("decided_by_user_id = created_by", name="ck_decision_decided_by_recorder"),
         sa.CheckConstraint("decided_on <= (created_at AT TIME ZONE 'UTC')::date + 1", name="ck_decision_not_future"),
         sa.CheckConstraint("supersedes_decision_id IS NULL OR supersedes_decision_id <> decision_id",

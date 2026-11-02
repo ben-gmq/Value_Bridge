@@ -1327,9 +1327,11 @@ erDiagram
         text alternative_rejected
         varchar analysis_code
         bigint decided_by_user_id FK
-        timestamptz decided_at
+        date decided_on
         bigint dimension_code_id FK
         bigint supersedes_decision_id FK
+        timestamptz created_at
+        bigint created_by FK
     }
     PHASE {
         bigint phase_id PK
@@ -2283,18 +2285,24 @@ in SQL and painful in SQLAlchemy. The seven columns are wider but checkable, joi
 "exactly one" is one `CHECK`, not a trigger. Adding an eighth impacted type later is a column and a
 migration.
 
-**DECISION** — one row per recorded project decision (D-17). PK `decision_id`; FK `project_id`,
-`decided_by_user_id`, `dimension_code_id`, `supersedes_decision_id` (nullable self-reference). UK
-`(project_id, decision_number)`. Carries `decision_text`, **`alternative_rejected`** and `analysis_code` —
-the analysis it was taken against. The rejected alternative is the field that makes a decision log worth
-reading; without it the log records outcomes and loses reasoning.
+**DECISION** — one row per recorded project decision (D-17; component-free, DC-1). PK `decision_id` (generated
+always); FK `project_id`, `decided_by_user_id` (the recorder, equal to `created_by` by CHECK), `dimension_code_id`
+(`PM_DIMENSION`, a company-only list), `supersedes_decision_id` (nullable self-reference through `(decision_id,
+project_id)`, so a correction stays in its project). UK `(project_id, decision_number)` → `DEC-0001`; partial UK
+on `supersedes_decision_id`, so each decision is superseded at most once and only the latest in a chain is corrected
+(DC-2). Carries `title`, `decision_text`, **`alternative_rejected`** (all non-blank), `analysis_code` — the analysis
+it was taken against, optional, one of the project's control rules (DC-3; checked by the service, the column holds
+its format only) — and `decided_on`, the meeting date, never in the future (DC-4). The rejected alternative is the
+field that makes a decision log worth reading; without it the log records outcomes and loses reasoning.
 
-**`DECISION` is append-only and evidential.** It carries the same `BEFORE UPDATE OR DELETE` reject trigger
-as the `baseline_*` shadow tables, is **exempt from soft delete** (no `is_active`, no `deleted_at`), and the
-application database role holds no `UPDATE` or `DELETE` privilege on it (§6.6). A decision that can be
-edited after the fact is a record of what someone currently wishes had been decided. A superseded decision
-is corrected by writing a **new** decision that references the old one via `supersedes_decision_id`, which
-also keeps the log readable as a narrative.
+**`DECISION` is append-only and evidential.** Its `BEFORE UPDATE OR DELETE` trigger (`fn_decision_reject`) refuses
+every UPDATE and every DELETE except the scoped purge of an approved project (`fn_purge_allows`, as the shadow
+tables); a `BEFORE INSERT` trigger sets `created_at` from the database clock. It is **exempt from soft delete and
+`row_version`** (only `created_at` / `created_by` of the audit columns), and the application database role holds no
+`UPDATE`, `DELETE` or `TRUNCATE` privilege on it (§6.6). A decision that can be edited after the fact is a record of
+what someone currently wishes had been decided. A superseded decision is corrected by writing a **new** decision
+that references the old one via `supersedes_decision_id`, which also keeps the log readable as a narrative.
+Not frozen into baselines.
 
 **PHASE / SOLUTION_PHASE / SOLUTION_DEPENDENCY** (D-18) — delivery waves (shown as "Wave", W-1), the assignment of
 solutions to them (`portion_pct`, because a solution can span waves; a solution's live rows total exactly 100 or
@@ -3654,7 +3662,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | topological check on insert; a cycle is rejected | `solution_dependency` *(when built)* | D-18 — a dependency cycle makes the phase plan unsolvable and is silent until someone tries to schedule |
 | `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NOT NULL OR owner_org_role_id IS NULL)`; `CHECK (is_house_default = (project_id IS NULL))`; `CHECK (project_id IS NULL OR created_by IS NOT NULL)`; composite FK (`owner_org_role_id`, `project_id`) → `org_role` | `control_rule` | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; the owner is the same project's role. **An analysis without a named owner is a report nobody acts on** — so an unowned project rule is shown and reported, not refused (CT-1: rules are copied before the client's org chart exists) |
 | `CHECK (num_nonnulls(impacted_br_id, impacted_solution_id, impacted_fr_id, impacted_application_id, impacted_data_entity_id, impacted_phase_id, impacted_benefit_id) = 1)` + composite `(id, project_id)` FK on each | `cr_impact` *(when built)* | A-37 — the database enforces which object a CR row points at, and that it belongs to this project |
-| `BEFORE UPDATE OR DELETE` reject trigger; **exempt from soft delete**; no `UPDATE`/`DELETE` grant | `decision` *(when built)* | A-41 — the decision log is evidential. Corrections are a new row with `supersedes_decision_id` |
+| `BEFORE UPDATE OR DELETE` reject trigger (`fn_decision_reject`; only the scoped project purge deletes); `created_at` stamped by trigger; **exempt from soft delete**; no `UPDATE`/`DELETE`/`TRUNCATE` grant | `decision` | A-41 — the decision log is evidential. Corrections are a new row with `supersedes_decision_id` |
 | `bfc_node_flow` constraints (`ck_bnf_has_end`, `ck_bnf_flow_type`, `ck_bnf_conditional_label`, `ck_bnf_seq`, process guards, partial `uq_bfc_node_flow_edge`) | `bfc_node_flow` | retired (D-38): they remain on the read-only history rows; no row can be inserted or updated by `vb_app` (§6.6) |
 
 **Rules the database does *not* hold, stated as such (R2-D11).** A CHECK sees one row of one table and has no
@@ -5973,7 +5981,7 @@ promote_risk_to_issue(risk_id, raiser_stakeholder_id, severity, issue_type, targ
     issue = issue.raise_issue(..., raised_by=raiser_stakeholder_id)    # RK-4: a stakeholder, chosen in the dialog
     risk.materialised_issue_id = issue.id
     risk.status_code = 'MATERIALISED'            # the risk row SURVIVES
-    audit('RISK_MATERIALISED', codes and numbers only)   # the Decisions module records it once built
+    audit('RISK_MATERIALISED', codes and numbers only)   # no DECISION row: a decision is a person's act (DC-5)
     # The risk is the record that it was foreseen — the evidence a post-mortem asks for.
 
 # ---- change control (D-16) ------------------------------------------------
@@ -6246,7 +6254,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `RISK_STATUS` | `OPEN`, `MITIGATING` (behaviour OPEN), `CLOSED`, `MATERIALISED` — company-only, all pinned, behaviour fixed | `RISK.status_code` |
 | `CR_STATUS` | `DRAFT`, `ANALYSED`, `PRICED`, `APPROVED`, `REJECTED`, `DEFERRED` | `CHANGE_REQUEST.status_code` — **D-16** |
 | `CR_ORIGIN` | `CLIENT`, `VENDOR`, `REGULATORY`, `FTC`, `DEFECT` | `CHANGE_REQUEST.origin_code` |
-| `PM_DIMENSION` | `SCOPE`, `SCHEDULE`, `COST`, `BENEFIT`, `RISK`, `QUALITY`, `ORG_CHANGE`, `DATA`, `VENDOR` | `DECISION.dimension_code` — **D-17**, the dimensions the control framework acts on |
+| `PM_DIMENSION` | `SCOPE`, `SCHEDULE`, `COST`, `BENEFIT`, `RISK`, `QUALITY`, `ORG_CHANGE`, `DATA`, `VENDOR` | `DECISION.dimension_code` — **D-17**, the dimensions the control framework acts on. **Company-only** (a decision row is never re-pointed to a project copy) |
 | `PHASE_STATUS` | `PLANNED`, `IN_DELIVERY`, `COMPLETE`, `CANCELLED` — company-only (W-4) | `PHASE.status_code` — **D-18** |
 | `ISSUE_SEVERITY` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` | `ISSUE.severity_code` |
 | `ISSUE_TYPE` | `PROCESS`, `DATA`, `SYSTEM`, `ORGANIZATION`, `POLICY`, `OTHER` | `ISSUE.issue_type_code` |
@@ -6517,7 +6525,7 @@ component.
 | `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per `measure_unit`** (D-14, R2-D12, Q9) |
 | `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2) |
 | `POST /change-requests/{id}/analyse` · `GET …/price` · `POST …/decide` | object_guard(ChangeRequest, EDIT) | seed objects · — · outcome, displaces_cr_id, rationale, alternative_rejected | the blast radius (`CR_IMPACT`); effort and benefit delta, phases hit, displacement candidates; the decision. **`decide` refuses net-positive effort with no displacement named (422)** and writes a `DECISION` row |
-| `GET/POST /projects/{project_id}/decisions` | project_ctx(VIEW / EDIT) | decision fields | the decision log (D-17); corrections are new rows |
+| `GET/POST /projects/{project_id}/decisions` · `GET /decisions/{id}` | project_ctx(VIEW / EDIT) · object_guard(Decision, VIEW) | title, decision_text, alternative_rejected, dimension_code, decided_on, analysis_code, supersedes_decision_id | the decision log (D-17, DC-1…DC-5), built; corrections are new rows; no PATCH or DELETE route |
 | `POST /projects/{project_id}/bulk/wbs/validate` · `GET /projects/{project_id}/wbs` · `PATCH /wbs-items/{id}` | project_ctx / object_guard(EDIT, `WBS`) | `.xlsx`, `import_mode` · filters · phase_id, solution_id, row_version | WBS keyed by MS Project Unique ID (D-33, R2-D15); **links only by PATCH** — any other field → 422 "Change it in MS Project and re-import". Progress updates are new dated rows, never overwritten by an import (D-41, OR-7); the progress report is generated from them |
 | **Phase 2 — risks, and the in-app waves of slice 15 (D-18)** | | | |
 | `GET/POST /projects/{project_id}/risks` · `PATCH /risks/{id}` · `POST /risks/{id}/materialise` | `RISK` | risk fields · description | risk incl. `RSK-0001`, derived `exposure_score` (D-15); materialise creates and links an issue and leaves the risk row |

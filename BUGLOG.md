@@ -690,6 +690,14 @@ place.
   platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
   `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
   the editor-gets-403 check over it.
+- **2026-11-02 · slice Decisions (`sara` 4 LOW, L1 / L2 / L4 fixed; design-auditor round 2):** (L3) the record form has
+  no unsaved-changes guard (`useBackGuard`) — Cancel or Back drops a long text, as on most screens. (D2-1) a lost
+  response after a committed save, then a second Save, writes a permanent duplicate decision; the form guards only a
+  double click — an idempotency key would close it (a column; depends on DC-6's redaction for any clean-up). (D2-4)
+  the project ARCHIVE run (not built) must include `decision`, which a purge then deletes — make it an acceptance line
+  of that slice. (DC-6, Ben 2026-11-02, low-priority enhancement, "a niche case") an IS-only audited redaction of a
+  decision recorded by mistake (text blanked, number kept), its own small task. (UAT cosmetic) "1 decisions"; no
+  required mark on Dimension; the filtered-empty grid says "No decisions recorded yet".
 - **2026-11-02 · slice Risks (`sara`, no CRITICAL / HIGH / MEDIUM; Control-C3 L1 and L2 below built in its piece 0, RK-6 —
   for Ben to close):** (L1) the traceability report (`reports.py`, `_Scope.br_fr`) still works out "untraced" itself
   rather than reading `fr_trace.traced_fr_ids`; read the helper or say why not. (L2) 0083's downgrade, like 0082's,

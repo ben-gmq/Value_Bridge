@@ -47,13 +47,14 @@ the series is already seeded by `create_project`). A correction is its own row w
   of a code (the row is immutable), so a project override would split one dimension into two in the filter.
 
 ## 5. Physical design (migration 0084)
-`decision`: `decision_id` bigint identity PK · `project_id` NOT NULL → project · `decision_number` varchar(20) NOT NULL ·
-`title` varchar(200) NOT NULL, non-blank CHECK · `decision_text` text NOT NULL, non-blank · `alternative_rejected` text
-NOT NULL, non-blank · `analysis_code` varchar(40) NULL, CHECK in the registry (as `ck_ctl_analysis`) ·
-`dimension_code_id` + computed `dimension_category` ('PM_DIMENSION') → composite FK (code_id, category) on code_master
-· `decided_on` date NOT NULL · `decided_by_user_id` NOT NULL → app_user · `supersedes_decision_id` NULL → composite
-`(supersedes_decision_id, project_id)` → `decision(decision_id, project_id)` · `created_at` timestamptz NOT NULL
-default now() · `created_by` NOT NULL → app_user.
+`decision`: `decision_id` bigint identity PK, **generated always** · `project_id` NOT NULL → project ·
+`decision_number` varchar(20) NOT NULL · `title` varchar(200) NOT NULL, non-blank CHECK · `decision_text` text NOT
+NULL, non-blank · `alternative_rejected` text NOT NULL, non-blank · `analysis_code` varchar(40) NULL, **format-only
+CHECK** `^[a-z0-9_]{1,40}$` (D1-2) · `dimension_code_id` + computed `dimension_category` ('PM_DIMENSION') → composite
+FK (code_id, category) on code_master · `decided_on` date NOT NULL, CHECK not after the creation day + 1 (UTC, D1-5) ·
+`decided_by_user_id` NOT NULL → app_user, CHECK `= created_by` (D1-1) · `supersedes_decision_id` NULL → composite
+`(supersedes_decision_id, project_id)` → `decision(decision_id, project_id)` · `created_at` timestamptz NOT NULL, set
+by `trg_decision_stamp` from the database clock (D1-3) · `created_by` NOT NULL → app_user.
 - **No** `is_active`, `deleted_at`, `updated_at`, `updated_by`, `row_version` (A-41: exempt from soft delete; nothing
   is ever updated).
 - UK `(project_id, decision_number)`; UK `(decision_id, project_id)`; **partial UK `supersedes_decision_id` WHERE NOT
@@ -62,8 +63,8 @@ default now() · `created_by` NOT NULL → app_user.
 - **Trigger** `trg_decision_immutable` BEFORE UPDATE OR DELETE FOR EACH ROW → new `fn_decision_reject()`: UPDATE always
   raises `restrict_violation`; DELETE passes only when `fn_purge_allows(OLD.project_id)` (0074's one rule), so the
   scoped purge still removes a purged project's decisions (law 1). `fn_reject_modification_purgeable` is not reused:
-  it reads `baseline_id`. No TRUNCATE trigger (as the shadows, S8-2).
-- **Grants:** `REVOKE UPDATE ON decision FROM vb_app` (it never had DELETE). The app keeps SELECT / INSERT.
+  it reads `baseline_id`. No TRUNCATE trigger (as the shadows, S8-2). `purge_run.DELETE_GUARDS` names it (D1-4).
+- **Grants:** `REVOKE UPDATE, TRUNCATE ON decision FROM vb_app` (it never had DELETE). The app keeps SELECT / INSERT.
 - `code_master`: the upgrade **refuses** if any project-tier `PM_DIMENSION` row or hide exists, naming
   `project:code` (0083's pattern); none is expected (no table used the list before).
 - Downgrade refuses while any `decision` row exists; then drops the table and function.
@@ -82,7 +83,8 @@ default now() · `created_by` NOT NULL → app_user.
   already points at it → 409 "DEC-0003 was already corrected by DEC-0007". A concurrent second correction loses on
   the partial unique index → 409 with the same message (no row lock: `vb_app` has no UPDATE, so `FOR UPDATE` is
   not available, and the index is the guarantee).
-- **Date:** `decided_on` after today (server date) → 422; absent → today.
+- **Date:** `decided_on` after today in ICT (`local_today()`, D1-5) → 422; absent → today (ICT). Whether the meeting
+  date is the ICT day or the recorder's own day is put to Ben (D2-2); until then the form pre-fills ICT today.
 - **Audit:** `DECISION_RECORDED` with `decision_number`, dimension code, analysis code, superseded number — never
   title or text (R7).
 - **Code lists:** `decision.dimension_code_id` named in `code_lists.EXCLUDED` (never re-pointed: immutable);
@@ -137,8 +139,36 @@ task if ever wanted). **Rest Grade 2** (log, validation) and **Grade 3** (screen
   approver is written into the decision text.
 - ASSUMPTION A3: the log shows newest first ("chronological" read as reverse-chronological for a working log).
 
-## 12. Design review round 1
-(pending)
+## 12. Design review round 1 (2026-11-02): apple (3 medium, 5 low) + design-auditor (1 high, 4 medium, 2 low)
 
-## 13. Design review round 2
-(pending)
+| # | Finding | Disposition |
+|---|---|---|
+| D1-1 | `decided_by_user_id` always equals `created_by` (apple M1) | **Fixed (kept per design):** `ck_decision_decided_by_recorder`; shown as "Recorded by". A separate decider (an org role) is put to Ben (DC-7) |
+| D1-2 | A copy of the analysis registry CHECK on an immutable table could never be narrowed, and drifts (apple M2, auditor L) | **Fixed:** format-only CHECK; the service checks the project's rules |
+| D1-3 | `created_at` could be backdated by the app (apple M3) | **Fixed:** `trg_decision_stamp` sets it from the database clock |
+| D1-4 | The new reject trigger would stop every purge (`DELETE_GUARDS`) (auditor M) | **Fixed:** `fn_decision_reject` joins `purge_run.DELETE_GUARDS`; purge test added |
+| D1-5 | "Today" ambiguous across time zones (auditor M) | **Fixed:** `local_today()` (ICT) for default and refusal; DB backstop `ck_decision_not_future` (+1 day, apple L5) |
+| D1-6 | Correction target must be read in the URL's project (auditor L) | **Fixed:** read with `project_id = :p` → 404 |
+| D1-7 | Double submit makes a permanent duplicate (auditor M) | **Fixed in the form:** one save in flight; an idempotency key is not built (it would add a column) — tracked as a backlog line |
+| D1-8 | No way to withdraw a decision recorded by mistake (auditor HIGH) | **Ben's call (DC-6):** built as designed (A-41); options put to him — accept, or an IS-only audited redaction as its own task |
+| D1-9 | Confidentiality / archive coverage (auditor M) | **Answered:** decisions are not frozen, so no baseline archive file carries them; the project ARCHIVE run is not built yet — when it is, it must include `decision` |
+| apple L1 | BY DEFAULT identity lets a crafted multi-row insert form a cycle | **Fixed:** `GENERATED ALWAYS` |
+| apple L2 | Correcting a typo forces a rejected alternative; no "revision vs correction" kind | **Accepted (A1)**; a supersede kind put to Ben as DC-8 (WHENEVER) |
+| apple L3 | Design ERD says `decided_at timestamptz` | **Fixed in docs:** design §5.3 and ERD rewritten (DC-4) |
+| apple L4 | Law-3 exemption must be explicit; TRUNCATE | **Fixed:** A-41 exemption named; `REVOKE TRUNCATE`; test asserts no UPDATE / DELETE / TRUNCATE |
+
+## 13. Design review round 2 (final under the cap, 2026-11-02): design-auditor (0 high, 1 medium, 3 low) + sara (4 low)
+
+D1-1…D1-6 and apple L1 / L4 hold. Nothing structural. New:
+
+| # | Finding | Disposition |
+|---|---|---|
+| D2-1 (medium) | D1-7's backlog line was not written; a lost response then a second Save writes a permanent duplicate | **Logged:** VB-005 line, depending on DC-6 |
+| D2-2 (low) + sara L1 | The form sends the browser's day, bypassing ICT; Sydney morning → 422, London evening → a day early | **Fixed:** the form pre-fills and caps at the ICT day; the calendar question put to Ben |
+| D2-3 (low) | Format CHECK refused digits a future rule code may hold → 500 | **Fixed:** `[a-z0-9_]` |
+| D2-4 (low) | Nothing enforces that the future ARCHIVE run includes `decision` | **Logged:** VB-005 line, and an acceptance line for the ARCHIVE slice |
+| sara L2 | Chain links and Correct used the URL's project, not the decision's | **Fixed:** the page uses `project_id` from the decision |
+| sara L3 | No unsaved-changes guard on the form (as the rest of the app) | **Logged:** VB-005 line |
+| sara L4 | `decided_on` without `Mapped[date]` | **Fixed** |
+
+Nothing further goes back to the auditor; what remains is settled against the running code.

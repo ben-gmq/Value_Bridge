@@ -5,7 +5,7 @@ row_version — nothing ever changes it. The database refuses UPDATE and DELETE 
 fn_decision_reject, migration 0084) except the scoped purge of an approved project (fn_purge_allows, 0074), and
 vb_app holds no UPDATE grant. A wrong decision is corrected by a NEW row whose supersedes_decision_id points at it;
 the partial unique index lets each decision be superseded once, so only the latest in a chain is corrected (DC-2)."""
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger, CheckConstraint, Computed, Date, DateTime, ForeignKey, ForeignKeyConstraint, Identity, Index, String,
@@ -28,7 +28,7 @@ class Decision(Base):
     analysis_code: Mapped[str | None] = mapped_column(String(40))          # DC-3: one of the project's rules
     dimension_code_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     dimension_category: Mapped[str] = mapped_column(String(40), Computed("'PM_DIMENSION'", persisted=True))
-    decided_on = mapped_column(Date, nullable=False)                          # DC-4: the meeting date
+    decided_on: Mapped[date] = mapped_column(Date, nullable=False)            # DC-4: the meeting date
     decided_by_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("app_user.app_user_id"), nullable=False)
     supersedes_decision_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -53,7 +53,7 @@ class Decision(Base):
         CheckConstraint("btrim(alternative_rejected) <> ''", name="ck_decision_alternative_not_blank"),
         # D1-2: format only — the registry check is the service's (an immutable row could never be re-validated
         # against a narrowed list, and a widened one would need this CHECK widened in step)
-        CheckConstraint("analysis_code IS NULL OR analysis_code ~ '^[a-z_]{1,40}$'", name="ck_decision_analysis"),
+        CheckConstraint("analysis_code IS NULL OR analysis_code ~ '^[a-z0-9_]{1,40}$'", name="ck_decision_analysis"),
         CheckConstraint("decided_by_user_id = created_by", name="ck_decision_decided_by_recorder"),   # D1-1
         CheckConstraint("decided_on <= (created_at AT TIME ZONE 'UTC')::date + 1", name="ck_decision_not_future"),
         CheckConstraint("supersedes_decision_id IS NULL OR supersedes_decision_id <> decision_id",

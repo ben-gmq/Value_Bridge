@@ -11,7 +11,8 @@ import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { SimpleSelect } from '../processes/chartKit';
 
-const today = () => new Date().toLocaleDateString('en-CA');           // YYYY-MM-DD, the browser's own day
+// YYYY-MM-DD in ICT — the day the server checks against (D2-2, sara L1), whatever the browser's own time zone
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 const EMPTY = { title: '', decision_text: '', alternative_rejected: '', dimension_code: '', analysis_code: '',
   decided_on: today() };
 

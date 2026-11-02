@@ -35,7 +35,7 @@ export default function DecisionsPage() {
           underline="hover" onClick={(e) => e.stopPropagation()}>
           <Code tone={row.superseded_by_id ? 'muted' : 'navy'}>{value}</Code></Link>) },
     { field: 'decided_on', headerName: t('decisions.field.decided_on'), width: 115 },
-    { field: 'title', headerName: t('decisions.field.title'), flex: 2, minWidth: 200,
+    { field: 'title', headerName: t('decisions.field.title'), flex: 3, minWidth: 320,      // room for the tag (UAT)
       renderCell: ({ row, value }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', height: '100%' }}>
           <Box component="span" sx={{ color: row.superseded_by_id ? 'text.secondary' : 'inherit' }}>{value}</Box>
@@ -44,7 +44,7 @@ export default function DecisionsPage() {
         </Stack>) },
     { field: 'dimension_code', headerName: t('decisions.field.dimension_code'), width: 150,
       valueGetter: (v) => dim.getLabel(v) },
-    { field: 'analysis_code', headerName: t('decisions.field.analysis_code'), flex: 1, minWidth: 180,
+    { field: 'analysis_code', headerName: t('decisions.field.analysis_code'), flex: 1, minWidth: 160,
       valueGetter: (v) => (v ? t(`control.analysis.${v}`) : '') },
     { field: 'decided_by_name', headerName: t('decisions.field.decided_by'), width: 160 },
   ];
