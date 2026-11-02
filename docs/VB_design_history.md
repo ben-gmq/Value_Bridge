@@ -16,15 +16,8 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-- **2026-11-02 · Risks (design review round 1 R1-2, round 2 NEW-1) — what a materialised risk may still do.** A
-  materialised risk is the record it was foreseen (D-15, criterion 62). Built default, pending Ben: it cannot be
-  retired, and of its fields only the owner role, node, solution and wave can still change — so its issue is closed,
-  not retired, and a restructure is never locked. Consequence (sara): once a risk on a project materialises, that
-  project can no longer switch the Risk component off, nor retire that issue. Alternative: let it be retired (shown
-  under "show retired"), which frees both.
-  Spec `docs/slice_risks_spec.md` §12–13.
-
-(The ERD-as-SVG question of 2026-10-29 is decided: CC-7, §3.)
+Nothing open. (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of
+2026-10-29: CC-7, §3.)
 
 
 ---
@@ -652,6 +645,7 @@ Ben, via Ren, 2026-11-02: *"all six questions (Q1–Q6) as you recommended, (a) 
 | RK-4 | **The issue a risk becomes is raised by a stakeholder chosen in the promote dialog** | §7 pseudo-code "the risk's owner becomes the raiser" (an owner is a role, a raiser a stakeholder) |
 | RK-5 | **The panel measures the highest exposure among open risks**; none open is not measured | §7.13 `risk_register` row (no headline named) |
 | RK-6 | **VB-005 Control-C3 L1 and L2 ride along**: one traced-FR definition; the untraced view is live FRs only | VB-005 lines of 2026-11-02 |
+| RK-7 | **(2026-11-02) A risk promoted to an issue cannot be retired; only its owner role, node, solution and wave can still change.** Ben: *"No. Risk and issues are separate things."* Accepted with it (sara): that project can no longer switch the Risk component off, and the issue is closed rather than retired | Design review R1-2 / NEW-1 (spec §12–13), recorded open in §1 the same day |
 
 ### Ben's rulings, 2026-10-30 — the last Phase 1 control slice (slice Control-C, CC-1…CC-7)
 
