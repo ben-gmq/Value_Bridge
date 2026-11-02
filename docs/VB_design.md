@@ -450,10 +450,10 @@ Component RISK.
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `raise_risk` | `RISK` | C | Next per-project sequence → `RSK-0001`. `probability_code` × `impact_code`, mitigation, owning `org_role_id`, target date. May link to a BFC node, a Solution or a Phase |
-| `score_risk` | `RISK` | U | `exposure_score` derived from probability × impact at save; `status_code` ∈ OPEN / MITIGATING / CLOSED / MATERIALISED |
-| `promote_risk_to_issue` | `RISK`, `ISSUE` | U/C | A materialised risk creates the issue and links back. **The one path between the two entities — they are never merged** |
-| `risk_register` | `RISK` | R | Exposure-ranked, ageing, by owner and by phase |
+| `raise_risk` | `RISK` | C | Next per-project sequence → `RSK-0001`. `probability_code` × `impact_code`, mitigation, owning `org_role_id` (required), raised date (today unless given, never future), target date (not before raised). May link to a BFC node, a Solution or a wave (`phase_id`, RK-3) |
+| `score_risk` | `RISK` | U | `exposure_score` = weight(probability) × weight(impact), 1–25 — each code's behaviour is its weight `W1`…`W5` (RK-1), so the score is a generated column no request sets. `status_code` ∈ OPEN / MITIGATING (behaviour OPEN) / CLOSED / MATERIALISED; MATERIALISED only by promote |
+| `promote_risk_to_issue` | `RISK`, `ISSUE` | U/C | One transaction: the issue is raised (title and description copied, raised today, its own optional target date; raiser, severity and type chosen in the dialog, RK-4), linked, the risk set MATERIALISED. **The one path between the two entities — they are never merged.** A materialised risk keeps its score, codes, dates and text and is not retired; only its owner, node, solution and wave can change (history §1, pending Ben) |
+| `risk_register` | `RISK` | R | Open first, ranked by exposure, then oldest raised; age in days since raised for open risks; filter by status, owner and wave |
 
 ### 4.11 Change control and decisions (D-16, D-17)
 
@@ -1283,9 +1283,11 @@ erDiagram
         text mitigation
         bigint owner_org_role_id FK
         bigint status_code_id FK
+        date raised_date
         date target_date
         bigint bfc_node_id FK
         bigint solution_id FK
+        bigint phase_id FK
         bigint materialised_issue_id FK
     }
     CHANGE_REQUEST {
@@ -2238,11 +2240,14 @@ relationship-specific fact, because a benefit is rarely delivered by one solutio
 what is argued about at realisation.
 
 **RISK** — one row per risk in one project (D-15). PK `risk_id`; FK `project_id`, `probability_code_id`,
-`impact_code_id`, `owner_org_role_id`, `status_code_id`, optional `bfc_node_id` / `solution_id`, and
-`materialised_issue_id` (nullable). UK `(project_id, risk_number)` → `RSK-0001`. `exposure_score` is
-derived at save from probability × impact. **Deliberately not merged with `ISSUE`** — an issue has
+`impact_code_id`, `owner_org_role_id`, `status_code_id`, optional `bfc_node_id` / `solution_id` / `phase_id` (a wave,
+RK-3), and `materialised_issue_id` (nullable; a live risk points only at a live issue, and an issue has at most one
+risk). `raised_date` NOT NULL. UK `(project_id, risk_number)` → `RSK-0001`. The probability and impact codes carry
+their weights (`W1`…`W5`) and the status its behaviour through composite FKs, so `exposure_score` is a column the
+database generates from the two weights (RK-1) and "MATERIALISED exactly when linked to its issue" is a CHECK.
+Live, never frozen. **Deliberately not merged with `ISSUE`** — an issue has
 happened and needs resolution; a risk might happen and needs mitigation. The one path between them is
-`promote_risk_to_issue`, which sets `materialised_issue_id` and leaves the risk row intact as the record
+`promote_risk_to_issue` (RK-4), which sets `materialised_issue_id` and leaves the risk row intact as the record
 that it was foreseen.
 
 **CHANGE_REQUEST** — one row per proposed change to a **frozen** baseline (D-16). PK
@@ -2347,7 +2352,7 @@ plan, the two links consultants own, and — separately — progress recorded in
 
 **CONTROL_RULE** — one row per (project × `analysis_code`), **or one FTC house default** when
 `project_id IS NULL` (D-19). PK `control_rule_id`; FK `project_id` (**nullable**), `owner_org_role_id`.
-Carries `comparison` (`GT` / `LT` / `PCT_GT`), `threshold_value`, `escalate_value`, `prescribed_action`,
+Carries `comparison` (`GT` / `LT` / `PCT_GT` / `GE` — GE counts equal as a breach, RK-2), `threshold_value`, `escalate_value`, `prescribed_action`,
 `escalation_path`, `is_enabled`, and the provenance fields `change_rationale` / `agreed_at`.
 **`analysis_code` is a closed vocabulary matching the report functions in §7.9 — a rule pointing at an
 analysis that does not exist is rejected**, which stops the table filling with aspirational governance.
@@ -5958,14 +5963,17 @@ value_ranking(project_id):                                            # R2-D12, 
 
 # ---- risk (D-15) ----------------------------------------------------------
 score_risk(risk):
-    risk.exposure_score = PROBABILITY_WEIGHT[p] * IMPACT_WEIGHT[i]    # derived at save (law 6)
+    # RK-1: each code carries its weight as behaviour (W1…W5), copied beside the code id and checked by the
+    # composite FK; the database generates exposure_score = weight(probability) * weight(impact) (law 6).
+    risk.probability_weight = probability_code.behaviour_code
+    risk.impact_weight = impact_code.behaviour_code
 
-promote_risk_to_issue(risk_id, description):
-    access.require_project(user, risk.project_id, EDIT, component='RISK')
-    issue = issue.raise_issue(...)               # the risk's owner becomes the raiser
+promote_risk_to_issue(risk_id, raiser_stakeholder_id, severity, issue_type, target_date):
+    access.require_project(user, risk.project_id, EDIT, component='RISK'); components.require_on('ISSUE')
+    issue = issue.raise_issue(..., raised_by=raiser_stakeholder_id)    # RK-4: a stakeholder, chosen in the dialog
     risk.materialised_issue_id = issue.id
     risk.status_code = 'MATERIALISED'            # the risk row SURVIVES
-    record_decision(... 'RISK_MATERIALISED' ...)
+    audit('RISK_MATERIALISED', codes and numbers only)   # the Decisions module records it once built
     # The risk is the record that it was foreseen — the evidence a post-mortem asks for.
 
 # ---- change control (D-16) ------------------------------------------------
@@ -6102,9 +6110,10 @@ headline (CT-4); the first four are `priced_diff` (net growth % from the agreed 
 (rows on the coverage report's warning lines), `solution_matrix` (TECHNOLOGY share %) and
 `interface_load` (INTERFACE FRs as % of live FRs); then `requirement_volatility`, `org_impact_heatmap`,
 `stakeholder_engagement` and `data_migration_map` (CB-1…CB-4); then `process_change_intensity`,
-`master_data_candidates` and `fr_unlinked` (CC-1…CC-3). The other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
+`master_data_candidates` and `fr_unlinked` (CC-1…CC-3); then `risk_register` (the highest exposure among open risks,
+`GE`, RK-2 / RK-5). The other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
 `seeds.seed_control_rules` arrives switched off until the client agrees it (CB-5); a new project's arrive on.
-`benefit_gap` and `risk_register` are the starting point their slices sign off with Ben. These thresholds are
+`benefit_gap` is the starting point its slice signs off with Ben. These thresholds are
 starting points, not doctrine:
 
 | `analysis_code` | Flag | Escalate | Prescribed action |
@@ -6117,7 +6126,7 @@ starting points, not doctrine:
 | `org_impact_heatmap` | one unit R/A on >40% of changes | >60% | Dedicated change agent and a capacity check — they are usually the SMEs too |
 | `stakeholder_engagement` | a silent unit on >10% of changes | >25% | Interview before sign-off — silence becomes rejection at UAT |
 | `benefit_gap` | any solution with effort and no benefit | >20% of solutions | Challenge at the next gate |
-| `risk_register` | exposure ≥ 12 open | ≥ 16 | Mitigation owner + date; steering if unmitigated |
+| `risk_register` | an open risk with exposure 12 or more (`GE`) | 16 or more | Mitigation owner + date; steering if unmitigated |
 | `data_migration_map` | any entity with no source system or conflicting sources | >5 entities | Data ownership decision before design freeze |
 | `process_change_intensity` | >50% of changed steps in one L1 area | >70% | Check the change workload and the change-management plan for that area before the next gate |
 | `master_data_candidates` | any entity used in 3+ L1 areas with no business owner noted | >5 | Assign a single owner; it becomes a managed cross-workstream dependency |
@@ -6232,9 +6241,9 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `FR_COMPLEXITY` | `SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX` | `FUNCTION_REQUIREMENT.complexity_code` — **D-13**, keyed with FR type into `EFFORT_RATE` |
 | `BENEFIT_TYPE` | `COST_REDUCTION`, `REVENUE`, `PRODUCTIVITY`, `RISK_REDUCTION`, `COMPLIANCE`, `CUSTOMER` | `BENEFIT.benefit_type_code` — **D-14** |
 | `BENEFIT_STATUS` | `FORECAST`, `COMMITTED`, `IN_REALISATION`, `REALISED`, `ABANDONED` | `BENEFIT.status_code` |
-| `RISK_PROBABILITY` | `RARE`, `UNLIKELY`, `POSSIBLE`, `LIKELY`, `ALMOST_CERTAIN` | `RISK.probability_code` — **D-15** |
-| `RISK_IMPACT` | `NEGLIGIBLE`, `MINOR`, `MODERATE`, `MAJOR`, `SEVERE` | `RISK.impact_code` |
-| `RISK_STATUS` | `OPEN`, `MITIGATING`, `CLOSED`, `MATERIALISED` | `RISK.status_code` |
+| `RISK_PROBABILITY` | `RARE`, `UNLIKELY`, `POSSIBLE`, `LIKELY`, `ALMOST_CERTAIN` — behaviour = weight `W1`…`W5` | `RISK.probability_code` — **D-15, RK-1** |
+| `RISK_IMPACT` | `NEGLIGIBLE`, `MINOR`, `MODERATE`, `MAJOR`, `SEVERE` — behaviour = weight `W1`…`W5` | `RISK.impact_code` — **RK-1** |
+| `RISK_STATUS` | `OPEN`, `MITIGATING` (behaviour OPEN), `CLOSED`, `MATERIALISED` — company-only, all pinned, behaviour fixed | `RISK.status_code` |
 | `CR_STATUS` | `DRAFT`, `ANALYSED`, `PRICED`, `APPROVED`, `REJECTED`, `DEFERRED` | `CHANGE_REQUEST.status_code` — **D-16** |
 | `CR_ORIGIN` | `CLIENT`, `VENDOR`, `REGULATORY`, `FTC`, `DEFECT` | `CHANGE_REQUEST.origin_code` |
 | `PM_DIMENSION` | `SCOPE`, `SCHEDULE`, `COST`, `BENEFIT`, `RISK`, `QUALITY`, `ORG_CHANGE`, `DATA`, `VENDOR` | `DECISION.dimension_code` — **D-17**, the dimensions the control framework acts on |

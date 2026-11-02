@@ -16,7 +16,15 @@ the slice rulings, the spec's revision history, and the items Ben has raised tha
 
 Nothing here is in the spec yet.
 
-Nothing open. (The ERD-as-SVG question of 2026-10-29 is decided: CC-7, §3.)
+- **2026-11-02 · Risks (design review round 1 R1-2, round 2 NEW-1) — what a materialised risk may still do.** A
+  materialised risk is the record it was foreseen (D-15, criterion 62). Built default, pending Ben: it cannot be
+  retired, and of its fields only the owner role, node, solution and wave can still change — so its issue is closed,
+  not retired, and a restructure is never locked. Consequence (sara): once a risk on a project materialises, that
+  project can no longer switch the Risk component off, nor retire that issue. Alternative: let it be retired (shown
+  under "show retired"), which frees both.
+  Spec `docs/slice_risks_spec.md` §12–13.
+
+(The ERD-as-SVG question of 2026-10-29 is decided: CC-7, §3.)
 
 
 ---
@@ -630,6 +638,21 @@ round 1 in its §11). No migration.
 | CB-4 | **`data_migration_map` counts the to-be entities needing a data-ownership decision** — seen on as-is steps with no supporting system, or held by two or more systems today. **Flag > 0, escalate > 5.** Entities never seen on as-is (new data) and as-is entities no to-be BR uses (retiring) are listed, not counted; NOT MEASURED until any in-scope entity is mapped on as-is | §7.9 "entities with no source, or with >1 source"; §7.13 table "no source / conflicting sources" |
 | CB-5 | **A rule backfilled into a running engagement arrives switched off until the client agrees it, but is still measured:** the panel shows every switched-off rule's figure greyed with no verdict — "Not yet agreed with the client" when never edited (row version 1), otherwise "Switched off" with who and when. New projects get the rules on | Control-A round 2 Q1; §7.13 `control_panel` measuring enabled rules only |
 
+### Ben's rulings, 2026-11-02 — the risk register (slice Risks, RK-1…RK-6)
+
+Ben, via Ren, 2026-11-02: *"all six questions (Q1–Q6) as you recommended, (a) each"* — plan
+`docs/plans/risks_plan_2026-11-02.md` §8. Spec: `docs/slice_risks_spec.md` (design review rounds 1 and 2 in its §12,
+§13). Migration 0083.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| RK-1 | **Probability and impact carry a weight 1–5 as their behaviour code (`W1`…`W5`); risk statuses carry OPEN / CLOSED / MATERIALISED.** Exposure = weight × weight, so a project may rename or add a level and still score | §7.13 pseudo-code `PROBABILITY_WEIGHT[p]` (no home for the weights) |
+| RK-2 | **A `GE` comparison ("12 or more")** joins the control rules | §7.13 "exposure ≥ 12" with only GT / LT / PCT_GT |
+| RK-3 | **A risk may name a wave** (optional `phase_id`) | §4.10 "may link to a Phase" with no column in §5 RISK |
+| RK-4 | **The issue a risk becomes is raised by a stakeholder chosen in the promote dialog** | §7 pseudo-code "the risk's owner becomes the raiser" (an owner is a role, a raiser a stakeholder) |
+| RK-5 | **The panel measures the highest exposure among open risks**; none open is not measured | §7.13 `risk_register` row (no headline named) |
+| RK-6 | **VB-005 Control-C3 L1 and L2 ride along**: one traced-FR definition; the untraced view is live FRs only | VB-005 lines of 2026-11-02 |
+
 ### Ben's rulings, 2026-10-30 — the last Phase 1 control slice (slice Control-C, CC-1…CC-7)
 
 Ben, via Ren, 2026-10-30: *"Let's go with the Ctrl+C. Yeah, tell Lilly all recommended."* — the eight plan questions
@@ -945,6 +968,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice_control_a_spec.md` | Slice Control-A — control rules and the control panel, first cut (CT-1…CT-4) | 2026-10-30 |
 | `docs/slice_control_b_spec.md` | Slice Control-B — volatility, org impact, stakeholder engagement, data migration map (CB-1…CB-5) | 2026-10-30 |
 | `docs/slice_control_c_spec.md` | Slice Control-C — where change lands, master data, FTC defaults and reset, `fr_unlinked` (CC-1…CC-7) | 2026-10-30 |
+| `docs/slice_risks_spec.md` | Slice Risks — the risk register, promote to an issue, the `risk_register` rule (RK-1…RK-6) | 2026-11-02 |
 
 ---
 

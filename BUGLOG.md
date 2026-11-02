@@ -670,6 +670,11 @@ place.
   platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
   `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
   the editor-gets-403 check over it.
+- **2026-11-02 · slice Risks (`sara`, no CRITICAL / HIGH / MEDIUM; Control-C3 L1 and L2 below built in its piece 0, RK-6 —
+  for Ben to close):** (L1) the traceability report (`reports.py`, `_Scope.br_fr`) still works out "untraced" itself
+  rather than reading `fr_trace.traced_fr_ids`; read the helper or say why not. (L2) 0083's downgrade, like 0082's,
+  removes an edited FTC company-default GE rule without refusing (only edited project rules refuse); the seed brings
+  back the original numbers — accept under CC-8 or extend the guard to the company row.
 - **2026-11-02 · slice Control-C C3, FRs nobody traced to a requirement (`sara`, no CRITICAL / HIGH / MEDIUM; L3 index
   comment and L4 "0 / 1 effort days" wording fixed):** (L1) "untraced" is computed three ways — the panel and register
   (`function_requirement.list_frs`, live link to a live BR), the effort summary (`effort.py`, live link only) and the
