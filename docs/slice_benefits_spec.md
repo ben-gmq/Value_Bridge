@@ -100,7 +100,8 @@ the engagement while any solution carrying effort has no benefit behind it, and 
   live link under a retired end whatever the timing (`issue_br`'s pattern). Needs `uq_benefit_live_target` (in 0085)
   and `uq_solution_live_target (solution_id, project_id, is_active)` added to `solution` here — a constraint, not a
   column, so `baseline_solution` is unaffected.
-- Shadow, guards and downgrade as 0085 (the downgrade also drops `uq_solution_live_target`).
+- Shadow, guards and downgrade as 0085; the downgrade drops `benefit_solution` (and its shadow) **before**
+  `uq_solution_live_target`. `models/solution.py` declares `uq_solution_live_target` so model and database agree.
 - The ≤ 100 total across rows is the service's, under `SELECT … FOR UPDATE` on the benefit row (a CHECK sees one
   row). Every link write takes that lock first, then `lock_for_share` on the solution (SR-5), then reads the total
   of the *other* live links. Retiring a benefit locks it `FOR UPDATE` before counting its links.
@@ -159,12 +160,15 @@ For each unit key with at least one counting benefit (§4):
   those units' values, never tagged a candidate on one unit's evidence.
 - `partly_rated`: solutions with value and at least one unrated FR — listed with "n of m FRs rated", never ranked,
   divided or put in the quartile (R1-H1).
-- `no_work`: solutions with value and no live FR — listed, never ranked.
+- `no_work`: solutions with value and no live FR, or (defensively — rates are > 0 by `ck_effort_rate_days_positive`)
+  a total of 0 days — listed, never ranked.
 - Per benefit under 100 % on counting links: "x % of BEN-0003 not assigned"; per benefit with links to REJECTED
   solutions: "y % on rejected solutions" (R1-M4).
-- Project lines: `untagged_effort_days` (live FR effort with no solution, §7 note 4); **reconciliation** — Σ ranked
-  + partly-rated + no-benefit + rejected + untagged effort shown beside `effort.summary`'s headline total, with the
-  difference if any (R1-L1). EFFORT or FUNCTION_REQUIREMENT off → effort "not measured" and nothing is ranked.
+- Project lines: `untagged_effort_days` (live FR effort with no solution, §7 note 4); **reconciliation** (R1-L1,
+  R2-M1) — computed **per solution, once** (never from the per-unit rankings, where a two-unit solution appears
+  twice): Σ rated effort of every live solution in four buckets — *with counting value*, *no counting benefit*
+  (including solutions whose only links are to ABANDONED benefits), *rejected*, and *untagged* — shown beside
+  `effort.summary`'s `total_days + rejected days`, with the difference if any (zero on a correct build). EFFORT or FUNCTION_REQUIREMENT off → effort "not measured" and nothing is ranked.
 - A solution with benefits in two units appears in both, with that unit's value only (A-B4).
 
 ### 8.2 `benefit_gap_report`
@@ -191,8 +195,11 @@ leaves the instance (R1-M7).
   filters status and unit; "show retired". New-benefit dialog. Tabs/links to **Value ranking** and **Gap**.
 - **Benefit page:** the form; the links table (solution, %, value it carries) with add / change % / remove;
   "x % not assigned"; retire / restore.
-- **Value ranking:** one card per unit; table rank, solution, value, effort, ratio, a Tag on the bottom quartile; a
-  "no effort rated" list; the untagged-effort line.
+- **Value ranking (R2-M2):** one card per unit, each with: the ranked table (rank, solution, value, effort, ratio), a
+  "Displacement candidate" Tag, or "Low here — also delivers in <units>" with those values; a **Partly rated** list
+  ("n of m FRs rated", value); a **No work yet** list; per-benefit lines "x % not assigned" and "y % on rejected
+  solutions". Below the cards: the untagged-effort line and the reconciliation line (four buckets, the effort
+  summary's figure, the difference). EFFORT off: one "effort not measured" notice, values only.
 - **Gap:** the gap table and the fragile list. The control panel row links here.
 - **Solution page:** a read-only "Benefits" list (number, %, value).
 - Edit controls through `useCanEdit`; component through `useComponents`. No mockup exists (A-B5).
@@ -219,7 +226,9 @@ leaves the instance (R1-M7).
     benefits ADDED with `not_frozen_in: "a"`, outside every summary.
 11. BENEFIT off → every write 409 COMPONENT_OFF, switching it off with a live benefit refused; non-member → 404
     on every new GET (criterion test covers it).
-12. Screens: create, link, rank, gap, component off, VIEW user sees no edit controls.
+12. Screens: create, link, rank, gap, component off, VIEW user sees no edit controls; the ranking screen shows the
+    partly-rated and no-work lists, the "also delivers in" mark, the not-assigned / on-rejected lines and the
+    reconciliation line (difference 0).
 
 ## 11. Assumptions
 - `ASSUMPTION A-B1` `measure_unit` is free text grouped by `lower(btrim())`; the form offers the project's units
@@ -265,5 +274,15 @@ apple (schema): 0 HIGH, 3 MEDIUM, 5 LOW. design-auditor: 1 HIGH, 6 MEDIUM, 1 LOW
 | apple L5 | No unique live name; `solution.benefit_note` overlap; no `actual_value` | Name: A-B10 (accepted). Overlap and actuals → history §1 open for Ben, not this slice |
 | Auditor Q1–Q3 | One-off vs recurring; does FORECAST / 0.01 % count; rounding | A-B8 (open in history §1); FORECAST and any % > 0 count (§4); rounding §4 |
 
-## 14. Design review — round 2
-*(filled in after the re-check)*
+## 14. Design review — round 2 (2026-11-03, final — the cap is two rounds)
+design-auditor: 0 CRITICAL, 0 HIGH, 2 MEDIUM, 2 LOW; nothing structural. Closed: R1-H1, R1-M1 (guard FK design
+checked against soft delete, restore and lock order), R1-M2, M4, M5, M6, M7.
+
+| Id | Finding | Disposition |
+|---|---|---|
+| R2-M1 | Reconciliation shows a built-in difference (rejected days outside `total_days`; two-unit solutions counted twice) | **Fixed** — per-solution buckets vs `total_days + rejected` (§8.1) |
+| R2-M2 | §9 screens missed the new lists and lines | **Fixed** — §9 and criterion 12 name each |
+| R2-L1 | A token link in another unit exempts a solution from displacement | **Accepted, visible** — the other unit's value is shown beside it; the threshold goes to history §1 as a question for Ben, settled against the running screen |
+| R2-L2 | Zero-effort fully rated solution; `models/solution.py` not listed | **Fixed** — rates are > 0 by CHECK, 0 days routed to `no_work` anyway; model listed (§5.2) |
+
+What is left open is tracked against the running code, not a third draft (design-review cap).
