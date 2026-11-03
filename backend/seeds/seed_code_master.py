@@ -92,9 +92,12 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
                             ("MODERATE", "Moderate", "W3"), ("MAJOR", "Major", "W4"), ("SEVERE", "Severe", "W5")]),
     ("RISK_STATUS", False, [("OPEN", "Open", "OPEN"), ("MITIGATING", "Mitigating", "OPEN"),
                             ("CLOSED", "Closed", "CLOSED"), ("MATERIALISED", "Materialised", "MATERIALISED")]),
-    ("CR_STATUS", False, [("DRAFT", "Draft"), ("ANALYSED", "Analysed"), ("PRICED", "Priced"),
-                          ("APPROVED", "Approved"), ("REJECTED", "Rejected"),
-                          ("DEFERRED", "Deferred")]),
+    # Slice Change requests (migration 0087): company-only; DRAFT / ANALYSED are open, the rest each its own state.
+    ("CR_STATUS", False, [("DRAFT", "Draft", "OPEN"), ("ANALYSED", "Analysed", "OPEN"), ("PRICED", "Priced", "PRICED"),
+                          ("APPROVED", "Approved", "APPROVED"), ("REJECTED", "Rejected", "REJECTED"),
+                          ("DEFERRED", "Deferred", "DEFERRED")]),
+    # CR-1: how a seed changes the agreed baseline. Company-only and pinned: pricing reads each by value.
+    ("CR_IMPACT_TYPE", False, [("ADD", "Add"), ("MODIFY", "Modify"), ("REMOVE", "Remove")]),
     ("CR_ORIGIN", False, [("CLIENT", "Client"), ("VENDOR", "Vendor"),
                           ("REGULATORY", "Regulatory"), ("FTC", "FTC"), ("DEFECT", "Defect")]),
     ("PM_DIMENSION", False, [("SCOPE", "Scope"), ("SCHEDULE", "Schedule"), ("COST", "Cost"),
