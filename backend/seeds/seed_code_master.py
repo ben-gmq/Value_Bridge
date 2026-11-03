@@ -80,9 +80,10 @@ LIBRARY: list[tuple[str, bool, list[tuple]]] = [
     ("BENEFIT_TYPE", False, [("COST_REDUCTION", "Cost reduction"), ("REVENUE", "Revenue"),
                              ("PRODUCTIVITY", "Productivity"), ("RISK_REDUCTION", "Risk reduction"),
                              ("COMPLIANCE", "Compliance"), ("CUSTOMER", "Customer")]),
-    ("BENEFIT_STATUS", False, [("FORECAST", "Forecast"), ("COMMITTED", "Committed"),
-                               ("IN_REALISATION", "In realisation"), ("REALISED", "Realised"),
-                               ("ABANDONED", "Abandoned")]),
+    # Slice Benefits (BN-3, migration 0085): company-only; ABANDONED leaves the ranking and the gap check.
+    ("BENEFIT_STATUS", False, [("FORECAST", "Forecast", "LIVE"), ("COMMITTED", "Committed", "LIVE"),
+                               ("IN_REALISATION", "In realisation", "LIVE"), ("REALISED", "Realised", "LIVE"),
+                               ("ABANDONED", "Abandoned", "ABANDONED")]),
     # Slice Risks (RK-1, migration 0083): the weight W1…W5 is the behaviour, so exposure = weight × weight.
     ("RISK_PROBABILITY", False, [("RARE", "Rare", "W1"), ("UNLIKELY", "Unlikely", "W2"),
                                  ("POSSIBLE", "Possible", "W3"), ("LIKELY", "Likely", "W4"),

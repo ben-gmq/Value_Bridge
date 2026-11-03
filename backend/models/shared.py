@@ -16,6 +16,7 @@ PROJECT_STATUS_BEHAVIOURS = ("OPEN", "CLOSED")        # slice 16 Q-89 b, AR-10 (
 RISK_WEIGHTS = ("W1", "W2", "W3", "W4", "W5")          # slice Risks RK-1 (0083): probability / impact weight
 RISK_STATUS_BEHAVIOURS = ("OPEN", "CLOSED", "MATERIALISED")   # slice Risks (0083)
 RISK_WEIGHT_CATEGORIES = ("RISK_PROBABILITY", "RISK_IMPACT")
+BENEFIT_STATUS_BEHAVIOURS = ("LIVE", "ABANDONED")       # slice Benefits BN-3 (0085)
 SEQUENCE_CODES = ("DE", "BR", "FR", "ISSUE", "SOL", "BEN", "RSK", "CR", "DEC", "EXT")
 
 
@@ -47,7 +48,7 @@ class CodeMaster(AuditMixin, Base):
               postgresql_nulls_not_distinct=True),
         CheckConstraint(
             "(category IN ('FR_TYPE','RACI_TYPE','ISSUE_STATUS','PROJECT_STATUS','RISK_PROBABILITY','RISK_IMPACT',"
-            "'RISK_STATUS')) = (behaviour_code IS NOT NULL)",
+            "'RISK_STATUS','BENEFIT_STATUS')) = (behaviour_code IS NOT NULL)",
             name="ck_code_behaviour_present"),
         CheckConstraint(f"category NOT IN ({_in(RISK_WEIGHT_CATEGORIES)}) OR behaviour_code IN ({_in(RISK_WEIGHTS)})",
                         name="ck_code_risk_weight_behaviour"),
@@ -61,6 +62,8 @@ class CodeMaster(AuditMixin, Base):
                         name="ck_code_issue_status_behaviour"),
         CheckConstraint(f"category <> 'PROJECT_STATUS' OR behaviour_code IN ({_in(PROJECT_STATUS_BEHAVIOURS)})",
                         name="ck_code_project_status_behaviour"),
+        CheckConstraint(f"category <> 'BENEFIT_STATUS' OR behaviour_code IN ({_in(BENEFIT_STATUS_BEHAVIOURS)})",
+                        name="ck_code_benefit_status_behaviour"),
         # Composite-FK target: category is in it because both vocabularies share OTHER (§5.3).
         UniqueConstraint("code_id", "category", "behaviour_code", name="uq_code_behaviour_target"),
         UniqueConstraint("code_id", "category", name="uq_code_category_target"),

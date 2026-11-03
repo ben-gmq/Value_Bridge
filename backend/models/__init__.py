@@ -16,6 +16,7 @@ from models.issue import Issue, IssueBr, Stakeholder  # noqa: F401
 from models.phase import Phase, SolutionDependency, SolutionPhase  # noqa: F401
 from models.risk import Risk  # noqa: F401
 from models.decision import Decision  # noqa: F401
+from models.benefit import Benefit, BenefitSolution  # noqa: F401
 from models.function_requirement import (BrFunctionRequirement, FrInterface, FrInterfaceDataEntity,  # noqa: F401
                                          FunctionRequirement)
 from models.identity import AppUser, AuditEvent, PlatformAdminGrant, ProgramMember, ProjectMember, UserAccessGrant  # noqa: F401
