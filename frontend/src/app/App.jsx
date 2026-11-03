@@ -38,6 +38,10 @@ import IssuesPage from '../features/issues/IssuesPage';
 import IssuePage from '../features/issues/IssuePage';
 import RisksPage from '../features/risks/RisksPage';
 import RiskPage from '../features/risks/RiskPage';
+import BenefitsPage from '../features/benefits/BenefitsPage';
+import BenefitPage from '../features/benefits/BenefitPage';
+import ValueRankingPage from '../features/benefits/ValueRankingPage';
+import BenefitGapPage from '../features/benefits/BenefitGapPage';
 import DecisionsPage from '../features/decisions/DecisionsPage';
 import DecisionPage from '../features/decisions/DecisionPage';
 import DecisionNewPage from '../features/decisions/DecisionNewPage';
@@ -68,6 +72,8 @@ const PAGES = [
   ['baselines', BaselinesPage], ['baselines/:baselineId', BaselinePage],
   ['issues', IssuesPage], ['issues/:issueId', IssuePage],
   ['risks', RisksPage], ['risks/:riskId', RiskPage],                     // slice Risks
+  ['benefits', BenefitsPage], ['benefits/ranking', ValueRankingPage], ['benefits/gap', BenefitGapPage],
+  ['benefits/:benefitId', BenefitPage],                                  // slice Benefits
   ['decisions', DecisionsPage], ['decisions/new', DecisionNewPage], ['decisions/:decisionId', DecisionPage],  // slice Decisions
   ['waves', WavesPage],                                                                            // slice 15
   ['reports', ReportsPage],                                                                        // slice 1f
@@ -84,6 +90,8 @@ const NEEDS = {
   'processes/:nodeId/dfd': ['TO_BE_DFD', 'AS_IS'], dfd: ['TO_BE_DFD', 'AS_IS'],
   issues: ['ISSUE'], 'issues/:issueId': ['ISSUE'], risks: ['RISK'], 'risks/:riskId': ['RISK'], 'settings/stakeholders': ['ISSUE'],
   waves: ['PHASING'],
+  benefits: ['BENEFIT'], 'benefits/ranking': ['BENEFIT'], 'benefits/gap': ['BENEFIT'],
+  'benefits/:benefitId': ['BENEFIT'],                                   // slice Benefits
 };
 
 function Gated({ path, Screen }) {

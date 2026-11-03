@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Box, ButtonBase, Drawer, IconButton, Menu, MenuItem, Tooltip, Typography, useMediaQuery } from '@mui/material';
 import { useColorScheme, useTheme } from '@mui/material/styles';
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined';
+import SavingsOutlined from '@mui/icons-material/SavingsOutlined';
 import AdminPanelSettingsOutlined from '@mui/icons-material/AdminPanelSettingsOutlined';
 import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
 import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined';
@@ -63,6 +64,7 @@ export const NAV = [
     ['nav.baselines', 'baselines', LayersOutlined],
     ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
     ['nav.risks', 'risks', ShieldOutlined, ['RISK']],                     // slice Risks
+    ['nav.benefits', 'benefits', SavingsOutlined, ['BENEFIT']],           // slice Benefits
     ['nav.decisions', 'decisions', GavelOutlined],                         // slice Decisions (DC-1: always on)
     ['nav.waves', 'waves', ViewTimelineOutlined, ['PHASING']],           // slice 15 (W-1: "Wave" on screen)
     ['nav.reports', 'reports', AssessmentOutlined],                       // slice 1f

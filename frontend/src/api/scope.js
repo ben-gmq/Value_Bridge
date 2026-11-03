@@ -197,6 +197,20 @@ export const decisionApi = {                                          // slice D
   get: (id) => d(http.get(`${V}/decisions/${id}`)),
 };
 
+export const benefitApi = {                                           // slice Benefits (D-14)
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/benefits`, { params })),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/benefits`, body)),
+  get: (id) => d(http.get(`${V}/benefits/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/benefits/${id}`, body)),
+  retire: (id, rowVersion) => del(`${V}/benefits/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/benefits/${id}/restore`)),
+  link: (id, solutionId, pct) => d(http.put(`${V}/benefits/${id}/solutions/${solutionId}`, { contribution_pct: pct })),
+  unlink: (id, solutionId) => d(http.delete(`${V}/benefits/${id}/solutions/${solutionId}`)),
+  ofSolution: (solutionId) => d(http.get(`${V}/solutions/${solutionId}/benefits`)),
+  ranking: (projectId) => d(http.get(`${P(projectId)}/value-ranking`)),
+  gap: (projectId) => d(http.get(`${P(projectId)}/benefit-gap`)),
+};
+
 export const riskApi = {                                              // slice Risks (§4.10)
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/risks`, { params })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/risks`, body)),

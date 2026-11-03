@@ -20,6 +20,7 @@ import { AppLinkPanel } from '../applications/AppLinkPanel';
 import { CodeTitle, SaveState, TwoCol } from '../frs/frKit';
 import { SolutionMix } from './SolutionMix';
 import { DependsOnCard, WaveSplitCard } from '../waves/SolutionWaves';
+import { SolutionBenefits } from '../benefits/benefitKit';
 
 const pickSolution = (s) => ({ solution_name: s.solution_name ?? '', category_code: s.category_code,
   status_code: s.status_code, description: s.description ?? '', benefit_note: s.benefit_note ?? '',
@@ -145,6 +146,7 @@ export default function SolutionPage() {
   const side = (
     <>
       <SolutionMix projectId={projectId} current={v.category_code} />
+      {isOn('BENEFIT') && <SolutionBenefits projectId={projectId} solutionId={sol.solution_id} />}   {/* slice Benefits */}
       {isOn('PHASING') && (                                      /* slice 15: the split and the dependencies (W-1) */
         <>
           <WaveSplitCard projectId={projectId} solution={sol} canEdit={canEdit} notify={setNotice} />

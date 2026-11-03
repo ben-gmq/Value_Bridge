@@ -28,6 +28,7 @@ const REPORT = {
   process_change_intensity: (p) => links.reports(p, 'change_intensity'), master_data_candidates: (p) => links.reports(p, 'master_data'),
   fr_unlinked: (p) => links.frs(p, 'untraced'),
   risk_register: (p) => links.risks(p),                                   // slice Risks: the register is the report
+  benefit_gap: (p) => links.benefitGap(p),                                // slice Benefits
 };
 
 const num = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v)}${unit === 'PCT' ? ' %' : ''}`);
