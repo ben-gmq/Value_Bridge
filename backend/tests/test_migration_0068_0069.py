@@ -6,6 +6,7 @@ import pytest
 from alembic import command
 
 from scripts.stamp_instance import stamp
+from services import freeze_set
 from tests.conftest import OWNER_URL
 from tests.test_baseline import approve, bid, freeze, scope
 from tests.test_migration_0053 import _cfg, owner, q, x  # noqa: F401 — owner is a fixture
@@ -18,11 +19,16 @@ WRITE = ("UPDATE baseline_archive SET object_name = 't/x.json.enc', file_sha256 
          "key_ref = 'k@1', written_at = now() WHERE baseline_id = :b AND archive_part = 'SCOPE'")
 
 
-def test_the_backfill_owes_every_existing_baseline_its_files(client, ed, owner):
+def test_the_backfill_owes_every_existing_baseline_its_files(client, ed, owner, monkeypatch):
     scope(client, ed)
-    b1 = bid(freeze(client, ed))
-    approve(client, ed, b1)
-    b2 = bid(freeze(client, ed))
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 6)                  # frozen as before Benefits: a spec-7
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 6)             # baseline refuses 0085's downgrade
+    try:
+        b1 = bid(freeze(client, ed))
+        approve(client, ed, b1)
+        b2 = bid(freeze(client, ed))
+    finally:
+        monkeypatch.undo()
     command.downgrade(_cfg(), "0067")
     assert q(owner, "SELECT to_regclass('baseline_archive')")[0][0] is None
     command.upgrade(_cfg(), "0068")

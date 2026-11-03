@@ -141,8 +141,8 @@ def test_dimension_and_analysis_are_checked(client, ed, world):
     assert dec(client, ed, analysis_code="priced_diff")["analysis_code"] == "priced_diff"
     dec(client, ed, analysis_code="not_a_rule", expect=422)
     rules = client.get(f"{API}/projects/{ed['p']}/control-rules", headers=ed["h"]).json()
-    assert rules and all(r["analysis_code"] != "benefit_gap" for r in rules)     # registry code, no rule here
-    dec(client, ed, analysis_code="benefit_gap", expect=422)
+    assert rules and all(r["analysis_code"] != "value_ranking" for r in rules)   # registry code, no rule (CC-5)
+    dec(client, ed, analysis_code="value_ranking", expect=422)
 
 
 def test_pm_dimension_is_company_only(client, ed, world):

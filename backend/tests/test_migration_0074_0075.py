@@ -11,6 +11,7 @@ USES = ("SELECT f.proname, count(*) FROM pg_trigger t JOIN pg_class c ON c.oid =
         "JOIN pg_proc f ON f.oid = t.tgfoid WHERE NOT t.tgisinternal AND (t.tgtype & 8) <> 0 "
         "AND (c.relname LIKE 'baseline\\_%' OR c.relname = 'audit_event') AND c.relname <> 'baseline_archive' "
         "GROUP BY 1 ORDER BY 1")
+LATER_SHADOW_GUARDS = 2          # one delete guard each on baseline_benefit (0085) and baseline_benefit_solution (0086)
 FUNCS = ("SELECT count(*) FROM pg_proc WHERE proname IN ('fn_purge_allows', 'fn_reject_modification_purgeable', "
          "'fn_reject_modification_audit_purgeable')")
 
@@ -20,7 +21,9 @@ def test_a_clean_downgrade_restores_the_old_guards_and_the_upgrade_returns(owner
     command.downgrade(_cfg(), "0073")
     assert q(owner, FUNCS)[0][0] == 0
     (fn, n), = q(owner, USES)
-    assert fn == "fn_reject_modification" and n == sum(c for _, c in at_head)
+    # Every guard at head goes back to the old function, less those on shadows made after 0073 and dropped on the way
+    # down (0085 baseline_benefit, 0086 baseline_benefit_solution).
+    assert fn == "fn_reject_modification" and n == sum(c for _, c in at_head) - LATER_SHADOW_GUARDS
     header = q(owner, "SELECT prosrc, proconfig FROM pg_proc WHERE proname = 'fn_baseline_header_guard'")[0]
     assert "fn_purge_allows" not in header[0] and header[1] is None
     for guard in ("fn_baseline_archive_guard", "fn_project_purge_key_guard"):

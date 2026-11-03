@@ -49,7 +49,7 @@ def test_a_spec_5_baseline_keeps_its_digest_and_reads_waves_as_new_structure(cli
         assert detail["counts"][t] is None, t                                 # never frozen, not 0
     assert freeze_set.digest(db, ed["p"], frozenset(), v5, 5) == before.content_digest
     v6 = bid(freeze(client, ed))
-    assert _stored(db, v6).hash_spec_version == 6
+    assert _stored(db, v6).hash_spec_version >= 6                            # 7 since Benefits (BN-5)
     assert client.get(f"{API}/baselines/{v6}", headers=ed["h"]).json()["intact"] is True
     d = diff(client, ed, v5, v6)
     assert d["entities"]["phase"]["not_frozen_in"] == "a" and d["entities"]["phase"]["joined_at_spec"] == 6

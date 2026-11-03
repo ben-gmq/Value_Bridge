@@ -6,6 +6,7 @@ table by giving only that table a row."""
 import pytest
 from alembic import command
 
+from services import freeze_set
 from tests.test_baseline import freeze, scope
 from tests.test_migration_0053 import _cfg, owner, q, x  # noqa: F401 — owner is a fixture
 from tests.test_phasing_api import depend, put_split, wave
@@ -23,9 +24,14 @@ def test_a_clean_downgrade_and_upgrade_round_trip(client, ed, owner):
     assert q(owner, TABLES)[0][0] == 6
 
 
-def test_a_spec_6_baseline_without_waves_refuses_the_downgrade(client, ed, owner):
+def test_a_spec_6_baseline_without_waves_refuses_the_downgrade(client, ed, owner, monkeypatch):
     scope(client, ed)
-    assert freeze(client, ed)["baseline"]["hash_spec_version"] == 6
+    monkeypatch.setattr(freeze_set, "CURRENT_HASH_SPEC", 6)                  # frozen as before Benefits (spec 7),
+    monkeypatch.setattr("services.baseline.CURRENT_HASH_SPEC", 6)             # so 0086 / 0085 step down past it
+    try:
+        assert freeze(client, ed)["baseline"]["hash_spec_version"] == 6
+    finally:
+        monkeypatch.undo()
     with pytest.raises(Exception, match="hash spec 6"):
         command.downgrade(_cfg(), "0066")
     assert q(owner, TABLES)[0][0] == 6
