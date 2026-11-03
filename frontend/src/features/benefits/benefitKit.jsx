@@ -2,7 +2,8 @@
 // register, the ranking and the gap, and the solution page's read-only list. Strings: en.benefits.json.
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Autocomplete, Box, Link, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Link, Stack, TextField, Typography } from '@mui/material';
+import { errorText } from '../../api/client';
 import { benefitApi, orgApi, solutionApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useCodes } from '../../app/useCodes';
@@ -30,7 +31,7 @@ export function useBenefitRefs(projectId) {
     solutionOptions: (taken = []) => (sols.data ?? []).filter((s) => s.is_active && !taken.includes(s.solution_id))
       .map((s) => ({ value: s.solution_id, label: solLabel(s) })),
     units,
-    error: roles.error || sols.error,
+    error: roles.error || sols.error || all.error,
   };
 }
 
@@ -91,7 +92,9 @@ export function SolutionBenefits({ projectId, solutionId }) {
   const rows = q.data ?? [];
   return (
     <Card title={t('benefits.onSolution.title')} bodySx={{ gap: 0.75 }}>
-      {rows.length === 0 && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('benefits.onSolution.empty')}</Typography>}
+      {/* A failed load is never shown as "no benefit" — that is what the gap challenge acts on (sara M1). */}
+      {q.error && <Alert severity="error">{errorText(q.error)}</Alert>}
+      {q.isSuccess && rows.length === 0 && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('benefits.onSolution.empty')}</Typography>}
       {rows.map((r) => (
         <Stack key={r.benefit_solution_id} direction="row" spacing={1} sx={{ alignItems: 'center', fontSize: 13.5 }}>
           <Link component={RouterLink} to={links.benefit(projectId, r.benefit_id)} underline="hover"><Code>{r.benefit_number}</Code></Link>

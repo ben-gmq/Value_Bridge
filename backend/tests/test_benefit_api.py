@@ -5,16 +5,19 @@ and is corrected once noticed.
 Deliberately uncovered (plan §8): a true two-connection race on the 100 % cap (the FOR UPDATE lock is exercised
 sequentially; the database guard FKs carry the solution-retire race and are proven directly); values near the
 numeric(18,2) limit."""
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from database import SessionLocal
-from models import AuditEvent
+from models import AuditEvent, Benefit, BenefitSolution
 from services import benefit as benefit_service
+from services import lifecycle
 from tests.conftest import ALL_COMPONENTS
 from tests.test_components import switch
 from tests.test_control import panel, role, row
@@ -195,6 +198,41 @@ def test_links_cap_at_100_and_reweight_restores_and_idempotent(client, ed, db):
     assert (out["link_total_pct"], out["linked_solutions"]) == ("50.00", [s1["solution_number"], s2["solution_number"]])
     put(client, ed, b, s3, 0, expect=422)
     put(client, ed, b, s3, "100.5", expect=422)
+
+
+def test_a_second_link_waits_for_the_first_and_the_cap_holds(client, ed, world):
+    """BN-2 under concurrency (sara M2). Writer A holds the benefit lock with an uncommitted 60 % link; writer B (the
+    service) must wait for it, then see A's 60 % and refuse its own 60 %. Without the FOR UPDATE on the benefit, B reads
+    0 % (A is uncommitted), commits at once and the benefit carries 120 % — the first assertion fails."""
+    owner = role(client, ed)
+    b = benefit(client, ed, owner)
+    s1, s2 = sol(client, ed, "A"), sol(client, ed, "B")
+    actor = world["users"]["editor"]
+    outcome = {}
+
+    def writer_b():
+        with SessionLocal() as s:
+            try:
+                benefit_service.link_solution(s, actor, s.get(Benefit, b["benefit_id"]), s2["solution_id"],
+                                              Decimal(60))
+                outcome["status"] = 200
+            except HTTPException as e:
+                outcome["status"], outcome["detail"] = e.status_code, e.detail
+
+    with SessionLocal() as a:
+        lifecycle.lock(a, a.get(Benefit, b["benefit_id"]))                 # the service's own lock
+        a.add(BenefitSolution(project_id=ed["p"], benefit_id=b["benefit_id"], solution_id=s1["solution_id"],
+                              contribution_pct=Decimal(60), created_by=actor))
+        a.flush()
+        t = threading.Thread(target=writer_b)
+        t.start()
+        t.join(timeout=2)
+        assert t.is_alive(), f"writer B did not wait for the benefit lock: {outcome}"
+        a.commit()
+    t.join(timeout=30)
+    assert not t.is_alive()
+    assert outcome["status"] == 409 and "60.00" in outcome["detail"], outcome
+    assert get(client, ed, b)["link_total_pct"] == "60.00"
 
 
 def test_foreign_or_missing_solution_is_404_and_a_retired_one_409(client, ed, world):

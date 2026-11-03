@@ -189,6 +189,7 @@ export default function BenefitPage() {
       </Box>
       {actionError && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }} onClose={() => setActionError('')}>{actionError}</Alert>}
       {save.error && <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{save.error}</Alert>}
+      {refs.error && <Alert severity="error" sx={{ mb: 2 }}>{errorText(refs.error)}</Alert>}
       <TwoCol main={main} side={side} sideWidth={440} />
       <ConflictDialog open={save.conflict} unsaved={unsaved} onReload={reload} onClose={() => save.setConflict(false)} />
       <ConfirmDialog open={confirmRetire} title={t('benefits.retireTitle')}

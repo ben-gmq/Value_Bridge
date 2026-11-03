@@ -690,6 +690,16 @@ place.
   platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
   `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
   the editor-gets-403 check over it.
+- **2026-11-03 · slice Benefits (`sara`, no CRITICAL / HIGH; M1 failed loads shown as errors and M2 concurrent cap test
+  fixed):** (L1) link re-weight (PUT) and unlink (DELETE) carry no `row_version` — last writer wins on a % (the spec's
+  idempotent PUT); check `LinkOut.row_version` or accept. (L2) `benefit.decorate` runs two queries per benefit (links,
+  role code) — the register is N+1, and `useBenefitRefs` fetches the decorated list again only for units; batch both.
+  (L3) the `" %"` and `"→"` joins in `BenefitsPage.jsx` / `benefitKit.jsx` are built in JSX, not `t()` format strings.
+  (L4) `benefit.link_solution` re-checks SOLUTION on although the `_link` guard already names it, and the router
+  docstring says the service checks it — keep the guard as the one owner. (L5) `models/benefit.py` `realisation_date`
+  lacks its `Mapped[date | None]`. (UAT cosmetic) a filtered register with no rows says "No benefits yet"; a Share %
+  typed and tabbed out does not save until "Change %" is clicked. (UAT, unreproduced) one "Cannot read properties of
+  null (reading 'focus')" from a MUI ToggleButton, twice in the first run, not seen in the re-check.
 - **2026-11-02 · slice Decisions (`sara` 4 LOW, L1 / L2 / L4 fixed; design-auditor round 2):** (L3) the record form has
   no unsaved-changes guard (`useBackGuard`) — Cancel or Back drops a long text, as on most screens. (D2-1) a lost
   response after a committed save, then a second Save, writes a permanent duplicate decision; the form guards only a
