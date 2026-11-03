@@ -20,6 +20,17 @@ Nothing here is in the spec yet.
   recorder's own day? Built as the ICT day (Lilly's recommendation) while Ben is asked.
 - **DC-8 (2026-11-02, apple L2):** should a supersession say whether it is a correction (recorded wrongly) or a
   revision (the decision changed later)?
+- **BN-7 (2026-11-03, slice Benefits review round 2 R2-L1) — how small a link may keep a solution off the
+  displacement list.** A bottom-quartile solution with any counting value in another unit is marked "Low here — also
+  delivers in …" instead of "Displacement candidate", however small that other link is. Built as any % > 0, with the
+  other unit's value shown beside the mark so a token link is visible. To settle against the running screen: keep it,
+  or set a floor (a minimum % or value) below which the other unit does not count.
+- **BN-8 (2026-11-03, design review auditor Q1, A-B8) — one-off vs recurring amounts.** Told apart today only by the
+  unit text ("THB" vs "THB/yr"); should a benefit carry a period field?
+- **BN-9 (2026-11-03, apple L5) — `solution.benefit_note` beside the register.** The solution's free-text benefit note
+  predates the register and overlaps it; keep, fold into the register, or retire it?
+- **BN-10 (2026-11-03, apple L5) — realised value.** The register holds baseline and target only; benefit realisation
+  tracking (an actual value over time) is out of this slice.
 
 (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of 2026-10-29: CC-7, §3.)
 
@@ -651,6 +662,27 @@ in its §12, §13). Migration 0084.
 | DC-6 | **(2026-11-02) A decision recorded by mistake is not withdrawn in this slice; an IS-only, audited redaction (text blanked, number kept) comes later as its own small task.** Ben, via Ren: (b), "a niche case" — logged as a low-priority enhancement | Design review D1-8 (auditor HIGH) |
 | DC-7 | **(2026-11-02) The decider stays in the decision text; no "decided by" role field.** Ben, via Ren: (b). The recorder is `decided_by_user_id` (= `created_by`) | Design review D1-1 (apple M1) |
 
+### Ben's rulings, 2026-11-03 — the benefit register (slice Benefits, BN-1…BN-6)
+
+Ben, via Ren, 2026-11-03: *"let's do it"* and *"Let's do the value bridge slice as Lilly recommends"* — plan
+`docs/plans/benefits_plan_2026-11-03.md` §7, questions 1–6, the recommendation each. Spec:
+`docs/slice_benefits_spec.md` (design review rounds 1 and 2 in its §13, §14). Migrations 0085, 0086; hash spec 7.
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| BN-1 | **A benefit's value is the size of the change, \|target − baseline\| × contribution % / 100 — a reduction ("close in 6 days, not 10") is value; a target equal to its baseline is refused** (service 422 and a CHECK) | A-40 and §4.9 `value_ranking` "(target − baseline)", which scored a reduction negative |
+| BN-2 | **A benefit's live solution shares total at most 100 %**; over → 409 naming the current total; under → "x % not assigned" | §5 BENEFIT_SOLUTION (no cap stated) |
+| BN-3 | **BENEFIT_STATUS carries a behaviour, LIVE / ABANDONED** (company-only list, all five codes pinned); abandoned benefits leave the ranking and the gap | §7.13 `value_ranking` "active benefits" (no way to tell an abandoned one without naming its code) |
+| BN-4 | **`benefit_gap`: % of solutions carrying work with no live benefit, `PCT_GT`, flag > 0 %, escalate > 20 %; REJECTED solutions left out**; not measured when BENEFIT, FR or EFFORT is off | §7.13 row "any solution with effort and no benefit" (headline unstated) |
+| BN-5 | **Every benefit field and each contribution % is frozen and hashed; benefit changes are counted apart from scope in a comparison** (`benefit_summary`) | §6.1 rows 30–31 "when built" |
+| BN-6 | **Units are free text, grouped case-insensitively (`lower(btrim())`), with a picker of the project's units** | §4.9 "ranked only within one `measure_unit`" (exact text) |
+
+Also settled in the build (design review, no ruling needed): BENEFIT_SOLUTION takes a surrogate key
+`benefit_solution_id` with UNIQUE `(benefit_id, solution_id)` (apple M3) and live-guard FKs onto both ends (R1-M1);
+only fully rated solutions are ranked, partly rated and no-work ones listed apart (R1-H1); a bottom-quartile solution
+with value in another unit is marked "also delivers in …", not a displacement candidate (R1-M5) — its threshold is
+open (§1 BN-7).
+
 ### Ben's rulings, 2026-11-02 — the risk register (slice Risks, RK-1…RK-6)
 
 Ben, via Ren, 2026-11-02: *"all six questions (Q1–Q6) as you recommended, (a) each"* — plan
@@ -984,6 +1016,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice_control_c_spec.md` | Slice Control-C — where change lands, master data, FTC defaults and reset, `fr_unlinked` (CC-1…CC-7) | 2026-10-30 |
 | `docs/slice_risks_spec.md` | Slice Risks — the risk register, promote to an issue, the `risk_register` rule (RK-1…RK-6) | 2026-11-02 |
 | `docs/slice_decisions_spec.md` | Slice Decisions — the append-only decision log, corrections by supersession (DC-1…DC-5) | 2026-11-02 |
+| `docs/slice_benefits_spec.md` | Slice Benefits — the benefit register, solution shares, value ranking, the `benefit_gap` rule (BN-1…BN-6) | 2026-11-03 |
 
 ---
 

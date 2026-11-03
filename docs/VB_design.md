@@ -439,10 +439,10 @@ Component BENEFIT (needs SOLUTION).
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `create_benefit` | `BENEFIT` | C | Next per-project sequence → `BEN-0001`. Measure, unit, baseline value, target value, realisation date, accountable `org_role_id` |
-| `link_benefit_solution` | `BENEFIT_SOLUTION` | C/D | Many-to-many. A benefit usually needs several solutions; a solution may serve several benefits |
-| `value_ranking` | `BENEFIT`, `BENEFIT_SOLUTION`, `FUNCTION_REQUIREMENT` | R | Per solution, **value = Σ (target − baseline) × contribution_pct**, ÷ effort days. **Ranked only within one `measure_unit`** (R2-D12, Q9) — hours saved and baht saved are never on one list. **This is what makes "trade, don't add" executable** — it names each unit's bottom quartile to displace |
-| `benefit_gap_report` | `SOLUTION`, `BENEFIT_SOLUTION` | R | Solutions carrying effort and no quantified benefit → challenge at the next gate. Benefits whose solutions are all TECHNOLOGY → fragile benefit case (§4.13) |
+| `create_benefit` | `BENEFIT` | C | Next per-project sequence → `BEN-0001`. Name, type, measure, unit, baseline value, target value, accountable `org_role_id` required (criterion 59); description and realisation date optional. **Target ≠ baseline** (BN-1). Status starts FORECAST. Update and retire / restore through `lifecycle`; retire refused while the benefit has live links |
+| `link_benefit_solution` | `BENEFIT_SOLUTION` | C/U | Many-to-many. Sets solution S's share of benefit B to p %, 0 < p ≤ 100; creates, restores or re-weights the one (B, S) row; unlinking retires it. **A benefit's live shares total at most 100 %** (BN-2), checked under a lock on the benefit; under 100 shows as "not assigned" |
+| `value_ranking` | `BENEFIT`, `BENEFIT_SOLUTION`, `FUNCTION_REQUIREMENT` | R | Per solution, **value = Σ \|target − baseline\| × contribution_pct / 100** (BN-1 — a reduction is value), ÷ effort days. **Ranked only within one `measure_unit`** (R2-D12, Q9), grouped case-insensitively (BN-6) — hours saved and baht saved are never on one list. Counts live benefits whose status behaviour is LIVE (BN-3), live links and live non-REJECTED solutions. Only fully rated solutions are ranked; partly rated and no-work solutions are listed apart. **This is what makes "trade, don't add" executable** — it names each unit's bottom quartile; a bottom-quartile solution is a displacement candidate only when it has no value in another unit |
+| `benefit_gap_report` | `SOLUTION`, `BENEFIT_SOLUTION` | R | Counting solutions carrying work (any live FR) and no counting benefit → challenge at the next gate (`benefit_gap`, BN-4). Benefits whose counting solutions are all TECHNOLOGY → fragile benefit case (§4.13) |
 
 ### 4.10 Risk (D-15)
 
@@ -1266,8 +1266,9 @@ erDiagram
         bigint status_code_id FK
     }
     BENEFIT_SOLUTION {
-        bigint benefit_id PK
-        bigint solution_id PK
+        bigint benefit_solution_id PK
+        bigint benefit_id FK
+        bigint solution_id FK
         bigint project_id FK
         numeric contribution_pct
     }
@@ -1459,8 +1460,7 @@ Multi-column PK markers on the remaining composite-key tables denote the composi
 composite notation, so each participating column is marked `PK`. Where a table has a surrogate PK, its
 design key is shown as a `UK (…)` note.
 
-**Build status.** The tables of the later phases — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `BENEFIT`,
-`BENEFIT_SOLUTION`, `RISK`, `CHANGE_REQUEST`, `CR_IMPACT`, `DECISION`, `PHASE`, `SOLUTION_PHASE`,
+**Build status.** The tables of the later phases — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `RISK`, `CHANGE_REQUEST`, `CR_IMPACT`, `DECISION`, `PHASE`, `SOLUTION_PHASE`,
 `SOLUTION_DEPENDENCY`, `WBS_ITEM`, `CONTROL_RULE` — are designed and not yet built. `FR_BFC_NODE` is retired
 and never built (SC-3); it is not drawn.
 The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is designed and being built. `BFC_NODE_FLOW` (D-38) and
@@ -2235,11 +2235,17 @@ row to the diff, not REMOVED + ADDED.
 FK `project_id`, `benefit_type_code_id`, `accountable_org_role_id`, `status_code_id`. UK `(project_id,
 benefit_number)` → `BEN-0001`. Carries `measure_name`, `measure_unit`, `baseline_value`, `target_value`,
 `realisation_date`. **A benefit with no accountable org role is not a benefit, it is a hope** — the FK is
-`NOT NULL`.
+`NOT NULL`. CHECK `target_value <> baseline_value` (BN-1). The status code carries its behaviour (`LIVE` /
+`ABANDONED`, BN-3) through a composite FK, so an abandoned benefit is told apart without naming its code. Frozen
+while BENEFIT is on (§6.1 row 30).
 
-**BENEFIT_SOLUTION** — one row per (benefit × solution). PK both; `contribution_pct` carries the
-relationship-specific fact, because a benefit is rarely delivered by one solution alone and the split is
-what is argued about at realisation.
+**BENEFIT_SOLUTION** — one row per (benefit × solution), ever. PK `benefit_solution_id` (a surrogate, so the
+frozen `source_id` is one number); UNIQUE `(benefit_id, solution_id)`; both ends same-project composite FKs.
+`contribution_pct` (`> 0` and `≤ 100`) carries the relationship-specific fact, because a benefit is rarely
+delivered by one solution alone and the split is what is argued about at realisation. Unlinking retires the row
+and linking again restores it. A computed `link_live` joins two more FKs onto `(…, is_active)` of the benefit and
+the solution, so the database refuses a live link under a retired end. The ≤ 100 % total across a benefit's rows
+is the service's (BN-2). Frozen while BENEFIT is on (§6.1 row 31).
 
 **RISK** — one row per risk in one project (D-15). PK `risk_id`; FK `project_id`, `probability_code_id`,
 `impact_code_id`, `owner_org_role_id`, `status_code_id`, optional `bfc_node_id` / `solution_id` / `phase_id` (a wave,
@@ -3474,8 +3480,8 @@ are designed and arrive with their slice (§12).
 | 27 | `application_bfc_node` | Landscape (D-8) — supporting systems of as-is processes (S7 Q-23) | ✓ | ✓ ⇐ `APPLICATION`; as-is rows also ⇐ `AS_IS` | ✓ |
 | 28 | `stakeholder` | Issue (D-4) | ✓ | ✗ — people are not scope | — |
 | 29 | `effort_rate` | Size (D-13) | ✓ | ✓ ⇐ `EFFORT` (R2-D7) — the agreed rate card is a commercial term | ✓ |
-| 30 | `benefit` | Benefit (D-14) | ✓ | ✓ when built ⇐ `BENEFIT` | — |
-| 31 | `benefit_solution` | Benefit (D-14) | ✓ | ✓ when built ⇐ `BENEFIT` | — |
+| 30 | `benefit` | Benefit (D-14) | ✓ | ✓ ⇐ `BENEFIT` (joins at hash spec 7; every field hashed, BN-5) | — |
+| 31 | `benefit_solution` | Benefit (D-14) | ✓ | ✓ ⇐ `BENEFIT` (joins at hash spec 7; each contribution % hashed, BN-5) | — |
 | 32 | `risk` | Risk (D-15) | ✓ | ✗ — risk is live, not scope | — |
 | 33 | `change_request` | Change (D-16) | ✓ | ✗ — a CR challenges baselines, is not in one | — |
 | 34 | `cr_impact` | Change (D-16) | ✓ | ✗ | — |
@@ -3507,8 +3513,9 @@ listed in `models/baseline.SHADOWED` and `services/freeze_set.FREEZE_SET` (a mod
 `business_requirement`, `br_data_entity`, `br_org_role`, `application`, `solution`, `br_solution`,
 `function_requirement`, `br_function_requirement`, `fr_interface`, `fr_interface_data_entity`,
 `application_solution`, `application_bfc_node`, `effort_rate`, `project_component`. The designed tables
-`br_requirement_line`, `br_data_field` and `br_system_flow` (slice 11, hash spec 4), and `issue`, `issue_br`,
-`benefit`, `benefit_solution`, `phase`, `solution_phase` and `solution_dependency` join when they are built; **a new entity joining the set bumps `CURRENT_HASH_SPEC` and registers
+`br_requirement_line`, `br_data_field` and `br_system_flow` (slice 11, hash spec 4), `issue` and `issue_br`
+(hash spec 5), `phase`, `solution_phase` and `solution_dependency` (hash spec 6), and `benefit` and
+`benefit_solution` (hash spec 7) are appended in that order; **a new entity joining the set bumps `CURRENT_HASH_SPEC` and registers
 its hashed columns under the new version** (S10b-1, slice10b Q-14), so older baselines still verify.
 
 **Every shadow is generated, never hand-written** (`services/baseline_shadow.py`, VB law 2):
@@ -3655,7 +3662,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `BEFORE UPDATE OR DELETE` reject trigger (`fn_reject_modification()`) **and** the statement-level `AFTER INSERT` guard (`fn_shadow_insert_guard()`: rows only into a baseline whose header was written in the same transaction) | every `baseline_*` | immutability at the database, not by convention (A-7); nothing is ever appended to an existing baseline (DR8-S1). No TRUNCATE trigger (S8-2) |
 | `raised_by_stakeholder_id NOT NULL` and separate `recorded_by_user_id NOT NULL` | `issue` *(when built)* | D-4, D8 — who raised it and who typed it are different facts and cannot collapse |
 | partial `UNIQUE (project_id, lower(btrim(stakeholder_name))) WHERE is_active` | `stakeholder` *(when built)* | D6 — the importer matches people by name, so the lookup must return at most one row |
-| `accountable_org_role_id NOT NULL` | `benefit` *(when built)* | D-14 — a benefit with no owner is a hope, not a benefit |
+| `accountable_org_role_id NOT NULL` | `benefit` | D-14 — a benefit with no owner is a hope, not a benefit |
 | `exposure_score` derived from probability × impact at save | `risk` *(when built)* | D-15 — the score cannot be argued down independently of its inputs |
 | `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN, APPROVED, or the SUPERSEDED one carrying the agreed approval (SC-2); `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8, SC-2** — a CR challenges something agreed: a baseline in force, or the superseded one that still carries the agreed client approval (DR8-P1). Point-in-time: an existing CR keeps its target when that baseline is later superseded |
 | `effort_delta_days` / `benefit_delta_value` writable **only** by `price_cr` | `change_request` *(when built)* | D-16 — a change priced by its requester is not priced |
@@ -5954,20 +5961,41 @@ priced_diff(baseline_a, baseline_b | live):                           # Q3, R2-D
     # scope log into scope control.
 
 # ---- benefit (D-14) -------------------------------------------------------
-value_ranking(project_id):                                            # R2-D12, Q9
+value_ranking(project_id):                                            # R2-D12, Q9, BN-1…BN-6
+    # Counting = live benefit with status behaviour LIVE (BN-3), live link, live solution not REJECTED.
+    # Unit key = lower(btrim(measure_unit)) (BN-6); shown with the most recently edited spelling.
+    if EFFORT or FUNCTION_REQUIREMENT is off: return values only, effort "not measured", nothing ranked
     out = {}
-    for unit in distinct BENEFIT.measure_unit among active benefits:
-        rows = []
-        for each SOLUTION s linked to an active benefit in this unit:
-            value  = Σ over BENEFIT_SOLUTION bs of benefits b in unit:
-                         (b.target_value - b.baseline_value) * bs.contribution_pct / 100
-            effort = Σ FUNCTION_REQUIREMENT.effort_days where solution_id = s and is_active
-            rows.append({solution, value, effort, ratio = value / nullif(effort, 0)})
-        out[unit] = rows ordered by ratio desc, with bottom_quartile marked
-    return out
+    for unit in distinct unit keys among counting benefits:
+        ranked, partly_rated, no_work = [], [], []
+        for each counting SOLUTION s linked to a counting benefit in this unit:
+            value  = Σ over counting BENEFIT_SOLUTION bs of benefits b in unit:
+                         |b.target_value - b.baseline_value| * bs.contribution_pct / 100   # BN-1
+            frs    = live FUNCTION_REQUIREMENT where solution_id = s
+            if no frs or Σ effort_days = 0:      no_work.append({s, value})
+            elif any fr.effort_days is null:     partly_rated.append({s, value, rated, of = len(frs)})
+            else: ranked.append({s, value, effort = Σ effort_days, ratio = value / effort})
+        sort ranked by ratio desc, then solution number
+        bottom = last ceil(n/4) of ranked when n >= 4, else none
+        for r in bottom:
+            r.mark = "also delivers in <units, values>" if s has counting value in another unit
+                     else "displacement candidate"
+        out[unit] = {ranked, partly_rated, no_work,
+                     not_assigned per benefit under 100 %, on_rejected per benefit linked to REJECTED}
+    lines = {untagged_effort_days,
+             reconciliation: rated effort per solution, once, in four buckets (with value · no counting
+             benefit · rejected · untagged) beside effort.summary's total + rejected days, and the difference}
+    return out, lines
+    # Values and ratios in Decimal, 2 decimals, ROUND_HALF_UP.
     # Benefits are ranked only within one unit: hours saved and baht saved are never summed.
     # A solution with benefits in two units appears in both rankings, each with that unit's
     # value only. The bottom quartile of each unit answers "what does this change displace?"
+
+benefit_gap_report(project_id):                                       # BN-4
+    works  = counting solutions with at least one live FR (rated or not)
+    gap    = works with no counting link
+    fragile = counting benefits whose every counting linked solution is TECHNOLOGY      # §4.13, informational
+    measured = len(gap) / len(works) * 100        # not measured when BENEFIT, FR or EFFORT off, or works empty
 
 # ---- risk (D-15) ----------------------------------------------------------
 score_risk(risk):
@@ -6119,10 +6147,11 @@ headline (CT-4); the first four are `priced_diff` (net growth % from the agreed 
 `interface_load` (INTERFACE FRs as % of live FRs); then `requirement_volatility`, `org_impact_heatmap`,
 `stakeholder_engagement` and `data_migration_map` (CB-1…CB-4); then `process_change_intensity`,
 `master_data_candidates` and `fr_unlinked` (CC-1…CC-3); then `risk_register` (the highest exposure among open risks,
-`GE`, RK-2 / RK-5). The other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
+`GE`, RK-2 / RK-5); then `benefit_gap` (the % of counting solutions carrying work with no counting benefit, `PCT_GT`,
+BN-4; not measured when BENEFIT, FUNCTION_REQUIREMENT or EFFORT is off, or no counting solution carries work). The
+other five registry analyses carry no rule (CC-5). A rule copied into a running engagement by
 `seeds.seed_control_rules` arrives switched off until the client agrees it (CB-5); a new project's arrive on.
-`benefit_gap` is the starting point its slice signs off with Ben. These thresholds are
-starting points, not doctrine:
+These thresholds are starting points, not doctrine:
 
 | `analysis_code` | Flag | Escalate | Prescribed action |
 |---|---|---|---|
@@ -6133,7 +6162,7 @@ starting points, not doctrine:
 | `interface_load` | INTERFACE >25% of FRs | >35% | Stand up an integration workstream; book test environments |
 | `org_impact_heatmap` | one unit R/A on >40% of changes | >60% | Dedicated change agent and a capacity check — they are usually the SMEs too |
 | `stakeholder_engagement` | a silent unit on >10% of changes | >25% | Interview before sign-off — silence becomes rejection at UAT |
-| `benefit_gap` | any solution with effort and no benefit | >20% of solutions | Challenge at the next gate |
+| `benefit_gap` | any solution carrying work (a live FR) with no live benefit, REJECTED left out (`PCT_GT` 0) | >20% of those solutions | Challenge at the next gate |
 | `risk_register` | an open risk with exposure 12 or more (`GE`) | 16 or more | Mitigation owner + date; steering if unmitigated |
 | `data_migration_map` | any entity with no source system or conflicting sources | >5 entities | Data ownership decision before design freeze |
 | `process_change_intensity` | >50% of changed steps in one L1 area | >70% | Check the change workload and the change-management plan for that area before the next gate |
@@ -6248,7 +6277,7 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `IMPORT_STATUS` | `VALIDATING`, `VALIDATED`, `REJECTED`, `COMMITTED` — **`is_system`, resolved from the global tier only** (S4-7) | `IMPORT_BATCH.status_code` — **D-5**. The 90-day purge turns an uncommitted batch REJECTED (Q14, §7.12b). *Import targets (`target_entity`) and `import_mode` are `CHECK` columns, not categories (§5.3 Import staging)* |
 | `FR_COMPLEXITY` | `SIMPLE`, `MEDIUM`, `COMPLEX`, `VERY_COMPLEX` | `FUNCTION_REQUIREMENT.complexity_code` — **D-13**, keyed with FR type into `EFFORT_RATE` |
 | `BENEFIT_TYPE` | `COST_REDUCTION`, `REVENUE`, `PRODUCTIVITY`, `RISK_REDUCTION`, `COMPLIANCE`, `CUSTOMER` | `BENEFIT.benefit_type_code` — **D-14** |
-| `BENEFIT_STATUS` | `FORECAST`, `COMMITTED`, `IN_REALISATION`, `REALISED`, `ABANDONED` | `BENEFIT.status_code` |
+| `BENEFIT_STATUS` | `FORECAST`, `COMMITTED`, `IN_REALISATION`, `REALISED`, `ABANDONED` | `BENEFIT.status_code` — **company-only**; each code carries a behaviour (BN-3): `ABANDONED` → `ABANDONED`, the other four → `LIVE` (fixed, all five pinned) |
 | `RISK_PROBABILITY` | `RARE`, `UNLIKELY`, `POSSIBLE`, `LIKELY`, `ALMOST_CERTAIN` — behaviour = weight `W1`…`W5` | `RISK.probability_code` — **D-15, RK-1** |
 | `RISK_IMPACT` | `NEGLIGIBLE`, `MINOR`, `MODERATE`, `MAJOR`, `SEVERE` — behaviour = weight `W1`…`W5` | `RISK.impact_code` — **RK-1** |
 | `RISK_STATUS` | `OPEN`, `MITIGATING` (behaviour OPEN), `CLOSED`, `MATERIALISED` — company-only, all pinned, behaviour fixed | `RISK.status_code` |
@@ -6356,7 +6385,7 @@ component names it (`component=`), and criterion 49b fails a write that forgets.
 | `authenticated` | the JWT user; the service filters | `GET /auth/me`, `GET /projects` (via `visible_project_ids`), `GET /programs` (programs with at least one project visible to the caller, or of which the caller is a live member; admins: all), `GET /project-templates`, `GET /project-components`; later `GET /process-flow-json/schema` |
 | `platform_admin` | `current_user().is_platform_admin`, re-read every request (S4) | `/users*`, `/clients*`, `POST /projects`, `POST /programs`, `POST /programs/{program_id}/projects`, `DELETE /programs/{program_id}/projects/{project_id}`; later `PATCH /programs/{id}`, house control-rule defaults, global code maintenance, `purge` |
 | `project_ctx(level, component=)` | `require_project(user, {project_id}, level, component)` | **every route under `/projects/{project_id}/…`** — `VIEW` for reads and exports; `EDIT` for writes, imports, freeze, client approval, the rate card and project control rules; `ADMIN` for effective access, members and the project's code lists incl. FR types (D-71, G-5); `PLATFORM` for components, data model depth, the DFD rule (preview and set), the FTE basis and restriction (D-71) |
-| `object_guard(Model, level, component=)` | the object's owning project, then `require_project`; a program-owned object (`ProgramMember`), its owning program, then `require_program`; an object with neither is platform-admin only | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-triggers/{id}` · `/project-members/{id}` · `/program-members/{id}` · `/baselines/{id}` · `/bulk/batches/{batch_id}` · **each restore route**, one per `RESTORABLE` entity (§7.12); later `/stakeholders`, `/issues`, `/benefits`, `/risks`, `/change-requests`, `/phases`, `/wbs-items` |
+| `object_guard(Model, level, component=)` | the object's owning project, then `require_project`; a program-owned object (`ProgramMember`), its owning program, then `require_program`; an object with neither is platform-admin only | `/bfc-nodes/{id}` · `/business-requirements/{id}` · `/solutions/{id}` · `/function-requirements/{id}` (incl. `/interface`, `/complexity`) · `/applications/{id}` · `/data-entities/{id}` · `/data-fields/{id}` · `/external-entities/{id}` · `/org-units/{id}` · `/org-roles/{id}` · `/process-triggers/{id}` · `/project-members/{id}` · `/program-members/{id}` · `/baselines/{id}` · `/bulk/batches/{batch_id}` · `/benefits/{id}` · **each restore route**, one per `RESTORABLE` entity (§7.12); later `/stakeholders`, `/issues`, `/risks`, `/change-requests`, `/phases`, `/wbs-items` |
 | `program_ctx(level)` | `require_program(user, {program_id}, level)` | `GET /programs/{program_id}`, `GET /programs/{program_id}/projects`, `GET`/`POST /programs/{program_id}/members` (`ADMIN`); later the roll-ups `/dashboard`, `/counts`, `/interfaces`, `/effort`, `/control-status`, `/plan-vs-actual` |
 
 `component=` on `project_ctx` / `object_guard` is a code, a tuple of codes, or a resolver on the row
@@ -6521,8 +6550,10 @@ component.
 | `GET/PUT /projects/{project_id}/code-master/FR_TYPE` | project_ctx(VIEW / ADMIN) (G-5) | code, label, behaviour, sort, is_active | the project's FR types (D-27). Behaviour immutable once referenced (R2-D8) |
 | `PUT /code-master/FR_TYPE` | platform_admin | as above | the global tier |
 | **Phase 2 — benefits, change requests, decisions, WBS** | | | |
-| `GET/POST /projects/{project_id}/benefits` · `PATCH/DELETE /benefits/{id}` · `POST/DELETE /benefits/{id}/solutions` | `BENEFIT` | benefit fields; solution_id, contribution_pct | benefit incl. `BEN-0001` (D-14) |
-| `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per `measure_unit`** (D-14, R2-D12, Q9) |
+| `GET/POST /projects/{project_id}/benefits` · `GET/PATCH/DELETE /benefits/{id}` · `PATCH /benefits/{id}/restore` | `BENEFIT` | benefit fields (codes, never labels); `row_version` on PATCH / DELETE | benefit incl. `BEN-0001` (D-14) |
+| `PUT/DELETE /benefits/{id}/solutions/{solution_id}` · `GET /solutions/{id}/benefits` | `BENEFIT` (writes) | contribution_pct | the link with its value; 409 naming the current total over 100 % (BN-2) |
+| `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per unit** (D-14, R2-D12, Q9, BN-1, BN-6) with partly-rated, no-work, not-assigned and reconciliation lines |
+| `GET /projects/{project_id}/benefit-gap` | project_ctx(VIEW) | — | gap solutions, fragile benefits, the `benefit_gap` figure (BN-4) |
 | `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2) |
 | `POST /change-requests/{id}/analyse` · `GET …/price` · `POST …/decide` | object_guard(ChangeRequest, EDIT) | seed objects · — · outcome, displaces_cr_id, rationale, alternative_rejected | the blast radius (`CR_IMPACT`); effort and benefit delta, phases hit, displacement candidates; the decision. **`decide` refuses net-positive effort with no displacement named (422)** and writes a `DECISION` row |
 | `GET/POST /projects/{project_id}/decisions` · `GET /decisions/{id}` | project_ctx(VIEW / EDIT) · object_guard(Decision, VIEW) | title, decision_text, alternative_rejected, dimension_code, decided_on, analysis_code, supersedes_decision_id | the decision log (D-17, DC-1…DC-5), built; corrections are new rows; no PATCH or DELETE route |
@@ -7182,8 +7213,9 @@ decision are recorded in the design history, not here.
   estimates usually need at least a vendor factor; adding one is a column on `EFFORT_RATE`,
   not a model change.
 - `ASSUMPTION A-40` — **Benefits are ranked only within one unit** (Q9): a benefit's value is
-  **`(target_value − baseline_value) × contribution_pct / 100`** in `measure_unit`, and
-  `value_ranking` returns one ranking per unit (R2-D12). **Open:** no currency conversion, no
+  **`|target_value − baseline_value| × contribution_pct / 100`** in `measure_unit` — a reduction ("close in 6
+  days, not 10") is value as much as an increase, and a target equal to its baseline is refused (BN-1) — and
+  `value_ranking` returns one ranking per unit, grouped case-insensitively (R2-D12, BN-6). **Open:** no currency conversion, no
   discounting, no NPV. If the business case needs NPV, that is a computed layer over this,
   and it needs a discount rate per project. `contribution_pct` is read as a percentage (0–100).
 - `ASSUMPTION A-42` — **The thresholds in §7.13 are FTC starting points, and every one of
