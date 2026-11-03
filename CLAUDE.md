@@ -32,7 +32,9 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   `master_data_candidates`, and `fr_unlinked` after migration 0082; Risks `risk_register` after 0083, which also gives
   the three risk code lists their weights / behaviours and refuses, naming `project:code`, any risk code it cannot
   map); until it runs `create_project` is 409. 0084 (Decisions) adds no rule; it refuses, naming `project:code`, while a
-  project holds its own `PM_DIMENSION` code or hide (the list is company-only).
+  project holds its own `PM_DIMENSION` code or hide (the list is company-only). Benefits (0085, 0086): run
+  `seed_code_master` then `seed_control_rules --actor-email <admin>` (adds `benefit_gap`); 0085 refuses, naming
+  `project:code`, a project-tier `BENEFIT_STATUS` row or hide, or a status code it cannot map (the list is company-only).
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's
