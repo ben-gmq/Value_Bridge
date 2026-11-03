@@ -11,21 +11,20 @@
 **Unit: person-days** — one working day of build time, covering the slice's spec, design review, build, tests and
 browser check. **Not counted:** Ben's own review hours.
 
-**State counted from:** `origin/main` at `6e99f81` (Decisions merged; 1,294 tests passed on that commit).
+**State counted from:** `origin/main` at `c3fb909` (Benefits merged; 1,326 tests passed on that commit).
 **Done since 2026-10-20:** all of Phase 1 (Control rules A/B/C and the panel, 1e imports, 1f reports, the Issue
-module's browser check); in Phase 2, slice 15 waves, Risks and Decisions; in Phase 3, slice 16 archive files and
-project purge, and the platform-admin grant approval.
+module's browser check); in Phase 2, slice 15 waves, Risks, Decisions and Benefits; in Phase 3, slice 16 archive
+files and project purge, and the platform-admin grant approval.
 
 ---
 
 ## Phase 1 — Finish the scope core — **done**
 
-## Phase 2 — Delivery control modules (10.2 days)
+## Phase 2 — Delivery control modules (7.8 days)
 
 | Slice | Remaining tasks | Spec | Days |
 |---|---|---|---:|
-| **Benefits** | Register (`BEN-`), link to solutions with contribution %, value-for-effort ranking, "no benefit yet" check (`benefit_gap` rule); frozen in baselines (hash spec 7) | Plan awaiting approval (`docs/plans/benefits_plan_2026-11-03.md`) | 2.7 |
-| **Change requests** | Raise against a frozen baseline (`CR-`), automatic impact trace, pricing (effort and benefit), decide (an increase needs a cut or a budget record, written as a decision); M2 tile | Owed | 4 |
+| **Change requests** | Raise against an agreed baseline (`CR-`), automatic impact trace, pricing (effort and benefit per unit), decide (an increase needs a cut or a budget record, written as a decision); M2 tile | Plan awaiting approval (`docs/plans/change_requests_plan_2026-11-03.md`) | 4.3 |
 | **WBS import + progress** | Import from MS Project; link lines to wave and solution; dated progress; progress report; M5 tile | Owed | 3.5 |
 
 ## Phase 3 — Ready for the first client (11.5 days)
@@ -56,11 +55,11 @@ project purge, and the platform-admin grant approval.
 | Phase | Slices | Days |
 |---|---:|---:|
 | 1 — Finish the scope core | 0 | 0 |
-| 2 — Delivery control modules | 3 | 10.2 |
+| 2 — Delivery control modules | 2 | 7.8 |
 | 3 — Ready for the first client | 6 | 11.5 |
-| **To first client use (1–3)** | **9** | **21.7** |
+| **To first client use (1–3)** | **8** | **19.3** |
 | 4 — After first client use | 3 | 9 |
-| **Everything in the design** | **12** | **30.7** |
+| **Everything in the design** | **11** | **28.3** |
 
-Built one slice at a time from 2026-11-04, 21.7 days reaches first client use around **the first week of
-December 2026**, if Ben's two Phase 3 inputs (sign-in decision, Azure subscription) arrive by mid-November.
+Built one slice at a time from 2026-11-04, 19.3 days reaches first client use around **the end of November
+2026**, if Ben's two Phase 3 inputs (sign-in decision, Azure subscription) arrive by mid-November.

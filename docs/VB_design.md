@@ -1460,10 +1460,11 @@ Multi-column PK markers on the remaining composite-key tables denote the composi
 composite notation, so each participating column is marked `PK`. Where a table has a surrogate PK, its
 design key is shown as a `UK (…)` note.
 
-**Build status.** The tables of the later phases — `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `RISK`, `CHANGE_REQUEST`, `CR_IMPACT`, `DECISION`, `PHASE`, `SOLUTION_PHASE`,
-`SOLUTION_DEPENDENCY`, `WBS_ITEM`, `CONTROL_RULE` — are designed and not yet built. `FR_BFC_NODE` is retired
-and never built (SC-3); it is not drawn.
-The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is designed and being built. `BFC_NODE_FLOW` (D-38) and
+**Build status.** Of the later phases' tables, `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `RISK`, `DECISION`, `BENEFIT`,
+`BENEFIT_SOLUTION`, `PHASE`, `SOLUTION_PHASE`, `SOLUTION_DEPENDENCY` and `CONTROL_RULE` are built; `CHANGE_REQUEST`,
+`CR_IMPACT` and `WBS_ITEM` are designed and not yet built. `FR_BFC_NODE` is retired and never built (SC-3); it is not
+drawn.
+The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is built. `BFC_NODE_FLOW` (D-38) and
 `USER_ACCESS_GRANT` (D-40) are retired: the tables hold history and take no new rows.
 
 ---
@@ -7379,14 +7380,16 @@ are in `docs/VB_remaining_work.md`. *Wave* is only the in-app delivery wave (D-1
 | built | 13d | Drawing connections on the DFD (D-65, Q-11, Q-12) | built |
 | built | 11 | Structured BR lines, the attributes a BR uses, BR system-to-system flows, the Data migration FR type; hash spec 4 (D-59, D-60b, D-61, S11-1, S11-3, S11-5) | built |
 | built | 12 | The Scope dashboard's remaining KPIs S7–S11 and the Project-management card (D-58, S12-1, `docs/slice12_kpis.md`). Each tile appears when its slice lands | built |
-| **1** | 14 | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) | built; browser check open |
-| **1** | — | The control rules and the control panel (D-19) (SC-9) | — |
-| **1** | 1e | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | — |
-| **1** | 1f | Reports and PDF export (D-42) | — |
+| built | 14 | The Issue module (D-4, D-5; component ISSUE — screens and routes; its import is in 1e) | built |
+| built | — | The control rules and the control panel (D-19) (SC-9) | built |
+| built | 1e | Imports 4b–4d: BR, FR and Issue `.xlsx`; the flow file `vb-process-flow/2.0` with warn-and-import (D-25, D-55) | built |
+| built | 1f | Reports and PDF export (D-42) | built |
 | built | 1g | Code maintenance | built |
-| **2** | 15 | In-app waves and solution dependencies (D-18) | spec approved |
-| **2** | — | Benefits (D-14) · change requests (D-16) · risks (D-15) · decisions (D-17) · **WBS import + progress updates + progress report (D-33, D-41)** | — |
-| **3** | 16, — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · baseline archive file and `purge_project` (S8-1) · client read-only login and the offline viewer file (D-43) | — |
+| built | 15 | In-app waves and solution dependencies (D-18) | built |
+| built | — | Risks (D-15) · decisions (D-17) · benefits (D-14), hash spec 7 | built |
+| **2** | — | Change requests (D-16) · **WBS import + progress updates + progress report (D-33, D-41)** | change requests: spec in review |
+| built | 16 | Baseline archive file and `purge_project` (S8-1) | built |
+| **3** | — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · client read-only login and the offline viewer file (D-43) | — |
 | **4** | — | Program roll-ups (R2-S2) · English / Japanese / Thai (D-44) · version comparison screen (D-50) | — |
 
 The canvas (§7.14) is one component for the DFD and the ERD. Program roll-ups are built after the

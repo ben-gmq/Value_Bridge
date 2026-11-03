@@ -31,6 +31,20 @@ Nothing here is in the spec yet.
   predates the register and overlaps it; keep, fold into the register, or retire it?
 - **BN-10 (2026-11-03, apple L5) — realised value.** The register holds baseline and target only; benefit realisation
   tracking (an actual value over time) is out of this slice.
+- **CR-1 (2026-11-03, slice Change requests spec) — how a change is stated and priced, and what happens to a rejected
+  edit.** §7.13 says the blast radius and price are computed, never typed, but not how a new FR is priced before it
+  exists. Recommended: the change is drafted in the working set and seeded ADD / MODIFY / REMOVE; priced as working
+  set minus agreed baseline for the seeded FRs only, exposure beside it (as Q3); only the seed figures block an
+  approval when they move; a rejected or undecided edit is listed and warned at freeze, and the team undoes it; one
+  FR is a seed of one open change at a time (design review R1 auditor H1, R2 auditor L).
+- **CR-2 (2026-11-03, apple R1 H1) — the CR data design changes.** Drop `benefit_delta_value` (a single total would add
+  baht to hours, against Q9) for per-unit value at stake and value change on the impact rows; impact type as a code
+  list (law 3); add exposure, unrated count, priced-at, budget and status-behaviour columns; decider and date read
+  from the decision, not copied.
+- **CR-3 (2026-11-03, design review R1 auditor M) — what covers an increase, and who may record a budget.**
+  Recommended: one approved net-negative CR on the same baseline (used once), a budget record (reference + who
+  approved it) for what remains, or both; any editor may record it (SC-7). Alternative: a budget-covered approval is
+  decided by someone other than the raiser.
 
 (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of 2026-10-29: CC-7, §3.)
 
@@ -1017,6 +1031,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice_risks_spec.md` | Slice Risks — the risk register, promote to an issue, the `risk_register` rule (RK-1…RK-6) | 2026-11-02 |
 | `docs/slice_decisions_spec.md` | Slice Decisions — the append-only decision log, corrections by supersession (DC-1…DC-5) | 2026-11-02 |
 | `docs/slice_benefits_spec.md` | Slice Benefits — the benefit register, solution shares, value ranking, the `benefit_gap` rule (BN-1…BN-6) | 2026-11-03 |
+| `docs/slice_change_requests_spec.md` | Slice Change requests — raise against an agreed baseline, trace, price, decide into the decision log (CR-1…CR-3 open) | 2026-11-03 |
 
 ---
 
