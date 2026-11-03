@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import SessionLocal
-from routers import (admin, auth, baselines, bulk, code_lists, control, decisions, issues, phasing, process_flow,
+from routers import (admin, auth, baselines, benefits, bulk, code_lists, control, decisions, issues, phasing, process_flow,
                      projects, purge, reports, risks, scope)
 from routers.guards import GuardedRouter
 from services import errors, instance
@@ -44,6 +44,7 @@ api.include_router(code_lists.router)
 api.include_router(scope.router)
 api.include_router(issues.router)
 api.include_router(risks.router)
+api.include_router(benefits.router)                                    # slice Benefits
 api.include_router(decisions.router)                                   # slice Decisions
 api.include_router(phasing.router)
 api.include_router(process_flow.router)

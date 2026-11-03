@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from models import AppUser, CodeMaster, EffortRate, Project, ProjectCodeVisibility, Risk
 from models.shared import (FR_BEHAVIOURS, ISSUE_STATUS_BEHAVIOURS, PROJECT_STATUS_BEHAVIOURS, RACI_BEHAVIOURS,
-                           RISK_STATUS_BEHAVIOURS, RISK_WEIGHTS)
+                           RISK_STATUS_BEHAVIOURS, RISK_WEIGHTS, BENEFIT_STATUS_BEHAVIOURS)
 from seeds.ftc_rate_card import FTC_DEFAULT_RATE_CARD
 from services import access, audit
 from services.code_master import resolve
@@ -37,17 +37,21 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
     | {("ISSUE_SEVERITY", "CRITICAL")}                              # I-13: the M3 tile counts it by code
     | {("PHASE_STATUS", c) for c in ("IN_DELIVERY", "CANCELLED")}   # slice 15 R8: the plan reads them by code
     | {("RISK_STATUS", c) for c in ("OPEN", "MITIGATING", "CLOSED", "MATERIALISED")}   # slice Risks R1-4
+    | {("BENEFIT_STATUS", c) for c in ("FORECAST", "COMMITTED", "IN_REALISATION", "REALISED",   # slice Benefits BN-3
+                                       "ABANDONED")}
     | {("FR_TYPE", t) for t, _ in FTC_DEFAULT_RATE_CARD}          # the rate card is keyed by them (R4)
     | {("FR_COMPLEXITY", c) for _, c in FTC_DEFAULT_RATE_CARD}
 )
 # §7.2, G-2, I-1: never overridden or hidden per project
 COMPANY_ONLY = frozenset({"PROJECT_TEMPLATE", "PROJECT_STATUS", "ISSUE_STATUS", "PHASE_STATUS",   # + W-4
                           "RISK_STATUS",                                                         # + slice Risks
+                          "BENEFIT_STATUS",                                                      # + slice Benefits
                           "PM_DIMENSION"})                      # + slice Decisions: a decision is never re-pointed
 BEHAVIOUR_CATEGORIES = frozenset({"FR_TYPE", "RACI_TYPE", "ISSUE_STATUS", "PROJECT_STATUS",       # + Q-89 b
-                                  "RISK_PROBABILITY", "RISK_IMPACT", "RISK_STATUS"})              # + RK-1 (0083)
+                                  "RISK_PROBABILITY", "RISK_IMPACT", "RISK_STATUS",               # + RK-1 (0083)
+                                  "BENEFIT_STATUS"})                                             # + BN-3 (0085)
 # Status lists whose every pinned code keeps its behaviour: the application writes them by value (sara A M-2, R1-4).
-FIXED_BEHAVIOUR = frozenset({"ISSUE_STATUS", "RISK_STATUS"})
+FIXED_BEHAVIOUR = frozenset({"ISSUE_STATUS", "RISK_STATUS", "BENEFIT_STATUS"})
 CODE_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")                # R7
 
 # R12: code columns the re-point never reaches, each with its reason. A code FK in neither this list nor the
@@ -58,6 +62,7 @@ EXCLUDED: dict[tuple[str, str], str] = {
     ("issue", "status_code_id"): "ISSUE_STATUS is company-only (I-1)",
     ("phase", "status_code_id"): "PHASE_STATUS is company-only (W-4)",
     ("risk", "status_code_id"): "RISK_STATUS is company-only (slice Risks)",
+    ("benefit", "status_code_id"): "BENEFIT_STATUS is company-only (slice Benefits BN-3)",
     ("decision", "dimension_code_id"): "PM_DIMENSION is company-only; a decision row is immutable (A-41)",
     ("import_batch", "status_code_id"): "IMPORT_STATUS is a system category",
     ("project_component", "component_code_id"): "PROJECT_COMPONENT is a system category",
@@ -102,7 +107,7 @@ def _behaviour(category: str, behaviour: str | None) -> str | None:
     allowed = {"FR_TYPE": FR_BEHAVIOURS, "RACI_TYPE": RACI_BEHAVIOURS,
                "ISSUE_STATUS": ISSUE_STATUS_BEHAVIOURS, "PROJECT_STATUS": PROJECT_STATUS_BEHAVIOURS,
                "RISK_PROBABILITY": RISK_WEIGHTS, "RISK_IMPACT": RISK_WEIGHTS,
-               "RISK_STATUS": RISK_STATUS_BEHAVIOURS}.get(category)
+               "RISK_STATUS": RISK_STATUS_BEHAVIOURS, "BENEFIT_STATUS": BENEFIT_STATUS_BEHAVIOURS}.get(category)
     if allowed and behaviour not in allowed:                        # sara 1g L7: a clear 422, not the CHECK's
         raise HTTPException(422, f"Behaviour must be one of {', '.join(allowed)}")
     if category not in BEHAVIOUR_CATEGORIES and behaviour:

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from models import (AppUser, ApplicationBfcNode, Application, AuditEvent, BfcNode, BfcNodeExternalFlow,
                     BfcNodeTrigger, BrFunctionRequirement, BrSystemFlow, BrSolution, CodeMaster, FunctionRequirement, ProcessTrigger, Project,
                     ProjectComponent, ProjectTemplateComponent, Solution, Issue, IssueBr, Stakeholder, Phase,
-                    Risk, SolutionDependency, SolutionPhase)
+                    Risk, SolutionDependency, SolutionPhase, Benefit, BenefitSolution)
 from services import audit
 
 CATEGORY = "PROJECT_COMPONENT"
@@ -34,7 +34,7 @@ COMPONENT_REQUIRES: dict[str, frozenset[str]] = {
 }
 # Components with screens today; the rest can be switched on but show "not yet available" (§7 risk 4).
 BUILT = frozenset({"SOLUTION", "FUNCTION_REQUIREMENT", "APPLICATION", "EFFORT", "ISSUE", "TO_BE_DFD", "AS_IS",
-                   "PHASING", "RISK"})                                  # RISK: slice Risks
+                   "PHASING", "RISK", "BENEFIT"})                       # RISK: slice Risks; BENEFIT: slice Benefits
 OFF_HEADERS = {"X-VB-Error": "COMPONENT_OFF"}
 DEPTHS = ("KEYS_ONLY", "FULL")
 _SAMPLE = 10
@@ -74,6 +74,8 @@ COMPONENT_ROWS = {
     # slice14 R10: live stakeholders too, so ISSUE cannot be switched off under them (labelled by id, R7)
     "ISSUE": (_rows(Issue, Issue.issue_number), _rows(Stakeholder, Stakeholder.stakeholder_id)),
     "RISK": (_rows(Risk, Risk.risk_number),),                           # slice Risks: live risks keep it on
+    "BENEFIT": (_rows(Benefit, Benefit.benefit_number),                  # slice Benefits: live benefits and links
+                _rows(BenefitSolution, BenefitSolution.benefit_solution_id)),
     # slice 15 R4: waves, splits and dependencies, so PHASING cannot be switched off under any of them
     "PHASING": (_rows(Phase, Phase.phase_code), _rows(SolutionPhase, SolutionPhase.solution_phase_id),
                 _rows(SolutionDependency, SolutionDependency.solution_dependency_id)),

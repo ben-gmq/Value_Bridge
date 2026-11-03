@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import AppUser, AuditEvent, Baseline, ControlRule, FunctionRequirement, OrgRole, Project, Risk
 from models.control import REGISTRY
-from services import audit, baseline, components, control_reports, function_requirement, reports
+from services import audit, baseline, benefit as benefit_service, components, control_reports, function_requirement, reports
 from services.lifecycle import check_version
 
 CENT = Decimal("0.01")
@@ -58,11 +58,14 @@ HOUSE_RULES = (
     # Slice Risks (RK-2, RK-5; design §7.13): an open risk scoring 12 or more flags, 16 or more escalates.
     ("risk_register", "SCORE", "GE", Decimal(12), Decimal(16),
      "Mitigation owner + date; steering if unmitigated"),
+    # Slice Benefits (BN-4; design §7.13): any effort-carrying solution with no benefit behind it flags, over 20 % of
+    # them escalates. REJECTED solutions are left out.
+    ("benefit_gap", "PCT", "PCT_GT", Decimal(0), Decimal(20), "Challenge at the next gate"),
 )
 ORDER = {code: i for i, (code, *_) in enumerate(HOUSE_RULES)}
 UNIT = {code: unit for code, unit, *_ in HOUSE_RULES}
 # Shown under the panel: the analyses still to come and what brings each (spec §1).
-COMING = (("benefit_gap", "BENEFITS"),)
+COMING: tuple = ()                                             # slice Benefits: benefit_gap was the last
 EDITABLE = ("threshold_value", "escalate_value", "owner_org_role_id", "prescribed_action", "escalation_path",
             "is_enabled")
 TEXT_FIELDS = ("prescribed_action", "escalation_path")         # CT-3: audited as "changed" only — they name people
@@ -515,6 +518,8 @@ def headline(db: Session, project_id: int, code: str, on: frozenset) -> dict:
         return _fr_unlinked(db, project_id, on)
     if code == "risk_register":
         return _risk_register(db, project_id, on)
+    if code == "benefit_gap":                                   # the gap tab and the panel read one computation
+        return _from_report(benefit_service.benefit_gap_report(db, project_id))
     return _measure(reason="NOT_BUILT")
 
 

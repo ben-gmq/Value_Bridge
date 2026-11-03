@@ -21,7 +21,8 @@ from tests.test_solution_api import link, sol
 
 CODES = ["priced_diff", "coverage", "solution_matrix", "interface_load", "requirement_volatility", "org_impact_heatmap",
          "stakeholder_engagement", "data_migration_map", "process_change_intensity", "master_data_candidates",
-         "fr_unlinked", "risk_register"]                                    # risk_register: slice Risks (RK-5)
+         "fr_unlinked", "risk_register",                                    # risk_register: slice Risks (RK-5)
+         "benefit_gap"]                                                     # slice Benefits (BN-4)
 
 
 def panel(client, ed, headers=None, expect=200):
@@ -165,7 +166,7 @@ def test_edit_refusals(client, ed, world):
         **{f: None for f in control.EDITABLE}, "threshold_value": "1", "is_enabled": True,
         "change_rationale": "x", "row_version": 1})
     assert r.status_code == 422
-    r = client.patch(f"{API}/projects/{ed['p']}/control-rules/benefit_gap", headers=ed["h"], json={
+    r = client.patch(f"{API}/projects/{ed['p']}/control-rules/value_ranking", headers=ed["h"], json={
         **{f: None for f in control.EDITABLE}, "threshold_value": "1", "is_enabled": True,
         "change_rationale": "x", "row_version": 1})
     assert r.status_code == 404                                               # in the registry, not on this project
@@ -209,7 +210,7 @@ def test_an_empty_project_measures_what_it_can(client, ed):
     assert row(out, "master_data_candidates")["reason"] == "NO_ENTITIES_USED"
     assert row(out, "fr_unlinked")["reason"] == "NO_FRS"
     assert row(out, "risk_register")["reason"] == "NO_OPEN_RISKS"
-    assert [c["analysis_code"] for c in out["coming"]] == ["benefit_gap"]
+    assert out["coming"] == []                                              # slice Benefits: nothing left to come
     panel(client, ed, headers=ed["rv"])                                      # VIEW reads it
     panel(client, ed, headers=ed["out"], expect=404)
 
@@ -223,7 +224,7 @@ def test_components_off_are_not_measured_never_zero(client, ed, world):
         "org_impact_heatmap": "SOLUTION_OFF", "stakeholder_engagement": "ISSUE_OFF",
         "data_migration_map": "APPLICATION_OFF", "process_change_intensity": "SOLUTION_OFF",
         "master_data_candidates": "NO_ENTITIES_USED", "fr_unlinked": "FUNCTION_REQUIREMENT_OFF",
-        "risk_register": "RISK_OFF"}
+        "risk_register": "RISK_OFF", "benefit_gap": "BENEFIT_OFF"}
     assert {r["verdict"] for r in out["rows"]} == {"NOT_MEASURED"}
 
 
