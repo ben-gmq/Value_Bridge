@@ -122,7 +122,7 @@
   "changes.retireBody": "{number} leaves the register. It can be restored with Show retired. Any edits it named stay in the working set.",
   "changes.restore": "Restore",
   "changes.restored": "Change request restored",
-  "changes.tileTitle": "Change requests",
+  "changes.tileTitle": "Open changes",
   "changes.tileNote": "{approved} approved, {rejected} rejected; net approved effort {net}.",
   "changes.tileOpen": "Open the register",
   "changes.backLink": "Records the decision on"
