@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import SessionLocal
-from routers import (admin, auth, baselines, benefits, bulk, code_lists, control, decisions, issues, phasing, process_flow,
-                     projects, purge, reports, risks, scope)
+from routers import (admin, auth, baselines, benefits, bulk, change_requests, code_lists, control, decisions, issues,
+                     phasing, process_flow, projects, purge, reports, risks, scope)
 from routers.guards import GuardedRouter
 from services import errors, instance
 from services.body_limit import BodyLimitMiddleware
@@ -46,6 +46,7 @@ api.include_router(issues.router)
 api.include_router(risks.router)
 api.include_router(benefits.router)                                    # slice Benefits
 api.include_router(decisions.router)                                   # slice Decisions
+api.include_router(change_requests.router)                             # slice Change requests
 api.include_router(phasing.router)
 api.include_router(process_flow.router)
 api.include_router(bulk.router)

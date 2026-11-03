@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from models import (Application, Base, BfcNode, BrRequirementLine, BusinessRequirement, DataEntity, DataField,
                     ExternalEntity, FunctionRequirement, Issue, OrgRole, OrgUnit, ProcessTrigger, Solution,
-                    Phase, Risk, Stakeholder, Benefit)
+                    Phase, Risk, Stakeholder, Benefit, ChangeRequest)
 from services import audit, errors
 
 # §5.4.15 exclusions: tenancy and identity are not liveness parents, and a code is retired
@@ -28,6 +28,9 @@ EXCLUDED_TARGETS = frozenset({"app_user", "project", "program", "client", "code_
 GUARD_TARGET_COLUMNS = frozenset({"is_active", "is_process", "fr_type_behaviour",   # + 6b-2 (schema §7)
                                   "io_is_active",                                  # + 11b: fk_brdf_licence
                                   "bfc_set_code"})                                 # + 7c (§9.1): one Link per parent
+# Child tables that are evidence of a trace, not part of what they point at: a live row never blocks the retire of its
+# target and never cascades (slice Change requests spec §2: a retired seed shows as retired and blocks approval).
+TRACE_ONLY = frozenset({"cr_impact"})
 
 RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntity, OrgUnit, OrgRole,
               Solution, FunctionRequirement, Application, ProcessTrigger,
@@ -35,7 +38,8 @@ RESTORABLE = (BfcNode, BusinessRequirement, DataEntity, DataField, ExternalEntit
               Stakeholder, Issue,                                      # slice 14
               Phase,                                                   # slice 15 (schema §6): not the link tables
               Risk,                                                    # slice Risks
-              Benefit)                                                 # slice Benefits: not the link table
+              Benefit,                                                 # slice Benefits: not the link table
+              ChangeRequest)                                           # slice Change requests: open ones only
 
 # How a row is named in a 409, so the consultant can find it (§7.12).
 LABELS = {
@@ -78,6 +82,7 @@ LABELS = {
     "stakeholder": ("Stakeholder", lambda r: f"#{r.stakeholder_id}"),
     "issue": ("Issue", lambda r: r.issue_number),
     "risk": ("Risk", lambda r: r.risk_number),                         # slice Risks: number only (R7)
+    "change_request": ("Change request", lambda r: r.cr_number),      # slice Change requests: number only (R7)
     # slice Benefits: numbers only (R7); the link names both ends (DR1-P1)
     "benefit": ("Benefit", lambda r: r.benefit_number),
     "benefit_solution": ("Benefit ↔ solution", lambda r: f"{r.benefit_row.benefit_number} ↔ {r.solution_row.solution_number}"),
@@ -118,7 +123,7 @@ def _mapper_for(table_name: str):
 def _links() -> list[Link]:
     seen, out = set(), []
     for table in Base.metadata.sorted_tables:
-        if "is_active" not in table.c:
+        if "is_active" not in table.c or table.name in TRACE_ONLY:
             continue
         child = _mapper_for(table.name)
         for fk in table.foreign_key_constraints:

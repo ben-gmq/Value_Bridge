@@ -98,6 +98,10 @@ def preview(db: Session, project: Project, bump: str) -> dict:
     label = f"v{major}.{minor}"
     errors, blocking, warnings = _gate_report(consistency_check(project.project_id, db))
     on = components.enabled(db, project.project_id)
+    from services import change_request                 # slice CR (spec §5): a warning only; the freeze is unchanged
+    unagreed = change_request.warning_lines(db, project.project_id)
+    if unagreed:
+        warnings = {**warnings, "unagreed_cr_edits": unagreed}
     supersedes = None
     if prior is not None:
         supersedes = {"version_label": prior.version_label, "status_code": prior.status_code,

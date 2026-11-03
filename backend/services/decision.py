@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
-from models import AppUser, ControlRule, Decision
+from models import AppUser, ChangeRequest, ControlRule, Decision
 from services import audit, numbering
 from services.baseline import local_today
 from services.code_master import validate_required_code
@@ -72,6 +72,16 @@ def _target(db: Session, project_id: int, decision_id: int | None) -> Decision |
     return target
 
 
+def _not_a_crs(db: Session, target: Decision | None) -> None:
+    """A decision a change request points at is corrected only through that change request (slice CR, R1 auditor
+    M), so the CR and the log never disagree."""
+    if target is None:
+        return
+    cr = db.scalar(select(ChangeRequest.cr_number).where(ChangeRequest.decision_id == target.decision_id))
+    if cr is not None:
+        raise HTTPException(409, f"{target.decision_number} records the decision on {cr}: correct it on {cr}")
+
+
 # ---- reads -----------------------------------------------------------------------------------------------------------
 def list_decisions(db: Session, project_id: int, dimension: str | None = None,
                    include_superseded: bool = True) -> list[Decision]:
@@ -108,8 +118,21 @@ def attach_chain(db: Session, rows: list[Decision]) -> None:
 
 # ---- writes ----------------------------------------------------------------------------------------------------------
 def record_decision(db: Session, actor_id: int, project_id: int, fields: dict) -> Decision:
+    row = insert_decision(db, actor_id, project_id, fields)
+    db.commit()
+    db.refresh(row)
+    attach_chain(db, [row])
+    return row
+
+
+def insert_decision(db: Session, actor_id: int, project_id: int, fields: dict, via_cr: bool = False) -> Decision:
+    """The same checks and audit as record_decision, flushed but NOT committed: a change request's decide writes its
+    decision and its own status in one transaction (slice CR, criterion 66). `via_cr` lets the CR supersede the
+    decision it points at (a deferred CR decided again, or its decision corrected)."""
     dimension = validate_required_code(db, None, "PM_DIMENSION", fields.get("dimension_code"), "dimension_code")
     target = _target(db, project_id, fields.get("supersedes_decision_id"))
+    if not via_cr:
+        _not_a_crs(db, target)
     row = Decision(project_id=project_id, title=_text(fields.get("title"), "title"),
                    decision_text=_text(fields.get("decision_text"), "decision_text"),
                    alternative_rejected=_text(fields.get("alternative_rejected"), "alternative_rejected"),
@@ -131,9 +154,6 @@ def record_decision(db: Session, actor_id: int, project_id: int, fields: dict) -
                  detail={"decision_number": row.decision_number, "dimension": dimension.code,
                          "analysis": row.analysis_code,
                          "supersedes": target.decision_number if target else None})
-    db.commit()
-    db.refresh(row)
-    attach_chain(db, [row])
     return row
 
 

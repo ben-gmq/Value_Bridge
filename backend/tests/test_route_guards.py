@@ -111,6 +111,7 @@ ROUTE_COMPONENTS = (
     ("/issues", "ISSUE"),
     ("/risks", "RISK"),                                           # slice Risks
     ("/benefits", "BENEFIT"),                                                # slice Benefits
+    ("/change-requests", "CHANGE_REQUEST"),                                  # slice Change requests
     ("/phases", "PHASING"),                                                  # slice 15, W-3
     ("/phase-split", "PHASING"),
     ("/solutions/{id}/dependencies", "PHASING"),

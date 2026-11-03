@@ -8,7 +8,7 @@ def test_every_business_fk_is_covered_or_excluded():
     covered = {(ln.child.__table__.name, ln.parent.__table__.name) for ln in lifecycle.LINKS}
     missing = []
     for t in Base.metadata.sorted_tables:
-        if "is_active" not in t.c:
+        if "is_active" not in t.c or t.name in lifecycle.TRACE_ONLY:   # trace evidence never blocks (slice CR)
             continue
         for fk in t.foreign_key_constraints:
             target = fk.referred_table
@@ -17,6 +17,13 @@ def test_every_business_fk_is_covered_or_excluded():
             if (t.name, target.name) not in covered:
                 missing.append(f"{t.name}.{fk.name} -> {target.name}")
     assert missing == []
+
+
+def test_trace_only_is_exactly_cr_impact():
+    """Slice Change requests: the one child table that never blocks a retire is the trace (spec §2). Widening this
+    list lets a row vanish from under live references, so it is pinned."""
+    assert lifecycle.TRACE_ONLY == frozenset({"cr_impact"})
+    assert not any(ln.child.__table__.name == "cr_impact" for ln in lifecycle.LINKS)
 
 
 def test_the_easy_to_miss_links_are_there():
