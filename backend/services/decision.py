@@ -110,7 +110,11 @@ def attach_chain(db: Session, rows: list[Decision]) -> None:
                              .where(Decision.decision_id.in_(before_ids))).all()) if before_ids else {}
     names = dict(db.execute(select(AppUser.app_user_id, AppUser.display_name)
                             .where(AppUser.app_user_id.in_({r.decided_by_user_id for r in rows}))).all())
+    crs = {d: (i, n) for d, i, n in db.execute(       # slice CR: the change request this decision records, if any
+        select(ChangeRequest.decision_id, ChangeRequest.change_request_id, ChangeRequest.cr_number)
+        .where(ChangeRequest.decision_id.in_(ids)))}
     for r in rows:
+        r.change_request_id, r.cr_number = crs.get(r.decision_id, (None, None))
         r.superseded_by_id, r.superseded_by_number = after.get(r.decision_id, (None, None))
         r.supersedes_number = before.get(r.supersedes_decision_id)
         r.decided_by_name = names.get(r.decided_by_user_id)

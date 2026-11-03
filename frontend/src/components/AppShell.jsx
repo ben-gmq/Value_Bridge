@@ -23,6 +23,7 @@ import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import GavelOutlined from '@mui/icons-material/GavelOutlined';
+import ChangeCircleOutlined from '@mui/icons-material/ChangeCircleOutlined';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
@@ -65,6 +66,7 @@ export const NAV = [
     ['nav.issues', 'issues', ReportProblemOutlined, ['ISSUE']],           // slice 14
     ['nav.risks', 'risks', ShieldOutlined, ['RISK']],                     // slice Risks
     ['nav.benefits', 'benefits', SavingsOutlined, ['BENEFIT']],           // slice Benefits
+    ['nav.changes', 'changes', ChangeCircleOutlined, ['CHANGE_REQUEST']], // slice Change requests (D-16)
     ['nav.decisions', 'decisions', GavelOutlined],                         // slice Decisions (DC-1: always on)
     ['nav.waves', 'waves', ViewTimelineOutlined, ['PHASING']],           // slice 15 (W-1: "Wave" on screen)
     ['nav.reports', 'reports', AssessmentOutlined],                       // slice 1f

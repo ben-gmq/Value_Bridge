@@ -26,6 +26,8 @@ export function itemText(x) {
   // slice 15 (sara M-B): a wave split or a dependency is named by both its ends
   if (x.solution_number && x.phase_code) return `${x.solution_number} ↔ ${x.phase_code}`;
   if (x.solution_number && x.depends_on_solution_number) return `${x.solution_number} → ${x.depends_on_solution_number}`;
+  // slice CR (CR-1): a seed of a change not approved whose edit is still in the working set
+  if (x.cr_number && x.number) return t('baselines.dlg.crEdit', { number: x.number, cr: x.cr_number, status: x.status_code.toLowerCase() });
   return fmtValue(x.label ?? x.component ?? x.de_number ?? x.br_number ?? x.solution_number ?? '');
 }
 

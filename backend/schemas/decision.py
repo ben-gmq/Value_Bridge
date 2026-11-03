@@ -38,4 +38,6 @@ class DecisionOut(Orm):
     supersedes_number: str | None = None
     superseded_by_id: int | None = None
     superseded_by_number: str | None = None
+    change_request_id: int | None = None            # slice CR: corrected only on that change request
+    cr_number: str | None = None
     created_at: datetime

@@ -197,6 +197,21 @@ export const decisionApi = {                                          // slice D
   get: (id) => d(http.get(`${V}/decisions/${id}`)),
 };
 
+export const changeApi = {                                            // slice Change requests (D-16)
+  list: (projectId, params = {}) => d(http.get(`${P(projectId)}/change-requests`, { params })),
+  unagreed: (projectId) => d(http.get(`${P(projectId)}/change-requests/unagreed-edits`)),
+  summary: (projectId) => d(http.get(`${P(projectId)}/change-requests/summary`)),
+  create: (projectId, body) => d(http.post(`${P(projectId)}/change-requests`, body)),
+  get: (id) => d(http.get(`${V}/change-requests/${id}`)),
+  update: (id, body) => d(http.patch(`${V}/change-requests/${id}`, body)),
+  seeds: (id, body) => d(http.put(`${V}/change-requests/${id}/seeds`, body)),
+  analyse: (id, rowVersion) => d(http.post(`${V}/change-requests/${id}/analyse`, { row_version: rowVersion })),
+  decide: (id, body) => d(http.post(`${V}/change-requests/${id}/decide`, body)),
+  correct: (id, body) => d(http.post(`${V}/change-requests/${id}/decision-correction`, body)),
+  retire: (id, rowVersion) => del(`${V}/change-requests/${id}`, rowVersion),
+  restore: (id) => d(http.patch(`${V}/change-requests/${id}/restore`)),
+};
+
 export const benefitApi = {                                           // slice Benefits (D-14)
   list: (projectId, params = {}) => d(http.get(`${P(projectId)}/benefits`, { params })),
   create: (projectId, body) => d(http.post(`${P(projectId)}/benefits`, body)),

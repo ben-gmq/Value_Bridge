@@ -60,7 +60,11 @@ export default function DecisionPage() {
         <Typography sx={{ fontSize: 13.5 }}>{t('decisions.supersedes')} {chainLink(d.supersedes_decision_id, d.supersedes_number)}</Typography>)}
       {d.superseded_by_id && (
         <Typography sx={{ fontSize: 13.5 }}>{t('decisions.supersededByLabel')} {chainLink(d.superseded_by_id, d.superseded_by_number)}</Typography>)}
-      {!d.supersedes_decision_id && !d.superseded_by_id && (
+      {d.change_request_id && (                                  // slice CR: the change request this decision records
+        <Typography sx={{ fontSize: 13.5 }}>{t('changes.backLink')}{' '}
+          <Link component={RouterLink} to={links.change(home, d.change_request_id)} underline="hover"><Code>{d.cr_number}</Code></Link>
+        </Typography>)}
+      {!d.supersedes_decision_id && !d.superseded_by_id && !d.change_request_id && (
         <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>{t('decisions.noChain')}</Typography>)}
     </Card>
   );
@@ -68,7 +72,7 @@ export default function DecisionPage() {
   return (
     <Page title={<CodeTitle code={d.decision_number} name={d.title} tone={d.superseded_by_id ? 'muted' : 'navy'} />}
       subtitle={t('decisions.detailSubtitle')} crumb={d.decision_number}
-      actions={canEdit && !d.superseded_by_id && (
+      actions={canEdit && !d.superseded_by_id && !d.change_request_id && (   // a CR's decision is corrected on the CR
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" onClick={() => navigate(links.decisionNew(home, d.decision_id))}>
             {t('decisions.correct')}</Button>

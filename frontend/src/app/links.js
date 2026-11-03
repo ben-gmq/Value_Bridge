@@ -38,6 +38,8 @@ export const links = {
   benefitGap: (p) => `/p/${p}/benefits/gap`,
   decisions: (p) => `/p/${p}/decisions`,                             // slice Decisions (D-17)
   decision: (p, id) => `/p/${p}/decisions/${id}`,
+  changes: (p) => `/p/${p}/changes`,                                 // slice Change requests (D-16)
+  change: (p, id) => `/p/${p}/changes/${id}`,
   decisionNew: (p, supersedes) => (supersedes ? `/p/${p}/decisions/new?supersedes=${supersedes}` : `/p/${p}/decisions/new`),
   waves: (p, tab) => (tab ? `/p/${p}/waves?tab=${tab}` : `/p/${p}/waves`),     // slice 15: "Wave" on screen (W-1)
   interfaces: (p) => `/p/${p}/interfaces`,
@@ -114,6 +116,10 @@ export const keys = {
   solutionBenefits: (id) => ['solution', String(id), 'benefits'],
   decisions: (p) => ['decisions', String(p)],                                        // slice Decisions
   decision: (id) => ['decision', String(id)],
+  changes: (p) => ['changes', String(p)],                                           // slice Change requests
+  change: (id) => ['change', String(id)],
+  changeSummary: (p) => ['changes', String(p), 'summary'],
+  unagreedEdits: (p) => ['changes', String(p), 'unagreed'],
   issues: (p) => ['issues', String(p)],
   issue: (id) => ['issue', String(id)],
   issueBrs: (id) => ['issue', String(id), 'brs'],                                   // under issue(id)

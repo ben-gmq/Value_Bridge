@@ -408,6 +408,12 @@ def test_a_crs_decision_is_corrected_only_through_the_cr(client, ed, db):
     assert out["decision_number"] == "DEC-0002" and out["status_code"] == "REJECTED"
     new = db.scalars(select(Decision).where(Decision.decision_number == "DEC-0002")).one()
     assert new.supersedes_decision_id == cr["decision_id"] and new.title.startswith("CR-0001 Rejected:")
+    # criterion 13: the log names the CR its latest decision records; the corrected one no longer does
+    log = {d["decision_number"]: d for d in client.get(f"{API}/projects/{ed['p']}/decisions", headers=ed["h"]).json()}
+    assert (log["DEC-0002"]["cr_number"], log["DEC-0002"]["change_request_id"]) == ("CR-0001", cr["change_request_id"])
+    assert log["DEC-0001"]["cr_number"] is None
+    one = client.get(f"{API}/decisions/{new.decision_id}", headers=ed["h"]).json()
+    assert one["cr_number"] == "CR-0001"
 
 
 # ---- stale price (criterion 9) ---------------------------------------------------------------------------------------

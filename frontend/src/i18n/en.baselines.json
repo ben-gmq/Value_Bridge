@@ -116,6 +116,8 @@
   "baselines.line.entities_without_fields": "Data entities with no fields",
   "baselines.line.entities_keys_only": "Data entities with keys only",
   "baselines.line.count": "{line}: {n}",
+  "baselines.line.unagreed_cr_edits": "Edits of change requests not approved (undo them, or approve the change)",
+  "baselines.dlg.crEdit": "{number} ({cr}, {status})",
   "baselines.view.banner": "Viewing {label} · frozen {date} · read only",
   "baselines.view.back": "Back to working set",
   "baselines.view.status": "Status",

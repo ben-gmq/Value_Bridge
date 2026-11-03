@@ -45,6 +45,8 @@ import BenefitGapPage from '../features/benefits/BenefitGapPage';
 import DecisionsPage from '../features/decisions/DecisionsPage';
 import DecisionPage from '../features/decisions/DecisionPage';
 import DecisionNewPage from '../features/decisions/DecisionNewPage';
+import ChangesPage from '../features/changes/ChangesPage';
+import ChangePage from '../features/changes/ChangePage';
 import WavesPage from '../features/waves/WavesPage';
 import ReportsPage from '../features/reports/ReportsPage';
 import ControlPanelPage from '../features/control/ControlPanelPage';
@@ -75,6 +77,7 @@ const PAGES = [
   ['benefits', BenefitsPage], ['benefits/ranking', ValueRankingPage], ['benefits/gap', BenefitGapPage],
   ['benefits/:benefitId', BenefitPage],                                  // slice Benefits
   ['decisions', DecisionsPage], ['decisions/new', DecisionNewPage], ['decisions/:decisionId', DecisionPage],  // slice Decisions
+  ['changes', ChangesPage], ['changes/:crId', ChangePage],              // slice Change requests (D-16)
   ['waves', WavesPage],                                                                            // slice 15
   ['reports', ReportsPage],                                                                        // slice 1f
   ['control', ControlPanelPage],                                                                   // Control-A
@@ -92,6 +95,7 @@ const NEEDS = {
   waves: ['PHASING'],
   benefits: ['BENEFIT'], 'benefits/ranking': ['BENEFIT'], 'benefits/gap': ['BENEFIT'],
   'benefits/:benefitId': ['BENEFIT'],                                   // slice Benefits
+  changes: ['CHANGE_REQUEST'], 'changes/:crId': ['CHANGE_REQUEST'],      // slice Change requests
 };
 
 function Gated({ path, Screen }) {

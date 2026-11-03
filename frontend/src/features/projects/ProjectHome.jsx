@@ -4,13 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Box, Button, Link, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { api } from '../../api/vb';
 import { errorText } from '../../api/client';
-import { baselineApi, effortApi, scopeSummaryApi } from '../../api/scope';
+import { baselineApi, changeApi, effortApi, scopeSummaryApi } from '../../api/scope';
 import { keys, links } from '../../app/links';
 import { useComponents } from '../../app/useComponents';
 import { Card, Code, ListRow, PurpleTile, Segmented, Tag, Tile } from '../../components/kit';
 import { Page } from '../../components/Page';
 import { t } from '../../i18n/t';
 import { AgreedChip, StatusChip, fmtDate } from '../baselines/baselineKit';
+import { days as crDays } from '../changes/changeKit';
 
 const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
 const days = (d) => (Number.isInteger(d) ? String(d) : d.toFixed(1));
@@ -81,7 +82,10 @@ function AreaTable({ s }) {
 // mockup's schedule parts (WBS plan vs actual, late tasks) wait for the WBS import (D-33, D-51: no data, no tile).
 export default function ProjectHome() {
   const { projectId } = useParams();
-  const issuesOn = useComponents(projectId).isOn('ISSUE');
+  const { isOn } = useComponents(projectId);
+  const issuesOn = isOn('ISSUE');
+  const crOn = isOn('CHANGE_REQUEST');
+  const cq = useQuery({ queryKey: keys.changeSummary(projectId), queryFn: () => changeApi.summary(projectId), enabled: crOn });
   const q = useQuery({ queryKey: keys.project(projectId), queryFn: () => api.project(projectId) });
   const sq = useQuery({ queryKey: keys.scopeSummary(projectId), queryFn: () => scopeSummaryApi.get(projectId) });
   const eq = useQuery({ queryKey: keys.effortSummary(projectId), queryFn: () => effortApi.summary(projectId) });
@@ -171,6 +175,15 @@ export default function ProjectHome() {
                   <>
                     {t('home.criticalNote', { open: s.totals.issues_open })}{' '}
                     <Link component={RouterLink} to={links.issues(projectId)}>{t('home.openIssues')}</Link>
+                  </>)} />)}
+            {/* M2 (slice Change requests): open and decided counts, net approved effort; the whole project */}
+            {crOn && cq.data && (
+              <Tile label={t('changes.tileTitle')} value={cq.data.open}
+                note={(
+                  <>
+                    {t('changes.tileNote', { approved: cq.data.approved, rejected: cq.data.rejected,
+                      net: crDays(cq.data.net_approved_days) })}{' '}
+                    <Link component={RouterLink} to={links.changes(projectId)}>{t('changes.tileOpen')}</Link>
                   </>)} />)}
             <Card title={t('home.bySolution')} bodySx={{ gap: 0.5 }}>
               {!topSolutions.length && <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{t('home.bySolutionNone')}</Typography>}
