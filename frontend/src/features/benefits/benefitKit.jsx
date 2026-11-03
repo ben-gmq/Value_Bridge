@@ -56,12 +56,15 @@ export function BenefitFields({ projectId, refs, v, set, disabled = false, idPre
           value={v.accountable_org_role_id ?? ''} disabled={disabled} onChange={(c) => set('accountable_org_role_id', c)}
           options={refs.roleOptions(v.accountable_org_role_id)} />
         {text('measure_name', { required: true, slotProps: { htmlInput: { maxLength: 200 } } })}
-        <Autocomplete freeSolo disabled={disabled} options={refs.units} value={v.measure_unit ?? ''}
-          onInputChange={(_, val) => set('measure_unit', val)}
+        {/* The typed text is the value (free text, BN-6), so it is controlled through inputValue. Autocomplete's own
+            slot props carry the input's ref: ours are merged into them, never put in their place. */}
+        <Autocomplete freeSolo id={`${idPrefix}-measure_unit`} disabled={disabled} options={refs.units}
+          inputValue={v.measure_unit ?? ''} onInputChange={(_, val) => set('measure_unit', val)}
           renderInput={(params) => (
-            <TextField {...params} size="small" id={`${idPrefix}-measure_unit`} required
+            <TextField {...params} size="small" required
               label={t('benefits.field.measure_unit')} helperText={t('benefits.unitHelp')}
-              slotProps={{ htmlInput: { ...params.inputProps, maxLength: 40 } }} />)} />
+              slotProps={{ ...params.slotProps,
+                htmlInput: { ...params.inputProps, ...params.slotProps?.htmlInput, maxLength: 40 } }} />)} />
         {num('baseline_value')}
         {num('target_value')}
         {text('realisation_date', { type: 'date', slotProps: { inputLabel: { shrink: true } } })}
