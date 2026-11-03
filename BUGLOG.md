@@ -694,6 +694,15 @@ place.
   rule on the **age of open change requests** (days since raised for DRAFT / ANALYSED / PRICED / DEFERRED, flag and
   escalate thresholds, not measured when CHANGE_REQUEST is off) would put a stalled change on the control panel instead
   of waiting for the freeze-preview warning. Candidate only; it needs Ben's thresholds and a seed run when built.
+- **2026-11-03 · slice Change requests (`sara`; H1 restore re-checks the seed overlap, M1 `PM_DIMENSION:SCOPE` pinned,
+  M2 the one-use cut index tested, M3 a later approved change silences a rejected one's warning, L4 the "price it
+  first" hint — all fixed):** (L1) the unagreed-edit line and the freeze dialog show the raw status code lower-cased
+  ("rejected", "analysed"), not its label — send `status_label`. (L2) the CR page reads components, edit level, codes,
+  pickers and the cut list from the URL's project, not `cr.project_id` (DecisionPage's `home` fix); presentation only,
+  the server still refuses. (L3) `change_request._analysis` copies `decision._analysis`'s control-rule lookup — one
+  lookup in `decision`, called from both. (L5) `test_every_value_lookup_is_pinned` misses codes held in module
+  constants (`SCOPE = "SCOPE"`), the root of M1 — read `UPPER = "CODE"` constants too. (L6) the CR page recomputes the
+  whole project's unagreed edits on every load — scope it to the one CR.
 - **2026-11-03 · slice Benefits (`sara`, no CRITICAL / HIGH; M1 failed loads shown as errors and M2 concurrent cap test
   fixed):** (L1) link re-weight (PUT) and unlink (DELETE) carry no `row_version` — last writer wins on a % (the spec's
   idempotent PUT); check `LinkOut.row_version` or accept. (L2) `benefit.decorate` runs two queries per benefit (links,

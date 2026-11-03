@@ -41,6 +41,7 @@ PINNED: frozenset[tuple[str, str]] = frozenset(
                                        "ABANDONED")}
     | {("CR_STATUS", c) for c in ("DRAFT", "ANALYSED", "PRICED", "APPROVED", "REJECTED", "DEFERRED")}  # slice CR
     | {("CR_IMPACT_TYPE", c) for c in ("ADD", "MODIFY", "REMOVE")}           # CR-1: pricing reads each by value
+    | {("PM_DIMENSION", "SCOPE")}                                  # sara M1: every CR decision is written under it
     | {("FR_TYPE", t) for t, _ in FTC_DEFAULT_RATE_CARD}          # the rate card is keyed by them (R4)
     | {("FR_COMPLEXITY", c) for _, c in FTC_DEFAULT_RATE_CARD}
 )

@@ -539,10 +539,8 @@ def decide(db: Session, actor_id: int, cr: ChangeRequest, row_version: int, fiel
     if outcome.behaviour_code == APPROVED:
         if cr.priced_at is None or cr.unrated_fr_count != 0:    # PRICED, or DEFERRED after a full price
             raise HTTPException(409, f"{cr.cr_number} is not priced: trace and price it before approving")
-        for f in db.scalars(select(FunctionRequirement).join(CrImpact, CrImpact.impacted_fr_id == FunctionRequirement.fr_id)
-                            .where(CrImpact.change_request_id == cr.change_request_id, CrImpact.is_seed,
-                                   CrImpact.is_active).with_for_update(read=True, of=FunctionRequirement)):
-            pass                                                     # seed FRs FOR SHARE until the decision commits
+        # seed FRs FOR SHARE until the decision commits; the overlap re-checked under them (sara H1)
+        _refuse_overlap(db, cr, _seed_fr_ids(db, cr, share=True))
         p = _Price(db, cr, db.get(Baseline, cr.against_baseline_id))
         if p.retired:
             raise HTTPException(409, f"{', '.join(sorted(p.retired))} retired since pricing: set the seeds again")
@@ -605,8 +603,19 @@ def retire(db: Session, actor_id: int, cr: ChangeRequest, row_version: int) -> N
     lifecycle.retire(db, actor_id, cr, row_version)
 
 
+def _seed_fr_ids(db: Session, cr: ChangeRequest, *, share: bool) -> list[int]:
+    """The CR's live seed FRs, locked: FOR SHARE while deciding, FOR UPDATE (as set_seeds) while restoring."""
+    q = (select(FunctionRequirement.fr_id).join(CrImpact, CrImpact.impacted_fr_id == FunctionRequirement.fr_id)
+         .where(CrImpact.change_request_id == cr.change_request_id, CrImpact.is_seed, CrImpact.is_active)
+         .order_by(FunctionRequirement.fr_id).with_for_update(read=share, of=FunctionRequirement))
+    return list(db.scalars(q))
+
+
 def restore(db: Session, actor_id: int, cr: ChangeRequest) -> ChangeRequest:
+    """sara H1: a retired CR's seeds stop blocking others (CR-1), so bringing it back re-checks the overlap."""
     lifecycle.lock(db, cr)
+    if not cr.is_active:
+        _refuse_overlap(db, cr, _seed_fr_ids(db, cr, share=False))
     lifecycle.restore(db, actor_id, cr)
     db.refresh(cr)
     return cr
@@ -777,6 +786,15 @@ def unagreed_edits(db: Session, project_id: int) -> list[dict]:
         ChangeRequest.project_id == project_id, ChangeRequest.status_behaviour != APPROVED)).unique())
     if not crs:
         return []
+    # sara M3: a seed that a later, live APPROVED change also names carries that approved edit — never warn to undo it
+    approved_later: dict[tuple[str, int], int] = {}
+    for cr_id, br_id, fr_id in db.execute(
+            select(CrImpact.change_request_id, CrImpact.impacted_br_id, CrImpact.impacted_fr_id)
+            .join(ChangeRequest, ChangeRequest.change_request_id == CrImpact.change_request_id)
+            .where(ChangeRequest.project_id == project_id, ChangeRequest.is_active,
+                   ChangeRequest.status_behaviour == APPROVED, CrImpact.is_seed, CrImpact.is_active)):
+        key = ("impacted_br_id", br_id) if br_id is not None else ("impacted_fr_id", fr_id)
+        approved_later[key] = max(cr_id, approved_later.get(key, 0))
     on = components.enabled(db, project_id)
     out = []
     for cr in sorted(crs, key=lambda c: c.cr_number):
@@ -800,7 +818,7 @@ def unagreed_edits(db: Session, project_id: int) -> list[dict]:
             numbers = dict(db.execute(select(pk, getattr(model, num)).where(pk.in_(ids))).all())
             for r in seeds:
                 i = getattr(r, col)
-                if i is None or frozen.get(i) == live.get(i):
+                if i is None or frozen.get(i) == live.get(i) or approved_later.get((col, i), 0) > cr.change_request_id:
                     continue
                 out.append({"cr_number": cr.cr_number, "change_request_id": cr.change_request_id,
                             "status_code": cr.status_code, "status_behaviour": cr.status_behaviour,

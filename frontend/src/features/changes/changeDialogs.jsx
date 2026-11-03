@@ -143,7 +143,7 @@ export function DecideDialog({ projectId, cr, onClose, onDone, onStale }) {
             <TextField id="cr-decide-on" type="date" size="small" label={t('changes.field.decided_on')} value={f.decided_on}
               onChange={(e) => set('decided_on', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
           </Box>
-          {behaviour === 'APPROVED' && cr.status_behaviour !== 'PRICED' && (
+          {behaviour === 'APPROVED' && !(cr.priced_at && cr.unrated_fr_count === 0) && (
             <Alert severity="info">{t('changes.needPriced')}</Alert>)}
           <TextField id="cr-decide-rationale" size="small" fullWidth required multiline minRows={2}
             label={t('changes.field.decisionRationale')} value={f.rationale} onChange={(e) => set('rationale', e.target.value)} />

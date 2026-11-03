@@ -31,6 +31,10 @@ Nothing here is in the spec yet.
   predates the register and overlaps it; keep, fold into the register, or retire it?
 - **BN-10 (2026-11-03, apple L5) — realised value.** The register holds baseline and target only; benefit realisation
   tracking (an actual value over time) is out of this slice.
+- **CR-4 (2026-11-03, sara M3) — how long a rejected change's warning lasts.** A seed of a rejected or undecided
+  change is warned at every freeze while its live row differs from that change's own target, even after a later
+  baseline has frozen the edit in. Built: the warning stops when the team undoes the edit or when a later change naming
+  the same requirement is approved. Open: should it also stop once a later baseline has frozen the row as it is?
 (The Change requests questions CR-1…CR-3 of 2026-11-03 are decided: §3.)
 (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of 2026-10-29: CC-7, §3.)
 

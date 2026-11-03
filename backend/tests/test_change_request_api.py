@@ -364,7 +364,7 @@ def test_a_cut_on_another_target_is_422(client, ed):
     assert "same baseline" in decide(client, ed, inc, expect=422, displaces_cr_id=cut["change_request_id"])["detail"]
 
 
-def test_the_database_refuses_a_cut_used_twice(client, ed, db):
+def test_the_database_refuses_a_cut_pointing_at_itself(client, ed, db):
     w = cr_world(client, ed)
     cut = decrease(client, ed, w, w["gone"])
     with pytest.raises(IntegrityError) as exc:
@@ -372,6 +372,25 @@ def test_the_database_refuses_a_cut_used_twice(client, ed, db):
                    {"c": cut["change_request_id"]})
     db.rollback()
     assert "ck_cr_displaces" in str(exc.value)
+
+
+def test_the_database_refuses_a_cut_used_twice(client, ed, db):
+    """sara M2: the race guard is the partial unique index, proven past the service's own pre-check."""
+    w = cr_world(client, ed)
+    cut = decrease(client, ed, w, w["traced"])             # −10.00
+    incs = []
+    for name in ("Credit check", "Credit report"):
+        f = rated(client, ed, name, "FORM", "SIMPLE", w["sol"])
+        inc = raise_cr(client, ed, w["v10"], title=name)
+        seeds(client, ed, inc, [(f, "ADD")])
+        incs.append(analyse(client, ed, inc))
+    decide(client, ed, incs[0], displaces_cr_id=cut["change_request_id"])
+    decide(client, ed, incs[1], budget_reference="PO-1", budget_approved_by="CFO")
+    with pytest.raises(IntegrityError) as exc:
+        db.execute(text("UPDATE change_request SET displaces_cr_id = :c WHERE change_request_id = :i"),
+                   {"c": cut["change_request_id"], "i": incs[1]["change_request_id"]})
+    db.rollback()
+    assert "uq_cr_displaces_once" in str(exc.value)
 
 
 def test_every_decision_writes_one_decision_and_deferred_then_approved_supersedes(client, ed, db):
@@ -481,6 +500,21 @@ def test_an_open_cr_retires_and_restores_a_decided_one_stays(client, ed):
     assert r.status_code == 409 and "decision on record" in r.json()["detail"]
 
 
+def test_restoring_a_cr_re_checks_its_seeds_overlap(client, ed):
+    """sara H1: a retired CR's seeds stop blocking; restoring it while another open CR seeds the FR is refused."""
+    w = cr_world(client, ed)
+    first = raise_cr(client, ed, w["v10"], title="First")
+    seeds(client, ed, first, [(w["keep"], "MODIFY")])
+    first = analyse(client, ed, first)
+    fid = first["change_request_id"]
+    assert client.delete(f"{API}/change-requests/{fid}", headers=ed["h"],
+                         params={"row_version": first["row_version"]}).status_code == 204
+    second = raise_cr(client, ed, w["v10"], title="Second")
+    seeds(client, ed, second, [(w["keep"], "MODIFY")])      # allowed: the first one is retired
+    r = client.patch(f"{API}/change-requests/{fid}/restore", headers=ed["h"])
+    assert r.status_code == 409 and "already a seed of CR-0002" in r.json()["detail"]
+
+
 # ---- unagreed edits (criterion 12) -----------------------------------------------------------------------------------
 def test_a_rejected_edit_still_in_the_working_set_is_warned_at_freeze(client, ed):
     w = cr_world(client, ed)
@@ -497,3 +531,8 @@ def test_a_rejected_edit_still_in_the_working_set_is_warned_at_freeze(client, ed
     assert rate(client, ed, w["keep"], "SIMPLE").status_code == 200        # the team undoes the modify
     left = client.get(f"{API}/projects/{ed['p']}/change-requests/unagreed-edits", headers=ed["h"]).json()
     assert [ln["number"] for ln in left] == ["FR-0004"]
+    # sara M3: a later change that adds FR-0004 and is approved carries the edit — the rejected one stops warning
+    again = raise_cr(client, ed, w["v10"], title="Credit check, agreed")
+    seeds(client, ed, again, [(new, "ADD")])
+    decide(client, ed, analyse(client, ed, again), budget_reference="PO-9", budget_approved_by="Client CFO")
+    assert client.get(f"{API}/projects/{ed['p']}/change-requests/unagreed-edits", headers=ed["h"]).json() == []
