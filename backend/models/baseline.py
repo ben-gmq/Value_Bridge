@@ -173,6 +173,7 @@ SHADOWED = ("org_unit", "org_role", "bfc_node", "data_entity", "data_field", "ex
             "solution", "br_solution", "function_requirement", "br_function_requirement", "fr_interface", "fr_interface_data_entity",
             "application_solution", "application_bfc_node", "effort_rate", "project_component",
             "issue", "issue_br",                                          # slice 14, hash spec 5 (I-5, I-8)
-            "phase", "solution_phase", "solution_dependency")             # slice 15, hash spec 6 (schema §3.5)
+            "phase", "solution_phase", "solution_dependency",             # slice 15, hash spec 6 (schema §3.5)
+            "benefit", "benefit_solution")                                # slice Benefits, hash spec 7 (BN-5)
 
 SHADOW_TABLES = {name: shadow_table(Base.metadata.tables[name], Base.metadata) for name in SHADOWED}

@@ -120,6 +120,8 @@ FREEZE_GATES: dict[str, Gate] = {
     "phase": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),                            # slice15 schema §3.5
     "solution_phase": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),
     "solution_dependency": Gate(all_of=frozenset({"PHASING", "SOLUTION"})),
+    "benefit": Gate(all_of=frozenset({"BENEFIT"})),                                     # slice Benefits §7
+    "benefit_solution": Gate(all_of=frozenset({"BENEFIT", "SOLUTION"})),
 }
 ALWAYS = Gate()
 

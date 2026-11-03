@@ -42,6 +42,8 @@ class Solution(AuditMixin, Base):
     __table_args__ = (
         UniqueConstraint("project_id", "solution_number", name="uq_solution_number"),
         UniqueConstraint("solution_id", "project_id", name="uq_solution_project"),
+        # slice Benefits (0086, R1-M1): the target of benefit_solution's live guard — a constraint, not a column
+        UniqueConstraint("solution_id", "project_id", "is_active", name="uq_solution_live_target"),
         ForeignKeyConstraint(["category_code_id", "category_category"],
                              ["code_master.code_id", "code_master.category"],
                              name="fk_sol_category_code", onupdate="NO ACTION"),

@@ -29,13 +29,15 @@ from models.baseline import SHADOW_TABLES, SHADOWED
 from services import components
 from services.baseline_shadow import code_pairs, snapshot_column_names
 
-CURRENT_HASH_SPEC = 6       # 2: br_function_requirement joined the set (slice 10b, D-52)
+CURRENT_HASH_SPEC = 7      # 2: br_function_requirement joined the set (slice 10b, D-52)
 #                             3: bfc_node gained the volume figures (slice 13c, D-67)
 #                             4: slice 11 — br_requirement_line (D-59), br_data_field (D-60b) and br_system_flow
 #                                (D-61) joined the set together (S11-6)
 #                             5: slice 14 — issue and issue_br joined the set together (I-5; one merge, S11-6)
 #                             6: slice 15 — phase, solution_phase and solution_dependency joined the set together
 #                                (D-18, W-8; one merge, S11-6)
+#                             7: slice Benefits — benefit and benefit_solution joined the set together (BN-5; one
+#                                merge, S11-6)
 SEP, NULL_SENTINEL = "\x1f", "\x1e"
 
 
@@ -155,6 +157,14 @@ FREEZE_SET: tuple[FrozenEntity, ...] = (
        refs=(("solution_id", SOL), ("phase_id", "phase")), since=6),
     _e("solution_dependency", "PHASE", ("solution_id", "depends_on_solution_id", "note"),
        refs=(("solution_id", SOL), ("depends_on_solution_id", SOL)), since=6),
+    # slice Benefits (spec §7, BN-5): every field and each contribution % hashed — codes, not labels. Counted apart
+    # from scope in a diff (benefit_summary). Spec 7 for both (one merge, S11-6).
+    _e("benefit", "BENEFIT", ("benefit_number", "benefit_name", "description", "benefit_type_code", "measure_name",
+                              "measure_unit", "baseline_value", "target_value", "realisation_date",
+                              "accountable_org_role_id", "status_code"),
+       label=("benefit_number", "benefit_name"), refs=(("accountable_org_role_id", ORG),), since=7),
+    _e("benefit_solution", "BENEFIT", ("benefit_id", "solution_id", "contribution_pct"),
+       refs=(("benefit_id", "benefit"), ("solution_id", SOL)), since=7),
 )
 BY_TABLE = {e.table: e for e in FREEZE_SET}
 assert tuple(BY_TABLE) == SHADOWED, "FREEZE_SET and models.baseline.SHADOWED disagree"

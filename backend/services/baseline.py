@@ -476,6 +476,7 @@ def diff(db: Session, project_id: int, a, b) -> dict:
     out, summary = {}, {c: 0 for c in CHANGES}
     # I-14 (Q-52): issues are counted apart from scope — resolving thirty issues is not thirty scope changes.
     issue_summary = {c: 0 for c in CHANGES}
+    benefit_summary = {c: 0 for c in CHANGES}                 # slice Benefits BN-5: counted apart, as issues are
     raiser = _raiser_names(db, project_id)                    # I-15: today's name, never frozen
     for e in FREEZE_SET:
         cols_a, cols_b = freeze_set.columns_for(e, _spec(a)), freeze_set.columns_for(e, _spec(b))
@@ -531,13 +532,15 @@ def diff(db: Session, project_id: int, a, b) -> dict:
                             "before": {c: shown(ra, c) for c in fields} if ra and fields else {},
                             "after": {c: shown(rb, c) for c in fields} if rb and fields else {}})
             if not unfrozen:
-                (issue_summary if e.area == ISSUE_AREA else summary)[kind] += 1
+                (issue_summary if e.area == ISSUE_AREA else benefit_summary if e.area == BENEFIT_AREA
+                 else summary)[kind] += 1
         out[e.table] = {**entry, "status": "OK", "rows": changes, **extra, **unfrozen}
     return {"from": _label_of(a), "to": _label_of(b), "summary": summary, "issue_summary": issue_summary,
-            "entities": out, "_rows": (cache_a, cache_b)}
+            "benefit_summary": benefit_summary, "entities": out, "_rows": (cache_a, cache_b)}
 
 
 ISSUE_AREA = "ISSUE"
+BENEFIT_AREA = "BENEFIT"            # slice Benefits BN-5: a re-forecast benefit or a changed % is not a scope change
 
 
 def _raiser_names(db: Session, project_id: int) -> dict[int, str]:
