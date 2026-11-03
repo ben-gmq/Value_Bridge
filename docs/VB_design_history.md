@@ -31,21 +31,7 @@ Nothing here is in the spec yet.
   predates the register and overlaps it; keep, fold into the register, or retire it?
 - **BN-10 (2026-11-03, apple L5) — realised value.** The register holds baseline and target only; benefit realisation
   tracking (an actual value over time) is out of this slice.
-- **CR-1 (2026-11-03, slice Change requests spec) — how a change is stated and priced, and what happens to a rejected
-  edit.** §7.13 says the blast radius and price are computed, never typed, but not how a new FR is priced before it
-  exists. Recommended: the change is drafted in the working set and seeded ADD / MODIFY / REMOVE; priced as working
-  set minus agreed baseline for the seeded FRs only, exposure beside it (as Q3); only the seed figures block an
-  approval when they move; a rejected or undecided edit is listed and warned at freeze, and the team undoes it; one
-  FR is a seed of one open change at a time (design review R1 auditor H1, R2 auditor L).
-- **CR-2 (2026-11-03, apple R1 H1) — the CR data design changes.** Drop `benefit_delta_value` (a single total would add
-  baht to hours, against Q9) for per-unit value at stake and value change on the impact rows; impact type as a code
-  list (law 3); add exposure, unrated count, priced-at, budget and status-behaviour columns; decider and date read
-  from the decision, not copied.
-- **CR-3 (2026-11-03, design review R1 auditor M) — what covers an increase, and who may record a budget.**
-  Recommended: one approved net-negative CR on the same baseline (used once), a budget record (reference + who
-  approved it) for what remains, or both; any editor may record it (SC-7). Alternative: a budget-covered approval is
-  decided by someone other than the raiser.
-
+(The Change requests questions CR-1…CR-3 of 2026-11-03 are decided: §3.)
 (The materialised-risk question of 2026-11-02 is decided: RK-7, §3. The ERD-as-SVG question of 2026-10-29: CC-7, §3.)
 
 
@@ -78,6 +64,9 @@ Nothing here is in the spec yet.
   exactly as shown; SVG is open (§1).
 - **2026-10-29** — FI-11 folded into §5 (BR import identity), §7.2b rules 1 and 9 and the API table: on an as-is
   anchor a step's `hier_code` cross-checks its name match.
+- **2026-11-03** — CR-1…CR-3 folded into §4.11 (new `set_cr_seeds`, `correct_cr_decision`, `cr_register`,
+  `retire_change_request` rows), §5.3 CHANGE_REQUEST / CR_IMPACT, the ERD, the §7 pseudo-code, the routes, §11
+  (`CR_STATUS` behaviours, `CR_IMPACT_TYPE`), criteria 64–66 and 66a–66c, and §12.1 (change requests built).
 
 ---
 
@@ -697,6 +686,25 @@ only fully rated solutions are ranked, partly rated and no-work ones listed apar
 with value in another unit is marked "also delivers in …", not a displacement candidate (R1-M5) — its threshold is
 open (§1 BN-7).
 
+### Ben's rulings, 2026-11-03 — change requests (slice Change requests, CR-1…CR-3)
+
+Ben, via Ren, 2026-11-03: *"Yes to all, Ren"* — to the three Change requests questions, option (a) each, as
+recommended (earlier: *"the next slide, change request, it's fine"*, approving the plan). Plan
+`docs/plans/change_requests_plan_2026-11-03.md`. Spec: `docs/slice_change_requests_spec.md` (design review rounds 1
+and 2 in the plan's §6). Migrations 0087, 0088; no hash-spec change (both tables live-only).
+
+| # | Decision | Supersedes / answers |
+|---|---|---|
+| CR-1 | **A change is drafted in the working set and named ADD / MODIFY / REMOVE; it is priced as working set minus agreed baseline over the seed FRs only, with exposure beside it (Q3); only the seed figures block an approval when they move; a rejected or undecided edit is listed and warned at freeze, and the team undoes it — the app never does; one FR is a seed of one open change at a time.** Approval never changes the working set | §7.13 "computed, never typed" (how a new FR is priced before it exists, and what happens to a rejected edit, unstated); impact type `RESEQUENCE` dropped |
+| CR-2 | **The data design: no single `benefit_delta_value` — value at stake and value change per unit on the impact rows (Q9); impact type is the code list `CR_IMPACT_TYPE` (law 3); the change carries exposure, unrated count, priced-at, budget and status-behaviour columns; decider and date are read from the decision, never copied** | §5.3 CHANGE_REQUEST `benefit_delta_value`, `CR_IMPACT.impact_type varchar`, `decided_by_user_id` |
+| CR-3 | **An approved increase is covered by one approved net-negative change on the same baseline (each used once), a budget record (reference and who approved it) for what remains, or both; the budget days are computed; any editor may record it (SC-7)** | §4.11 `decide_cr` "name what it displaces, or record an explicit budget increase" (what counts, and who, unstated). Not chosen: a budget-covered approval decided by someone other than the raiser |
+
+Also settled in the build (no ruling needed): a REMOVE seed may be retired before the decision, an ADD or MODIFY seed
+must stay live; a `CR_IMPACT` row never blocks the retire of the object it names (`lifecycle.TRACE_ONLY`); a deferred
+change with a full price can be approved; `CR_STATUS` behaviours are OPEN (DRAFT, ANALYSED), PRICED, DEFERRED,
+APPROVED, REJECTED; a change's decision is corrected only on the change, and the decision page links back to it.
+Out of this slice: a control rule on the age of open changes (VB-005), CR in reports and program roll-ups.
+
 ### Ben's rulings, 2026-11-02 — the risk register (slice Risks, RK-1…RK-6)
 
 Ben, via Ren, 2026-11-02: *"all six questions (Q1–Q6) as you recommended, (a) each"* — plan
@@ -1031,7 +1039,7 @@ collapsing into `bfc_node` — see §5.4.1a for why that matters.
 | `docs/slice_risks_spec.md` | Slice Risks — the risk register, promote to an issue, the `risk_register` rule (RK-1…RK-6) | 2026-11-02 |
 | `docs/slice_decisions_spec.md` | Slice Decisions — the append-only decision log, corrections by supersession (DC-1…DC-5) | 2026-11-02 |
 | `docs/slice_benefits_spec.md` | Slice Benefits — the benefit register, solution shares, value ranking, the `benefit_gap` rule (BN-1…BN-6) | 2026-11-03 |
-| `docs/slice_change_requests_spec.md` | Slice Change requests — raise against an agreed baseline, trace, price, decide into the decision log (CR-1…CR-3 open) | 2026-11-03 |
+| `docs/slice_change_requests_spec.md` | Slice Change requests — raise against an agreed baseline, trace, price, decide into the decision log (CR-1…CR-3, §3); built | 2026-11-03 |
 
 ---
 

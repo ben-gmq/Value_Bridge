@@ -35,6 +35,8 @@ only; once Ben decides, it moves to history §3 and the spec is rewritten to the
   project holds its own `PM_DIMENSION` code or hide (the list is company-only). Benefits (0085, 0086): run
   `seed_code_master` then `seed_control_rules --actor-email <admin>` (adds `benefit_gap`); 0085 refuses, naming
   `project:code`, a project-tier `BENEFIT_STATUS` row or hide, or a status code it cannot map (the list is company-only).
+  Change requests (0087, 0088): run `seed_code_master` after 0088 (adds `CR_IMPACT_TYPE`); no rule. 0087 refuses a
+  project-tier `CR_STATUS` row or hide, or a status code it cannot map (the list is company-only, with behaviours).
   **7a deploy only (one-off, not every deploy):** a database with pre-7a projects then runs
   `seeds.seed_project_components --actor-email <admin>`, or their gated writes return 409 COMPONENT_OFF.
   **Slice 11 deploy only:** after `seed_code_master`, `seeds.backfill_br_lines --actor-email <admin>` copies each BR's

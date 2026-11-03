@@ -461,10 +461,14 @@ Component CHANGE_REQUEST (needs EFFORT).
 
 | Function | Entity | Use | Business logic → output data |
 |---|---|---|---|
-| `raise_change_request` | `CHANGE_REQUEST` | C | Next per-project sequence → `CR-0001`. Raised against an agreed baseline — **FROZEN or APPROVED, or a SUPERSEDED one that carries the agreed client approval** (the newest baseline with a recorded approval, DR8-P1); **never the working set, never a SUPERSEDED baseline without that approval** (Q8, SC-2) — with a stated rationale and origin |
-| `analyse_cr_impact` | `CR_IMPACT` | C | Trace the proposed change through BR → FR (direct links) and BR → Solution → Application → Data Entity → Phase. **An FR is accepted as a seed** as well as a BR, because an untraced FR cannot be reached from any BR. Every touched object becomes a row. **The blast radius is computed, not typed** |
-| `price_cr` | `CHANGE_REQUEST` | U | Sum `effort_days` across impacted FRs (D-13); sum benefit delta across impacted benefits (D-14); flag impacted phases and dependencies |
-| `decide_cr` | `CHANGE_REQUEST`, `DECISION` | U/C | APPROVED / REJECTED / DEFERRED, with `decided_by_user_id` and `displaces_cr_id` — **an approval of net-positive effort must name what it displaces, or record an explicit budget increase** |
+| `raise_change_request` | `CHANGE_REQUEST` | C | Next per-project sequence → `CR-0001`, at save. Raised against an agreed baseline of the same project — **FROZEN or APPROVED, or a SUPERSEDED one that carries the agreed client approval** (the newest baseline with a recorded approval, DR8-P1); **never the working set, never a SUPERSEDED baseline without that approval** (Q8, SC-2), and never one frozen without EFFORT (it carries no prices) — with a title, a stated rationale and an origin. The target is fixed once raised. Status DRAFT; the raiser is the signed-in user |
+| `set_cr_seeds` | `CR_IMPACT` | C/U | **Open changes only** (status behaviour OPEN, PRICED or DEFERRED). The change is drafted in the working set first, then each changed BR or FR is named as a **seed** with an impact type from `CR_IMPACT_TYPE`: ADD (absent from the target), MODIFY or REMOVE (present in it) (CR-1). An ADD or MODIFY seed is live; a REMOVE seed may be retired. **One FR is a seed of one open change at a time**, and of no further change once an approved change against the same target names it — the same edit is never priced twice. Saving the list clears the trace and price and returns the change to DRAFT |
+| `analyse_cr_impact` | `CR_IMPACT` | C/U | "Trace and price", one action, over the **live** working set: BR → FR (direct links), BR → Solution, FR → its Solution, Solution → Application, BR → Data Entity, Solution → Wave, Solution → Benefit. A part whose component is off is skipped and named. One row per reached object (the first route recorded); a row no longer reached retires, and comes back when reached again. **The blast radius is computed, not typed** |
+| `price_cr` | `CHANGE_REQUEST`, `CR_IMPACT` | U | **Effort change** = Σ over the seed FRs: ADD → + live `effort_days`; REMOVE → − agreed `effort_days`; MODIFY → live − agreed (D-13, Q3, CR-1). **Exposure** = Σ agreed `effort_days` of traced FRs that are not seeds, shown beside the effort change, never added to it (Q3). An unrated ADD or MODIFY seed leaves the change ANALYSED with the FRs named; all rated → PRICED. Per impacted benefit, with its unit: **value at stake** = \|target − baseline\| × Σ share of its impacted solutions / 100 (BN-1) and **value change** = live − agreed value, summed **per unit only, never across units** (Q9, CR-2); a target frozen before benefits were kept shows value change as not measured. Shown with it: waves reached, dependency pairs touching an impacted solution, and the bottom quarter of the value ranking per unit as displacement candidates |
+| `decide_cr` | `CHANGE_REQUEST`, `DECISION` | U/C | APPROVED / REJECTED / DEFERRED, with the decided-on date, the rationale and the alternative rejected. **APPROVED needs PRICED**, every seed still valid, and the seed figures re-computed equal to the stored ones — else 409 "the price has moved"; exposure and benefit values that moved are shown, never blocking. A deferred change with a full price can be approved. **An approval of net-positive effort is covered** by a cut — one approved change of the same project with a negative effort change against the **same target**, each cut used once — and/or a budget record (reference and who approved it) for what the cut leaves; the budget days are computed, never typed; any editor records it (CR-3, SC-7). Uncovered → 422. One transaction writes the `DECISION` (dimension SCOPE, analysis `priced_diff` when the project has that rule) and points the change at it; who decided and when are read from the decision. A deferred change returns to the open states and its next decision supersedes the deferral's. APPROVED and REJECTED are final. Approval never changes the working set (CR-1) |
+| `correct_cr_decision` | `DECISION` | C | A decided change's decision is corrected only on the change: a superseding decision with the same outcome, the change re-pointed to it. The decision log refuses to correct a decision a change points at (409, naming the change) |
+| `cr_register` | `CHANGE_REQUEST` | R | Newest first; filter by status, origin and target; effort change, exposure, decision number, decider and date. Lists the **unagreed edits**: each seed of an undecided, rejected or retired-undecided change whose live row differs from the target's frozen row, or exists on one side only. The team undoes these edits; the app never does (CR-1). The freeze preview carries the same list as a warning that never blocks |
+| `retire_change_request` | `CHANGE_REQUEST` | U | Soft delete and restore, open changes only; a decided change is evidence and stays. A `CR_IMPACT` row never blocks the retire of the object it names (`lifecycle.TRACE_ONLY`) |
 | `record_decision` | `DECISION` | C | Any project decision, not only CRs: what, who, when, the analysis it was taken against, and the alternative rejected |
 | `decision_log` | `DECISION` | R | Chronological, filterable by dimension → answers "why did we do that" six months later |
 
@@ -1299,11 +1303,18 @@ erDiagram
         text rationale
         bigint against_baseline_id FK
         bigint origin_code_id FK
-        numeric effort_delta_days
-        numeric benefit_delta_value
         bigint status_code_id FK
-        bigint displaces_cr_id FK
+        varchar status_behaviour
+        bigint raised_by_user_id FK
+        numeric effort_delta_days
+        numeric effort_exposed_days
+        int unrated_fr_count
+        timestamptz priced_at
         bigint decision_id FK
+        bigint displaces_cr_id FK
+        numeric budget_increase_days
+        varchar budget_reference
+        varchar budget_approved_by
     }
     CR_IMPACT {
         bigint cr_impact_id PK
@@ -1316,8 +1327,14 @@ erDiagram
         bigint impacted_data_entity_id FK
         bigint impacted_phase_id FK
         bigint impacted_benefit_id FK
-        varchar impact_type
+        boolean is_seed
+        bigint impact_type_code_id FK
+        varchar reached_via
         numeric effort_delta_days
+        numeric agreed_effort_days
+        varchar value_unit
+        numeric value_at_stake
+        numeric value_change
     }
     DECISION {
         bigint decision_id PK
@@ -1461,8 +1478,8 @@ composite notation, so each participating column is marked `PK`. Where a table h
 design key is shown as a `UK (…)` note.
 
 **Build status.** Of the later phases' tables, `STAKEHOLDER`, `ISSUE`, `ISSUE_BR`, `RISK`, `DECISION`, `BENEFIT`,
-`BENEFIT_SOLUTION`, `PHASE`, `SOLUTION_PHASE`, `SOLUTION_DEPENDENCY` and `CONTROL_RULE` are built; `CHANGE_REQUEST`,
-`CR_IMPACT` and `WBS_ITEM` are designed and not yet built. `FR_BFC_NODE` is retired and never built (SC-3); it is not
+`BENEFIT_SOLUTION`, `PHASE`, `SOLUTION_PHASE`, `SOLUTION_DEPENDENCY`, `CONTROL_RULE`, `CHANGE_REQUEST` and
+`CR_IMPACT` are built; `WBS_ITEM` is designed and not yet built. `FR_BFC_NODE` is retired and never built (SC-3); it is not
 drawn.
 The `node_live_set` guard on `BFC_NODE_ORG_ROLE` (Slice 10d) is built. `BFC_NODE_FLOW` (D-38) and
 `USER_ACCESS_GRANT` (D-40) are retired: the tables hold history and take no new rows.
@@ -2261,9 +2278,17 @@ that it was foreseen.
 
 **CHANGE_REQUEST** — one row per proposed change to a **frozen** baseline (D-16). PK
 `change_request_id`; FK `project_id`, `against_baseline_id NOT NULL` (composite onto `BASELINE(baseline_id,
-project_id)`), `origin_code_id`, `status_code_id`, `displaces_cr_id` (nullable self-reference),
-`decision_id`. UK `(project_id, cr_number)` → `CR-0001`. `effort_delta_days` and `benefit_delta_value` are
-**computed from `CR_IMPACT`, never typed** — a change priced by the person requesting it is not priced.
+project_id)`), `origin_code_id` (`CR_ORIGIN`), `status_code_id` + `status_behaviour` (composite onto the code's
+`(code_id, category, behaviour_code)`; `CR_STATUS` is company-only and pinned, D-27), `raised_by_user_id` (= `created_by`
+by CHECK), `decision_id` (composite onto `DECISION(decision_id, project_id)`: the latest decision, set whenever the
+status is APPROVED, REJECTED or DEFERRED, and kept when a deferred change reopens so the next decision supersedes it),
+`displaces_cr_id` (composite self-reference: the cut, only on an APPROVED change with a positive effort change, each
+cut used once by partial UNIQUE). UK `(project_id, cr_number)` → `CR-0001`. Title and rationale non-blank. The price
+— `effort_delta_days`, `effort_exposed_days`, `unrated_fr_count`, `priced_at` — is all set or all NULL, **computed
+from `CR_IMPACT`, never typed**; a change priced by the person requesting it is not priced. With APPROVED and
+REJECTED final, it is the figure the decider saw. The budget record — `budget_increase_days` (> 0, computed),
+`budget_reference`, `budget_approved_by` — is all set or all NULL, and only on an APPROVED change (CR-3). Benefit value
+is never one column on the change: it lives per unit on the impact rows (Q9, CR-2). Not frozen (§6.1).
 
 **Which baselines a CR may target (Q8, DR8-P1, SC-2, R2-D11): FROZEN or APPROVED, or a SUPERSEDED baseline
 that carries the agreed client approval (the newest baseline with a recorded approval); never another
@@ -2290,7 +2315,14 @@ CR physically cannot reach into another project's objects. **The database enforc
 typed columns instead of a polymorphic `impacted_entity` + `impacted_id` pair, which would be unenforceable
 in SQL and painful in SQLAlchemy. The seven columns are wider but checkable, joinable and cascade-safe, and
 "exactly one" is one `CHECK`, not a trigger. Adding an eighth impacted type later is a column and a
-migration.
+migration. Grain: one row per (change request × impacted object), ever — `UNIQUE NULLS NOT DISTINCT` over the change
+and the seven columns; a seed and a traced object are never two rows. `is_seed` is true exactly when
+`impact_type_code_id` (`CR_IMPACT_TYPE`: ADD / MODIFY / REMOVE, company-only, pinned, CR-1) is set, and a seed names a
+BR or an FR only. `reached_via` records the first route (`SEED`, `BR_FR`, `BR_SOLUTION`, `FR_SOLUTION`,
+`SOLUTION_APP`, `BR_ENTITY`, `SOLUTION_WAVE`, `SOLUTION_BENEFIT`). `effort_delta_days` is set only on a seed FR,
+`agreed_effort_days` only on an FR; `value_unit`, `value_at_stake` and `value_change` only on a benefit row (CR-2). A row
+no longer reached retires; a retired object keeps its row as trace evidence and is never blocked from retiring by it.
+Not frozen (§6.1).
 
 **DECISION** — one row per recorded project decision (D-17; component-free, DC-1). PK `decision_id` (generated
 always); FK `project_id`, `decided_by_user_id` (the recorder, equal to `created_by` by CHECK), `dimension_code_id`
@@ -3666,7 +3698,7 @@ re-linking restores the old row and keeps its `source_id` (S1-7).
 | `accountable_org_role_id NOT NULL` | `benefit` | D-14 — a benefit with no owner is a hope, not a benefit |
 | `exposure_score` derived from probability × impact at save | `risk` *(when built)* | D-15 — the score cannot be argued down independently of its inputs |
 | `against_baseline_id NOT NULL` + composite `(against_baseline_id, project_id) → baseline (uq_baseline_project)`; **status rule service-enforced under lock** (R2-D11): the target baseline is read `FOR SHARE` and must be FROZEN, APPROVED, or the SUPERSEDED one carrying the agreed approval (SC-2); `freeze` supersedes the prior header `FOR UPDATE`, so the two serialize. `BASELINE_STATUS` seeded `is_system` | `change_request` *(when built)* | D-16, **Q8, SC-2** — a CR challenges something agreed: a baseline in force, or the superseded one that still carries the agreed client approval (DR8-P1). Point-in-time: an existing CR keeps its target when that baseline is later superseded |
-| `effort_delta_days` / `benefit_delta_value` writable **only** by `price_cr` | `change_request` *(when built)* | D-16 — a change priced by its requester is not priced |
+| the four price columns and `budget_increase_days` written **only** by the service (`price_cr`, `decide_cr`); all-or-none CHECKs | `change_request`, `cr_impact` | D-16 — a change priced by its requester is not priced |
 | topological check on insert; a cycle is rejected | `solution_dependency` *(when built)* | D-18 — a dependency cycle makes the phase plan unsolvable and is silent until someone tries to schedule |
 | `UNIQUE (analysis_code) WHERE project_id IS NULL` + `UNIQUE (project_id, analysis_code) WHERE project_id IS NOT NULL`; `analysis_code` in a closed list matching §7.9; `CHECK (project_id IS NOT NULL OR owner_org_role_id IS NULL)`; `CHECK (is_house_default = (project_id IS NULL))`; `CHECK (project_id IS NULL OR created_by IS NOT NULL)`; composite FK (`owner_org_role_id`, `project_id`) → `org_role` | `control_rule` | D-19 — two tiers (one FTC house default and one agreed rule per project per analysis); no rule for a non-existent analysis; the owner is the same project's role. **An analysis without a named owner is a report nobody acts on** — so an unowned project rule is shown and reported, not refused (CT-1: rules are copied before the client's org chart exists) |
 | `CHECK (num_nonnulls(impacted_br_id, impacted_solution_id, impacted_fr_id, impacted_application_id, impacted_data_entity_id, impacted_phase_id, impacted_benefit_id) = 1)` + composite `(id, project_id)` FK on each | `cr_impact` *(when built)* | A-37 — the database enforces which object a CR row points at, and that it belongs to this project |
@@ -3921,8 +3953,8 @@ Every function named in the §4 grid, and where it lives. Access levels are `VIE
 | `create_benefit` · `link_benefit_solution` | `benefit.*` / `link_service` pattern | §7.13 / §7.0 |
 | `value_ranking` · `benefit_gap_report` | `benefit.value_ranking` / `reports.benefit_gap` | §7.13 |
 | `raise_risk` · `score_risk` · `promote_risk_to_issue` · `risk_register` | `risk.*` | §7.13 |
-| `raise_change_request` · `analyse_cr_impact` · `price_cr` · `decide_cr` | `change.*` | §7.13 |
-| `record_decision` · `decision_log` | `decision.*` | §7.13 |
+| `raise_change_request` · `set_cr_seeds` · `analyse_cr_impact` · `price_cr` · `decide_cr` · `correct_cr_decision` · `cr_register` · `unagreed_edits` | `change_request.*` | §7.13 |
+| `record_decision` · `decision_log` | `decision.*` (`insert_decision` is the one writer; a change's decision goes through it) | §7.13 |
 | `create_phase` · `assign_solution_phase` · `link_solution_dependency` · `phase_plan_report` | `phase.*` | §7.13 |
 | `maintain_control_rule` · `control_panel` | `control.*` | §7.13 |
 | `requirement_volatility` · `process_change_intensity` · `org_impact_heatmap` · `stakeholder_engagement` · `interface_load` · `data_migration_map` · `master_data_candidates` | `reports.*` | §7.9 |
@@ -6021,44 +6053,74 @@ raise_change_request(project_id, baseline_id, title, rationale, origin_code):   
     if bl.status_code not in ('FROZEN', 'APPROVED') and bl.baseline_id != agreed.baseline_id:   # SC-2
         raise 422 "A change request is raised against an agreed baseline — FROZEN, "
                   "APPROVED, or the superseded one carrying the client's approval"
+    if 'EFFORT' not in components frozen into bl: raise 422 "this baseline carries no prices"
     validate_required_code("CR_ORIGIN", origin_code)
     cr_number = numbering.next_number(db, project_id, "CR", "CR", 4)
     insert CHANGE_REQUEST(..., baseline_id, status_code='DRAFT',
                           raised_by_user_id=jwt.user_id)
 
-analyse_cr_impact(cr_id, seed_objects):
-    # The blast radius is COMPUTED, never typed.
-    # seed_objects may be BRs or FRs: an untraced FR has no BR, so it can only be a seed.
-    walk: BR -> BR_FUNCTION_REQUIREMENT -> FUNCTION_REQUIREMENT                   # D-52
-          BR -> BR_SOLUTION -> SOLUTION (solution-level rows)
-          FR -> its solution tag, if any -> APPLICATION_SOLUTION -> APPLICATION
-          BR -> BR_DATA_ENTITY -> DATA_ENTITY -> DATA_FIELD
+set_cr_seeds(cr_id, row_version, seeds):          # CR-1: the edit is drafted in the working set first
+    lock cr FOR UPDATE; if cr.status_behaviour not in (OPEN, PRICED, DEFERRED): raise 409 "final"
+    for seed in seeds:                            # each a BR or FR of this project (404 otherwise)
+        in_target = seed object has a row in cr's target baseline shadow
+        if seed.type == ADD and in_target or seed.type in (MODIFY, REMOVE) and not in_target: raise 422
+        if seed.type in (ADD, MODIFY) and not seed.object.is_active: raise 422
+    lock the seed FRs FOR UPDATE
+    if an FR is a seed of another open change, or of an APPROVED change on the same target: raise 409 naming it
+    upsert the seed rows; retire every traced row; clear the four price columns; status DRAFT
+
+analyse_cr_impact(cr_id, row_version):            # "Trace and price"; the blast radius is COMPUTED, never typed
+    lock cr FOR UPDATE; open changes only
+    walk the LIVE working set from the seeds, skipping and naming a part whose component is off:
+          BR -> BR_FUNCTION_REQUIREMENT -> FUNCTION_REQUIREMENT                   # D-52
+          BR -> BR_SOLUTION -> SOLUTION;  FR -> its SOLUTION
+          SOLUTION -> APPLICATION_SOLUTION -> APPLICATION
+          BR -> BR_DATA_ENTITY -> DATA_ENTITY
           SOLUTION -> SOLUTION_PHASE -> PHASE
-          SOLUTION -> SOLUTION_DEPENDENCY (both directions)
           SOLUTION -> BENEFIT_SOLUTION -> BENEFIT
-    for each reached object: INSERT CR_IMPACT(entity, id, impact_type)
-    # impact_type ∈ ADD | MODIFY | REMOVE | RESEQUENCE
+    one CR_IMPACT per reached object (first route in reached_via; restored if retired); unreached rows retire
+    price_cr(cr)
 
-price_cr(cr_id):
-    cr.effort_delta_days   = sum(CR_IMPACT.effort_delta_days)     # from D-13
-    cr.benefit_delta_value = sum over impacted BENEFIT rows       # from D-14
-    return { effort_delta, benefit_delta,
-             phases_impacted, dependency_violations,
-             displaced_candidates: {unit: value_ranking(project)[unit].bottom_quartile
-                                    for unit in units of the CR's impacted benefits} }
-             # per unit (Q9) — never one list across units
+price_cr(cr):                                     # Q3, Q9, CR-1, CR-2
+    for each seed FR: agreed = its target-shadow effort_days, live = its effort_days
+        ADD -> +live;  REMOVE -> -agreed;  MODIFY -> live - agreed
+        an ADD / MODIFY with live unrated -> unrated (named)
+    cr.effort_delta_days   = sum(seed deltas)
+    cr.effort_exposed_days = sum(agreed effort_days of traced, non-seed FRs)   # beside, never added
+    cr.unrated_fr_count    = count(unrated); cr.priced_at = now()
+    cr.status = ANALYSED if unrated else PRICED
+    per impacted BENEFIT: value_at_stake = |target - baseline| * sum(share of its impacted solutions) / 100   # BN-1
+                          value_change   = live value - agreed value (not measured on a target before spec 7)
+    shown, per unit only (Q9): waves reached, dependency pairs touching an impacted solution,
+             displacement candidates = value_ranking(project)[unit].bottom_quartile
 
-decide_cr(cr_id, outcome, displaces_cr_id, rationale, alternative_rejected):
-    access.require_project(user, cr.project_id, EDIT, component='CHANGE_REQUEST')
-    if outcome == 'APPROVED' and cr.effort_delta_days > 0 \
-       and displaces_cr_id is None and not cr.budget_increase_approved:
-        raise 422 "Approving net-positive effort must name what it displaces, or record " \
-                  "an explicit budget increase."
-        # This is the control. Not a warning, not a report footnote — a refused write.
-    cr.status_code = outcome
-    cr.decision_id = record_decision(project_id, title, rationale, alternative_rejected,
-                                     analysis_code='priced_diff', dimension='SCOPE')
-    AUDIT_EVENT(event_type='CR_DECIDED', detail={cr_number, outcome, effort_delta})
+decide_cr(cr_id, row_version, outcome, decided_on, rationale, alternative_rejected,
+          displaces_cr_id, budget_reference, budget_approved_by):
+    access.require_project(user, cr.project_id, EDIT, component='CHANGE_REQUEST')     # SC-7
+    lock cr FOR UPDATE; read seed FRs FOR SHARE; open changes only (DEFERRED on DEFERRED with nothing new: 409)
+    if outcome == 'APPROVED':
+        if cr.status_behaviour != PRICED or a seed is no longer valid: raise 409
+        if re-priced seed figures != stored ones: raise 409 "the price has moved — trace and price again"
+        if cr.effort_delta_days > 0:                                          # CR-3
+            cut = displaces_cr_id and lock that CR: same project, APPROVED, delta < 0, same target, unused (else 422/409)
+            left = cr.effort_delta_days + (cut.effort_delta_days if cut else 0)
+            if left > 0 and not (budget_reference and budget_approved_by):
+                raise 422 "Approving net-positive effort must name a cut, or record the budget increase."
+                # This is the control. Not a warning, not a report footnote — a refused write.
+            cr.budget_increase_days = left if left > 0 else None              # computed, never typed
+    dec = decision.insert_decision(project_id, title="CR-000n <outcome>: <title>", rationale, alternative_rejected,
+                                   dimension='SCOPE', analysis_code='priced_diff' if the project has it,
+                                   decided_on, supersedes=cr.decision_id)     # a deferral's DEC is superseded
+    cr.status_code = outcome; cr.decision_id = dec.id                          # one transaction
+    AUDIT_EVENT(event_type='CR_DECIDED', detail={cr_number, outcome, decision_number, effort_delta, cut, budget_days})
+
+correct_cr_decision(cr_id, row_version, decided_on, rationale, alternative_rejected):
+    decided changes only; dec = insert_decision(same outcome, supersedes=cr.decision_id); cr.decision_id = dec.id
+    # record_decision refuses to supersede a DEC a change points at: 409 "correct it on CR-000n"
+
+unagreed_edits(project_id):                        # CR-1: listed on the register, warned in the freeze preview
+    for each seed of an undecided, REJECTED or retired-undecided change:
+        if live row hash != target shadow row hash, or the row exists on one side only: list it
 
 # ---- phasing (D-18) -------------------------------------------------------
 link_solution_dependency(solution_id, depends_on_id):
@@ -6282,7 +6344,8 @@ Seeded by `backend/seeds/seed_code_master.py`, never in Alembic. Resolved only b
 | `RISK_PROBABILITY` | `RARE`, `UNLIKELY`, `POSSIBLE`, `LIKELY`, `ALMOST_CERTAIN` — behaviour = weight `W1`…`W5` | `RISK.probability_code` — **D-15, RK-1** |
 | `RISK_IMPACT` | `NEGLIGIBLE`, `MINOR`, `MODERATE`, `MAJOR`, `SEVERE` — behaviour = weight `W1`…`W5` | `RISK.impact_code` — **RK-1** |
 | `RISK_STATUS` | `OPEN`, `MITIGATING` (behaviour OPEN), `CLOSED`, `MATERIALISED` — company-only, all pinned, behaviour fixed | `RISK.status_code` |
-| `CR_STATUS` | `DRAFT`, `ANALYSED`, `PRICED`, `APPROVED`, `REJECTED`, `DEFERRED` | `CHANGE_REQUEST.status_code` — **D-16** |
+| `CR_STATUS` | `DRAFT`, `ANALYSED` (behaviour OPEN), `PRICED`, `APPROVED`, `REJECTED`, `DEFERRED` (each its own behaviour) — company-only, all pinned, behaviour fixed | `CHANGE_REQUEST.status_code` — **D-16**; code branches on the behaviour (law 5) |
+| `CR_IMPACT_TYPE` | `ADD`, `MODIFY`, `REMOVE` — company-only, pinned | `CR_IMPACT.impact_type_code`, on seed rows only — **CR-1** |
 | `CR_ORIGIN` | `CLIENT`, `VENDOR`, `REGULATORY`, `FTC`, `DEFECT` | `CHANGE_REQUEST.origin_code` |
 | `PM_DIMENSION` | `SCOPE`, `SCHEDULE`, `COST`, `BENEFIT`, `RISK`, `QUALITY`, `ORG_CHANGE`, `DATA`, `VENDOR` | `DECISION.dimension_code` — **D-17**, the dimensions the control framework acts on. **Company-only** (a decision row is never re-pointed to a project copy) |
 | `PHASE_STATUS` | `PLANNED`, `IN_DELIVERY`, `COMPLETE`, `CANCELLED` — company-only (W-4) | `PHASE.status_code` — **D-18** |
@@ -6555,8 +6618,8 @@ component.
 | `PUT/DELETE /benefits/{id}/solutions/{solution_id}` · `GET /solutions/{id}/benefits` | `BENEFIT` (writes) | contribution_pct | the link with its value; 409 naming the current total over 100 % (BN-2) |
 | `GET /projects/{project_id}/value-ranking` | project_ctx(VIEW) | — | value ÷ effort per solution, **one ranking per unit** (D-14, R2-D12, Q9, BN-1, BN-6) with partly-rated, no-work, not-assigned and reconciliation lines |
 | `GET /projects/{project_id}/benefit-gap` | project_ctx(VIEW) | — | gap solutions, fragile benefits, the `benefit_gap` figure (BN-4) |
-| `GET/POST /projects/{project_id}/change-requests` · `PATCH /change-requests/{id}` | `CHANGE_REQUEST` | CR fields | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2) |
-| `POST /change-requests/{id}/analyse` · `GET …/price` · `POST …/decide` | object_guard(ChangeRequest, EDIT) | seed objects · — · outcome, displaces_cr_id, rationale, alternative_rejected | the blast radius (`CR_IMPACT`); effort and benefit delta, phases hit, displacement candidates; the decision. **`decide` refuses net-positive effort with no displacement named (422)** and writes a `DECISION` row |
+| `GET/POST /projects/{project_id}/change-requests` · `GET …/change-requests/unagreed-edits` · `GET …/change-requests/summary` · `GET/PATCH /change-requests/{id}` · `DELETE /change-requests/{id}` · `PATCH …/restore` | `CHANGE_REQUEST` | title, rationale, origin, target (at raise only) | CR incl. `CR-0001` (D-16); target baseline FROZEN or APPROVED, or the SUPERSEDED one carrying the agreed approval (Q8, SC-2); the register, the unagreed edits (CR-1), the M2 counts |
+| `PUT /change-requests/{id}/seeds` · `POST …/analyse` · `POST …/decide` · `POST …/decision-correction` | object_guard(ChangeRequest, EDIT, component='CHANGE_REQUEST') | seeds (BR / FR + impact type) · — · outcome, decided_on, rationale, alternative_rejected, displaces_cr_id, budget reference and approver · decided_on, rationale, alternative | the change with its seeds, trace (`CR_IMPACT`), price, per-unit value, waves, dependencies, displacement candidates and what moved since pricing. **`decide` refuses an uncovered net-positive approval (422)** and writes a `DECISION` row |
 | `GET/POST /projects/{project_id}/decisions` · `GET /decisions/{id}` | project_ctx(VIEW / EDIT) · object_guard(Decision, VIEW) | title, decision_text, alternative_rejected, dimension_code, decided_on, analysis_code, supersedes_decision_id | the decision log (D-17, DC-1…DC-5), built; corrections are new rows; no PATCH or DELETE route |
 | `POST /projects/{project_id}/bulk/wbs/validate` · `GET /projects/{project_id}/wbs` · `PATCH /wbs-items/{id}` | project_ctx / object_guard(EDIT, `WBS`) | `.xlsx`, `import_mode` · filters · phase_id, solution_id, row_version | WBS keyed by MS Project Unique ID (D-33, R2-D15); **links only by PATCH** — any other field → 422 "Change it in MS Project and re-import". Progress updates are new dated rows, never overwritten by an import (D-41, OR-7); the progress report is generated from them |
 | **Phase 2 — risks, and the in-app waves of slice 15 (D-18)** | | | |
@@ -6762,12 +6825,20 @@ Each is observable by someone who did not build it.
     SUPERSEDED baseline without the agreed approval (422). Against a FROZEN or an APPROVED baseline, or the
     SUPERSEDED baseline that carries the newest recorded client approval, it is accepted.
 64. **(D-16)** `analyse` on a CR seeded with one BR returns impacted Solutions, FRs,
-    Applications, Data Entities and Phases without any of them being typed by hand.
-65. **(D-16)** Approving a CR with a positive effort delta, no `displaces_cr_id` and no
-    recorded budget increase returns **422**. *This is the control: a refused write, not a
-    warning.*
+    Applications, Data Entities, Waves and Benefits without any of them being typed by hand; re-analysing after a
+    solution is unlinked retires that row, and relinking restores it.
+65. **(D-16, CR-3)** Approving a CR with a positive effort change, no cut and no budget record returns **422**.
+    *This is the control: a refused write, not a warning.* An approved cut against the same target covers it, once
+    (a second use 409, a cut on another target 422); a budget record covers what the cut leaves, its days computed.
 66. **(D-17)** Every CR decision writes a `DECISION` row carrying the rejected alternative
-    and the analysis it was taken against.
+    and the analysis it was taken against; a refused decide writes none; a deferral's decision is superseded by the
+    next one; a CR's decision is corrected only on the CR (409 from the decision log).
+66a. **(CR-1, Q3)** The effort change is the working set minus the agreed baseline over the seed FRs only (ADD
+    5 d + REMOVE 3 d agreed + MODIFY 2 → 4 d = +4.00); a traced, unseeded FR's agreed days are exposure, never in the
+    effort change; a seed re-rated after pricing blocks an approval (409), a traced FR re-rated does not.
+66b. **(CR-1)** A seed of an undecided, rejected or retired-undecided change whose live row still differs from the
+    target is listed on the register and as a warning in the freeze preview; the freeze is not refused.
+66c. **(CR-2, Q9)** Benefit value at stake and value change are summed per unit, never across units.
 67. **(D-18)** Linking solution A to depend on B, then B on A, is rejected as a cycle.
 68. **(D-18)** `phase_plan` flags a solution scheduled in a wave at or before its
     prerequisite's wave.
@@ -7387,7 +7458,8 @@ are in `docs/VB_remaining_work.md`. *Wave* is only the in-app delivery wave (D-1
 | built | 1g | Code maintenance | built |
 | built | 15 | In-app waves and solution dependencies (D-18) | built |
 | built | — | Risks (D-15) · decisions (D-17) · benefits (D-14), hash spec 7 | built |
-| **2** | — | Change requests (D-16) · **WBS import + progress updates + progress report (D-33, D-41)** | change requests: spec in review |
+| built | — | Change requests (D-16): raise, seed, trace and price, decide with a cut or budget record (CR-1…CR-3) | built |
+| **2** | — | **WBS import + progress updates + progress report (D-33, D-41)** | — |
 | built | 16 | Baseline archive file and `purge_project` (S8-1) | built |
 | **3** | — | Azure (D-35) · restore drill (§15.3) · prompt pack (D-36) · client read-only login and the offline viewer file (D-43) | — |
 | **4** | — | Program roll-ups (R2-S2) · English / Japanese / Thai (D-44) · version comparison screen (D-50) | — |

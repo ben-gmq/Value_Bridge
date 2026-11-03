@@ -690,6 +690,10 @@ place.
   platform-admin refusal of `GET/PATCH /control-rules/defaults` is proven only in `test_control_c2`; no table pins every
   `Guard.PLATFORM_ADMIN` route as `test_project_admin.PLATFORM_ROUTES` does the project-level ones — add one and loop
   the editor-gets-403 check over it.
+- **2026-11-03 · slice Change requests, a later control rule (spec §6 maintenance loop, out of the slice):** a house
+  rule on the **age of open change requests** (days since raised for DRAFT / ANALYSED / PRICED / DEFERRED, flag and
+  escalate thresholds, not measured when CHANGE_REQUEST is off) would put a stalled change on the control panel instead
+  of waiting for the freeze-preview warning. Candidate only; it needs Ben's thresholds and a seed run when built.
 - **2026-11-03 · slice Benefits (`sara`, no CRITICAL / HIGH; M1 failed loads shown as errors and M2 concurrent cap test
   fixed):** (L1) link re-weight (PUT) and unlink (DELETE) carry no `row_version` — last writer wins on a % (the spec's
   idempotent PUT); check `LinkOut.row_version` or accept. (L2) `benefit.decorate` runs two queries per benefit (links,

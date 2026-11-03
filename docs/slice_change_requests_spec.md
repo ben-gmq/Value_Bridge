@@ -1,7 +1,8 @@
 # Slice Change requests (D-16) — build spec
 
 **Status:** reviewed, two rounds (round 1 design-auditor + apple, round 2 design-auditor; findings and dispositions in
-`docs/plans/change_requests_plan_2026-11-03.md` §6), 2026-11-03. Nothing built. **Counted from**
+`docs/plans/change_requests_plan_2026-11-03.md` §6), 2026-11-03. **Built 2026-11-03**; CR-1…CR-3 decided (a) each
+(history §3). **Counted from**
 `origin/main` at `c3fb909` (Benefits merged; 1,326 tests passed on that commit). **Sources:** design §4.11, §5
 CHANGE_REQUEST / CR_IMPACT / DECISION, §6.1 rows 33–34, §7.13 change control, criteria 63–66, 190, 192; history D-16,
 Q3, Q8, Q9, SC-2, SC-7, DR8-P1, DC-1…DC-7, BN-1; `services/baseline.py` (`agreed_id`, `freeze`, `preview`),
